@@ -258,15 +258,29 @@ cd industrias-doradas
 pnpm.cmd install --frozen-lockfile
 ```
 
-En el estado actual del Sprint 0, este comando restaura el workspace raíz. Las instrucciones para ejecutar API, web y desktop se añadirán al crear cada proyecto; todavía no existen comandos ficticios de build o pruebas.
+En el estado actual del Sprint 0, este comando restaura el workspace y la API NestJS. Web y desktop se añadirán en sus pasos correspondientes; no se documentan comandos ficticios para componentes que todavía no existen.
 
-Comandos disponibles para comprobar la base:
+Comandos disponibles para comprobar la base y la API:
 
 ```powershell
 pnpm.cmd --version
 pnpm.cmd list --recursive --depth -1
 dotnet --version
+pnpm.cmd --filter @industrias-doradas/api lint
+pnpm.cmd --filter @industrias-doradas/api build
+pnpm.cmd --filter @industrias-doradas/api test
+pnpm.cmd --filter @industrias-doradas/api test:e2e
 ```
+
+Para iniciar la API en PowerShell:
+
+```powershell
+$env:NODE_ENV = 'development'
+$env:PORT = '3000'
+pnpm.cmd --filter @industrias-doradas/api start:dev
+```
+
+El endpoint técnico está disponible en `GET http://localhost:3000/api/v1/health`. La documentación detallada y la explicación de cada dependencia se encuentran en `apps/api/README.md`.
 
 ---
 
@@ -277,8 +291,8 @@ dotnet --version
 - [x] Selección preliminar de tecnologías.
 - [x] Definición de la arquitectura general.
 - [x] Creación del repositorio.
-- [ ] Configuración del monorepo.
-- [ ] Creación del backend NestJS.
+- [x] Configuración del monorepo.
+- [x] Creación del esqueleto del backend NestJS.
 - [ ] Configuración de Supabase.
 - [ ] Creación de la aplicación WPF.
 - [ ] Implementación de SQLite.
