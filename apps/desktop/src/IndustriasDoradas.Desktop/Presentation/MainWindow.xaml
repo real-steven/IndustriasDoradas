@@ -1,0 +1,89 @@
+<Window x:Class="IndustriasDoradas.Desktop.Presentation.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:viewModels="clr-namespace:IndustriasDoradas.Desktop.Presentation.ViewModels"
+        xmlns:views="clr-namespace:IndustriasDoradas.Desktop.Presentation.Views"
+        mc:Ignorable="d"
+        Title="Industrias Doradas"
+        Width="1100"
+        Height="700"
+        MinWidth="800"
+        MinHeight="540"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource CanvasBrush}">
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type viewModels:HomeViewModel}">
+            <views:HomeView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:DiagnosticsViewModel}">
+            <views:DiagnosticsView />
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="{StaticResource Ink900Brush}">
+            <Grid Margin="24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="44"
+                            Height="44"
+                            CornerRadius="10"
+                            Background="{StaticResource Gold500Brush}">
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource Ink900Brush}"
+                                   FontWeight="Bold"
+                                   Text="ID" />
+                    </Border>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Foreground="White"
+                                   FontWeight="Bold"
+                                   Text="Industrias Doradas" />
+                        <TextBlock Foreground="#B7C0C7"
+                                   FontSize="12"
+                                   Text="Sistema de planta" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Margin="0,44,0,0">
+                    <TextBlock Margin="4,0,0,10"
+                               Foreground="#B7C0C7"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Text="NAVEGACIÓN" />
+                    <Button Margin="0,0,0,8"
+                            HorizontalContentAlignment="Left"
+                            AutomationProperties.Name="Ir al inicio"
+                            Command="{Binding ShowHomeCommand}"
+                            Content="Inicio" />
+                    <Button HorizontalContentAlignment="Left"
+                            AutomationProperties.Name="Ir a diagnóstico"
+                            Command="{Binding ShowDiagnosticsCommand}"
+                            Content="Diagnóstico" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="3"
+                           Foreground="#B7C0C7"
+                           FontSize="12"
+                           Text="Base técnica · Sprint 0" />
+            </Grid>
+        </Border>
+
+        <ContentControl Grid.Column="1"
+                        Content="{Binding CurrentPage}"
+                        Focusable="False" />
+    </Grid>
+</Window>

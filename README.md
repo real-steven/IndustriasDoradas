@@ -258,9 +258,9 @@ cd industrias-doradas
 pnpm.cmd install --frozen-lockfile
 ```
 
-En el estado actual del Sprint 0, este comando restaura el workspace, la API NestJS y el portal React. Desktop se añadirá en su paso correspondiente; no se documentan comandos ficticios para componentes que todavía no existen.
+En el estado actual del Sprint 0, este comando restaura el workspace de Node.js para la API NestJS y el portal React. La solución WPF se restaura mediante `dotnet restore`.
 
-Comandos disponibles para comprobar la base, la API y el portal web:
+Comandos disponibles para comprobar la base, la API, el portal web y desktop:
 
 ```powershell
 pnpm.cmd --version
@@ -273,6 +273,9 @@ pnpm.cmd --filter @industrias-doradas/api test:e2e
 pnpm.cmd --filter @industrias-doradas/web lint
 pnpm.cmd --filter @industrias-doradas/web build
 pnpm.cmd --filter @industrias-doradas/web test
+dotnet restore apps/desktop/IndustriasDoradas.Desktop.slnx
+dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore
+dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-build
 ```
 
 Para iniciar la API en PowerShell:
@@ -293,6 +296,15 @@ pnpm.cmd --filter @industrias-doradas/web dev
 
 La página de diagnóstico queda disponible en `http://localhost:5173/estado`. Su documentación y dependencias están explicadas en `apps/web/README.md`.
 
+Para iniciar la aplicación de escritorio desde una tercera terminal:
+
+```powershell
+$env:DOTNET_ENVIRONMENT = 'Development'
+dotnet run --project apps/desktop/src/IndustriasDoradas.Desktop/IndustriasDoradas.Desktop.csproj
+```
+
+La solución para Visual Studio, la configuración por ambiente y la explicación de dependencias están documentadas en `apps/desktop/README.md`.
+
 ---
 
 ## 🚧 Estado del proyecto
@@ -305,7 +317,7 @@ La página de diagnóstico queda disponible en `http://localhost:5173/estado`. S
 - [x] Configuración del monorepo.
 - [x] Creación del esqueleto del backend NestJS.
 - [ ] Configuración de Supabase.
-- [ ] Creación de la aplicación WPF.
+- [x] Creación del esqueleto de la aplicación WPF.
 - [ ] Implementación de SQLite.
 - [ ] Implementación de la sincronización.
 - [x] Creación del esqueleto de la aplicación React.
