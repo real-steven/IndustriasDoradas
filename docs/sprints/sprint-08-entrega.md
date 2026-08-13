@@ -2,14 +2,14 @@
 
 **Objetivo:** apoyar decisiones y dejar una versión instalable, recuperable y mantenible.
 
-**Entregable:** comparación de proveedores, Excel y ensayo completo de despliegue/recuperación.
+**Entregable:** comparación de proveedores, Excel bilingüe y ensayo completo de despliegue/recuperación.
 
 ## Orden de trabajo
 
 1. Aprobar fórmulas: cajuelas/palo, g/cajuela, oro/cargamento, mercurio/g, costo y rendimiento/precio. Sin denominador = “datos insuficientes”.
 2. Servicios versionados y pruebas con datasets conocidos.
 3. Web: comparación por proveedor/cargamento/fecha/línea; tablas antes de gráficos decorativos.
-4. Excel: resumen, fuente, filtros, unidades, fecha y zona horaria.
+4. Excel es/en: resumen, fuente, filtros, unidades, fecha y zona horaria; PDF queda posterior.
 5. Reportes de producción, barridas, asistencia e inventario por permiso.
 6. Carga, seguridad, accesibilidad, compatibilidad, offline prolongado y regresión.
 7. Instalador/actualizador WPF con backup SQLite y rollback.
@@ -51,13 +51,13 @@
 
 ### 8.5 Motor de reportes y Excel
 
-**Prompt:** Implementa exportación Excel desde backend con streaming/límites, nombre seguro y hojas de resumen + datos fuente. Incluye filtros, unidades, zona horaria, fecha, versión de fórmula y autor. Evita fórmulas peligrosas por inyección de celdas. Prueba contenido, no solo existencia del archivo.
+**Prompt:** Implementa exportación Excel desde backend con streaming/límites, nombre seguro y hojas de resumen + fuente. Cubre oro, cajuelas/producción, asistencia/horas, actividad de líneas, cargamentos y proveedores. Genera es/en según selección, por defecto preferencia de cuenta. Incluye unidades, zona horaria, versión y autor; evita inyección. No agregues PDF todavía.
 
 **Pausa:** abrir en Excel/iPhone si aplica y cotejar dataset dorado celda por celda en muestra.
 
 ### 8.6 Reportes por módulo
 
-**Prompt:** Añade reportes priorizados de producción, cargamentos/proveedores, barridas/mercurio/oro, asistencia/horas, inventario y paros. Reutiliza infraestructura/filtros, respeta permisos y no dupliques consultas. Documenta campos y límites de cada reporte.
+**Prompt:** Añade reportes priorizados de producción/cajuelas, actividad de línea, cargamentos/proveedores, barridas/mercurio/oro/custodia/entregas y asistencia/horas. Inventario/novedades se incluyen solo si fueron aprobados. Respeta que jefe de empresa genera reportes y cuenta administrativa no. Documenta campos/límites.
 
 **Pausa:** cada responsable valida al menos un reporte contra pantalla/fuente.
 
@@ -105,6 +105,6 @@
 
 ### 8.14 Cierre y transferencia
 
-**Prompt:** Ejecuta prueba final de jornada completa y matriz de requisitos. Organiza defectos/deuda/backlog futuro (sensores, multiempresa, biometría avanzada), versiones y licencias; entrega código, migraciones, instaladores, documentación y credenciales mediante canal seguro. Registra aceptación y plan de continuidad sin prometer soporte fuera del acuerdo.
+**Prompt:** Ejecuta prueba final y matriz de requisitos. Organiza deuda/backlog (PDF, sensores, multiempresa, biometría si siguió aplazada), habilita MFA y dispositivos administrativos autorizados antes de producción, revisa versiones/licencias y entrega por canal seguro. Registra aceptación y continuidad.
 
 **Pausa:** cero críticos/altos, todos los RF/RNF con evidencia, restauración demostrada y cierre firmado.

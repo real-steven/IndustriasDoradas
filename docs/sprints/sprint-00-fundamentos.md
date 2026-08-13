@@ -4,9 +4,11 @@
 
 **Entregable:** clon limpio → API `health`, shell WPF, shell React y CI en verde.
 
+**Estado 0.1:** línea base funcional consolidada en `docs/requirements/linea-base-funcional-v0.1.md`. Confirma una planta con cuatro líneas (piloto en una), roles/cuentas separadas, cajuelas y cargamentos, alertas 50–55, barridas reales, mercurio/oro, operación offline, web bilingüe, asistencia básica, inventario y decisiones diferidas por sprint.
+
 ## Orden de trabajo
 
-1. Validar glosario: cajuela, palo (0,1 g), 10 palos = 1 g, cargamento, turno, línea, rastra y barrida/50 cajuelas.
+1. Validar glosario: cajuela, palo (0,1 g), cargamento, jornada, asignación, ciclo de línea, molino, rastra y barrida con umbral configurable.
 2. Documentar ADR de NestJS, WPF, React, PostgreSQL, SQLite, REST y local-first.
 3. Crear soluciones/workspaces y comandos únicos para restaurar, ejecutar, probar y formatear.
 4. Activar TypeScript estricto, nullable/análisis .NET, lint y formato.
@@ -27,7 +29,7 @@ Ejecutar en orden. Todos heredan el [contrato base](guia-de-prompts.md).
 
 **Prompt:** Revisa el diagnóstico original y toda la documentación existente. Crea una línea base versionada de requerimientos, actores, procesos, reglas confirmadas, preguntas abiertas, supuestos y glosario. Distingue hechos de ejemplos ficticios; registra 50 cajuelas como umbral inicial configurable y 10 palos = 1 gramo como conversión. Incluye paros/incidentes básicos y marca sensores/PLC fuera de alcance. No generes código.
 
-**Pausa:** Gerencia o responsable lee glosario, corrige nombres y responde preguntas que bloqueen datos.
+**Pausa:** Gerencia o responsable lee glosario, corrige nombres y responde preguntas que bloqueen datos. **Cumplida el 2026-08-13 para continuar Sprint 0; pendientes específicos fueron enrutados a sus sprints.**
 
 ### 0.2 Higiene y estructura del monorepo
 

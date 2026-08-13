@@ -11,11 +11,13 @@ Los prompts no se ejecutan todos juntos. Para cada mini paso:
 5. Corregir cualquier defecto crítico/alto antes del siguiente prompt.
 6. Hacer un commit pequeño y descriptivo cuando la pausa sea aprobada.
 
+La fuente funcional vigente es `docs/requirements/linea-base-funcional-v0.1.md`. Cuando una descripción histórica de un sprint use términos ya corregidos —por ejemplo, turno como cierre de línea o barrida como bloque rígido— prevalece la línea base consolidada. Si aparece una contradicción nueva, se actualiza primero la línea base y el sprint afectado antes de programar.
+
 ## Contrato base para todos los prompts
 
 Cada prompt de los sprints hereda estas instrucciones:
 
-> Trabaja en `C:\Users\titen\IndustriasDoradas`, rama `DevSteven`. Antes de editar, lee `README.md`, `docs/sprints/arquitectura-y-calidad.md`, `docs/sprints/dependencias-y-alcance.md`, el documento del sprint actual y las instrucciones del repositorio. Inspecciona el estado Git y conserva cambios ajenos. Implementa únicamente el mini paso solicitado con el diseño más simple que respete la arquitectura. No adelantes funcionalidades de prompts posteriores, no agregues dependencias sin justificar y no uses secretos reales. Añade o actualiza pruebas y documentación proporcionalmente. Ejecuta compilación, análisis y pruebas relevantes. Al finalizar informa: resultado, archivos cambiados, decisiones, comandos/pruebas, riesgos o pendientes y pasos exactos para mi pausa manual. No hagas commit ni push salvo que yo lo pida. Si falta una decisión de negocio que cambie datos o comportamiento, detente y pregúntame; no la inventes.
+> Trabaja en `C:\Users\titen\IndustriasDoradas`, rama `DevSteven`. Antes de editar, lee `README.md`, `docs/requirements/linea-base-funcional-v0.1.md`, `docs/sprints/arquitectura-y-calidad.md`, `docs/sprints/dependencias-y-alcance.md`, el documento del sprint actual y las instrucciones del repositorio. Inspecciona el estado Git y conserva cambios ajenos. Implementa únicamente el mini paso solicitado con el diseño más simple que respete la arquitectura. No adelantes funcionalidades de prompts posteriores, no agregues dependencias sin justificar y no uses secretos reales. Añade o actualiza pruebas y documentación proporcionalmente. Ejecuta compilación, análisis y pruebas relevantes. Al finalizar informa: resultado, archivos cambiados, decisiones, comandos/pruebas, riesgos o pendientes y pasos exactos para mi pausa manual. No hagas commit ni push salvo que yo lo pida. Si falta una decisión de negocio que cambie datos o comportamiento, detente y pregúntame; no la inventes.
 
 ## Pausa rápida estándar
 

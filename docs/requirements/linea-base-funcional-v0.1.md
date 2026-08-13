@@ -1,362 +1,308 @@
-# Línea base funcional — versión 0.1
+# Línea base funcional 0.1 — revisión consolidada
 
-**Estado:** Borrador para validación de Gerencia/responsable de planta  
-**Fecha de línea base:** 2026-08-11  
-**Proyecto:** Sistema de Gestión y Control de Producción Minera — Industrias Doradas  
-**Alcance de esta versión:** requerimientos, actores, procesos, reglas conocidas, supuestos, preguntas abiertas y glosario previos a implementación.
+**Estado:** validada funcionalmente para continuar el Sprint 0; decisiones diferidas identificadas
 
-## 1. Propósito y criterio de lectura
+**Fecha de consolidación:** 2026-08-13
 
-Este documento establece la línea base funcional inicial disponible en el repositorio. No autoriza implementar reglas todavía no validadas con la empresa.
+**Proyecto:** Sistema de Gestión y Control de Producción Minera — Industrias Doradas
 
-Cada afirmación se clasifica así:
+**Alcance:** requerimientos, actores, procesos, reglas confirmadas, supuestos y preguntas abiertas previos a implementación.
 
-- **Confirmado:** aparece expresamente en la documentación actual del proyecto.
-- **Supuesto por validar:** interpretación provisional necesaria para organizar el análisis; no es una regla de negocio.
-- **Pregunta abierta:** requiere respuesta de Gerencia o del responsable de planta antes de diseñar datos o comportamiento relacionado.
-- **Ejemplo ficticio:** dato creado solo para explicar o probar; no representa producción real.
+## 1. Criterio de lectura y fuentes
 
-> No se encontró en el repositorio un archivo independiente identificado como “diagnóstico original”. Esta línea base usa el diagnóstico resumido en `README.md` y los documentos de `docs/sprints/`. Debe compararse con el diagnóstico fuente, cuadernos y entrevistas cuando estén disponibles.
+Esta línea base consolida el diagnóstico descrito en `README.md`, los documentos de `docs/sprints/`, las respuestas de la encargada y las aclaraciones del responsable del proyecto. Las hojas de Excel y los cuadernos físicos son fuentes del proceso actual; deberán utilizarse como muestra en los levantamientos detallados de cada sprint.
 
-## 2. Fuentes revisadas
+Las afirmaciones se clasifican así:
 
-Se revisaron completos:
+- **Confirmado:** decisión funcional aceptada para orientar el diseño.
+- **Pendiente:** decisión que debe resolverse en el sprint indicado antes de implementar esa función.
+- **Ejemplo ficticio:** dato ilustrativo que no representa producción real.
 
-- `README.md`.
-- `docs/sprints/README.md`.
-- Los planes de los sprints 0 al 8.
-- `docs/sprints/arquitectura-y-calidad.md`.
-- `docs/sprints/dependencias-y-alcance.md`.
-- `docs/sprints/guia-de-prompts.md`.
-- `docs/sprints/plantilla-pruebas-manuales.md`.
+Los valores ficticios nunca se convierten en reglas. Las decisiones que afecten datos, permisos o comportamiento se documentan antes de programarse.
 
-## 3. Contexto confirmado
+## 2. Contexto operativo confirmado
 
-- **Confirmado — situación actual:** Industrias Doradas es una empresa de reciente creación dedicada al procesamiento de material minero en Abangares, Guanacaste, Costa Rica.
-- **Confirmado — problema:** gran parte de la información operativa se registra manualmente en cuadernos y luego se consolida en hojas de Microsoft Excel.
-- **Confirmado — propósito:** digitalizar y centralizar gradualmente los registros operativos y administrativos para mejorar consulta, control y toma de decisiones.
-- **Confirmado — conectividad:** la planta puede sufrir interrupciones de Internet satelital; el registro operativo debe continuar sin conexión.
-- **Confirmado — primera versión:** se orienta inicialmente a una planta y una línea, pero el modelo debe admitir varias líneas, estaciones y futuras plantas sin implementar una administración multiempresa completa.
-- **Confirmado — sensibilidad:** el sistema manejará información operativa, financiera y posiblemente fotografías o datos biométricos, por lo que requiere acceso por roles, auditoría y protección de secretos.
+- Industrias Doradas procesa material minero en Abangares, Guanacaste.
+- Las cajuelas, asistencia y otros datos se registran actualmente en cuadernos y se consolidan en Excel.
+- La planta actual tiene cuatro líneas; cada línea posee un molino y tres rastras.
+- El piloto empieza con una línea y un punto de control, pero líneas, rastras, estaciones y controladores serán configurables.
+- La planta opera normalmente de lunes a sábado de forma continua. El domingo no hay producción regular.
+- La conectividad satelital suele funcionar, pero una caída puede durar hasta uno o dos días.
+- El escritorio debe confirmar siempre primero en SQLite y sincronizar en segundo plano; la nube consolida, pero nunca bloquea la operación local.
+- Con varias estaciones conectadas, los cambios deben propagarse casi en tiempo real. Sin conexión, convergen al recuperar red.
 
-## 4. Actores
+## 3. Glosario confirmado
 
-| Actor | Estado | Necesidad o responsabilidad conocida |
+| Término | Definición |
+|---|---|
+| Cajuela | Balde usado como unidad operativa para medir el material introducido en un molino. Su peso no es fijo y no se convierte automáticamente a kilogramos. |
+| Línea | Flujo productivo configurable compuesto actualmente por un molino y tres rastras. |
+| Molino | Equipo que rompe inicialmente las piedras grandes. |
+| Rastra | Etapa posterior que continúa reduciendo el material hasta permitir obtener amalgama. Actualmente existen tres por línea. |
+| Cargamento | Entrega específica de material perteneciente a un solo proveedor. Un proveedor puede entregar varios cargamentos, incluso el mismo día. |
+| Jornada | Clasificación diurna o nocturna de las horas trabajadas; no abre ni cierra físicamente una línea. |
+| Asignación de línea | Relación temporal entre una línea activa y su operario principal responsable. |
+| Ciclo de línea | Periodo en el que una línea recibe cajuelas de un cargamento específico hasta terminar su alimentación. |
+| Barrida | Limpieza real del proceso; puede abarcar menos, exactamente o más de 50 cajuelas según el cargamento y la decisión operativa. |
+| Palo | Unidad tradicional para oro. Para la línea base, `1 palo = 0,1 g` y `10 palos = 1 g`; redondeo y variación real quedan pendientes. |
+| Outbox | Cola local de operaciones confirmadas en SQLite pendientes de aceptación central. |
+| Corrección compensatoria | Nuevo registro que revierte o ajusta el efecto de otro sin borrar el historial. |
+
+## 4. Actores y separación de cuentas
+
+Existen cuatro roles funcionales. Una persona puede cumplir varios, pero los accesos privilegiados se separan en cuentas diferentes para reducir errores.
+
+| Rol | Canal | Facultades confirmadas |
 |---|---|---|
-| Operario | Confirmado | Registrar la operación de planta de forma rápida, comprensible y sin depender de Internet; utilizar teclado o controlador. |
-| Supervisor | Confirmado | Supervisar operación, asignaciones, correcciones, barridas, paros/incidentes y estado de sincronización según permisos. |
-| Gerencia | Confirmado | Consultar información consolidada, revisar indicadores, reportes, auditoría, asistencia e incidencias; aprobar reglas y resultados. |
-| Administrador del sistema | Confirmado | Gestionar configuración, usuarios, roles, plantas, líneas, estaciones y catálogos autorizados. |
-| Socio | Confirmado | Consultar información gerencial remotamente desde computadora o móvil, con permisos por definir. |
-| Trabajador/operario sujeto a asistencia | Confirmado | Registrar entrada/salida y, si se aprueba, fotografía o mecanismo de identificación con alternativa ante fallos. |
-| Responsable de planta | Confirmado | Validar lenguaje, flujo físico, reglas de barrida y decisiones operativas que no pueden inferirse del software. |
-| Proveedor | Confirmado como entidad externa | Proveer material asociado a cargamentos; no se confirma que use directamente el sistema. |
-| Tutor académico | Confirmado | Validar aspectos académicos y decisiones sensibles que requieran consulta, particularmente privacidad/biometría. |
-| Personal de soporte/desarrollo | Supuesto por validar | Instalar, mantener, diagnosticar y recuperar el sistema sin acceder indebidamente a información sensible. |
-
-### Preguntas sobre actores y permisos
-
-- **PA-01:** ¿“Gerencia” y “Socio” tendrán exactamente los mismos permisos de consulta?
-- **PA-02:** ¿Quién puede iniciar/cerrar turnos, cargamentos, barridas y paros?
-- **PA-03:** ¿Quién puede corregir cada tipo de registro y quién aprueba la corrección?
-- **PA-04:** ¿Quién administrará usuarios, estaciones y catálogos en la operación real?
-- **PA-05:** ¿Existe personal de mantenimiento o bodega con acceso propio, o esas funciones recaen en supervisor/administrador?
-
-## 5. Procesos funcionales identificados
-
-### 5.1 Configuración e identidad
-
-1. Administrar organización, planta, líneas y estaciones.
-2. Administrar usuarios, roles, trabajadores/operarios y proveedores.
-3. Autenticar usuarios mediante Supabase Auth y aplicar permisos propios desde el backend.
-4. Activar o desactivar catálogos conservando su historial.
-5. Auditar accesos, rechazos, mutaciones y correcciones.
-
-### 5.2 Preparación de la operación
-
-1. Preparar o autorizar una estación.
-2. Seleccionar o abrir turno y cargamento.
-3. Asociar proveedor, línea y operario/responsable.
-4. Validar que el contexto esté activo antes de registrar producción.
-
-Los responsables exactos, la simultaneidad permitida y las transiciones son preguntas abiertas.
-
-### 5.3 Registro local de producción
-
-1. El operario registra una cajuela mediante una pulsación.
-2. La aplicación confirma primero el evento en SQLite local.
-3. El registro genera un identificador UUID y una operación pendiente de sincronización en la misma transacción.
-4. La interfaz muestra confirmación inmediata, contador derivado y estado local/sincronización.
-5. Una corrección genera un evento compensatorio; no elimina ni sobrescribe el evento confirmado.
-6. La estación continúa funcionando durante una interrupción de Internet.
-
-### 5.4 Sincronización
-
-1. La estación envía operaciones pendientes por lotes al backend NestJS.
-2. El backend valida identidad, permisos, organización, estación, esquema y reglas.
-3. La recepción es idempotente: reintentar el mismo UUID no duplica el efecto.
-4. La estación recibe confirmación por operación y conserva para revisión los rechazos permanentes.
-5. Los catálogos y asignaciones se actualizan incrementalmente mediante cursor; no se descarga toda la base.
-6. Fotografías y archivos se sincronizan separadamente de los eventos.
-
-### 5.5 Barrida, mercurio y resultado de oro
-
-1. El sistema calcula el progreso desde eventos válidos de producción.
-2. Al alcanzar el umbral configurado emite una alerta operacional sin perder la pulsación registrada.
-3. Un usuario autorizado inicia, sigue y cierra la barrida.
-4. Se registra responsable, tiempos, rastras, eventos incluidos, mercurio y resultado.
-5. El oro se almacena canónicamente en gramos y puede mostrarse o capturarse en palos.
-6. La trazabilidad debe permitir recorrer resultado de oro → barrida → cajuelas → cargamento/línea/turno/operarios.
-
-La agrupación exacta del conteo, sobrantes, reinicios y cambios de proveedor/turno sigue abierta.
-
-### 5.6 Paros, incidentes y mantenimiento básico
-
-1. Registrar inicio y fin de un paro de línea.
-2. Registrar categoría, motivo, responsable y observaciones necesarias.
-3. Relacionar un incidente o mantenimiento básico cuando corresponda.
-4. Permitir operación offline, reinicio y sincronización posterior.
-5. Conservar eventos auditables para calcular tiempo detenido en el futuro.
-
-Este proceso no incluye órdenes de trabajo completas, repuestos, mantenimiento predictivo ni un CMMS.
-
-### 5.7 Consulta web y reportes
-
-1. Gerencia y roles autorizados consultan líneas, turnos, cargamentos, proveedores, barridas, historial y auditoría.
-2. La interfaz diferencia datos centrales actualizados de estaciones desconectadas o información tardía.
-3. Los filtros y totales provienen del backend; React no redefine las reglas.
-4. Los reportes e indicadores se generan con fórmulas previamente aprobadas y pueden exportarse a Excel.
-
-### 5.8 Asistencia
-
-1. Registrar eventos de entrada y salida, incluso offline.
-2. Conservar incidencias y ajustes auditados en vez de reemplazar silenciosamente los datos.
-3. Calcular horas revisables; no implementar nómina, impuestos, deducciones ni pago final.
-4. Capturar fotografía solo bajo política aprobada y con alternativa manual cuando falle la cámara.
-5. Considerar reconocimiento facial únicamente después de consentimiento, aprobación y medición de precisión.
-
-### 5.9 Inventario
-
-1. Administrar artículos, herramientas, unidades, ubicaciones y mínimos.
-2. Registrar movimientos inmutables de entrada, salida, consumo, devolución, ajuste y reverso.
-3. Derivar existencias desde movimientos; no usar un saldo editable como única verdad.
-4. Relacionar el consumo de mercurio de una barrida con exactamente un movimiento de inventario.
-5. Registrar asignación y devolución de herramientas a operarios.
-
-## 6. Requerimientos funcionales de línea base
-
-| ID | Estado | Requerimiento |
-|---|---|---|
-| RF-01 | Confirmado | Autenticar usuarios y autorizar acciones según rol y ámbito organizacional. |
-| RF-02 | Confirmado | Administrar planta, líneas, estaciones, operarios, proveedores y cargamentos. |
-| RF-03 | Confirmado | Preparar turnos y asignar línea, cargamento y operario antes de registrar producción. |
-| RF-04 | Confirmado | Registrar cajuelas localmente con una pulsación aunque no haya Internet. |
-| RF-05 | Confirmado | Corregir producción mediante eventos compensatorios auditables, sin borrar el original. |
-| RF-06 | Confirmado | Sincronizar operaciones incremental e idempotentemente, sin pérdida ni duplicación. |
-| RF-07 | Confirmado | Alertar al alcanzar el umbral inicial configurable de barrida. |
-| RF-08 | Confirmado | Registrar barridas, mercurio y resultados de oro con trazabilidad al origen. |
-| RF-09 | Confirmado | Registrar paros, incidentes y mantenimiento básico que afecten una línea. |
-| RF-10 | Confirmado | Consultar historial y estado operativo desde un portal web adaptable a móvil y computadora. |
-| RF-11 | Confirmado | Registrar asistencia y calcular horas revisables sin implementar nómina completa. |
-| RF-12 | Confirmado si se mantiene el calendario | Gestionar inventario mediante movimientos trazables y asignar herramientas. |
-| RF-13 | Confirmado | Generar reportes y exportaciones a Microsoft Excel. |
-| RF-14 | Confirmado | Mantener auditoría de accesos, cambios, correcciones y operaciones sensibles. |
-| RF-15 | Posterior al núcleo y condicionado | Evaluar reconocimiento facial solo con consentimiento, política y precisión aprobados. |
-
-## 7. Requerimientos no funcionales de línea base
-
-| ID | Estado | Requerimiento |
-|---|---|---|
-| RNF-01 | Confirmado | Registrar localmente una cajuela en menos de 300 ms en el equipo objetivo. |
-| RNF-02 | Confirmado | Tener la pantalla operativa lista en menos de 3 segundos en el equipo objetivo. |
-| RNF-03 | Confirmado | Un reinicio offline no debe perder registros ya confirmados localmente. |
-| RNF-04 | Confirmado | Permitir operación completa mediante teclado/controlador, con foco visible, botones grandes, icono y texto, contraste y retroalimentación visual/sonora. |
-| RNF-05 | Confirmado | Almacenar fechas en UTC y mostrarlas en `America/Costa_Rica`. |
-| RNF-06 | Confirmado | Usar tipos decimales, no punto flotante binario, para oro, mercurio y dinero. |
-| RNF-07 | Confirmado | Mantener secretos fuera del repositorio y restringir `service_role` al backend. |
-| RNF-08 | Confirmado | Validar JWT de Supabase en NestJS y concentrar reglas, permisos y auditoría en el backend. |
-| RNF-09 | Confirmado | Producir logs estructurados y diagnósticos sin tokens, claves, fotografías ni biometría. |
-| RNF-10 | Confirmado | Ensayar realmente respaldo y restauración antes de producción. |
-| RNF-11 | Confirmado | Conservar compatibilidad con Safari/Chrome y dispositivos iPhone/Android para el portal web. |
-| RNF-12 | Confirmado | Mantener un monolito modular y evitar microservicios o abstracciones especulativas sin necesidad medida. |
-
-## 8. Reglas confirmadas
-
-### RC-01 — Umbral inicial de barrida
-
-- El umbral inicial es **50 cajuelas**.
-- Debe ser **configurable**, no una constante irreversible distribuida entre clientes.
-- Alcanzar el umbral debe producir una alerta una sola vez por ciclo reconocido, incluso después de reiniciar o sincronizar.
-- **Pendiente:** definir el ámbito del conteo y el tratamiento de sobrantes, cambios y correcciones.
-
-### RC-02 — Conversión entre palos y gramos
-
-- **1 palo = 0,1 gramos.**
-- **10 palos = 1 gramo.**
-- El valor canónico de oro se almacena en gramos decimales.
-- “Palos” es una unidad de captura o presentación; el redondeo, si existe, debe ser solo visual y aprobado.
-
-### RC-03 — Registros operativos inmutables
-
-- Producción, asistencia e inventario se representan mediante eventos o movimientos inmutables.
-- Una corrección compensa y audita; no borra silenciosamente el registro confirmado.
-- `CAJUELA_ADDED` suma y `CAJUELA_REVERSED` compensa.
-
-### RC-04 — Operación local-first
-
-- Registrar una cajuela confirma primero en SQLite y nunca espera Internet.
-- Cada operación sincronizable usa UUID generado en origen y una cola local.
-- La sincronización debe admitir reintentos idempotentes e incrementales.
-
-### RC-05 — Autoridad de negocio
-
-- NestJS es la única puerta remota a datos y reglas de negocio.
-- React y WPF no consultan directamente tablas de negocio en Supabase.
-- Los clientes no deben duplicar fórmulas o reglas cuya autoridad corresponde a la API.
-
-### RC-06 — Paros e incidentes básicos
-
-- Se registran eventos básicos de inicio/fin de paro, categoría, motivo y responsable.
-- Los incidentes y mantenimientos relacionados deben ser offline, sincronizables y auditables.
-- No se incluye un sistema completo de mantenimiento, órdenes de trabajo, repuestos ni mantenimiento predictivo.
-
-## 9. Supuestos por validar
-
-Estos supuestos permiten organizar el análisis, pero **no deben implementarse como reglas** hasta validación:
-
-- **SV-01:** la operación piloto comenzará efectivamente con una sola planta y una sola línea.
-- **SV-02:** cada estación será una computadora Windows identificable y autorizada.
-- **SV-03:** una estación podrá mostrar y operar más de una línea, porque la planificación contempla escenarios de 1, 4 y 10 líneas.
-- **SV-04:** proveedor y cargamento se seleccionan antes del primer registro de producción relacionado.
-- **SV-05:** Gerencia podrá revisar remotamente información central ya sincronizada, pero no verá como confirmados los eventos que permanezcan solo en una estación offline.
-- **SV-06:** los nombres de roles `ADMIN`, `GERENCIA`, `SUPERVISOR` y `OPERADOR` son identificadores técnicos iniciales; falta validar su vocabulario empresarial.
-- **SV-07:** los términos “trabajador”, “operario”, “encargado” y “responsable” pueden representar funciones diferentes; no deben fusionarse sin confirmación.
-- **SV-08:** las tres “rastras” mencionadas forman parte del ciclo de barrida; su definición física y relación con línea/cargamento están pendientes.
-
-## 10. Preguntas abiertas para la pausa gerencial
-
-### Bloqueantes para el modelo y el flujo operativo
-
-- **PA-06:** ¿Cuál es el documento del diagnóstico original y dónde se encuentra? ¿Hay cuadernos, formularios, fotografías o entrevistas que deban incorporarse como fuente?
-- **PA-07:** ¿Qué significa exactamente una **cajuela** en planta: recipiente, cantidad, acción procesada u otra unidad? ¿Su capacidad es fija?
-- **PA-08:** ¿Qué significa exactamente una **línea** y cuál es su relación con una rastra, estación y monitor?
-- **PA-09:** ¿Qué es una **rastra** en el proceso de Industrias Doradas y por qué se contemplan tres en una barrida?
-- **PA-10:** ¿Quién inicia y cierra un turno? ¿Puede haber más de un turno activo por planta, línea o estación?
-- **PA-11:** ¿Cómo se identifica un cargamento y cuándo se considera abierto, activo, agotado o cerrado?
-- **PA-12:** ¿Puede una línea procesar más de un cargamento o proveedor durante el mismo turno? ¿Cómo se registra el cambio?
-- **PA-13:** ¿Puede un operario cambiar durante un turno o compartir responsabilidad sobre una línea?
-- **PA-14:** ¿Qué correcciones se permiten, durante cuánto tiempo y con qué autorización/motivo?
-
-### Bloqueantes para barridas, mercurio y oro
-
-- **PA-15:** ¿Las 50 cajuelas se cuentan por línea, cargamento, proveedor, rastra, turno u otra combinación?
-- **PA-16:** ¿Qué ocurre con las cajuelas sobrantes después de una barrida o al cambiar turno, proveedor o cargamento?
-- **PA-17:** ¿Un reverso al pasar de 50 a 49 reactiva, cancela o conserva la alerta ya reconocida?
-- **PA-18:** ¿Cuándo inicia y termina formalmente una barrida, quién la autoriza y puede reabrirse?
-- **PA-19:** ¿Cómo participan las tres rastras y se permiten barridas simultáneas o solapadas?
-- **PA-20:** ¿En qué unidad se mide actualmente el mercurio, con qué instrumento y precisión?
-- **PA-21:** ¿En qué momento el resultado de oro pasa de preliminar a final y quién lo confirma?
-- **PA-22:** ¿“Palo” se utiliza como décima exacta de gramo en todos los registros o existen prácticas de redondeo?
-
-### Paros, incidentes y mantenimiento
-
-- **PA-23:** ¿Qué categorías reales de paro e incidente utiliza la planta?
-- **PA-24:** ¿Quién abre/cierra un paro y qué ocurre si atraviesa un cambio de turno?
-- **PA-25:** ¿Qué datos mínimos necesita Gerencia para un incidente o mantenimiento básico?
-
-### Seguridad, asistencia e inventario
-
-- **PA-26:** ¿Qué funciones exactas deben continuar offline para una estación previamente autorizada?
-- **PA-27:** ¿Cuál será la política de retención, acceso, consentimiento y eliminación para fotografías y posible biometría?
-- **PA-28:** ¿Cómo se registran hoy entrada, salida, descansos, olvidos y turnos nocturnos?
-- **PA-29:** ¿Se permiten existencias negativas? ¿Qué unidades, conversiones, ubicaciones y responsables usa inventario?
-- **PA-30:** ¿Cuál es la lista mínima de reportes e indicadores que Gerencia considera imprescindible?
-
-## 11. Glosario inicial
-
-| Término | Estado | Definición de línea base |
-|---|---|---|
-| Cajuela | Parcialmente confirmado | Unidad o evento operativo cuyo registro suma uno al conteo de producción. Su significado físico y capacidad deben validarse en PA-07. |
-| Palo | Confirmado en conversión | Unidad usada para expresar oro. Un palo equivale exactamente a 0,1 g en esta línea base. Falta validar uso y redondeo en planta. |
-| Gramo (g) | Confirmado | Unidad canónica para almacenar el resultado de oro. Diez palos equivalen a un gramo. |
-| Cargamento | Parcialmente confirmado | Conjunto de material recibido y asociado con un proveedor, producción y resultado. Identificación, estados y cambios requieren validación. |
-| Turno | Parcialmente confirmado | Periodo operativo que contextualiza producción, asignaciones y posiblemente asistencia. Horarios, responsables y simultaneidad están abiertos. |
-| Línea de producción | Parcialmente confirmado | Ámbito operativo al que se asignan estación, operario, producción, paros y barridas. Su definición física exacta está abierta. |
-| Estación | Confirmado técnicamente | Cliente/computadora autorizada que mantiene SQLite, registra eventos locales y los sincroniza. Su correspondencia física debe validarse. |
-| Rastra | Pendiente de definición | Elemento del proceso minero relacionado con la barrida; la documentación menciona tres, pero no define su función o cardinalidad. |
-| Barrida | Parcialmente confirmado | Proceso del ciclo productivo activado por un progreso cuyo umbral inicial es 50 cajuelas configurables, y que relaciona responsables, tiempos, rastras, mercurio y oro. Las reglas físicas están abiertas. |
-| Proveedor | Confirmado | Persona u organización de origen del material asociado a uno o más cargamentos. |
-| Operario | Confirmado | Persona que participa en la operación y registra o tiene asignada producción, conforme a permisos. |
-| Responsable/encargado | Pendiente de distinción | Persona responsable de una línea, turno, barrida, paro u otra acción. Debe aclararse si es un rol, una asignación o sinónimo de operario/supervisor. |
-| Evento de producción | Confirmado técnicamente | Registro inmutable con UUID y contexto de organización, planta, estación, línea, turno, cargamento, operario y tiempos. |
-| Evento compensatorio | Confirmado | Nuevo evento que corrige el efecto de otro sin modificarlo ni borrarlo. |
-| Paro de línea | Parcialmente confirmado | Intervalo en que una línea deja de operar; debe registrar inicio/fin, motivo/categoría y responsable. |
-| Incidente | Parcialmente confirmado | Hecho relevante que afecta o puede afectar la operación y debe quedar registrado y auditado. Sus categorías están abiertas. |
-| Mantenimiento básico | Confirmado en alcance limitado | Registro relacionado con una línea o incidente, sin órdenes completas, repuestos, predicción ni funciones propias de un CMMS. |
-| Outbox | Confirmado técnicamente | Cola local de operaciones confirmadas en SQLite que aún deben enviarse al backend. |
-| Sincronización incremental | Confirmado técnicamente | Intercambio solo de operaciones o cambios pendientes desde un cursor, sin descargar o reemplazar la base completa. |
-| Idempotencia | Confirmado técnicamente | Propiedad por la que repetir una operación con el mismo identificador no produce un segundo efecto. |
-| Datos centrales confirmados | Confirmado técnicamente | Datos aceptados por el backend y persistidos centralmente; pueden diferir temporalmente de eventos aún pendientes en estaciones offline. |
-| Ejemplo ficticio | Confirmado como criterio | Nombre, cantidad, horario, proveedor, persona o resultado inventado únicamente para documentación, seed o pruebas; nunca se presume como dato o regla real. |
-
-## 12. Ejemplos exclusivamente ficticios
-
-Los siguientes casos ilustran el modelo y **no confirman comportamiento real**:
-
-- **EF-01:** “Proveedor Alfa”, “Cargamento C-001”, “Línea 1” y “Operario Ejemplo” son nombres ficticios aptos para pruebas.
-- **EF-02:** si un ciclo configurado en 50 registra 49 eventos válidos, el progreso ilustrativo es 49; el evento número 50 alcanza el umbral y el 51 sería posterior al umbral. La pertenencia del evento 51 al mismo ciclo o a sobrantes no está definida.
-- **EF-03:** 25 palos equivalen matemáticamente a 2,5 g según la conversión confirmada; esto no representa una recuperación real esperada.
-- **EF-04:** un paro ficticio de 10:00 a 10:15 ilustra un intervalo de 15 minutos; no confirma categorías, horarios ni reglas de planta.
-
-Los seeds, capturas, pruebas y manuales deben identificar claramente sus datos como ficticios y no usar información sensible real.
-
-## 13. Alcance inicial y exclusiones
-
-### Imprescindible
-
-- Identidad, roles y auditoría.
-- Planta, líneas, estaciones, operarios, proveedores, cargamentos y turnos.
-- Cajuelas, correcciones, operación offline y sincronización.
-- Barrida con umbral inicial configurable de 50 cajuelas, mercurio y oro.
-- Portal web básico, reportes Excel, respaldo y recuperación.
-- Paros, incidentes y mantenimiento básico que afecten la línea.
-
-### Incluido si se mantiene el calendario
-
-- Asistencia con fotografía y revisión.
-- Cálculo de horas como apoyo, sin nómina completa.
-- Inventario y herramientas.
-- Indicadores básicos de proveedores y cargamentos.
-
-### Posterior al núcleo o condicionado
-
-- Reconocimiento facial automático, únicamente con consentimiento y precisión medida.
-- Reportes avanzados.
-- Editor visual de teclas.
+| Jefe de empresa | Web | Consulta de toda la operación, estadísticas, notificaciones y reportes Excel. No modifica datos sensibles. Puede confirmar o rechazar entregas físicas de oro. |
+| Administrador | Web | Crea, edita, corrige, desactiva y ejecuta protocolos de eliminación; administra usuarios privilegiados, líneas, estaciones y configuración. No consulta ni genera reportes desde esta cuenta por ahora. |
+| Jefe de planta | Desktop | Prepara la operación, crea trabajadores, gestiona proveedores e inventario, asigna responsables, registra/certifica mercurio y oro, revisa asistencia pendiente y corrige durante el ciclo abierto. |
+| Operario | Desktop compartido | Registra cajuelas, confirma una reversión inmediata y puede seleccionar el responsable principal. No registra mercurio ni oro. |
+
+Reglas de acceso:
+
+- Un gerente que también administra usa una cuenta gerencial y otra administrativa.
+- Un administrador que también es jefe de planta puede acceder a ambos sistemas con sus credenciales correspondientes.
+- Solo un administrador crea cuentas de administrador o jefe de empresa.
+- El jefe de planta puede crear trabajadores operativos sin aprobación administrativa adicional.
+- La interfaz es española por defecto; cada cuenta guarda una preferencia editable `es` o `en`.
+- MFA y enrolamiento/revocación de dispositivos administrativos son obligatorios antes de producción, aunque se implementen al final del proyecto.
+
+## 5. Proceso físico y productivo
+
+### 5.1 Preparación y alimentación
+
+1. El jefe de planta registra o selecciona un proveedor existente.
+2. Registra un cargamento con código legible generado automáticamente, fecha y proveedor. Internamente usa UUID.
+3. Selecciona una línea, el cargamento y un operario principal desde listas de registros activos.
+4. Una línea no puede comenzar a recibir cajuelas sin responsable principal.
+5. Un operario puede ser responsable simultáneamente de varias líneas; no se trazan ayudantes secundarios.
+6. El punto de control puede ser compartido. La atribución se hace a línea, cargamento, responsable asignado y estación, no a quien pulsó físicamente la tecla.
+7. El responsable permanece durante el ciclo; los cambios excepcionales conservan hora e historial.
+8. Una jornada o cambio de responsable no obliga a detener la línea ni a cambiar cargamento.
+
+### 5.2 Cargamentos
+
+- Un cargamento siempre pertenece a un único proveedor.
+- Proveedor + fecha no es identificador suficiente; el sistema genera un consecutivo legible y UUID.
+- Un cargamento puede procesarse en varias líneas.
+- Cada línea lleva su conteo, barridas, mercurio y oro; el cargamento consolida todas las líneas.
+- La barrida no cierra el cargamento.
+- Al agotarse el material termina la alimentación de ese ciclo; el material ya introducido sigue su curso hasta obtener amalgama y oro.
+- Un nuevo cargamento puede comenzar sin crear una nueva jornada.
+- Nunca se mezclan cajuelas o resultados de cargamentos distintos dentro de una misma barrida.
+
+### 5.3 Cajuelas y corrección inmediata
+
+- Cada pulsación válida crea un evento inmutable `CAJUELA_ADDED` con UUID.
+- La confirmación local debe tardar menos de 300 ms en el equipo objetivo.
+- El operario puede revertir únicamente la última cajuela de la línea seleccionada mientras el ciclo está abierto.
+- La reversión requiere un segundo paso de confirmación, no texto libre, y usa un motivo automático de error inmediato.
+- Visualmente resta uno; técnicamente crea `CAJUELA_REVERSED` y conserva el original.
+- El jefe de planta puede corregir registros operativos antes del cierre/revisión del ciclo correspondiente.
+- Después del cierre, solo el administrador corrige desde la web mediante eventos o ajustes auditados. El escritorio recibe la corrección al sincronizar.
+
+## 6. Regla de alerta y barrida
+
+- El umbral inicial configurable es 50 cajuelas por línea y cargamento.
+- La alerta se repite en cada múltiplo: 50, 100, 150 y siguientes.
+- La señal grande, visual y sonora dura aproximadamente 10 segundos; el sonido debe ser perceptible sin resultar molesto.
+- El estado visual permanece durante el intervalo 50–55, 100–105, 150–155, etc.
+- Al superar el final del intervalo desaparece y no bloquea nuevas cajuelas.
+- Si una reversión baja de 50 a 49, la alerta desaparece; al regresar a 50 se activa otra vez.
+- El operario principal decide cuándo barrer. No existe un máximo rígido porque la cajuela y el material son variables.
+- Si queda poco material, puede continuarse más allá de 50 para evitar una barrida adicional pequeña.
+- Todo cargamento termina con una barrida final, aunque el último grupo tenga menos de 50.
+- Cada barrida registra la cantidad real de cajuelas incluidas y sus eventos; no se presume que sean exactamente 50.
+
+## 7. Mercurio y oro
+
+- El mercurio se registra después de cada barrida.
+- La unidad provisional es gramos decimales; unidad definitiva, precisión y rangos se validan en el Sprint 4.
+- El operario puede medir o comunicar el resultado; el jefe de planta lo verifica, registra y certifica.
+- Cada barrida produce un resultado parcial de oro en gramos.
+- El resultado definitivo del cargamento es la suma automática de sus barridas y líneas.
+- Los totales se consultan por barrida, línea, jornada, día, cargamento y proveedor.
+- El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
+- La conversión inicial es `1 palo = 0,1 g`; no se implementa redondeo hasta validarlo.
+
+### Custodia y entrega de oro
+
+1. El sistema deriva el oro producido y el oro aún bajo custodia en planta.
+2. El jefe de planta crea una solicitud de entrega en gramos desde el escritorio.
+3. La gerente autorizada recibe una notificación en la web.
+4. Tras la verificación física, confirma o rechaza la cantidad.
+5. Una discrepancia conserva cantidad solicitada, cantidad recibida, motivo, participantes y fechas.
+6. No se modelan transporte, venta, contabilidad ni destino posterior del oro.
+
+El umbral para avisar que ya conviene recoger oro queda pendiente y será configurable.
+
+## 8. Jornadas y asistencia
+
+- Jornada diurna/nocturna clasifica horas y no representa el estado de la línea.
+- Actualmente el jefe de planta anota entradas y salidas en cuaderno.
+- La primera versión digital registra solo check-in y check-out; no descansos ni almuerzo.
+- El jefe de planta selecciona al trabajador y registra la hora mientras se pospone biometría.
+- La jornada habitual es hasta 8 horas y puede extenderse aproximadamente hasta 10; la regla exacta de horas extra/dobles queda pendiente.
+- El sistema calcula duración e incidencias, no salarios, impuestos ni deducciones.
+- Olvidos o marcas históricas se corrigen por administrador mediante ajuste auditable.
+- El escritorio debe soportar asistencia offline.
+
+### Biometría posterior y condicionada
+
+- Reconocimiento facial no es requisito del núcleo inicial.
+- Antes de activarlo se aprueban consentimiento, retención, precisión, enrolamiento y alternativa segura.
+- El enrolamiento debe capturar varios ángulos; detalles técnicos quedan para el Sprint 6.
+- Un intento fallido guarda foto, hora original, trabajador propuesto, estación y tipo de marca.
+- El jefe de planta puede ver la evidencia y aceptar/rechazar; al aceptar se conserva la hora del intento.
+- No se usará PIN como sustituto ordinario porque permitiría marcar a un trabajador ausente.
+- Administrador o jefe de planta puede repetir el enrolamiento cuando falle.
+
+## 9. Inventario y novedades
+
+### Inventario inicial
+
+- Alcance: herramientas y utensilios como palas, escaleras, tornillos, taladros y unidades o envases completos por definir.
+- Las cantidades iniciales son enteras y no se permiten existencias negativas.
+- Jefe de planta y administrador registran entradas, salidas, consumos, devoluciones y ajustes.
+- No se requieren varias ubicaciones ni existencias mínimas inicialmente.
+- La revisión es recomendada; si todo coincide se registra “inventario revisado sin diferencias”.
+- El sistema recuerda el tiempo desde la última revisión con intervalos configurables; jefe de planta y gerencia pueden consultarlo.
+- Catálogo, unidades definitivas y tratamiento de consumibles se validan en Sprint 7.
+
+### Novedades operativas
+
+- No existen categorías formales de paro actualmente.
+- Se implementará un registro simple de novedad: fecha/hora, línea o planta, tipo general opcional, descripción, responsable e inicio/fin si aplica.
+- El jefe de planta registra feriados, emergencias, paros, mantenimiento o razones de ausencia de producción.
+- Una novedad puede atravesar el cambio de jornada.
+- No se implementa CMMS, órdenes de trabajo, repuestos ni mantenimiento predictivo.
+
+## 10. Web, reportes e idiomas
+
+El perfil jefe de empresa consulta en modo informativo:
+
+- cajuelas y líneas operando o detenidas;
+- proveedor, cargamento y responsable;
+- barridas, mercurio y oro;
+- actividad por línea y jornada;
+- check-in/check-out y horas;
+- inventario, última revisión y novedades;
+- estado/frescura de sincronización;
+- entregas de oro pendientes y confirmadas.
+
+Reportes iniciales:
+
+- Excel de oro, cajuelas/producción, asistencia, horas, actividad de líneas, cargamentos y proveedores.
+- PDF queda fuera de la primera versión.
+- El idioma se puede elegir; por defecto usa la preferencia de la cuenta.
+- La interfaz web y sus reportes soportan español e inglés; el texto libre no se traduce automáticamente.
+
+## 11. Operación offline, sincronización y auditoría
+
+- Toda mutación de planta se guarda primero en SQLite y outbox dentro de una transacción.
+- Se intenta sincronizar inmediatamente sin bloquear la interfaz.
+- Reiniciar, cerrar la aplicación o perder electricidad no elimina operaciones confirmadas localmente.
+- La estación soporta uno o dos días offline y reanuda automáticamente.
+- El acceso offline se limita a usuarios previamente autenticados y estación autorizada; no permite administración privilegiada.
+- NestJS valida identidad, permisos, organización, estación, versión e idempotencia.
+- PostgreSQL consolida la verdad central; los clientes reciben cambios incrementales, no una descarga completa.
+- Con Internet, varias estaciones se actualizan casi en tiempo real; sin Internet se garantiza convergencia posterior, no simultaneidad.
+- Solapamientos de varias estaciones sobre la misma línea se bloquean o advierten según política aprobada en Sprint 3.
+- Una corrección web recibida por el escritorio genera una notificación breve y enlace al detalle.
+- La auditoría registra actor con nombre, rol, origen, fecha, acción, entidad, anterior/nuevo, motivo y correlación.
+- Usuarios, líneas, proveedores y trabajadores con historial se desactivan antes de considerar eliminación.
+
+## 12. Requerimientos funcionales consolidados
+
+| ID | Requerimiento |
+|---|---|
+| RF-01 | Autenticar y autorizar los cuatro roles con cuentas privilegiadas separadas. |
+| RF-02 | Administrar planta, líneas, rastras, estaciones, trabajadores, proveedores y cargamentos. |
+| RF-03 | Asignar un responsable principal y cargamento antes de alimentar una línea. |
+| RF-04 | Registrar y revertir cajuelas localmente mediante eventos inmutables. |
+| RF-05 | Operar uno o dos días offline y sincronizar sin pérdida o duplicación. |
+| RF-06 | Alertar en cada múltiplo configurable de 50 sin bloquear producción. |
+| RF-07 | Registrar barridas reales, mercurio y oro parcial/definitivo con trazabilidad al cargamento. |
+| RF-08 | Registrar entrega y confirmación/rechazo de oro bajo custodia. |
+| RF-09 | Consultar operación central desde web responsive en español e inglés. |
+| RF-10 | Registrar asistencia básica de entrada/salida y calcular horas revisables. |
+| RF-11 | Gestionar inventario básico sin existencias negativas y registrar revisiones. |
+| RF-12 | Registrar novedades simples de paro, mantenimiento, emergencia o cierre. |
+| RF-13 | Generar reportes Excel bilingües según permisos. |
+| RF-14 | Auditar accesos, mutaciones, correcciones, entregas y eliminaciones. |
+| RF-15 | Incorporar biometría solo después de aprobar política y medir precisión. |
+
+## 13. Requerimientos no funcionales consolidados
+
+- Registro local de cajuela menor a 300 ms; pantalla lista menor a 3 s en equipo objetivo.
+- Uso mediante controlador configurable, foco visible, panel claro por línea y retroalimentación visual/sonora.
+- UTC al almacenar y `America/Costa_Rica` al mostrar/agrupar.
+- Tipos decimales para oro, mercurio y dinero; nunca `float` binario.
+- JWT de Supabase validado por NestJS; `service_role` solo en backend.
+- Logs sin tokens, claves, fotografías o plantillas biométricas.
+- Fotografías privadas con acceso temporal y auditado.
+- MFA y dispositivos administrativos autorizados antes de producción.
+- Instalación, respaldo y restauración ensayados.
+- Monolito modular, sin microservicios ni servidor local de planta hasta que una necesidad medida lo justifique.
+
+## 14. Datos personales y desactivación
+
+- Un trabajador que deja la empresa se desactiva y conserva su historial para auditoría y posible recontratación.
+- No existe eliminación automática por antigüedad en esta línea base.
+- Un administrador puede iniciar una eliminación manual bajo protocolo, siempre que no rompa referencias legales u operativas.
+- La fotografía/plantilla biométrica tiene ciclo de vida separado del historial laboral.
+- Administrador accede a evidencias privadas desde funciones protegidas de la web, no directamente a la base de datos.
+- Jefe de planta accede únicamente a fotografías necesarias para resolver intentos pendientes.
+
+## 15. Alcance y exclusiones
+
+### Núcleo prioritario
+
+- Roles, auditoría y catálogos.
+- Líneas, responsables, proveedores y cargamentos.
+- Cajuelas, correcciones, SQLite y sincronización.
+- Alertas, barridas, mercurio, oro y custodia/entrega.
+- Web informativa y Excel.
+
+### Posterior dentro del plan
+
+- Asistencia básica sin biometría.
+- Inventario básico.
+- Reconocimiento facial condicionado.
 
 ### Fuera de alcance
 
-- **Sensores, PLC, IoT y SCADA.**
-- Automatización física y medición automática.
-- Contabilidad, banca y nómina completa.
-- Migración masiva de cuadernos.
+- Sensores, PLC, IoT, SCADA y automatización física.
+- Medición automática de material, mercurio u oro.
+- Contabilidad, banca, nómina completa y cálculo definitivo de salarios.
+- PDF en la primera versión.
 - Aplicación móvil nativa.
 - Administración multiempresa completa.
-- CMMS completo, órdenes de mantenimiento y mantenimiento predictivo.
+- CMMS, mantenimiento predictivo y gestión completa de compras.
 
-## 14. Criterio para aprobar esta línea base
+## 16. Decisiones pendientes enrutadas
 
-Gerencia o el responsable de planta debe:
+| Pendiente | Debe resolverse en |
+|---|---|
+| Precisión/unidad definitiva de mercurio y rangos válidos | Sprint 4 |
+| Variación real y redondeo de palos ↔ gramos | Sprint 4 |
+| Umbral de oro para notificar recogida | Sprint 4/5 |
+| Política exacta de corrección administrativa y eliminación | Sprint 1 |
+| Matriz detallada de permisos y acceso offline | Sprint 1 |
+| Horarios diurno/nocturno y regla de horas extra/dobles | Sprint 6 |
+| Consentimiento, retención, enrolamiento y precisión biométrica | Sprint 6 |
+| Catálogo/unidades definitivas e intervalos de revisión de inventario | Sprint 7 |
+| Fórmulas e indicadores gerenciales | Sprint 8 |
 
-1. Corregir términos del glosario y confirmar su uso real.
-2. Identificar el diagnóstico original y demás fuentes faltantes.
-3. Responder primero PA-07 a PA-25, porque bloquean el modelo de producción, barridas y paros.
-4. Revisar actores y responsables de cada acción.
-5. Confirmar que 50 cajuelas es un umbral inicial configurable y que 10 palos = 1 gramo.
-6. Confirmar las inclusiones y exclusiones de alcance.
-7. Marcar esta versión como **Aprobada**, **Aprobada con correcciones** o **Rechazada**.
+## 17. Aprobación de la pausa 0.1
 
-**Decisión:** Pendiente  
-**Responsable:** Pendiente  
-**Fecha:** Pendiente  
-**Observaciones:** Pendiente
+La línea base ya incorpora las respuestas funcionales disponibles y permite continuar con infraestructura sin inventar reglas pendientes. Las decisiones de la sección 16 no bloquean Sprint 0 y deberán cerrarse antes de implementar su módulo.
+
+**Decisión funcional:** Aprobada para continuar Sprint 0
+
+**Responsable de consolidación:** Steven Venegas
+
+**Fecha:** 2026-08-13
+
+**Restricción:** no avanzar al siguiente prompt sin autorización expresa del responsable del proyecto.

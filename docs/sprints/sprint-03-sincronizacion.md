@@ -2,7 +2,7 @@
 
 **Objetivo:** consolidar una o varias computadoras con Internet inestable.
 
-**Entregable:** dos estaciones trabajan offline y convergen en PostgreSQL sin pérdida/duplicación.
+**Entregable:** una o más estaciones guardan localmente, sincronizan de inmediato cuando hay red y convergen en PostgreSQL sin pérdida/duplicación.
 
 ## Orden de trabajo
 
@@ -10,22 +10,23 @@
 2. Restricciones PostgreSQL contra duplicación.
 3. Worker desktop: lotes, backoff+jitter, reanudación y errores temporales/permanentes.
 4. Pull incremental de catálogos/asignaciones con cursor e inactivos.
-5. Conflictos: eventos se anexan; catálogo central prevalece; irresolubles quedan para revisión.
-6. Estados `PENDING/SYNCING/SYNCED/FAILED_REVIEW` y panel supervisor.
-7. Registrar estación, versión, última sync y desviación de reloj.
-8. Métricas y diagnóstico exportable sin secretos.
+5. Propagación casi en tiempo real de cambios centrales y notificación de correcciones administrativas.
+6. Conflictos: eventos se anexan; catálogo central prevalece; irresolubles quedan para revisión.
+7. Estados `PENDING/SYNCING/SYNCED/FAILED_REVIEW` y panel jefe de planta.
+8. Registrar estación, versión, última sync y desviación de reloj.
+9. Métricas y diagnóstico exportable sin secretos.
 
 **Pruebas:** repetir lote; cortar red antes/durante/después; reiniciar; 24 h offline; concurrencia; aislar evento inválido.
 
 **Prueba manual:** dos equipos para líneas 1–2 y 3–4, luego superposición deliberada; comparar SQLite/API/PostgreSQL.
 
-**Aceptación:** cero eventos perdidos/duplicados; operario no resuelve errores técnicos; supervisor ve pendientes.
+**Aceptación:** cero eventos perdidos/duplicados; operario no resuelve errores técnicos; jefe de planta ve pendientes.
 
 ## Mini pasos, pausas y prompts
 
 ### 3.1 Contrato y estados de sincronización
 
-**Prompt:** Diseña el protocolo push/pull antes de implementarlo: envelope, versión, client/event UUID, orden, lotes, cursor, respuestas parciales, idempotencia, timestamps y estados locales. Define qué significa confirmado por servidor y qué datos nunca se sobrescriben. Registra ADR y ejemplos de caída en cada punto.
+**Prompt:** Diseña push/pull y propagación de cambios: envelope, versión, UUID, secuencia, lotes, cursor, respuestas parciales, idempotencia, timestamps y estados. Cada mutación se confirma primero en SQLite, se envía inmediatamente si hay red y nunca depende de la nube para responder al operario. Define confirmado central, correcciones administrativas entrantes y datos que nunca se sobrescriben.
 
 **Pausa:** representar en papel reintento después de perder respuesta sin producir duplicado.
 
@@ -49,7 +50,7 @@
 
 ### 3.5 Pull incremental de configuración
 
-**Prompt:** Implementa feed incremental con cursor para líneas, estaciones, operarios, proveedores y asignaciones activas/inactivas. Aplica cambios localmente en transacción y avanza cursor solo al completar. No descargues la base completa. Define bootstrap inicial y paginación.
+**Prompt:** Implementa feed incremental con cursor para líneas/componentes, estaciones, trabajadores, proveedores, cargamentos, asignaciones y correcciones administrativas. Aplica transaccionalmente y avanza cursor al completar. Añade señal de cambios para actualización casi en tiempo real cuando hay red, con polling incremental de respaldo; no descargues la base completa.
 
 **Pausa:** bootstrap, dos páginas, interrupción intermedia, reinicio y desactivación sin pérdida local.
 
@@ -61,13 +62,13 @@
 
 ### 3.7 Coordinación de varias estaciones
 
-**Prompt:** Añade registro/activación de clientes de sincronización, asignación de líneas y advertencia ante solapamientos. Permite la configuración flexible discutida (varias líneas por PC, varias PC), sin asumir una pantalla por línea. Define qué impide doble operación y qué solo alerta.
+**Prompt:** Añade clientes de sincronización, asignación de líneas y política de solapamiento. Piloto: un punto/una línea; configuración actual: cuatro líneas; futuro: varias líneas por PC y varias PC. Impide o advierte doble operación sobre la misma línea según decisión aprobada.
 
 **Pausa:** escenarios 1 PC/4 líneas, 2 PC/2 líneas y solapamiento intencional.
 
 ### 3.8 Estado y diagnóstico
 
-**Prompt:** Crea vista supervisor con última sincronización, pendientes, fallidos, versión, estación, red y desviación horaria. Añade logs estructurados/correlación y exportación redactada. La vista del operario solo muestra estados accionables simples.
+**Prompt:** Crea vista de jefe de planta con última sincronización, pendientes, fallidos, versión, estación, red, desviación horaria y correcciones web recibidas. Una notificación breve abre auditoría con administrador, motivo y cambios. La vista operaria solo muestra estados simples.
 
 **Pausa:** partiendo de un evento fallido, localizar su causa usando pantalla + diagnóstico sin abrir base.
 

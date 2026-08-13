@@ -65,17 +65,18 @@ Desarrollar un sistema informático para la gestión y control de la producción
 
 - Gestión de empresas, plantas, terminales y líneas.
 - Registro visual de cajuelas procesadas.
-- Producción por línea, turno y operario.
+- Producción por línea, jornada, cargamento y operario principal.
 - Administración de proveedores y cargamentos.
-- Alertas de barrida cada 50 cajuelas.
-- Registro de barridas y consumo de mercurio.
+- Alertas visuales y sonoras en cada múltiplo configurable de 50 cajuelas.
+- Registro de barridas reales, consumo de mercurio y oro por línea/cargamento.
 - Medición del oro recuperado en palos y gramos.
 - Indicadores de rendimiento por cargamento y proveedor.
 - Registro de horas trabajadas.
-- Check-in mediante cámara y reconocimiento facial.
+- Check-in/check-out; reconocimiento facial posterior y condicionado.
 - Control de inventarios, herramientas e insumos.
 - Registro de paros, mantenimiento e incidentes.
-- Reportes y exportación a Microsoft Excel.
+- Reportes bilingües y exportación inicial a Microsoft Excel.
+- Custodia y confirmación de entregas físicas de oro.
 - Auditoría de operaciones.
 - Funcionamiento local sin internet.
 - Sincronización incremental con Supabase.
@@ -98,7 +99,7 @@ flowchart LR
 
 La aplicación de escritorio seguirá un enfoque **local-first**. Los operarios podrán registrar información aunque se interrumpa el internet satelital.
 
-Cuando la conexión regrese, el sistema enviará únicamente las operaciones pendientes. No será necesario actualizar o descargar la base de datos completa.
+Cuando la conexión regrese, el sistema enviará únicamente las operaciones pendientes. No será necesario actualizar o descargar la base de datos completa. Con varias estaciones conectadas, los cambios centrales se propagarán casi en tiempo real; durante una caída cada estación continuará localmente y convergerá al recuperar la red.
 
 ---
 
@@ -116,6 +117,7 @@ La sincronización se fundamentará en:
 - Resolución controlada de conflictos.
 - Sincronización separada de fotografías y archivos.
 - Fechas almacenadas en UTC.
+- Notificación al escritorio cuando reciba correcciones administrativas.
 
 ---
 
@@ -201,10 +203,10 @@ Antes de trabajar en el proyecto se necesita:
 
 | Herramienta | Versión recomendada |
 |---|---|
-| Node.js | 24 LTS |
+| Node.js | 24.19.0 LTS |
 | npm | Incluido con Node.js |
-| pnpm | 11 o superior |
-| .NET SDK | 10 |
+| pnpm | 11.21.0 |
+| .NET SDK | 10.0.302 o una banda estable posterior de .NET 10 |
 | Visual Studio | 2026 |
 | Git | Versión estable reciente |
 | Navegador | Chrome, Edge, Firefox o Safari |
@@ -216,7 +218,13 @@ En Visual Studio debe instalarse la carga de trabajo:
 Desarrollo de escritorio de .NET
 ```
 
-No se deben instalar globalmente React, NestJS, Vite, Tailwind ni las demás bibliotecas. Estas dependencias estarán versionadas dentro del repositorio.
+No se deben instalar globalmente React, NestJS, Vite, Tailwind, Supabase CLI ni las demás bibliotecas. Estas dependencias estarán versionadas dentro del repositorio. La política completa está en `VERSIONS.md`.
+
+pnpm sí se instala con la versión fijada para poder administrar el workspace:
+
+```powershell
+npm.cmd install --global pnpm@11.21.0
+```
 
 ---
 
@@ -233,10 +241,10 @@ git --version
 Resultados esperados:
 
 ```text
-Node.js 24.x
+Node.js 24.19.0
 npm 11.x
-pnpm 11.x
-.NET SDK 10.x
+pnpm 11.21.0
+.NET SDK 10.0.302 o compatible según global.json
 Git instalado
 ```
 
@@ -244,15 +252,21 @@ Git instalado
 
 ## 🚀 Instalación del proyecto
 
-> Esta sección se completará cuando se generen las tres aplicaciones.
-
 ```powershell
 git clone URL_DEL_REPOSITORIO
 cd industrias-doradas
-pnpm.cmd install
+pnpm.cmd install --frozen-lockfile
 ```
 
-Las instrucciones específicas para ejecutar escritorio, backend y web se agregarán después de crear los proyectos iniciales.
+En el estado actual del Sprint 0, este comando restaura el workspace raíz. Las instrucciones para ejecutar API, web y desktop se añadirán al crear cada proyecto; todavía no existen comandos ficticios de build o pruebas.
+
+Comandos disponibles para comprobar la base:
+
+```powershell
+pnpm.cmd --version
+pnpm.cmd list --recursive --depth -1
+dotnet --version
+```
 
 ---
 
@@ -319,7 +333,7 @@ El trabajo se organizará mediante:
 
 ## 🔐 Seguridad
 
-Debido a que el sistema administrará información operativa, financiera y biométrica, se contemplarán:
+Debido a que el sistema administrará información operativa, financiera y posiblemente biométrica, se contemplarán:
 
 - Autenticación y autorización por roles.
 - Protección de credenciales.
@@ -330,6 +344,8 @@ Debido a que el sistema administrará información operativa, financiera y biom�
 - Copias de seguridad.
 - Recuperación ante fallos.
 - Variables de entorno para secretos.
+- Cuentas separadas para consulta gerencial y administración privilegiada.
+- MFA y dispositivos administrativos autorizados antes de producción.
 
 > Ninguna contraseña, clave privada o credencial de Supabase debe almacenarse en el repositorio.
 
@@ -337,7 +353,7 @@ Debido a que el sistema administrará información operativa, financiera y biom�
 
 ## 📌 Alcance inicial
 
-La primera versión estará orientada a una planta y una línea de producción, conservando una estructura preparada para incorporar más líneas, terminales y sucursales.
+La planta actual tiene cuatro líneas, cada una con un molino y tres rastras. El piloto y el primer punto de control se orientarán a una línea, conservando una estructura configurable para las cuatro líneas actuales y futuras ampliaciones.
 
 Las integraciones con sensores, maquinaria pesada, PLC o sistemas industriales no forman parte del alcance inicial.
 

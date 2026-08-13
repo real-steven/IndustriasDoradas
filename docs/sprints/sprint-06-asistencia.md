@@ -1,19 +1,20 @@
 # Sprint 6 — Asistencia y horas (semanas 12–13)
 
-**Objetivo:** check-in/out local con alternativa cuando falle cámara/biometría.
+**Objetivo:** check-in/out local y horas revisables; biometría solo después de estabilizar el flujo base.
 
-**Entregable:** fotografía + marca; dudas quedan pendientes y gerencia corrige auditadamente.
+**Entregable:** entrada/salida offline, incidencias y correcciones auditadas; reconocimiento facial opcional si política y precisión quedan aprobadas.
 
 ## Orden de trabajo
 
-1. Aprobar consentimiento, retención, acceso/eliminación antes de biometría.
-2. Eventos `CHECK_IN/CHECK_OUT`, incidencias, revisión y ajustes.
-3. Abstraer cámara/reconocimiento; primero fotografía + identificación/PIN.
-4. Almacenamiento privado/cifrado y URL firmada; nunca imagen pública/log.
-5. Offline/sync; reglas para turno abierto y reloj incorrecto.
-6. Calcular horas revisables, no nómina contable.
-7. Web para pendientes y resumen por operario/periodo.
-8. Facial opcional tras medir errores; fallo siempre deriva a foto pendiente.
+1. Eventos `CHECK_IN/CHECK_OUT`, incidencias y ajustes sin descansos.
+2. Flujo inicial: jefe de planta selecciona trabajador y registra marca.
+3. Calcular horas normales/adicionales sin salario; validar regla 8–10 horas.
+4. Aprobar consentimiento, retención, acceso/eliminación antes de biometría.
+5. Abstraer cámara/reconocimiento sin usar PIN como alternativa ordinaria.
+6. Almacenamiento privado/cifrado y URL firmada; nunca imagen pública/log.
+7. Offline/sync; hora original del intento y reloj incorrecto.
+8. Web para resumen; desktop para pendientes del jefe de planta.
+9. Facial opcional tras medir errores; fallo siempre deriva a foto pendiente.
 
 **Pruebas:** doble/entrada sin salida, nocturno, corrección, reloj, offline, permisos de imagen y cálculo decimal.
 
@@ -31,13 +32,13 @@
 
 ### 6.2 Flujo de asistencia real
 
-**Prompt:** Especifica check-in/out, descansos si aplican, turnos nocturnos, olvido, doble marca, cambio de día, encargado, incidencia y ajuste. Define qué necesita el cálculo de pago sin convertirlo en nómina. Crea historias, estados y ejemplos con horarios reales.
+**Prompt:** Especifica check-in/out sin descansos, jornadas diurna/nocturna, olvido, doble marca, cambio de día e incidencias. Valida jornada habitual de 8 horas y extensión aproximada a 10 sin inventar pago. Flujo inicial: jefe de planta selecciona trabajador; correcciones históricas: administrador.
 
 **Pausa:** gerencia resuelve ejemplos ambiguos y aprueba reglas de redondeo (o ausencia de redondeo).
 
 ### 6.3 Modelo de eventos y ajustes
 
-**Prompt:** Diseña eventos inmutables de asistencia y ajustes compensatorios con trabajador, estación, turno, tiempos dispositivo/servidor, método, estado de revisión, motivo y actor. Separa cálculo derivado de horas. Implementa dominio puro y pruebas de casos límite.
+**Prompt:** Diseña eventos inmutables de asistencia y ajustes compensatorios con trabajador, estación, jornada, tiempos dispositivo/servidor, método, estado de revisión, motivo y actor. Separa cálculo derivado de horas. Implementa dominio puro y pruebas de casos límite.
 
 **Pausa:** tabla de entrada/salida nocturna, abierta, duplicada y corregida produce estados esperados.
 
@@ -49,19 +50,19 @@
 
 ### 6.5 Abstracción de captura
 
-**Prompt:** Define `ICameraCapture`/puerto equivalente, detección de cámaras, selección y captura con timeout, cancelación, tamaño/formato y orientación. Implementa adaptador WPF y fake para pruebas. Maneja cámara ausente/ocupada/desconectada sin impedir método alternativo.
+**Prompt:** Solo después de aprobar política, define `ICameraCapture` y puerto de reconocimiento, enrolamiento por varios ángulos, captura con timeout/cancelación y fake. No uses PIN como fallback ordinario. Cámara ausente/fallo crea intento pendiente con evidencia y hora original.
 
 **Pausa:** capturar, cancelar y desconectar cámara durante operación; aplicación permanece utilizable.
 
 ### 6.6 Check-in/out local-first
 
-**Prompt:** Implementa interfaz WPF simple para identificar trabajador por selección/PIN autorizado, capturar foto y confirmar marca local en una acción clara. Evento y outbox deben ser atómicos; archivo usa ID opaco y cola separada. Muestra confirmación comprensible y evita doble pulsación.
+**Prompt:** Implementa primero interfaz WPF para seleccionar trabajador y registrar entrada/salida localmente. Si biometría fue aprobada, añade cámara como método preferido y pendiente con foto al fallar. Evento/outbox atómicos; evita doble pulsación.
 
 **Pausa:** marcar sin Internet, reiniciar y comprobar evento/foto pendiente sin duplicación.
 
 ### 6.7 Almacenamiento y sincronización privada
 
-**Prompt:** Implementa carga separada a bucket privado de Supabase Storage mediante backend/flujo autorizado, metadatos mínimos, checksum, reintentos e idempotencia. Genera URL firmada corta solo para roles permitidos. Define qué ocurre si evento sincroniza pero archivo no, y limpieza segura de temporales.
+**Prompt:** Solo si fotografía/biometría fue aprobada, implementa carga separada a bucket privado de Supabase Storage mediante backend/flujo autorizado, metadatos mínimos, checksum, reintentos e idempotencia. Genera URL firmada corta solo para roles permitidos. Define qué ocurre si evento sincroniza pero archivo no y limpieza segura de temporales; si fue aplazada, documenta este paso como no aplicable.
 
 **Pausa:** perder red durante carga, reintentar, comprobar un solo archivo y expiración del enlace.
 
@@ -73,9 +74,9 @@
 
 ### 6.9 Revisión web y ajustes
 
-**Prompt:** Implementa web para pendientes, visualización temporal de foto, aprobación/rechazo y ajuste con motivo. Separa revisión de resumen de horas; purga caché sensible al cerrar sesión. Añade filtros, permisos, auditoría y accesibilidad móvil.
+**Prompt:** Implementa resumen web de asistencia para jefe de empresa y correcciones administrativas auditadas. Las solicitudes biométricas pendientes se resuelven en desktop por jefe de planta; administrador puede auditar/re-enrolar. Purga caché sensible al cerrar sesión.
 
-**Pausa:** gerente resuelve pendiente desde iPhone; operador no accede a fotos ajenas.
+**Pausa:** jefe de planta resuelve pendiente desde desktop; jefe de empresa no accede a fotos y operario no accede a fotos ajenas.
 
 ### 6.10 Reconocimiento facial opcional y evaluable
 
@@ -85,6 +86,6 @@
 
 ### 6.11 Piloto y cierre
 
-**Prompt:** Ejecuta jornada de asistencia con cámara normal/difícil/ausente, offline, turnos nocturnos, olvido y revisión. Verifica privacidad, sincronización, horas y eliminación según política. Corrige críticos/altos, redacta manual y cierra Sprint 6.
+**Prompt:** Ejecuta jornada de asistencia básica offline con entrada/salida, jornada nocturna, olvido y corrección. Si biometría fue aprobada, añade cámara normal/difícil/ausente y pendientes; si no, deja evidencia explícita del aplazamiento. Verifica privacidad, horas y sincronización, corrige críticos/altos y cierra Sprint 6.
 
 **Pausa:** nadie queda sin marcar por falla técnica; horas aprobadas; compuerta cerrada.

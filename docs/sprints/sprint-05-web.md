@@ -1,31 +1,32 @@
 # Sprint 5 — Portal web gerencial (semanas 10–11)
 
-**Objetivo:** seguimiento remoto claro y seguro.
+**Objetivo:** seguimiento remoto bilingüe, claro y seguro, separado de la administración.
 
-**Entregable:** gerencia consulta líneas, sincronización, historial, cargamentos y barridas desde móvil/PC.
+**Entregable:** jefe de empresa consulta toda la operación y confirma/rechaza entregas de oro desde móvil/PC en español o inglés.
 
 ## Orden de trabajo
 
 1. Read models solo después de estabilizar eventos.
-2. API paginada con fecha, planta, línea, turno, proveedor, operario y cargamento.
+2. API paginada con fecha, planta, línea, jornada, proveedor, responsable y cargamento.
 3. Dashboard: línea activa, cajuelas, cercanía de barrida, última sync y alertas.
-4. Historial/detalle/auditoría, diferenciando hora de dispositivo/servidor.
-5. React mobile-first; vacío/carga/error/offline en Safari iOS y Chrome.
-6. Permisos gerencia/supervisor.
-7. Refresco razonable/manual; tiempo real solo si aporta valor medido.
-8. Rendimiento con datos proyectados de un año.
+4. Oro bajo custodia y entrega: notificación, confirmación/rechazo y discrepancia.
+5. Historial/detalle/auditoría, diferenciando hora de dispositivo/servidor.
+6. React mobile-first bilingüe; vacío/carga/error/offline en Safari iOS y Chrome.
+7. Cuenta jefe de empresa informativa y cuenta administrador separada.
+8. Actualización casi en tiempo real con frescura visible y respaldo incremental.
+9. Rendimiento con datos proyectados de un año.
 
 **Pruebas:** filtros/totales SQL conocidos, rutas/roles y E2E login → línea → cargamento → barrida.
 
 **Prueba manual:** iPhone Safari, Android Chrome y PC con red lenta; comparar con API/desktop.
 
-**Aceptación:** se distingue dato actualizado/offline; mismos filtros = mismos totales; web aún no ejecuta acciones operativas críticas.
+**Aceptación:** se distingue dato actualizado/offline; mismos filtros = mismos totales; gerencia no muta operación salvo confirmar/rechazar entrega de oro.
 
 ## Mini pasos, pausas y prompts
 
 ### 5.1 Necesidades gerenciales y wireframes
 
-**Prompt:** Entrevista/revisa necesidades de gerente y socios viajeros. Prioriza preguntas que la web debe responder, no gráficos deseados. Diseña wireframes mobile-first de resumen, línea, cargamento, barrida e historial; muestra frescura/sincronización. Valida lenguaje, privacidad y acciones permitidas antes de código.
+**Prompt:** Diseña wireframes mobile-first para jefe de empresa: resumen, línea, cargamento, barrida, oro/custodia, asistencia, inventario e historial. Incluye español/inglés, preferencia por cuenta y frescura. No muestres acciones administrativas; la única mutación gerencial es confirmar/rechazar entrega de oro autorizada.
 
 **Pausa:** gerente encuentra tres respuestas clave en prototipo sin explicación del desarrollador.
 
@@ -37,31 +38,31 @@
 
 ### 5.3 API de consulta
 
-**Prompt:** Implementa endpoints de consulta paginados/filtrables por fechas, planta, línea, turno, proveedor, operario y cargamento. Usa DTO estables, límites máximos, orden determinista e índices medidos. Añade autorización y pruebas contra dataset conocido.
+**Prompt:** Implementa endpoints de consulta paginados/filtrables por fechas, planta, línea, jornada, proveedor, responsable y cargamento. Usa DTO estables, límites máximos, orden determinista e índices medidos. Añade autorización y pruebas contra dataset conocido.
 
 **Pausa:** Swagger devuelve páginas estables, filtros combinados y 403 correctos.
 
 ### 5.4 Resumen operativo web
 
-**Prompt:** Implementa dashboard React con estado de líneas, cajuelas desde última barrida, cargamento/proveedor, turno, paro, alerta y última sincronización. Usa TanStack Query y componentes accesibles; no agregues gráficos sin decisión asociada.
+**Prompt:** Implementa dashboard React con líneas operando/detenidas, cajuelas totales/progreso, cargamento/proveedor, jornada, responsable, novedades, barridas, oro y última sincronización. Usa TanStack Query, i18n y componentes accesibles; no agregues gráficos sin decisión asociada.
 
 **Pausa:** comparar cada tarjeta con API/desktop y distinguir claramente estación desactualizada.
 
 ### 5.5 Historial y detalle
 
-**Prompt:** Implementa listado/historial con filtros conservados en URL, paginación y detalle de turno/cargamento/barrida. Diferencia hora del dispositivo y servidor, eventos corregidos y datos pendientes/tardíos. Maneja vacío y filtros sin resultados.
+**Prompt:** Implementa listado/historial con filtros conservados en URL, paginación y detalle de jornada/cargamento/barrida. Diferencia hora del dispositivo y servidor, eventos corregidos y datos pendientes/tardíos. Maneja vacío y filtros sin resultados.
 
 **Pausa:** abrir/enviar URL filtrada en móvil y reproducir exactamente la consulta.
 
 ### 5.6 Auditoría visible para autorizados
 
-**Prompt:** Añade vista de auditoría para roles permitidos con actor, acción, entidad, motivo y correlación, redactando datos sensibles. Ofrece trazabilidad desde registros corregidos sin exponer tokens/fotos. Prueba paginación y permisos.
+**Prompt:** Añade vista de auditoría de lectura para roles permitidos con actor, acción, entidad, motivo y correlación, redactando datos sensibles. El jefe de empresa ve estado/revisiones relevantes; el administrador ve detalle de mutaciones. No expongas tokens ni fotos.
 
-**Pausa:** supervisor explica quién corrigió un dato y por qué; operador recibe 403.
+**Pausa:** un usuario autorizado explica quién corrigió un dato y por qué; operario recibe 403.
 
 ### 5.7 Responsive, accesibilidad y navegadores
 
-**Prompt:** Refina layout mobile-first para iPhone Safari, Android Chrome y escritorio. Prueba teclado, lector básico, contraste, objetivos táctiles, zoom, orientación y safe areas. No escondas información esencial solo por tamaño; documenta matriz de compatibilidad.
+**Prompt:** Refina layout mobile-first bilingüe para iPhone Safari, Android Chrome y escritorio. Prueba cambio es/en, textos largos ingleses, teclado, lector, contraste, objetivos táctiles, zoom, orientación y safe areas.
 
 **Pausa:** recorrido completo en dispositivos reales o emulación validada, sin scroll horizontal accidental.
 
@@ -79,6 +80,6 @@
 
 ### 5.10 E2E y aceptación gerencial
 
-**Prompt:** Automatiza E2E login→dashboard→línea→cargamento→barrida→auditoría con roles. Ejecuta prueba manual en iPhone/Android/PC, compara totales y registra feedback. Corrige críticos/altos, actualiza manual y cierra Sprint 5.
+**Prompt:** Automatiza E2E es/en: login→dashboard→línea→cargamento→barrida→entrega de oro→auditoría. Verifica cuenta gerencial frente a administrativa en iPhone/Android/PC, compara totales y corrige críticos/altos.
 
 **Pausa:** gerente completa tareas sin ayuda; compuerta aprobada.
