@@ -258,9 +258,9 @@ cd industrias-doradas
 pnpm.cmd install --frozen-lockfile
 ```
 
-En el estado actual del Sprint 0, este comando restaura el workspace y la API NestJS. Web y desktop se añadirán en sus pasos correspondientes; no se documentan comandos ficticios para componentes que todavía no existen.
+En el estado actual del Sprint 0, este comando restaura el workspace, la API NestJS y el portal React. Desktop se añadirá en su paso correspondiente; no se documentan comandos ficticios para componentes que todavía no existen.
 
-Comandos disponibles para comprobar la base y la API:
+Comandos disponibles para comprobar la base, la API y el portal web:
 
 ```powershell
 pnpm.cmd --version
@@ -270,6 +270,9 @@ pnpm.cmd --filter @industrias-doradas/api lint
 pnpm.cmd --filter @industrias-doradas/api build
 pnpm.cmd --filter @industrias-doradas/api test
 pnpm.cmd --filter @industrias-doradas/api test:e2e
+pnpm.cmd --filter @industrias-doradas/web lint
+pnpm.cmd --filter @industrias-doradas/web build
+pnpm.cmd --filter @industrias-doradas/web test
 ```
 
 Para iniciar la API en PowerShell:
@@ -281,6 +284,14 @@ pnpm.cmd --filter @industrias-doradas/api start:dev
 ```
 
 El endpoint técnico está disponible en `GET http://localhost:3000/api/v1/health`. La documentación detallada y la explicación de cada dependencia se encuentran en `apps/api/README.md`.
+
+Con la API activa, inicia el portal desde otra terminal:
+
+```powershell
+pnpm.cmd --filter @industrias-doradas/web dev
+```
+
+La página de diagnóstico queda disponible en `http://localhost:5173/estado`. Su documentación y dependencias están explicadas en `apps/web/README.md`.
 
 ---
 
@@ -297,7 +308,7 @@ El endpoint técnico está disponible en `GET http://localhost:3000/api/v1/healt
 - [ ] Creación de la aplicación WPF.
 - [ ] Implementación de SQLite.
 - [ ] Implementación de la sincronización.
-- [ ] Creación de la aplicación React.
+- [x] Creación del esqueleto de la aplicación React.
 - [ ] Pruebas con usuarios.
 - [ ] Implementación en la empresa.
 
