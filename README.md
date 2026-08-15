@@ -298,6 +298,15 @@ GitHub Actions valida API/web en Linux y desktop WPF en Windows para pushes y
 pull requests de `main` y `DevSteven`. La explicación y los comandos para
 reproducir fallos están en `docs/development/integracion-continua.md`.
 
+Las decisiones técnicas aceptadas están en `docs/decisions/` y los diagramas C4,
+la secuencia offline/sincronización, la autoridad de reglas y la ubicación de
+secretos están en `docs/architecture/arquitectura-sistema.md`.
+
+La auditoría y compuerta del Sprint 0 están en
+`docs/sprints/sprint-00-cierre.md`; su ficha manual y matriz de trazabilidad se
+encuentran en `docs/testing/sprint-00-resultado.md` y
+`docs/requirements/matriz-requisito-sprint.md`.
+
 Para iniciar la API en PowerShell:
 
 ```powershell
