@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery } from "@tanstack/react-query";
 
-import { getHealth } from './health-api';
+import { getHealth } from "./health-api";
 
 export function StatusPage() {
   const healthQuery = useQuery({
-    queryKey: ['system', 'health'],
+    queryKey: ["system", "health"],
     queryFn: ({ signal }) => getHealth(signal),
     refetchInterval: 30_000,
   });
@@ -14,9 +14,7 @@ export function StatusPage() {
       <div className="page-heading">
         <p className="eyebrow">Diagnóstico</p>
         <h1 id="status-title">Estado del sistema</h1>
-        <p>
-          Verificación básica de comunicación entre el portal web y la API.
-        </p>
+        <p>Verificación básica de comunicación entre el portal web y la API.</p>
       </div>
 
       {healthQuery.isPending ? <LoadingState /> : null}
@@ -69,7 +67,7 @@ function ErrorState({ isRetrying, onRetry }: ErrorStateProps) {
           Confirma que la API esté iniciada e inténtalo nuevamente.
         </p>
         <button type="button" onClick={onRetry} disabled={isRetrying}>
-          {isRetrying ? 'Reintentando…' : 'Reintentar conexión'}
+          {isRetrying ? "Reintentando…" : "Reintentar conexión"}
         </button>
       </div>
     </div>
@@ -89,9 +87,9 @@ function AvailableState({
   isRefreshing,
   onRefresh,
 }: AvailableStateProps) {
-  const checkedAt = new Intl.DateTimeFormat('es-CR', {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
+  const checkedAt = new Intl.DateTimeFormat("es-CR", {
+    dateStyle: "medium",
+    timeStyle: "medium",
   }).format(new Date(timestamp));
 
   return (
@@ -111,7 +109,7 @@ function AvailableState({
           </div>
         </dl>
         <button type="button" onClick={onRefresh} disabled={isRefreshing}>
-          {isRefreshing ? 'Actualizando…' : 'Actualizar estado'}
+          {isRefreshing ? "Actualizando…" : "Actualizar estado"}
         </button>
       </div>
     </div>

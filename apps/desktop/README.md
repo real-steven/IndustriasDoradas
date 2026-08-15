@@ -65,3 +65,9 @@ dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-build
 
 Las versiones están fijadas en los archivos de proyecto. Nullable, analizadores
 de .NET y advertencias como errores se aplican desde `Directory.Build.props`.
+
+## Producción y configuración externa
+
+La URL local vive en `appsettings.Development.json`. Producción no incorpora
+una URL y exige inyectarla externamente mediante `Api__BaseUrl`; si falta, el
+arranque muestra una regla accionable sin revelar ningún valor sensible.

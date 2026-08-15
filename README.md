@@ -278,6 +278,26 @@ dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore
 dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-build
 ```
 
+Para preparar un clon y verificar todo el monorepo con comandos unificados:
+
+```powershell
+pnpm.cmd run setup
+pnpm.cmd run verify
+```
+
+`verify` comprueba formato, lint/análisis estático, builds y pruebas de API, web
+y desktop. La explicación completa y la prueba deliberada de formato están en
+`docs/development/calidad-y-comandos.md`.
+
+`verify` también busca patrones comunes de secretos antes de compilar. La
+configuración por ambiente, la ubicación exclusiva de `service_role` y el
+procedimiento de rotación se explican en
+`docs/development/configuracion-y-secretos.md`.
+
+GitHub Actions valida API/web en Linux y desktop WPF en Windows para pushes y
+pull requests de `main` y `DevSteven`. La explicación y los comandos para
+reproducir fallos están en `docs/development/integracion-continua.md`.
+
 Para iniciar la API en PowerShell:
 
 ```powershell

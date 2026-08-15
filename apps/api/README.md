@@ -60,3 +60,10 @@ pnpm.cmd --filter @industrias-doradas/api test:e2e
 
 Todas las versiones estan fijadas exactamente en `package.json` y el lockfile del
 workspace conserva una instalacion reproducible.
+
+## Variables y secretos
+
+`.env.example` documenta las variables admitidas sin credenciales reales. Los
+valores locales viven en `.env.local`, ignorado por Git. La clave
+`SUPABASE_SERVICE_ROLE_KEY` es exclusiva del proceso backend y nunca debe
+copiarse a web o desktop. Consulta `docs/development/configuracion-y-secretos.md`.

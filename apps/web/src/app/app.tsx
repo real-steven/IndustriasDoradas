@@ -1,6 +1,6 @@
-import { Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 
-import { StatusPage } from '../features/system-status/status-page';
+import { StatusPage } from "../features/system-status/status-page";
 
 export function App() {
   return (
@@ -34,7 +34,9 @@ function AppLayout() {
 
         <nav aria-label="Navegación principal">
           <NavLink
-            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+            className={({ isActive }) =>
+              isActive ? "nav-link active" : "nav-link"
+            }
             to="/estado"
           >
             Estado del sistema

@@ -5,8 +5,8 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import type { Request, Response } from 'express';
+} from "@nestjs/common";
+import type { Request, Response } from "express";
 
 interface ErrorBody {
   statusCode: number;
@@ -41,7 +41,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
 
     const logContext = {
-      event: 'http_request_failed',
+      event: "http_request_failed",
       method: request.method,
       path: request.originalUrl,
       statusCode,
@@ -58,19 +58,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   private getPublicMessage(exception: unknown): string | string[] {
     if (!(exception instanceof HttpException)) {
-      return 'Internal server error';
+      return "Internal server error";
     }
 
     const exceptionResponse = exception.getResponse();
 
-    if (typeof exceptionResponse === 'string') {
+    if (typeof exceptionResponse === "string") {
       return exceptionResponse;
     }
 
     if (this.isNestHttpExceptionBody(exceptionResponse)) {
       const { message } = exceptionResponse;
 
-      if (typeof message === 'string' || this.isStringArray(message)) {
+      if (typeof message === "string" || this.isStringArray(message)) {
         return message;
       }
     }
@@ -81,10 +81,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private isNestHttpExceptionBody(
     value: object,
   ): value is NestHttpExceptionBody {
-    return 'message' in value;
+    return "message" in value;
   }
 
   private isStringArray(value: unknown): value is string[] {
-    return Array.isArray(value) && value.every((item) => typeof item === 'string');
+    return (
+      Array.isArray(value) && value.every((item) => typeof item === "string")
+    );
   }
 }

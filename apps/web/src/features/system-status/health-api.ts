@@ -1,13 +1,14 @@
 export interface HealthResponse {
-  status: 'ok';
+  status: "ok";
   service: string;
   timestamp: string;
 }
 
 export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
-  const response = await fetch('/api/v1/health', {
+  const { apiBaseUrl } = readWebEnvironment();
+  const response = await fetch(`${apiBaseUrl}/v1/health`, {
     headers: {
-      Accept: 'application/json',
+      Accept: "application/json",
     },
     signal,
   });
@@ -19,24 +20,25 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   const body: unknown = await response.json();
 
   if (!isHealthResponse(body)) {
-    throw new Error('La API respondió con un formato de health inválido.');
+    throw new Error("La API respondió con un formato de health inválido.");
   }
 
   return body;
 }
 
 function isHealthResponse(value: unknown): value is HealthResponse {
-  if (typeof value !== 'object' || value === null) {
+  if (typeof value !== "object" || value === null) {
     return false;
   }
 
   return (
-    'status' in value &&
-    value.status === 'ok' &&
-    'service' in value &&
-    typeof value.service === 'string' &&
-    'timestamp' in value &&
-    typeof value.timestamp === 'string' &&
+    "status" in value &&
+    value.status === "ok" &&
+    "service" in value &&
+    typeof value.service === "string" &&
+    "timestamp" in value &&
+    typeof value.timestamp === "string" &&
     !Number.isNaN(Date.parse(value.timestamp))
   );
 }
+import { readWebEnvironment } from "../../config/environment";

@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 export interface HealthStatus {
-  status: 'ok';
-  service: 'industrias-doradas-api';
+  status: "ok";
+  service: "industrias-doradas-api";
   timestamp: string;
 }
 
@@ -10,8 +10,8 @@ export interface HealthStatus {
 export class HealthService {
   getStatus(): HealthStatus {
     return {
-      status: 'ok',
-      service: 'industrias-doradas-api',
+      status: "ok",
+      service: "industrias-doradas-api",
       timestamp: new Date().toISOString(),
     };
   }

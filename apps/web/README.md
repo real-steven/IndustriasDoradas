@@ -51,3 +51,9 @@ pnpm.cmd --filter @industrias-doradas/web test
 
 Las versiones están fijadas exactamente y se conservan en el lockfile del
 workspace.
+
+## Variables y secretos
+
+`.env.example` documenta la URL del API y las variables públicas reservadas
+para Supabase Auth. Todo valor `VITE_*` queda visible en el navegador; nunca
+debe contener `service_role` ni otro secreto administrativo.

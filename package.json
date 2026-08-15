@@ -7,5 +7,29 @@
   "engines": {
     "node": ">=24.19.0 <25",
     "pnpm": "11.21.0"
+  },
+  "scripts": {
+    "setup": "pnpm install --frozen-lockfile && dotnet restore apps/desktop/IndustriasDoradas.Desktop.slnx",
+    "format": "pnpm run format:typescript && pnpm run format:dotnet",
+    "format:check": "pnpm run format:typescript:check && pnpm run format:dotnet:check",
+    "format:typescript": "prettier --write \"apps/{api,web}/**/*.{ts,tsx,mjs,json,css,html}\" \"scripts/**/*.mjs\" \".github/**/*.yml\" package.json pnpm-workspace.yaml",
+    "format:typescript:check": "prettier --check \"apps/{api,web}/**/*.{ts,tsx,mjs,json,css,html}\" \"scripts/**/*.mjs\" \".github/**/*.yml\" package.json pnpm-workspace.yaml",
+    "format:dotnet": "dotnet format apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore",
+    "format:dotnet:check": "dotnet format apps/desktop/IndustriasDoradas.Desktop.slnx --verify-no-changes --no-restore",
+    "lint": "pnpm run lint:typescript && pnpm run lint:dotnet",
+    "lint:typescript": "pnpm --filter @industrias-doradas/api lint && pnpm --filter @industrias-doradas/web lint",
+    "lint:dotnet": "dotnet format analyzers apps/desktop/IndustriasDoradas.Desktop.slnx --verify-no-changes --no-restore",
+    "build": "pnpm run build:typescript && pnpm run build:dotnet",
+    "build:typescript": "pnpm --filter @industrias-doradas/api build && pnpm --filter @industrias-doradas/web build",
+    "build:dotnet": "dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release",
+    "test": "pnpm run test:api && pnpm run test:web && pnpm run test:desktop",
+    "test:api": "pnpm --filter @industrias-doradas/api test && pnpm --filter @industrias-doradas/api test:e2e",
+    "test:web": "pnpm --filter @industrias-doradas/web test",
+    "test:desktop": "dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release",
+    "secrets:check": "node scripts/check-secrets.mjs",
+    "verify": "pnpm run secrets:check && pnpm run format:check && pnpm run lint && pnpm run build && pnpm run test"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6"
   }
 }
