@@ -306,3 +306,29 @@ La línea base ya incorpora las respuestas funcionales disponibles y permite con
 **Fecha:** 2026-08-13
 
 **Restricción:** no avanzar al siguiente prompt sin autorización expresa del responsable del proyecto.
+
+## 18. Matriz requisito → sprint
+
+La asignación indica responsabilidad futura; no significa que el requisito ya
+esté implementado.
+
+| ID | Sprint | Evidencia prevista |
+| --- | ---: | --- |
+| RF-01 | 1 | Matriz de permisos y accesos rechazados |
+| RF-02 | 1 | Catálogos y cuatro líneas configurables |
+| RF-03 | 2 | Cargamento y responsable obligatorios |
+| RF-04 | 2 | Cajuela y reverso local probados |
+| RF-05 | 3 | Caída, reintento y convergencia sin duplicados |
+| RF-06 | 4 | Casos 49/50/55/56 y múltiplos |
+| RF-07 | 4 | Barridas y oro consolidado por cargamento |
+| RF-08 | 4–5 | Entrega, confirmación, rechazo y discrepancia |
+| RF-09 | 5 | Portal español/inglés en móvil y escritorio |
+| RF-10 | 6 | Entrada/salida offline y ajustes |
+| RF-11 | 7 | Kardex sin negativos y revisión |
+| RF-12 | 7 | Novedad que puede atravesar jornada |
+| RF-13 | 8 | Excel bilingüe con dataset aprobado |
+| RF-14 | 1–8 | Auditoría transversal por módulo |
+| RF-15 | 6 | Política/precisión aprobadas o aplazamiento |
+
+Seguridad, accesibilidad, rendimiento, UTC, decimales, recuperación y
+observabilidad se verifican transversalmente cuando se introduce cada flujo.

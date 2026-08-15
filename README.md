@@ -285,27 +285,18 @@ pnpm.cmd run setup
 pnpm.cmd run verify
 ```
 
-`verify` comprueba formato, lint/análisis estático, builds y pruebas de API, web
-y desktop. La explicación completa y la prueba deliberada de formato están en
-`docs/development/calidad-y-comandos.md`.
+`verify` comprueba secretos, formato, lint, builds y pruebas. Instalación,
+ambientes, seguridad, calidad y CI están reunidos en
+`docs/development/guia-desarrollo.md`.
 
-`verify` también busca patrones comunes de secretos antes de compilar. La
-configuración por ambiente, la ubicación exclusiva de `service_role` y el
-procedimiento de rotación se explican en
-`docs/development/configuracion-y-secretos.md`.
-
-GitHub Actions valida API/web en Linux y desktop WPF en Windows para pushes y
-pull requests de `main` y `DevSteven`. La explicación y los comandos para
-reproducir fallos están en `docs/development/integracion-continua.md`.
-
-Las decisiones técnicas aceptadas están en `docs/decisions/` y los diagramas C4,
-la secuencia offline/sincronización, la autoridad de reglas y la ubicación de
-secretos están en `docs/architecture/arquitectura-sistema.md`.
+Las decisiones técnicas, diagramas C4, secuencia offline/sincronización,
+autoridad de reglas y ubicación de secretos están reunidos en
+`docs/architecture/arquitectura-y-decisiones.md`.
 
 La auditoría y compuerta del Sprint 0 están en
-`docs/sprints/sprint-00-cierre.md`; su ficha manual y matriz de trazabilidad se
-encuentran en `docs/testing/sprint-00-resultado.md` y
-`docs/requirements/matriz-requisito-sprint.md`.
+`docs/sprints/sprint-00-cierre.md`; la ficha manual está en
+`docs/testing/sprint-00-resultado.md` y la trazabilidad se integró en la línea
+base funcional.
 
 Para iniciar la API en PowerShell:
 
