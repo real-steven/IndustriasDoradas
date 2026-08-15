@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - DevSteven
+  pull_request:
+    branches:
+      - main
+      - DevSteven
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-web:
+    name: API y web (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Instalar pnpm fijado
+        uses: pnpm/action-setup@v6
+
+      - name: Instalar Node.js con cache de pnpm
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Restaurar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Revisar secretos accidentales
+        run: pnpm run secrets:check
+
+      - name: Comprobar formato TypeScript
+        run: pnpm run format:typescript:check
+
+      - name: Ejecutar lint TypeScript
+        run: pnpm run lint:typescript
+
+      - name: Compilar API y web
+        run: pnpm run build:typescript
+
+      - name: Probar API
+        run: pnpm run test:api
+
+      - name: Probar web
+        run: pnpm run test:web
+
+  desktop:
+    name: Desktop WPF (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Instalar .NET y restaurar cache NuGet
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: apps/desktop/**/packages.lock.json
+
+      - name: Restaurar dependencias bloqueadas
+        run: dotnet restore apps/desktop/IndustriasDoradas.Desktop.slnx --locked-mode
+
+      - name: Comprobar formato .NET
+        run: dotnet format apps/desktop/IndustriasDoradas.Desktop.slnx --verify-no-changes --no-restore
+
+      - name: Ejecutar analizadores .NET
+        run: dotnet format analyzers apps/desktop/IndustriasDoradas.Desktop.slnx --verify-no-changes --no-restore
+
+      - name: Compilar desktop
+        run: dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release
+
+      - name: Probar desktop
+        run: dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release

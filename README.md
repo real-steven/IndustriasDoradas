@@ -65,17 +65,18 @@ Desarrollar un sistema informático para la gestión y control de la producción
 
 - Gestión de empresas, plantas, terminales y líneas.
 - Registro visual de cajuelas procesadas.
-- Producción por línea, turno y operario.
+- Producción por línea, jornada, cargamento y operario principal.
 - Administración de proveedores y cargamentos.
-- Alertas de barrida cada 50 cajuelas.
-- Registro de barridas y consumo de mercurio.
+- Alertas visuales y sonoras en cada múltiplo configurable de 50 cajuelas.
+- Registro de barridas reales, consumo de mercurio y oro por línea/cargamento.
 - Medición del oro recuperado en palos y gramos.
 - Indicadores de rendimiento por cargamento y proveedor.
 - Registro de horas trabajadas.
-- Check-in mediante cámara y reconocimiento facial.
+- Check-in/check-out; reconocimiento facial posterior y condicionado.
 - Control de inventarios, herramientas e insumos.
 - Registro de paros, mantenimiento e incidentes.
-- Reportes y exportación a Microsoft Excel.
+- Reportes bilingües y exportación inicial a Microsoft Excel.
+- Custodia y confirmación de entregas físicas de oro.
 - Auditoría de operaciones.
 - Funcionamiento local sin internet.
 - Sincronización incremental con Supabase.
@@ -98,7 +99,7 @@ flowchart LR
 
 La aplicación de escritorio seguirá un enfoque **local-first**. Los operarios podrán registrar información aunque se interrumpa el internet satelital.
 
-Cuando la conexión regrese, el sistema enviará únicamente las operaciones pendientes. No será necesario actualizar o descargar la base de datos completa.
+Cuando la conexión regrese, el sistema enviará únicamente las operaciones pendientes. No será necesario actualizar o descargar la base de datos completa. Con varias estaciones conectadas, los cambios centrales se propagarán casi en tiempo real; durante una caída cada estación continuará localmente y convergerá al recuperar la red.
 
 ---
 
@@ -116,6 +117,7 @@ La sincronización se fundamentará en:
 - Resolución controlada de conflictos.
 - Sincronización separada de fotografías y archivos.
 - Fechas almacenadas en UTC.
+- Notificación al escritorio cuando reciba correcciones administrativas.
 
 ---
 
@@ -201,10 +203,10 @@ Antes de trabajar en el proyecto se necesita:
 
 | Herramienta | Versión recomendada |
 |---|---|
-| Node.js | 24 LTS |
+| Node.js | 24.19.0 LTS |
 | npm | Incluido con Node.js |
-| pnpm | 11 o superior |
-| .NET SDK | 10 |
+| pnpm | 11.21.0 |
+| .NET SDK | 10.0.302 o una banda estable posterior de .NET 10 |
 | Visual Studio | 2026 |
 | Git | Versión estable reciente |
 | Navegador | Chrome, Edge, Firefox o Safari |
@@ -216,7 +218,13 @@ En Visual Studio debe instalarse la carga de trabajo:
 Desarrollo de escritorio de .NET
 ```
 
-No se deben instalar globalmente React, NestJS, Vite, Tailwind ni las demás bibliotecas. Estas dependencias estarán versionadas dentro del repositorio.
+No se deben instalar globalmente React, NestJS, Vite, Tailwind, Supabase CLI ni las demás bibliotecas. Estas dependencias estarán versionadas dentro del repositorio. La política completa está en `VERSIONS.md`.
+
+pnpm sí se instala con la versión fijada para poder administrar el workspace:
+
+```powershell
+npm.cmd install --global pnpm@11.21.0
+```
 
 ---
 
@@ -233,10 +241,10 @@ git --version
 Resultados esperados:
 
 ```text
-Node.js 24.x
+Node.js 24.19.0
 npm 11.x
-pnpm 11.x
-.NET SDK 10.x
+pnpm 11.21.0
+.NET SDK 10.0.302 o compatible según global.json
 Git instalado
 ```
 
@@ -244,15 +252,78 @@ Git instalado
 
 ## 🚀 Instalación del proyecto
 
-> Esta sección se completará cuando se generen las tres aplicaciones.
-
 ```powershell
 git clone URL_DEL_REPOSITORIO
 cd industrias-doradas
-pnpm.cmd install
+pnpm.cmd install --frozen-lockfile
 ```
 
-Las instrucciones específicas para ejecutar escritorio, backend y web se agregarán después de crear los proyectos iniciales.
+En el estado actual del Sprint 0, este comando restaura el workspace de Node.js para la API NestJS y el portal React. La solución WPF se restaura mediante `dotnet restore`.
+
+Comandos disponibles para comprobar la base, la API, el portal web y desktop:
+
+```powershell
+pnpm.cmd --version
+pnpm.cmd list --recursive --depth -1
+dotnet --version
+pnpm.cmd --filter @industrias-doradas/api lint
+pnpm.cmd --filter @industrias-doradas/api build
+pnpm.cmd --filter @industrias-doradas/api test
+pnpm.cmd --filter @industrias-doradas/api test:e2e
+pnpm.cmd --filter @industrias-doradas/web lint
+pnpm.cmd --filter @industrias-doradas/web build
+pnpm.cmd --filter @industrias-doradas/web test
+dotnet restore apps/desktop/IndustriasDoradas.Desktop.slnx
+dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore
+dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-build
+```
+
+Para preparar un clon y verificar todo el monorepo con comandos unificados:
+
+```powershell
+pnpm.cmd run setup
+pnpm.cmd run verify
+```
+
+`verify` comprueba secretos, formato, lint, builds y pruebas. Instalación,
+ambientes, seguridad, calidad y CI están reunidos en
+`docs/development/guia-desarrollo.md`.
+
+Las decisiones técnicas, diagramas C4, secuencia offline/sincronización,
+autoridad de reglas y ubicación de secretos están reunidos en
+`docs/architecture/arquitectura-y-decisiones.md`.
+
+La auditoría y compuerta del Sprint 0 están en
+`docs/sprints/sprint-00-cierre.md`; la ficha manual está en
+`docs/testing/sprint-00-resultado.md` y la trazabilidad se integró en la línea
+base funcional.
+
+Para iniciar la API en PowerShell:
+
+```powershell
+$env:NODE_ENV = 'development'
+$env:PORT = '3000'
+pnpm.cmd --filter @industrias-doradas/api start:dev
+```
+
+El endpoint técnico está disponible en `GET http://localhost:3000/api/v1/health`. La documentación detallada y la explicación de cada dependencia se encuentran en `apps/api/README.md`.
+
+Con la API activa, inicia el portal desde otra terminal:
+
+```powershell
+pnpm.cmd --filter @industrias-doradas/web dev
+```
+
+La página de diagnóstico queda disponible en `http://localhost:5173/estado`. Su documentación y dependencias están explicadas en `apps/web/README.md`.
+
+Para iniciar la aplicación de escritorio desde una tercera terminal:
+
+```powershell
+$env:DOTNET_ENVIRONMENT = 'Development'
+dotnet run --project apps/desktop/src/IndustriasDoradas.Desktop/IndustriasDoradas.Desktop.csproj
+```
+
+La solución para Visual Studio, la configuración por ambiente y la explicación de dependencias están documentadas en `apps/desktop/README.md`.
 
 ---
 
@@ -263,13 +334,13 @@ Las instrucciones específicas para ejecutar escritorio, backend y web se agrega
 - [x] Selección preliminar de tecnologías.
 - [x] Definición de la arquitectura general.
 - [x] Creación del repositorio.
-- [ ] Configuración del monorepo.
-- [ ] Creación del backend NestJS.
+- [x] Configuración del monorepo.
+- [x] Creación del esqueleto del backend NestJS.
 - [ ] Configuración de Supabase.
-- [ ] Creación de la aplicación WPF.
+- [x] Creación del esqueleto de la aplicación WPF.
 - [ ] Implementación de SQLite.
 - [ ] Implementación de la sincronización.
-- [ ] Creación de la aplicación React.
+- [x] Creación del esqueleto de la aplicación React.
 - [ ] Pruebas con usuarios.
 - [ ] Implementación en la empresa.
 
@@ -319,7 +390,7 @@ El trabajo se organizará mediante:
 
 ## 🔐 Seguridad
 
-Debido a que el sistema administrará información operativa, financiera y biométrica, se contemplarán:
+Debido a que el sistema administrará información operativa, financiera y posiblemente biométrica, se contemplarán:
 
 - Autenticación y autorización por roles.
 - Protección de credenciales.
@@ -330,6 +401,8 @@ Debido a que el sistema administrará información operativa, financiera y biom�
 - Copias de seguridad.
 - Recuperación ante fallos.
 - Variables de entorno para secretos.
+- Cuentas separadas para consulta gerencial y administración privilegiada.
+- MFA y dispositivos administrativos autorizados antes de producción.
 
 > Ninguna contraseña, clave privada o credencial de Supabase debe almacenarse en el repositorio.
 
@@ -337,7 +410,7 @@ Debido a que el sistema administrará información operativa, financiera y biom�
 
 ## 📌 Alcance inicial
 
-La primera versión estará orientada a una planta y una línea de producción, conservando una estructura preparada para incorporar más líneas, terminales y sucursales.
+La planta actual tiene cuatro líneas, cada una con un molino y tres rastras. El piloto y el primer punto de control se orientarán a una línea, conservando una estructura configurable para las cuatro líneas actuales y futuras ampliaciones.
 
 Las integraciones con sensores, maquinaria pesada, PLC o sistemas industriales no forman parte del alcance inicial.
 

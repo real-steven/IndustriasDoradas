@@ -1,0 +1,103 @@
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+secrets.json
+appsettings.*.local.json
+
+# Node.js / pnpm
+node_modules/
+**/node_modules/
+.pnpm-store/
+**/.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Builds, pruebas y cobertura web/API
+dist/
+**/dist/
+build/
+**/build/
+coverage/
+**/coverage/
+.cache/
+**/.cache/
+.vite/
+**/.vite/
+playwright-report/
+test-results/
+
+# .NET / Visual Studio
+[Bb]in/
+[Oo]bj/
+.vs/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# SQLite y archivos auxiliares
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Datos operativos, fotografías y cargas locales
+photos/
+**/photos/
+captures/
+**/captures/
+uploads/
+**/uploads/
+runtime-data/
+**/runtime-data/
+diagnostics/
+**/diagnostics/
+
+# Publicaciones y artefactos generados
+artifacts/
+**/artifacts/
+publish/
+**/publish/
+out/
+**/out/
+logs/
+**/logs/
+*.log
+*.tmp
+*.temp
+
+# Estado local de Supabase
+supabase/.branches/
+supabase/.temp/
+
+# Editores y sistema operativo
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Copias locales
+*.bak
+*.backup
+*.zip
+*.7z

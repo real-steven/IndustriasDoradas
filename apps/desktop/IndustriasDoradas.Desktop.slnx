@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/IndustriasDoradas.Desktop/IndustriasDoradas.Desktop.csproj" />
+  <Project Path="tests/IndustriasDoradas.Desktop.Tests/IndustriasDoradas.Desktop.Tests.csproj" />
+</Solution>

@@ -1,0 +1,73 @@
+# Aplicación de escritorio WPF
+
+Shell técnico de la estación de planta construido con WPF y .NET 10. En este
+paso contiene navegación mínima y diagnóstico de comunicación con la API; no
+incluye todavía módulos operativos, SQLite ni sincronización.
+
+## Organización
+
+El ejecutable usa carpetas y namespaces para separar responsabilidades sin
+crear bibliotecas vacías:
+
+| Carpeta | Responsabilidad |
+| --- | --- |
+| `Presentation` | Ventanas, vistas XAML y ViewModels MVVM. |
+| `Application` | Contratos que definen los casos técnicos de la aplicación. |
+| `Domain` | Modelo independiente del resultado de health. |
+| `Infrastructure` | Cliente HTTP que implementa la consulta a NestJS. |
+| `Configuration` | Opciones validadas de conexión. |
+
+## Ejecutar desde CLI
+
+Inicia primero la API en el puerto 3000. Después, desde la raíz del repositorio:
+
+```powershell
+$env:DOTNET_ENVIRONMENT = "Development"
+dotnet run --project apps/desktop/src/IndustriasDoradas.Desktop/IndustriasDoradas.Desktop.csproj
+```
+
+La aplicación inicia aunque la API no esté disponible: la pantalla de
+diagnóstico muestra el error y permite actualizar nuevamente.
+
+## Ejecutar desde Visual Studio
+
+1. Abre `apps/desktop/IndustriasDoradas.Desktop.slnx`.
+2. Establece `IndustriasDoradas.Desktop` como proyecto de inicio.
+3. Selecciona la configuración `Debug`.
+4. Presiona `F5`.
+
+Visual Studio permite ejecutar las pruebas desde **Test > Test Explorer**.
+
+## Configuración por ambiente
+
+El Generic Host carga `appsettings.json` y después
+`appsettings.{DOTNET_ENVIRONMENT}.json`. La configuración base consulta
+`http://127.0.0.1:3000/`; `Development` reduce el timeout a dos segundos para
+dar retroalimentación rápida. Ambas opciones se validan al iniciar.
+
+## Verificar
+
+```powershell
+dotnet restore apps/desktop/IndustriasDoradas.Desktop.slnx
+dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore
+dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-build
+```
+
+## Dependencias
+
+| Paquete | Propósito |
+| --- | --- |
+| `CommunityToolkit.Mvvm` | `ObservableObject` y comandos síncronos/asíncronos para MVVM. |
+| `Microsoft.Extensions.Hosting` | Ciclo de vida, configuración, logging e inyección de dependencias. |
+| `Microsoft.Extensions.Http` | Creación y administración de `HttpClient` mediante DI. |
+| `Microsoft.Extensions.Options.ConfigurationExtensions` | Enlace y validación de la sección `Api`. |
+| `MSTest.Sdk` | SDK y runner de pruebas compatible con CLI y Test Explorer. |
+
+Las versiones están fijadas en los archivos de proyecto. Nullable, analizadores
+de .NET y advertencias como errores se aplican desde `Directory.Build.props`.
+
+## Producción y configuración externa
+
+La URL local vive en `appsettings.Development.json`. Producción no incorpora
+una URL y exige inyectarla externamente mediante `Api__BaseUrl`; si falta, el
+arranque muestra una regla accionable sin revelar ningún valor sensible.
