@@ -169,13 +169,13 @@ conectividad.
 | --- | --- | --- |
 | Access/refresh token | Almacén seguro de Windows | Nunca SQLite, logs o URL. |
 | Autorización offline | Almacén local protegido + referencia SQLite | Firmada/íntegra, jefe/estación, versión y expiración. |
-| Verificador de PIN | Almacén protegido de Windows | Derivación lenta con sal; nunca PIN claro. |
+| Verificador de PIN | PostgreSQL protegido + representación en almacén seguro de Windows | Fuente central solo por NestJS y copia local versionada; nunca PIN claro ni SQLite. |
 | Perfil/rol cacheado | SQLite | Solo snapshot mínimo para experiencia offline. |
 | Eventos y Outbox | SQLite | Transacción local, UUID e historial inmutable. |
 
-El mecanismo exacto de protección y el modelo relacional se eligen en 1.2/1.8;
-esta política prohíbe crear autenticación propia o copiar credenciales de
-Supabase.
+El modelo relacional se define en 1.2 y el mecanismo exacto de KDF/protección en
+1.8. Esta política prohíbe crear autenticación propia, copiar credenciales de
+Supabase o guardar el verificador en SQLite.
 
 ### 6.3 Modo Jefe de Planta
 

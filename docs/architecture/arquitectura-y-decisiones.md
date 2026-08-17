@@ -187,6 +187,11 @@ La matriz detallada, el flujo Supabase Auth/JWT, los modos, PIN, bloqueos y
 contingencia offline se especifican en
 [`identidad-y-acceso-offline.md`](identidad-y-acceso-offline.md).
 
+El diagrama y diccionario propuestos para organizaciones, plantas, líneas,
+componentes, estaciones, perfiles, permisos, trabajadores y proveedores están
+en
+[`modelo-relacional-identidad-organizacion.md`](modelo-relacional-identidad-organizacion.md).
+
 ## Decisiones complementarias del 2026-08-17
 
 ### 9. Estación compartida y elevación temporal

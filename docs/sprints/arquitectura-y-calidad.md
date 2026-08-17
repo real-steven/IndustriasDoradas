@@ -18,7 +18,9 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
 - Planta actual: cuatro líneas configurables; cada una posee actualmente un molino y tres rastras. Piloto: una línea y un punto de control.
 - Una línea activa requiere cargamento y operario principal. Un operario puede responsabilizarse por varias líneas; no se trazan ayudantes.
 - Jornada diurna/nocturna clasifica horas y no abre/cierra la línea.
-- Un cargamento pertenece a un proveedor y puede repartirse entre líneas; nunca se mezclan resultados de cargamentos distintos.
+- Un cargamento pertenece a un proveedor, se asigna exactamente a una línea y
+  tiene un responsable principal; nunca se reparte entre líneas ni se mezclan
+  resultados de cargamentos distintos.
 - La alerta de barrida es configurable, inicialmente cada 50 cajuelas, visible/sonora en los intervalos 50–55, 100–105, etc.; no bloquea producción.
 - Una barrida real puede incluir menos, exactamente o más de 50 cajuelas y siempre existe una barrida final al terminar el cargamento.
 - Mercurio y oro se registran por barrida; el oro definitivo del cargamento es la suma de resultados certificados.

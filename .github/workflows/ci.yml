@@ -55,6 +55,9 @@ jobs:
       - name: Compilar API y web
         run: pnpm run build:typescript
 
+      - name: Probar migraciones PostgreSQL
+        run: pnpm run test:db
+
       - name: Probar API
         run: pnpm run test:api
 

@@ -32,7 +32,7 @@
 
 ### 2.2 Dominio de jornada, cargamento, ciclo y asignación
 
-**Prompt:** Modela cargamento, jornada, ciclo de alimentación y asignación de línea/responsable. Un cargamento pertenece a un proveedor, puede usar varias líneas y no requiere nueva jornada al cambiar. Una línea activa exige responsable; un operario puede llevar varias. Define cierre por fin de cargamento, no por relevo. Implementa dominio puro y pruebas; aún no UI/persistencia.
+**Prompt:** Modela cargamento, jornada, ciclo de alimentación y asignación de línea/responsable. Un cargamento pertenece a un proveedor, se asigna exactamente a una línea, nunca se reparte y tiene un único operario principal responsable; un operario puede responder por varios cargamentos/líneas. Ayudantes y demás trabajadores solo registran asistencia y no se asignan a la línea. Cambiar cargamento no requiere nueva jornada. Define cierre por fin de cargamento, no por relevo. Implementa dominio puro y pruebas; aún no UI/persistencia.
 
 **Pausa:** revisar tabla de estados y ejecutar todos los casos inválidos relevantes.
 

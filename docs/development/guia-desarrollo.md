@@ -28,7 +28,8 @@ pnpm.cmd run setup
 | `pnpm.cmd run format` | Corrige formato TypeScript y .NET. |
 | `pnpm.cmd run lint` | Ejecuta ESLint y analizadores .NET. |
 | `pnpm.cmd run build` | Compila API, web y desktop Release. |
-| `pnpm.cmd test` | Ejecuta pruebas API, web, E2E y desktop. |
+| `pnpm.cmd test` | Ejecuta pruebas de base, API, web, E2E y desktop. |
+| `pnpm.cmd run test:db` | Aplica migraciones desde cero, repite el seed y prueba restricciones/RLS en PostgreSQL efímero. |
 | `pnpm.cmd run verify` | Ejecuta secretos, formato, lint, build y pruebas. |
 
 Antes de compartir cambios:
@@ -103,6 +104,7 @@ pnpm.cmd run secrets:check
 pnpm.cmd run format:typescript:check
 pnpm.cmd run lint:typescript
 pnpm.cmd run build:typescript
+pnpm.cmd run test:db
 pnpm.cmd run test:api
 pnpm.cmd run test:web
 ```
@@ -127,4 +129,3 @@ Un fallo de CI se reproduce ejecutando localmente el comando del paso rojo.
   nombrando variables, nunca valores.
 - Para validar un clon: ejecuta `setup`, `verify` y abre API, web y desktop según
   README.
-

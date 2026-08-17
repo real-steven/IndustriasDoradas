@@ -22,7 +22,8 @@
     "build": "pnpm run build:typescript && pnpm run build:dotnet",
     "build:typescript": "pnpm --filter @industrias-doradas/api build && pnpm --filter @industrias-doradas/web build",
     "build:dotnet": "dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release",
-    "test": "pnpm run test:api && pnpm run test:web && pnpm run test:desktop",
+    "test": "pnpm run test:db && pnpm run test:api && pnpm run test:web && pnpm run test:desktop",
+    "test:db": "node scripts/test-database.mjs",
     "test:api": "pnpm --filter @industrias-doradas/api test && pnpm --filter @industrias-doradas/api test:e2e",
     "test:web": "pnpm --filter @industrias-doradas/web test",
     "test:desktop": "dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release",
@@ -30,6 +31,7 @@
     "verify": "pnpm run secrets:check && pnpm run format:check && pnpm run lint && pnpm run build && pnpm run test"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.5",
     "prettier": "3.9.6"
   }
 }

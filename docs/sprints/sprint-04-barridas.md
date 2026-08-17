@@ -17,9 +17,9 @@
 9. Integrar novedades simples de paro/mantenimiento/feriado.
 10. Sincronizar y auditar todo idempotentemente.
 
-**Pruebas:** 49/50/55/56, 99/100/105/106, reverso 50→49→50, barrida final de 30, barrida única de 60, varias líneas por cargamento, decimales, doble certificación y llegada fuera de orden.
+**Pruebas:** 49/50/55/56, 99/100/105/106, reverso 50→49→50, barrida final de 30, barrida única de 60, rechazo de segunda línea para el mismo cargamento, decimales, doble certificación y llegada fuera de orden.
 
-**Prueba manual:** cargamento repartido entre líneas, alertas, barridas reales, mercurio, oro parcial/definitivo, desconexión y solicitud de entrega.
+**Prueba manual:** cargamentos separados en líneas distintas sin repartir ninguno, alertas, barridas reales, mercurio, oro parcial/definitivo, desconexión y solicitud de entrega.
 
 **Aceptación:** trazabilidad oro → barrida real → eventos → cargamento/línea/responsable; total del cargamento exacto; cifras pendientes no se inventan.
 
@@ -69,7 +69,7 @@
 
 ### 4.8 Oro parcial y definitivo
 
-**Prompt:** Registra oro parcial por barrida en gramos decimales, certificado por jefe de planta. Deriva automáticamente totales por línea, jornada, día (medianoche Costa Rica), cargamento y proveedor. El definitivo del cargamento es la suma de barridas/líneas. Muestra palos solo con conversión aprobada.
+**Prompt:** Registra oro parcial por barrida en gramos decimales, certificado por jefe de planta. Deriva automáticamente totales por línea, jornada, día (medianoche Costa Rica), cargamento y proveedor. El definitivo del cargamento es la suma de sus barridas en la única línea asignada. Muestra palos solo con conversión aprobada.
 
 **Pausa:** dataset manual coincide por todos los cortes y no cuenta dos veces un parcial.
 

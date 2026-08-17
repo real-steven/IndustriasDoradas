@@ -132,7 +132,9 @@ industrias-doradas/
 │
 ├── supabase/
 │   ├── migrations/             # Migraciones de PostgreSQL
-│   └── seed/                   # Datos de desarrollo
+│   ├── tests/                  # Pruebas de restricciones y aislamiento
+│   ├── seed.sql                # Datos ficticios idempotentes
+│   └── demo/                   # Esquema visual no productivo
 │
 ├── docs/
 │   ├── architecture/           # Arquitectura

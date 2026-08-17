@@ -94,8 +94,11 @@ Reglas de acceso:
 
 - Un cargamento siempre pertenece a un único proveedor.
 - Proveedor + fecha no es identificador suficiente; el sistema genera un consecutivo legible y UUID.
-- Un cargamento puede procesarse en varias líneas.
-- Cada línea lleva su conteo, barridas, mercurio y oro; el cargamento consolida todas las líneas.
+- Un cargamento se asigna exactamente a una línea y nunca se reparte entre varias.
+- Cada cargamento tiene exactamente un operario principal responsable; puede ser
+  responsable simultáneamente de otros cargamentos/líneas sin privilegios
+  adicionales. Ayudantes y demás operarios no se asignan a la línea.
+- La línea asignada lleva el conteo, barridas, mercurio y oro del cargamento.
 - La barrida no cierra el cargamento.
 - Al agotarse el material termina la alimentación de ese ciclo; el material ya introducido sigue su curso hasta obtener amalgama y oro.
 - Un nuevo cargamento puede comenzar sin crear una nueva jornada.
@@ -130,7 +133,8 @@ Reglas de acceso:
 - La unidad provisional es gramos decimales; unidad definitiva, precisión y rangos se validan en el Sprint 4.
 - El operario puede medir o comunicar el resultado; el jefe de planta lo verifica, registra y certifica.
 - Cada barrida produce un resultado parcial de oro en gramos.
-- El resultado definitivo del cargamento es la suma automática de sus barridas y líneas.
+- El resultado definitivo del cargamento es la suma automática de sus barridas
+  en la única línea asignada.
 - Los totales se consultan por barrida, línea, jornada, día, cargamento y proveedor.
 - El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
 - La conversión inicial es `1 palo = 0,1 g`; no se implementa redondeo hasta validarlo.
@@ -312,7 +316,8 @@ Reportes iniciales:
 | Variación real y redondeo de palos ↔ gramos | Sprint 4 |
 | Umbral de oro para notificar recogida | Sprint 4/5 |
 | Política exacta de corrección administrativa y eliminación | Sprint 1 |
-| Matriz detallada de permisos, gobierno de cuentas, PIN y acceso offline de 24 horas | Propuesta 1.1 lista; pendiente de aprobación manual |
+| Matriz detallada de permisos, gobierno de cuentas, PIN y acceso offline de 24 horas | Aprobada al iniciar el prompt 1.2 el 2026-08-17 |
+| Cardinalidades y modelo relacional de identidad, organización y catálogos iniciales | Aprobados al iniciar el prompt 1.3 el 2026-08-17 |
 | Comportamiento de check-in cuando la cámara de asistencia no está disponible | Sprint 6 |
 | Horarios diurno/nocturno y regla de horas extra/dobles | Sprint 6 |
 | Confirmación o sustitución de la retención indefinida provisional de fotografías; consentimiento, enrolamiento y precisión biométrica | Sprint 6 |
@@ -369,3 +374,10 @@ fotografía pendiente. También confirmó que las horas nunca se eliminan, que l
 operación continúa ante fallos técnicos y que sensor, reconocimiento facial y
 estimaciones de pago se incorporan únicamente después de estabilizar sus flujos
 base y aprobar sus políticas específicas.
+
+También confirmó que la planta actual tiene un solo jefe de planta, que todos
+los trabajadores registran horas independientemente de la línea y que solo el
+responsable principal se asigna operativamente. Un trabajador puede responder
+por más de una línea. Cada cargamento pertenece a un proveedor, se procesa en
+exactamente una línea y tiene un único responsable; nunca se reparte entre
+líneas.

@@ -30,7 +30,7 @@
 
 **Estado:** propuesta ejecutada el 2026-08-17 en
 [`../architecture/identidad-y-acceso-offline.md`](../architecture/identidad-y-acceso-offline.md);
-pendiente de aprobación de la pausa manual.
+pausa manual aprobada mediante el `R` que inició el prompt 1.2.
 
 **Prompt:** Define y documenta Supabase Auth → JWT → validación NestJS → perfil/rol propio. Usa `JEFE_EMPRESA` (lectura, Excel, auditoría, confirmación limitada de oro y aprobación/suspensión de administradores), `ADMINISTRADOR` (mutaciones sensibles, aprobación de trabajadores y correcciones profundas, sin reportes) y `JEFE_PLANTA` (abre estación y eleva permisos para operación física). Quien ejerza gerencia y administración usa dos cuentas separadas; no crees rol compuesto. No crees cuenta `OPERARIO`: define Modo Operación restringido de la estación y Modo Jefe de Planta temporal con PIN individual, salida explícita, aviso y bloqueo tras dos minutos de inactividad total sin perder borradores. Define límite/ventana/enfriamiento de intentos de PIN: al excederlos se bloquea solo la elevación, Modo Operación continúa y la recuperación exige contraseña completa en línea o restablecimiento administrativo. Toda cuenta autenticada usa correo válido y recuperación de contraseña de Supabase Auth; nunca envíes PIN. Define autorización offline máxima de 24 horas, revalidación al recuperar red y continuidad sin descartar eventos locales. Documenta fotografía de elevación como evidencia posterior condicionada a política/cámara; si no hay cámara, PIN continúa y genera alerta. Documenta MFA y dispositivos administrativos como compuerta previa a producción, no los adelantes.
 
@@ -38,11 +38,27 @@ pendiente de aprobación de la pausa manual.
 
 ### 1.2 Modelo relacional de identidad y organización
 
+**Estado:** propuesta ejecutada el 2026-08-17 en
+[`../architecture/modelo-relacional-identidad-organizacion.md`](../architecture/modelo-relacional-identidad-organizacion.md);
+pausa manual aprobada mediante el `R` que inició el prompt 1.3.
+
 **Prompt:** Diseña `organizations`, `plants`, `production_lines`, componentes configurables de línea (molino/rastras), `stations`, `user_profiles`, tres roles autenticados/permisos, preferencia `es/en`, PIN del jefe almacenado solo mediante verificador seguro, `worker_requests`, `workers` y `suppliers`. Modela nombre obligatorio, contacto opcional, estados provisional/vencido/activo/rechazado, plazo de 72 horas, aprobación, fusión y reasignación sin pérdida. Representa cuatro líneas actuales con un molino y tres rastras cada una sin fijar esa cardinalidad. Incluye UUID, timestamps, restricciones, nombres únicos, índices y desactivación. Genera diagrama/diccionario; no crees endpoints/UI ni biometría.
 
 **Pausa:** revisar cardinalidades para una planta inicial, múltiples líneas/estaciones y futura segunda planta.
 
 ### 1.3 Migraciones y seed central
+
+**Estado:** ejecutado el 2026-08-17 mediante
+[`../../supabase/migrations/20260817182220_identity_organization.sql`](../../supabase/migrations/20260817182220_identity_organization.sql),
+[`../../supabase/migrations/20260817202508_add_missing_foreign_key_indexes.sql`](../../supabase/migrations/20260817202508_add_missing_foreign_key_indexes.sql),
+[`../../supabase/seed.sql`](../../supabase/seed.sql) y
+[`../../supabase/tests/`](../../supabase/tests/). La migración se aplicó al
+proyecto Supabase de desarrollo con versiones remotas `20260817182220` y
+`20260817202508`; el seed se repitió sin duplicados y `app` no conserva claves
+foráneas sin índice de soporte. El esquema preexistente `demo_supervisor` se
+mantiene únicamente como guía, fuera de las migraciones productivas. La pausa
+manual queda lista para aprobación; no iniciar 1.4 hasta recibir el siguiente
+`R`.
 
 **Prompt:** Implementa migraciones PostgreSQL/Supabase del modelo aprobado y un seed completamente ficticio e idempotente. Configura esquemas, FK, checks, índices, timestamps y aislamiento por `organization_id`. Si se usa RLS como defensa adicional, las tablas de negocio deben negar acceso directo del cliente y permitir el acceso controlado del backend. Añade pruebas de migración desde cero.
 
