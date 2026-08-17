@@ -20,6 +20,8 @@
     "@nestjs/config": "4.0.4",
     "@nestjs/core": "11.1.29",
     "@nestjs/platform-express": "11.1.29",
+    "@supabase/supabase-js": "2.112.3",
+    "jose": "5.10.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },

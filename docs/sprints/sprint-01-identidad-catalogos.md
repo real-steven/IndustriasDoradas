@@ -56,15 +56,21 @@ pausa manual aprobada mediante el `R` que inició el prompt 1.3.
 proyecto Supabase de desarrollo con versiones remotas `20260817182220` y
 `20260817202508`; el seed se repitió sin duplicados y `app` no conserva claves
 foráneas sin índice de soporte. El esquema preexistente `demo_supervisor` se
-mantiene únicamente como guía, fuera de las migraciones productivas. La pausa
-manual queda lista para aprobación; no iniciar 1.4 hasta recibir el siguiente
-`R`.
+mantiene únicamente como guía, fuera de las migraciones productivas. Pausa
+manual aprobada mediante el `R` que inició el prompt 1.4.
 
 **Prompt:** Implementa migraciones PostgreSQL/Supabase del modelo aprobado y un seed completamente ficticio e idempotente. Configura esquemas, FK, checks, índices, timestamps y aislamiento por `organization_id`. Si se usa RLS como defensa adicional, las tablas de negocio deben negar acceso directo del cliente y permitir el acceso controlado del backend. Añade pruebas de migración desde cero.
 
 **Pausa:** aplicar en base vacía, inspeccionar restricciones y repetir seed sin duplicar.
 
 ### 1.4 Validación JWT y autorización API
+
+**Estado:** ejecutado el 2026-08-17 en
+[`../../apps/api/src/auth/`](../../apps/api/src/auth/), con endpoints mínimos de
+sesión/perfil, guards globales y pruebas negativas unitarias/HTTP. Supabase usa
+JWKS asimétrico `ES256`; el perfil, estado, rol, permisos y organización se
+resuelven desde `app` con una clave secreta exclusiva del backend. Pausa manual
+pendiente; no iniciar 1.5 hasta recibir el siguiente `R`.
 
 **Prompt:** Integra Supabase Auth en NestJS validando firma, emisor, audiencia y expiración; carga el perfil y aplica guards/policies por rol y organización. No implementes contraseñas propias ni expongas `service_role`. Añade endpoints mínimos de sesión/perfil y pruebas negativas exhaustivas.
 

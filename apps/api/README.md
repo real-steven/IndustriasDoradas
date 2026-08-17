@@ -1,8 +1,8 @@
 # API NestJS
 
-Backend base del sistema, organizado como monolito modular. En este paso contiene
-solo infraestructura transversal y el modulo tecnico `health`; no incluye modulos
-de negocio ni conexion a Supabase.
+Backend organizado como monolito modular. Contiene infraestructura transversal,
+el modulo tecnico `health` y la frontera de identidad/autorizacion con Supabase;
+los modulos de negocio se agregan en prompts posteriores.
 
 ## Ejecutar
 
@@ -11,16 +11,22 @@ Desde la raiz del repositorio, en PowerShell:
 ```powershell
 $env:NODE_ENV = 'development'
 $env:PORT = '3000'
+$env:SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co'
+$env:SUPABASE_SECRET_KEY = 'YOUR_BACKEND_ONLY_KEY_REPLACE_LOCALLY'
 pnpm.cmd --filter @industrias-doradas/api start:dev
 ```
 
 La comprobacion queda disponible en `GET http://localhost:3000/api/v1/health`.
+Las rutas `GET /api/v1/auth/session` y `GET /api/v1/auth/profile` exigen el
+access token de una sesion Supabase en `Authorization: Bearer <token>`.
 
 Para verificar que la configuracion obligatoria falla de forma explicita:
 
 ```powershell
 Remove-Item Env:NODE_ENV -ErrorAction Ignore
 Remove-Item Env:PORT -ErrorAction Ignore
+Remove-Item Env:SUPABASE_URL -ErrorAction Ignore
+Remove-Item Env:SUPABASE_SECRET_KEY -ErrorAction Ignore
 pnpm.cmd --filter @industrias-doradas/api start
 ```
 
@@ -43,6 +49,8 @@ pnpm.cmd --filter @industrias-doradas/api test:e2e
 | `@nestjs/core` | Contenedor de inyeccion y ciclo de arranque de NestJS. |
 | `@nestjs/platform-express` | Adaptador HTTP Express usado por la API y las pruebas smoke. |
 | `@nestjs/config` | Carga centralizada y validacion de configuracion al iniciar. |
+| `@supabase/supabase-js` | Consulta backend del perfil, rol y permisos en el esquema `app`. |
+| `jose` | Verifica firma JWKS y claims de los access tokens de Supabase Auth. |
 | `reflect-metadata` | Metadatos requeridos por decoradores e inyeccion de dependencias. |
 | `rxjs` | Primitivas reactivas requeridas por NestJS. |
 
@@ -64,6 +72,25 @@ workspace conserva una instalacion reproducible.
 ## Variables y secretos
 
 `.env.example` documenta las variables admitidas sin credenciales reales. Los
-valores locales viven en `.env.local`, ignorado por Git. La clave
-`SUPABASE_SERVICE_ROLE_KEY` es exclusiva del proceso backend y nunca debe
-copiarse a web o desktop. Consulta `docs/development/configuracion-y-secretos.md`.
+valores locales viven en `.env.local`, ignorado por Git. `SUPABASE_SECRET_KEY`
+es exclusiva del proceso backend y nunca debe copiarse a web o desktop, incluirse
+en respuestas, logs o capturas. La API no necesita el secreto JWT: descubre la
+clave publica rotatoria en `SUPABASE_URL/auth/v1/.well-known/jwks.json`.
+
+El Data API del proyecto debe exponer el esquema `app` para que el cliente
+backend consulte perfiles. Esto no abre las tablas a los clientes: `anon` y
+`authenticated` carecen de `USAGE` y permisos, todas las tablas conservan RLS y
+solo el rol interno de la clave secreta tiene acceso. `demo_supervisor` debe
+permanecer fuera de los esquemas expuestos.
+
+## Autenticacion y autorizacion
+
+- Se valida firma asimetrica, emisor exacto, audiencia `authenticated`,
+  expiracion, `session_id`, correo y sesion no anonima.
+- El rol tecnico del token no decide permisos funcionales. Cada peticion carga
+  `user_profiles`, rol y permisos centrales para detectar suspensiones sin
+  esperar a que venza el JWT.
+- Los guards globales niegan por defecto; solo `health` esta marcado publico.
+- `RequireRoles`, `RequirePermissions` y `RequireOrganizationParam` componen las
+  politicas de los futuros controladores sin confiar en IDs de organizacion del
+  cliente.

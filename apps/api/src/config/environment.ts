@@ -9,9 +9,8 @@ export type NodeEnvironment = (typeof ALLOWED_NODE_ENVIRONMENTS)[number];
 export interface EnvironmentVariables {
   NODE_ENV: NodeEnvironment;
   PORT: number;
-  SUPABASE_URL?: string;
-  SUPABASE_ANON_KEY?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
+  SUPABASE_URL: string;
+  SUPABASE_SECRET_KEY: string;
 }
 
 export function validateEnvironment(
@@ -20,19 +19,10 @@ export function validateEnvironment(
   const errors: string[] = [];
   const nodeEnvironment = parseNodeEnvironment(input.NODE_ENV, errors);
   const port = parsePort(input.PORT, errors);
-  const supabaseUrl = parseOptionalHttpUrl(
-    "SUPABASE_URL",
-    input.SUPABASE_URL,
-    errors,
-  );
-  const supabaseAnonKey = parseOptionalSecret(
-    "SUPABASE_ANON_KEY",
-    input.SUPABASE_ANON_KEY,
-    errors,
-  );
-  const supabaseServiceRoleKey = parseOptionalSecret(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    input.SUPABASE_SERVICE_ROLE_KEY,
+  const supabaseUrl = parseHttpUrl("SUPABASE_URL", input.SUPABASE_URL, errors);
+  const supabaseSecretKey = parseSecret(
+    "SUPABASE_SECRET_KEY",
+    input.SUPABASE_SECRET_KEY,
     errors,
   );
 
@@ -44,22 +34,18 @@ export function validateEnvironment(
     ...input,
     NODE_ENV: nodeEnvironment as NodeEnvironment,
     PORT: port as number,
-    ...(supabaseUrl === undefined ? {} : { SUPABASE_URL: supabaseUrl }),
-    ...(supabaseAnonKey === undefined
-      ? {}
-      : { SUPABASE_ANON_KEY: supabaseAnonKey }),
-    ...(supabaseServiceRoleKey === undefined
-      ? {}
-      : { SUPABASE_SERVICE_ROLE_KEY: supabaseServiceRoleKey }),
+    SUPABASE_URL: supabaseUrl as string,
+    SUPABASE_SECRET_KEY: supabaseSecretKey as string,
   };
 }
 
-function parseOptionalHttpUrl(
+function parseHttpUrl(
   name: string,
   value: unknown,
   errors: string[],
 ): string | undefined {
   if (value === undefined || value === null || value === "") {
+    errors.push(`${name} is required`);
     return undefined;
   }
 
@@ -81,17 +67,18 @@ function parseOptionalHttpUrl(
   return value;
 }
 
-function parseOptionalSecret(
+function parseSecret(
   name: string,
   value: unknown,
   errors: string[],
 ): string | undefined {
   if (value === undefined || value === null || value === "") {
+    errors.push(`${name} is required`);
     return undefined;
   }
 
-  if (typeof value !== "string" || value.trim().length < 16) {
-    errors.push(`${name} must contain at least 16 characters`);
+  if (typeof value !== "string" || value.trim().length < 24) {
+    errors.push(`${name} must contain at least 24 characters`);
     return undefined;
   }
 

@@ -77,8 +77,8 @@ Producción no incorpora la URL del API; se inyecta con `Api__BaseUrl`.
 
 | Valor | API | Web | Desktop |
 | --- | --- | --- | --- |
-| URL/anon key Supabase | Permitido | Público para Auth futuro | No usado todavía |
-| `service_role` | Solo gestor de secretos del API | Prohibido | Prohibido |
+| URL/publishable key Supabase | URL en API; publishable no requerido | Público para Auth futuro | No usado todavía |
+| `SUPABASE_SECRET_KEY`/`service_role` heredado | Solo gestor de secretos del API | Prohibido | Prohibido |
 
 Toda variable `VITE_*` es visible en el navegador. Nunca se versionan `.env`,
 claves privadas, `secrets.json`, appsettings locales, SQLite, fotos, diagnósticos
