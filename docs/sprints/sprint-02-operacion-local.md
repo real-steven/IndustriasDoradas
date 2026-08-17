@@ -2,7 +2,7 @@
 
 **Objetivo:** registrar cajuelas con una pulsación aun sin Internet.
 
-**Entregable:** un punto de control opera el piloto de una línea, configurable para las cuatro actuales, asigna cargamento/responsable y registra/corrige en SQLite offline.
+**Entregable:** la computadora compartida opera en Modo Operación el piloto de una línea, configurable para las cuatro actuales, asigna cargamento/responsable y registra/corrige en SQLite offline mediante clic, teclado o controlador.
 
 ## Orden de trabajo
 
@@ -12,7 +12,7 @@
 4. `RegistrarCajuela`: validar, UUID, transacción local, contador y outbox.
 5. `RevertirÚltimaCajuela`: doble confirmación, motivo automático y evento compensatorio.
 6. Dashboard WPF adaptable para varias líneas/monitores.
-7. `IInputCommandSource`: teclado común/USB HID, mapeo de +1, flechas, OK y cancelar.
+7. `IInputCommandSource`: clic, teclado común/USB HID, mapeo de +1, flechas, OK y cancelar; sensor automático queda fuera del MVP pero puede usar este puerto después.
 8. Feedback visual/sonoro, antirrebote y bloqueo de tecla sostenida.
 9. Mostrar guardado local, red y pendientes sin bloquear.
 
@@ -20,13 +20,13 @@
 
 **Prueba manual:** offline, 120 registros alternados, correcciones y reinicio; cotejar evento por evento con hoja manual.
 
-**Aceptación:** una pulsación por cajuela, <300 ms local y cero pérdida; outbox visible (sin sync aún).
+**Aceptación:** una pulsación/clic por cajuela, <300 ms local y cero pérdida; outbox visible (sin sync aún). No depende de sensor.
 
 ## Mini pasos, pausas y prompts
 
 ### 2.1 Observación y contrato del flujo real
 
-**Prompt:** Antes de programar, contrasta cuadernos/Excel con la línea base: una cajuela es un balde variable; una línea tiene molino y rastras; jornada diurna/nocturna no detiene producción; un ciclo necesita cargamento y responsable. Diseña historias/estados/wireframes para seleccionar proveedor, cargamento, responsable y línea desde listas, pensando en manos sucias y un punto de control compartido.
+**Prompt:** Antes de programar, contrasta cuadernos/Excel con la línea base: una cajuela es un balde variable; una línea tiene molino y rastras; jornada diurna/nocturna no detiene producción; un ciclo necesita cargamento y responsable. Diseña historias/estados/wireframes del Modo Operación para seleccionar proveedor, cargamento, responsable y línea desde listas, pensando en manos sucias, una computadora compartida y elevación breve del jefe sin detener el conteo.
 
 **Pausa:** simular el flujo en papel con un usuario; aprobar palabras, iconos y número de pasos.
 
@@ -74,7 +74,7 @@
 
 ### 2.9 Entrada por teclado/controlador
 
-**Prompt:** Implementa fuente abstracta de comandos y mapeo configurable por estación/controlador: elegir línea, registrar, flechas, OK y revertir. No dependas de un teclado específico; soporta inicialmente un punto compartido y deja preparado más de un controlador. Añade prueba con teclado convencional.
+**Prompt:** Implementa fuente abstracta de comandos y mapeo configurable por estación/controlador: clic, elegir línea, registrar, flechas, OK y revertir. No dependas de un teclado específico; soporta inicialmente un punto compartido y deja preparado más de un controlador o un adaptador futuro. Añade prueba con teclado convencional. No integres sensor automático en este sprint.
 
 **Pausa:** operar recorrido completo sin mouse y reconectar el teclado durante ejecución.
 

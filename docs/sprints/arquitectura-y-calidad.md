@@ -11,7 +11,7 @@
 
 Los frontends no consultan tablas de negocio de Supabase directamente. Supabase Auth emite la identidad; NestJS valida sus JWT y concentra permisos, validaciones, auditoría y reglas. La clave `service_role` existe solo en el backend, nunca en desktop/web. Desktop confirma primero en SQLite y sincroniza después; registrar una cajuela nunca espera Internet.
 
-Con varias estaciones, cada mutación se guarda primero en SQLite + Outbox y se intenta enviar inmediatamente. PostgreSQL mantiene la vista central consolidada y NestJS propaga cambios casi en tiempo real cuando hay red. Sin conexión no se promete simultaneidad: se garantiza operación por uno o dos días y convergencia idempotente posterior. No se introduce servidor local/Docker en planta hasta que una necesidad medida lo justifique.
+El MVP usa una computadora compartida, conservando el modelo para varias estaciones futuras. Cada mutación se guarda primero en SQLite + Outbox y se intenta enviar inmediatamente. PostgreSQL mantiene la vista central consolidada y NestJS propaga cambios casi en tiempo real cuando hay red. Sin conexión no se promete simultaneidad: la estación previamente validada opera hasta 24 horas y converge de forma idempotente al volver la red. No se introduce servidor local/Docker en planta hasta que una necesidad medida lo justifique.
 
 ## Invariantes funcionales confirmadas
 
@@ -23,8 +23,10 @@ Con varias estaciones, cada mutación se guarda primero en SQLite + Outbox y se 
 - Una barrida real puede incluir menos, exactamente o más de 50 cajuelas y siempre existe una barrida final al terminar el cargamento.
 - Mercurio y oro se registran por barrida; el oro definitivo del cargamento es la suma de resultados certificados.
 - Interfaz y reportes web soportan español/inglés con preferencia por cuenta.
-- Jefe de empresa consulta y exporta; administrador modifica; jefe de planta opera; operario registra cajuelas.
+- Jefe de empresa consulta/exporta y gobierna cuentas administrativas de forma limitada; administrador modifica/audita; jefe de planta abre la estación y eleva permisos; Modo Operación compartido registra cajuelas y asistencia sin cuenta de operario.
 - Una misma persona usa cuentas separadas para consulta gerencial y administración privilegiada.
+- Trabajador provisional registra horas desde el primer día; a las 72 horas pasa a vencido sin bloqueo ni pérdida y exige atención administrativa urgente.
+- Check-in/out inicial usa fotografía pendiente; reconocimiento facial y sensor automático son posteriores y condicionados.
 
 ## Reglas contra código espagueti
 
@@ -39,6 +41,9 @@ Con varias estaciones, cada mutación se guarda primero en SQLite + Outbox y se 
 9. Migraciones compartidas no se reescriben. Secretos nunca entran al repositorio.
 10. Empezar como monolito modular desplegable; no microservicios, bus de eventos externo ni CQRS completo sin una necesidad medida.
 11. Fijar versiones y centralizar paquetes; toda dependencia nueva requiere propósito, mantenimiento activo y licencia compatible.
+12. Ninguna corrección, rechazo, fusión o vencimiento elimina horas, evidencias o eventos confirmados; se reasignan o compensan con auditoría.
+13. Un fallo de cámara no bloquea la elevación con PIN ni la continuidad; se registra ausencia de evidencia y se alerta.
+14. Fotografías en Storage privado y auditoría por referencia/checksum; la retención indefinida provisional no autoriza blobs en logs/base ni URLs permanentes y exige monitoreo de uso.
 
 ## Pruebas
 
@@ -69,6 +74,7 @@ Historia con usuario, necesidad, aceptación, datos, errores esperados, diseño 
 - Uso completo por teclado/controlador, botones grandes, icono + texto, contraste y señal visual/sonora.
 - Reiniciar offline no pierde confirmados.
 - Cerrar la aplicación o perder energía no pierde confirmados; al recuperar red la sincronización se reanuda automáticamente.
+- La autorización offline caduca a las 24 horas desde la última validación central y se revalida al recuperar conexión, sin descartar eventos locales.
 - JWT de Supabase validado por NestJS, renovación segura, roles propios, HTTPS y rate limiting.
 - Logs estructurados con ID de correlación; diagnóstico de sincronización exportable.
 - Respaldo y restauración realmente ensayados antes de producción.
