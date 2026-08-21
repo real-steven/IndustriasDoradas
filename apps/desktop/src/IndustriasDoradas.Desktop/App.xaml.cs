@@ -1,11 +1,16 @@
 using System.IO;
 using System.Windows;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Infrastructure.Health;
+using IndustriasDoradas.Desktop.Infrastructure.Auth;
+using IndustriasDoradas.Desktop.Infrastructure.Security;
+using IndustriasDoradas.Desktop.Infrastructure.Station;
 using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
@@ -62,6 +67,7 @@ public partial class App : System.Windows.Application
                 ContentRootPath = AppContext.BaseDirectory,
                 EnvironmentName = environmentName,
             });
+        builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
 
         builder.Services
             .AddOptions<ApiOptions>()
@@ -75,6 +81,18 @@ public partial class App : System.Windows.Application
                 "Api:RequestTimeoutSeconds debe estar entre 1 y 30.")
             .ValidateOnStart();
 
+        builder.Services.AddOptions<SupabaseOptions>()
+            .Bind(builder.Configuration.GetSection(SupabaseOptions.SectionName))
+            .Validate(options => Uri.TryCreate(options.Url, UriKind.Absolute, out _), "Supabase:Url debe ser absoluta.")
+            .Validate(options => options.PublishableKey.StartsWith("sb_publishable_", StringComparison.Ordinal), "Supabase:PublishableKey debe ser publicable.")
+            .ValidateOnStart();
+        builder.Services.AddOptions<StationOptions>()
+            .Bind(builder.Configuration.GetSection(StationOptions.SectionName))
+            .Validate(options => options.Id != Guid.Empty, "Station:Id es obligatorio.")
+            .Validate(options => options.PrivilegedIdleSeconds == 120, "La inactividad privilegiada aprobada es 120 segundos.")
+            .Validate(options => options.OfflineHours == 24, "La contingencia offline aprobada es 24 horas.")
+            .ValidateOnStart();
+
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(
             static (services, client) =>
             {
@@ -82,9 +100,27 @@ public partial class App : System.Windows.Application
                 client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
             });
+        builder.Services.AddHttpClient<IStationApi, StationApi>(static (services, client) =>
+        {
+            ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        });
+        builder.Services.AddHttpClient<ISupabaseAuthService, SupabaseAuthService>(static (services, client) =>
+        {
+            SupabaseOptions options = services.GetRequiredService<IOptions<SupabaseOptions>>().Value;
+            client.BaseAddress = new Uri(options.Url.TrimEnd('/') + '/', UriKind.Absolute);
+            client.DefaultRequestHeaders.Add("apikey", options.PublishableKey);
+        });
+
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
+        builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
+        builder.Services.AddSingleton<StationCoordinator>();
 
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DiagnosticsViewModel>();
+        builder.Services.AddSingleton<StationViewModel>();
         builder.Services.AddSingleton<MainWindowViewModel>();
         builder.Services.AddSingleton<MainWindow>();
 

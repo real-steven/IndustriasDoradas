@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
+import type { AuditTrailService } from "../audit/audit-trail.service";
 import type {
   AccessTokenVerifier,
   AuthorizedProfile,
@@ -42,12 +43,24 @@ const ACTIVE_PROFILE: AuthorizedProfile = {
 describe("AuthenticationGuard", () => {
   let verifier: jest.Mocked<AccessTokenVerifier>;
   let profiles: jest.Mocked<ProfileRepository>;
+  let auditTrail: jest.Mocked<
+    Pick<AuditTrailService, "record" | "recordBestEffort">
+  >;
   let guard: AuthenticationGuard;
 
   beforeEach(() => {
     verifier = { verify: jest.fn() };
     profiles = { findByAuthUserId: jest.fn() };
-    guard = new AuthenticationGuard(new Reflector(), verifier, profiles);
+    auditTrail = {
+      record: jest.fn().mockResolvedValue(undefined),
+      recordBestEffort: jest.fn().mockResolvedValue(undefined),
+    };
+    guard = new AuthenticationGuard(
+      new Reflector(),
+      verifier,
+      profiles,
+      auditTrail as unknown as AuditTrailService,
+    );
   });
 
   it("rejects a missing authorization header", async () => {
@@ -57,6 +70,12 @@ describe("AuthenticationGuard", () => {
       UnauthorizedException,
     );
     expect(verifier.verify.mock.calls).toHaveLength(0);
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "REJECTED",
+        reasonCode: "AUTHENTICATION_REQUIRED",
+      }),
+    );
   });
 
   it("rejects a malformed authorization header", async () => {
@@ -66,6 +85,12 @@ describe("AuthenticationGuard", () => {
       UnauthorizedException,
     );
     expect(verifier.verify.mock.calls).toHaveLength(0);
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "REJECTED",
+        reasonCode: "AUTHORIZATION_HEADER_INVALID",
+      }),
+    );
   });
 
   it("propagates rejection of an invalid token", async () => {
@@ -77,6 +102,12 @@ describe("AuthenticationGuard", () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "REJECTED",
+        reasonCode: "ACCESS_TOKEN_INVALID_OR_EXPIRED",
+      }),
+    );
   });
 
   it("rejects an authenticated account without a profile", async () => {
@@ -86,6 +117,12 @@ describe("AuthenticationGuard", () => {
 
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       ForbiddenException,
+    );
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "REJECTED",
+        reasonCode: "APPLICATION_PROFILE_NOT_FOUND",
+      }),
     );
   });
 
@@ -105,6 +142,12 @@ describe("AuthenticationGuard", () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "REJECTED",
+        reasonCode: "ACCOUNT_INACTIVE",
+      }),
+    );
   });
 
   it("attaches the current token and active profile", async () => {
@@ -117,6 +160,12 @@ describe("AuthenticationGuard", () => {
       token: VERIFIED_TOKEN,
       profile: ACTIVE_PROFILE,
     });
+    expect(auditTrail.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: ACTIVE_PROFILE.organizationId,
+        result: "SUCCEEDED",
+      }),
+    );
   });
 });
 
@@ -127,6 +176,9 @@ function createContext(authorization?: string): {
   const request = {
     headers: authorization === undefined ? {} : { authorization },
     params: {},
+    method: "GET",
+    path: "/api/v1/auth/session",
+    correlationId: "a9000000-0000-4000-8000-000000000001",
   } as unknown as AuthenticatedRequest;
   const context = {
     getClass: () => TestController,

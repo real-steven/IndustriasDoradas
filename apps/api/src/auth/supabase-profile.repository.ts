@@ -38,7 +38,12 @@ interface RolePermissionRow {
 }
 
 interface PermissionRow {
+  id: string;
   code: string;
+}
+
+interface UserPermissionGrantRow {
+  permission_id: string;
 }
 
 type ReadOnlyTable<Row> = {
@@ -55,6 +60,7 @@ interface AppDatabase {
       roles: ReadOnlyTable<RoleRow>;
       role_permissions: ReadOnlyTable<RolePermissionRow>;
       permissions: ReadOnlyTable<PermissionRow>;
+      user_permission_grants: ReadOnlyTable<UserPermissionGrantRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -92,7 +98,7 @@ export class SupabaseProfileRepository implements ProfileRepository {
     }
 
     const role = await this.loadRole(profile.role_id);
-    const permissions = await this.loadPermissions(role.id);
+    const permissions = await this.loadPermissions(profile, role);
 
     return {
       id: profile.id,
@@ -147,28 +153,52 @@ export class SupabaseProfileRepository implements ProfileRepository {
     return data[0] as RoleRow;
   }
 
-  private async loadPermissions(roleId: string): Promise<readonly string[]> {
+  private async loadPermissions(
+    profile: ProfileRow,
+    role: RoleRow,
+  ): Promise<readonly string[]> {
+    if (role.code === "JEFE_EMPRESA") {
+      const { data, error } = await this.client
+        .from("permissions")
+        .select("id, code")
+        .eq("is_active", true)
+        .overrideTypes<PermissionRow[], { merge: false }>();
+      if (error !== null) this.failQuery("permissions");
+      return data.map((permission) => permission.code).sort();
+    }
+
     const { data: assignments, error: assignmentsError } = await this.client
       .from("role_permissions")
       .select("permission_id")
-      .eq("role_id", roleId)
+      .eq("role_id", role.id)
       .overrideTypes<RolePermissionRow[], { merge: false }>();
 
     if (assignmentsError !== null) {
       this.failQuery("role_permissions");
     }
 
-    if (assignments.length === 0) {
-      return [];
+    const permissionIds = assignments.map(
+      (assignment) => assignment.permission_id,
+    );
+    if (role.code === "ADMINISTRADOR") {
+      const { data: grants, error: grantsError } = await this.client
+        .from("user_permission_grants")
+        .select("permission_id")
+        .eq("organization_id", profile.organization_id)
+        .eq("user_profile_id", profile.id)
+        .is("revoked_at", null)
+        .overrideTypes<UserPermissionGrantRow[], { merge: false }>();
+      if (grantsError !== null) this.failQuery("user_permission_grants");
+      permissionIds.push(...grants.map((grant) => grant.permission_id));
     }
+
+    const uniquePermissionIds = [...new Set(permissionIds)];
+    if (uniquePermissionIds.length === 0) return [];
 
     const { data: permissions, error: permissionsError } = await this.client
       .from("permissions")
-      .select("code")
-      .in(
-        "id",
-        assignments.map((assignment) => assignment.permission_id),
-      )
+      .select("id, code")
+      .in("id", uniquePermissionIds)
       .eq("is_active", true)
       .overrideTypes<PermissionRow[], { merge: false }>();
 

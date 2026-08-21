@@ -1,8 +1,8 @@
 # Aplicación de escritorio WPF
 
-Shell técnico de la estación de planta construido con WPF y .NET 10. En este
-paso contiene navegación mínima y diagnóstico de comunicación con la API; no
-incluye todavía módulos operativos, SQLite ni sincronización.
+Estación de planta construida con WPF y .NET 10. Incluye login Supabase Auth,
+Modo Operación y elevación temporal de jefe de planta; aún no incluye
+producción, asistencia ni biometría.
 
 ## Organización
 
@@ -40,10 +40,18 @@ Visual Studio permite ejecutar las pruebas desde **Test > Test Explorer**.
 
 ## Configuración por ambiente
 
-El Generic Host carga `appsettings.json` y después
-`appsettings.{DOTNET_ENVIRONMENT}.json`. La configuración base consulta
+El Generic Host carga `appsettings.json`, después
+`appsettings.{DOTNET_ENVIRONMENT}.json` y `appsettings.Local.json`. Copia el
+ejemplo local y agrega únicamente URL/clave publicable de Supabase e ID de
+estación; nunca uses la clave secreta del API. La configuración base consulta
 `http://127.0.0.1:3000/`; `Development` reduce el timeout a dos segundos para
 dar retroalimentación rápida. Ambas opciones se validan al iniciar.
+
+Tokens, refresh token y verificador offline se guardan cifrados con DPAPI para
+el usuario Windows actual. La autorización offline vence a las 24 horas; al
+recuperar red se revalida y una revocación invalida el modo privilegiado sin
+borrar eventos pendientes. La fotografía futura está desacoplada y hoy se
+registra únicamente como evidencia ausente.
 
 ## Verificar
 

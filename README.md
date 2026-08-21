@@ -403,7 +403,8 @@ Debido a que el sistema administrará información operativa, financiera y posib
 - Copias de seguridad.
 - Recuperación ante fallos.
 - Variables de entorno para secretos.
-- Cuentas separadas para consulta gerencial y administración privilegiada.
+- Una cuenta `JEFE_EMPRESA` superadministradora y permisos individuales de
+  mínimo privilegio para cada `ADMINISTRADOR`.
 - MFA y dispositivos administrativos autorizados antes de producción.
 
 > Ninguna contraseña, clave privada o credencial de Supabase debe almacenarse en el repositorio.

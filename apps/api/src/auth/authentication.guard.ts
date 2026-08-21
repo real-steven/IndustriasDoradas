@@ -8,6 +8,8 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
+import { AUDIT_ACTIONS, type AuditActor } from "../audit/audit.contracts";
+import { AuditTrailService } from "../audit/audit-trail.service";
 import {
   ACCESS_TOKEN_VERIFIER,
   PROFILE_REPOSITORY,
@@ -25,6 +27,7 @@ export class AuthenticationGuard implements CanActivate {
     private readonly tokenVerifier: AccessTokenVerifier,
     @Inject(PROFILE_REPOSITORY)
     private readonly profiles: ProfileRepository,
+    private readonly auditTrail: AuditTrailService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -38,25 +41,125 @@ export class AuthenticationGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const token = await this.tokenVerifier.verify(
-      this.extractBearerToken(request.headers.authorization),
-    );
-    const profile = await this.profiles.findByAuthUserId(token.subject);
+    let token: Awaited<ReturnType<AccessTokenVerifier["verify"]>> | undefined;
+    let profile:
+      Awaited<ReturnType<ProfileRepository["findByAuthUserId"]>> | undefined;
 
-    if (profile === null) {
-      throw new ForbiddenException("Authenticated account has no profile");
+    try {
+      token = await this.tokenVerifier.verify(
+        this.extractBearerToken(request.headers.authorization),
+      );
+      profile = await this.profiles.findByAuthUserId(token.subject);
+
+      if (profile === null) {
+        throw new ForbiddenException("Authenticated account has no profile");
+      }
+
+      if (
+        profile.accountStatus !== "ACTIVE" ||
+        !profile.isActive ||
+        !profile.role.isActive
+      ) {
+        throw new ForbiddenException("Account is not active");
+      }
+    } catch (error) {
+      await this.auditTrail.recordBestEffort({
+        correlationId: this.getCorrelationId(request),
+        ...(profile?.organizationId === undefined
+          ? {}
+          : { organizationId: profile.organizationId }),
+        actor: this.createActor(token, profile),
+        origin: "API",
+        action: AUDIT_ACTIONS.API_ACCESS,
+        entityType: "api_endpoint",
+        result: "REJECTED",
+        reasonCode: this.getRejectionReason(error),
+        request: this.getRequestContext(request),
+      });
+      throw error;
     }
 
-    if (
-      profile.accountStatus !== "ACTIVE" ||
-      !profile.isActive ||
-      !profile.role.isActive
-    ) {
-      throw new ForbiddenException("Account is not active");
+    if (token === undefined || profile === undefined || profile === null) {
+      throw new Error("Authentication context was not resolved");
     }
 
     request.auth = { token, profile };
+    await this.auditTrail.record({
+      correlationId: this.getCorrelationId(request),
+      organizationId: profile.organizationId,
+      actor: this.createActor(token, profile),
+      origin: "API",
+      action: AUDIT_ACTIONS.API_ACCESS,
+      entityType: "api_endpoint",
+      result: "SUCCEEDED",
+      request: this.getRequestContext(request),
+    });
     return true;
+  }
+
+  private createActor(
+    token: Awaited<ReturnType<AccessTokenVerifier["verify"]>> | undefined,
+    profile:
+      Awaited<ReturnType<ProfileRepository["findByAuthUserId"]>> | undefined,
+  ): AuditActor {
+    if (profile !== null && profile !== undefined) {
+      return {
+        kind: "AUTHENTICATED_USER",
+        profileId: profile.id,
+        authUserId: profile.authUserId,
+        displayName: profile.displayName,
+        roleCode: profile.role.code,
+      };
+    }
+
+    if (token !== undefined) {
+      return {
+        kind: "AUTHENTICATED_USER",
+        authUserId: token.subject,
+      };
+    }
+
+    return { kind: "UNKNOWN" };
+  }
+
+  private getCorrelationId(request: AuthenticatedRequest): string {
+    if (request.correlationId === undefined) {
+      throw new Error("Correlation ID middleware was not applied");
+    }
+    return request.correlationId;
+  }
+
+  private getRequestContext(request: AuthenticatedRequest): {
+    method: string;
+    path: string;
+  } {
+    return {
+      method: request.method,
+      path: request.path,
+    };
+  }
+
+  private getRejectionReason(error: unknown): string {
+    if (!(error instanceof UnauthorizedException)) {
+      if (
+        error instanceof ForbiddenException &&
+        error.message === "Authenticated account has no profile"
+      ) {
+        return "APPLICATION_PROFILE_NOT_FOUND";
+      }
+      if (error instanceof ForbiddenException) {
+        return "ACCOUNT_INACTIVE";
+      }
+      return "AUTHENTICATION_FAILED";
+    }
+
+    if (error.message === "Authentication required") {
+      return "AUTHENTICATION_REQUIRED";
+    }
+    if (error.message === "Invalid authorization header") {
+      return "AUTHORIZATION_HEADER_INVALID";
+    }
+    return "ACCESS_TOKEN_INVALID_OR_EXPIRED";
   }
 
   private extractBearerToken(authorization: string | undefined): string {

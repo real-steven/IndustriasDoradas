@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-08-17
 
-**Estado:** propuesta completa para la pausa manual del prompt 1.1; no implementada
+**Estado:** revisado e implementado; decisión de autorización granular del 2026-08-20
 
 **Fuente funcional:** `docs/requirements/linea-base-funcional-v0.1.md`
 
@@ -30,17 +30,20 @@ Hay tres roles autenticados:
 | Rol | Canal principal | Identidad |
 | --- | --- | --- |
 | `JEFE_EMPRESA` | Web | Cuenta personal con correo y contraseña. |
-| `ADMINISTRADOR` | Web | Cuenta personal separada, incluso cuando pertenece al gerente. |
+| `ADMINISTRADOR` | Web | Cuenta personal con permisos individuales concedidos. |
 | `JEFE_PLANTA` | Desktop | Cuenta personal con correo/contraseña y PIN individual para elevación local. |
 
 `Modo Operación` no es cuenta, usuario de Supabase ni rol. Es un estado
 restringido de la estación habilitada por un jefe de planta. Los trabajadores
 regulares son registros del catálogo y no reciben credenciales.
 
-Reglas de separación:
+Reglas de identidad:
 
-- Una persona que ejerce gerencia y administración usa dos cuentas.
-- No existe `GERENTE_ADMINISTRADOR` ni unión silenciosa de permisos.
+- `JEFE_EMPRESA` consulta y administra desde una sola cuenta con todos los
+  permisos activos; no existe una segunda cuenta obligatoria.
+- No existe `GERENTE_ADMINISTRADOR`: la máxima autoridad sigue siendo
+  `JEFE_EMPRESA`.
+- `ADMINISTRADOR` parte de privilegio mínimo y recibe concesiones atómicas.
 - Una cuenta no cambia de rol desde la interfaz ordinaria.
 - Ninguna cuenta se comparte y todo acceso privilegiado identifica a una
   persona.
@@ -49,15 +52,19 @@ Reglas de separación:
 
 ### 3.1 Primeras cuentas
 
-Las primeras cuentas `JEFE_EMPRESA` y `ADMINISTRADOR` se aprovisionan mediante
+La primera cuenta `JEFE_EMPRESA` se aprovisiona mediante
 un procedimiento único de instalación, ejecutado desde backend/entorno seguro,
 sin formulario público ni secretos versionados. Se entregan por canal separado
 y obligan a establecer contraseña propia.
 
 ### 3.2 Cuentas posteriores
 
-- Jefe de empresa aprueba o rechaza una nueva cuenta administrativa.
-- Una cuenta administrativa autorizada ejecuta el aprovisionamiento aprobado.
+- Jefe de empresa crea/invita la nueva cuenta administrativa y selecciona sus
+  permisos iniciales.
+- Un administrador con `administrators.create` también puede crear otra cuenta,
+  pero solo puede conceder permisos que él mismo posea.
+- Cambiar permisos existentes exige `administrators.permissions.manage`; aprobar,
+  suspender o reactivar exige `administrators.govern`.
 - Administrador crea, suspende o revoca cuentas de jefe de planta.
 - Administrador no se autoaprueba, no altera su auditoría y no desactiva la
   última cuenta gerencial activa.
@@ -100,7 +107,7 @@ Reglas:
 - `service_role` existe únicamente en el proceso NestJS/gestor de secretos.
 - El JWT prueba identidad y sesión; no es la única fuente de permisos.
 - NestJS carga el perfil propio en cada operación protegida para que una
-  suspensión central no dependa de esperar a que expire el JWT.
+  suspensión o revocación central no dependa de esperar a que expire el JWT.
 - En acciones sensibles, NestJS puede comprobar además que `session_id` siga
   activo.
 - Los frontends nunca consultan tablas de negocio directamente.
@@ -119,23 +126,24 @@ Leyenda: `Sí`, `No`, `Solicita`, `Aprueba`, `Limitado` y `Posterior`.
 | Capacidad | Jefe de empresa | Administrador | Jefe de planta | Modo Operación |
 | --- | --- | --- | --- | --- |
 | Iniciar sesión | Web | Web | Desktop | No aplica |
-| Habilitar estación | No | Configura/revoca | Sí | No |
-| Registrar/revertir última cajuela | Consulta | Corrección cerrada posterior | Sí | Sí |
-| Corregir ciclo abierto | Consulta | Sí | Limitado | Reverso inmediato |
-| Corregir ciclo cerrado | Consulta/audita | Sí, con ajuste | No | No |
-| Consultar reportes/estadísticas | Sí | No | Resumen operativo local | No |
-| Confirmar/rechazar entrega de oro | Posterior, limitado | Audita/corrige | Posterior, solicita | No |
-| Aprobar/suspender administrador | Sí | No puede autoaprobarse | No | No |
-| Aprovisionar administrador aprobado | No | Sí | No | No |
-| Gestionar cuenta/PIN de jefe de planta | No | Sí | Solo su recuperación | No |
-| Gestionar planta/líneas/estaciones | Consulta | Sí | Consulta | Contexto activo |
-| Gestionar proveedores | Consulta | Sí/corrección | Sí | Selecciona activo |
+| Habilitar estación | Configura/revoca | Según concesión | Sí | No |
+| Registrar/revertir última cajuela | Sí, auditado | Según concesión | Sí | Sí |
+| Corregir ciclo abierto | Sí | Según concesión | Limitado | Reverso inmediato |
+| Corregir ciclo cerrado | Sí, con ajuste | Según concesión | No | No |
+| Consultar reportes/estadísticas | Sí | Según concesión | Resumen operativo local | No |
+| Confirmar/rechazar entrega de oro | Sí | Según concesión | Posterior, solicita | No |
+| Aprobar/suspender administrador | Sí | Con `administrators.govern` | No | No |
+| Crear administrador | Sí | Con `administrators.create`; delegación acotada | No | No |
+| Asignar permisos administrativos | Sí | Con `administrators.permissions.manage`; solo propios | No | No |
+| Gestionar cuenta/PIN de jefe de planta | Sí | Según concesión | Solo su recuperación | No |
+| Gestionar planta/líneas/estaciones | Sí | Según concesión | Consulta | Contexto activo |
+| Gestionar proveedores | Sí | Según concesión | Sí | Selecciona activo |
 | Solicitar trabajador | Consulta | Audita | Sí | No |
-| Aprobar/rechazar/fusionar trabajador | Consulta | Sí | No | No |
-| Check-in/out propio del trabajador | Consulta horas | Audita/corrige | Revisa reciente | Posterior |
-| Ver foto pendiente hasta 24 h | No | Sí | Sí, limitada | No |
-| Ver evidencia histórica | No | Sí, auditado | No | No |
-| Inventario | Consulta posterior | Sí | Sí | No |
+| Aprobar/rechazar/fusionar trabajador | Sí | Según concesión | No | No |
+| Check-in/out propio del trabajador | Consulta/corrige | Según concesión | Revisa reciente | Posterior |
+| Ver foto pendiente hasta 24 h | Sí, auditado | Según concesión | Sí, limitada | No |
+| Ver evidencia histórica | Sí, auditado | Según concesión y auditado | No | No |
+| Inventario | Sí | Según concesión | Sí | No |
 | Alterar o borrar auditoría | No | No | No | No |
 | Preferencia `es/en` | Sí | Sí | Sí | Hereda estación |
 
@@ -146,8 +154,8 @@ Restricciones transversales:
 - Desactivar conserva historial y referencias.
 - Correcciones profundas son ajustes/eventos auditados, no `UPDATE`/`DELETE`
   silenciosos.
-- Jefe de empresa ve auditoría redactada; administrador ve detalle necesario,
-  nunca tokens, contraseñas o PIN.
+- Jefe de empresa conserva acceso completo auditado; cada administrador ve solo
+  el detalle concedido. Nadie ve tokens, contraseñas o PIN.
 
 ## 6. Estación, modos y elevación
 
@@ -300,8 +308,9 @@ No se adelantan en 1.1, pero son obligatorias antes de producción:
 
 ## 11. Casos para aprobar la pausa 1.1
 
-- Gerente con cuenta gerencial y administrativa separadas.
-- Administrador no puede autoaprobarse ni borrar auditoría.
+- Gerente usa una cuenta `JEFE_EMPRESA` para datos y administración.
+- Administrador no puede modificar sus propios permisos ni borrar auditoría.
+- Administrador delegado no puede conceder o retirar permisos que no posea.
 - Jefe abre la estación; trabajador usa Modo Operación sin cuenta.
 - Cinco PIN incorrectos bloquean solo la elevación; producción continúa.
 - Formulario privilegiado se conserva detrás del bloqueo de dos minutos.

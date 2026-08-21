@@ -9,7 +9,7 @@
 1. Eventos `CHECK_IN/CHECK_OUT`, incidencias y ajustes sin descansos.
 2. Flujo inicial autoservicio: trabajador selecciona perfil, captura foto y crea marca pendiente con hora original.
 3. Trabajador `PROVISIONAL` desde la solicitud; a las 72 horas pasa a `PROVISIONAL_VENCIDO` con alerta urgente, sin bloquear ni perder horas.
-4. Revisión del jefe durante 24 horas; auditoría/corrección posterior del administrador sin borrar eventos.
+4. Revisión del jefe durante 24 horas; auditoría/corrección posterior de `JEFE_EMPRESA` o administrador autorizado sin borrar eventos.
 5. Calcular horas normales/adicionales sin salario; validar regla 8–10 horas.
 6. Revisar y aprobar o sustituir la retención indefinida provisional; definir finalidad, acceso, respaldo y respuesta a incidentes de fotos, además de consentimiento, enrolamiento y precisión antes de reconocimiento facial.
 7. Abstraer cámara/reconocimiento sin usar PIN como alternativa ordinaria del trabajador.
@@ -27,7 +27,7 @@
 
 ### 6.1 Política y minimización de datos
 
-**Prompt:** Antes de código, revisa la decisión provisional de conservar fotografías indefinidamente y apruébala o sustitúyela con una política explícita. Documenta finalidad, acceso por ventana temporal, almacenamiento/costo, respaldo y respuesta a incidentes; agrega consentimiento, enrolamiento y precisión para biometría. Distingue foto de evidencia de plantilla facial. La foto vive en Storage privado y auditoría conserva referencia/checksum, nunca blob o URL permanente. Jefe de planta ve pendientes/recientes durante 24 horas; administrador ve evidencia histórica mediante acceso temporal auditado; jefe de empresa no ve fotos. Define continuidad cuando no hay cámara. Si reconocimiento no se aprueba, implementa solo foto pendiente.
+**Prompt:** Antes de código, revisa la decisión provisional de conservar fotografías indefinidamente y apruébala o sustitúyela con una política explícita. Documenta finalidad, acceso por ventana temporal, almacenamiento/costo, respaldo y respuesta a incidentes; agrega consentimiento, enrolamiento y precisión para biometría. Distingue foto de evidencia de plantilla facial. La foto vive en Storage privado y auditoría conserva referencia/checksum, nunca blob o URL permanente. Jefe de planta ve pendientes/recientes durante 24 horas; `JEFE_EMPRESA` y administradores con permiso sensible ven evidencia histórica mediante acceso temporal auditado. Define continuidad cuando no hay cámara. Si reconocimiento no se aprueba, implementa solo foto pendiente.
 
 **Pausa:** política aprobada por responsable; decisión explícita de incluir o posponer reconocimiento.
 
@@ -75,9 +75,9 @@
 
 ### 6.9 Revisión web y ajustes
 
-**Prompt:** Implementa resumen web de asistencia para jefe de empresa sin fotografías y correcciones administrativas auditadas. Jefe de planta resuelve pendientes/recentes desde desktop durante 24 horas; administrador audita después, aprueba/rechaza trabajadores y fusiona/reasigna sin borrar horas. Muestra alertas urgentes por provisional vencido o cámara ausente. Purga caché sensible al cerrar sesión.
+**Prompt:** Implementa resumen web de asistencia para jefe de empresa y correcciones auditadas en el módulo Administración. Jefe de planta resuelve pendientes/recientes desde desktop durante 24 horas; `JEFE_EMPRESA` o administrador con permisos de asistencia audita después, aprueba/rechaza trabajadores y fusiona/reasigna sin borrar horas. Las fotografías exigen permiso sensible y cada acceso queda auditado. Muestra alertas urgentes por provisional vencido o cámara ausente. Purga caché sensible al cerrar sesión.
 
-**Pausa:** jefe de planta resuelve pendiente desde desktop; jefe de empresa no accede a fotos y operario no accede a fotos ajenas.
+**Pausa:** jefe de planta resuelve pendiente desde desktop; solo superadministración o administradores con permiso sensible acceden temporalmente a fotos y cada consulta queda auditada; operario no accede a fotos ajenas.
 
 ### 6.10 Reconocimiento facial opcional y evaluable
 

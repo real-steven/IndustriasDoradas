@@ -218,12 +218,20 @@ en
 
 - **Decisión confirmada:** las identidades son `JEFE_EMPRESA`,
   `ADMINISTRADOR` y `JEFE_PLANTA`. Los trabajadores no tienen cuenta.
-- **Separación:** quien ejerza gerencia y administración utiliza dos cuentas; su
-  perfil administrativo es otra cuenta `ADMINISTRADOR`, no un rol compuesto.
-  Jefe de empresa puede aprobar/suspender administradores y consultar su
-  auditoría, pero no editar datos operativos ordinarios.
-- **Restricciones:** administrador no se autoaprueba, no altera auditoría y no
-  desactiva la última cuenta gerencial activa.
+- **Cuenta gerencial unificada:** `JEFE_EMPRESA` es superadministrador y recibe
+  todos los permisos activos desde una sola cuenta. La experiencia web presenta
+  primero datos/reportes y mantiene las ediciones en un módulo separado dentro
+  de la misma sesión.
+- **Administración granular:** `ADMINISTRADOR` combina permisos base mínimos con
+  concesiones individuales vigentes. Jefe de empresa crea la cuenta y selecciona
+  sus permisos; una revocación se consulta en cada solicitud y surte efecto sin
+  esperar a que expire el JWT.
+- **Delegación acotada:** `administrators.create`,
+  `administrators.permissions.manage` y `administrators.govern` son capacidades
+  distintas. Un administrador autorizado nunca concede ni retira permisos que
+  él mismo no posee y no modifica sus propios privilegios.
+- **Restricciones:** nadie altera auditoría o borra historial; no se desactiva la
+  última cuenta gerencial activa.
 
 ### 11. Trabajador provisional y evidencia de asistencia
 

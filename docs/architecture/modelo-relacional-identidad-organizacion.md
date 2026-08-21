@@ -121,8 +121,9 @@ erDiagram
 | Organización → perfil autenticado | `1:N` | Cada cuenta pertenece a una sola organización. |
 | Perfil ↔ planta | `N:M` | Permite jefes en más de una planta sin duplicar la cuenta. |
 | Jefe ↔ estación | `N:M` | Una estación admite turnos de varios jefes y un jefe puede abrir varias estaciones autorizadas. |
-| Perfil → rol | `N:1` | Exactamente un rol por cuenta; gerente-administrador usa dos cuentas. |
-| Rol ↔ permiso | `N:M` | Matriz central fija; no hay permisos especiales por usuario. |
+| Perfil → rol | `N:1` | Exactamente un rol por cuenta; `JEFE_EMPRESA` incluye superadministración. |
+| Rol ↔ permiso | `N:M` | Capacidades base fijas. |
+| Administrador ↔ permiso | `N:M` | Concesiones individuales revocables, con actor y fechas. |
 | Solicitud → trabajador | `1:1` | Toda solicitud crea un trabajador provisional en la misma transacción. |
 | Trabajador origen → fusión | `1:0..1` | Un duplicado solo puede quedar fusionado una vez. |
 | Trabajador destino → fusiones | `1:N` | Un perfil canónico puede recibir varios duplicados. |
@@ -143,35 +144,40 @@ migración y no se administran desde UI.
 
 ### 5.2 Permisos
 
-`permissions` contiene códigos atómicos estables derivados de la matriz 1.1;
-`role_permissions` materializa la matriz aprobada. NestJS sigue siendo la
-autoridad y no acepta permisos enviados por el cliente.
+`permissions` contiene códigos atómicos estables; `role_permissions` conserva
+los mínimos fijos de cada rol y `user_permission_grants` registra concesiones y
+revocaciones individuales de `ADMINISTRADOR`. `JEFE_EMPRESA` obtiene todos los
+permisos activos. NestJS recalcula la autorización en cada solicitud y nunca
+acepta permisos afirmados por el cliente.
 
 Catálogo inicial propuesto (`—` significa no concedido):
 
 | Código | Jefe de empresa | Administrador | Jefe de planta |
 | --- | --- | --- | --- |
-| `reports.read` | Sí | — | — |
+| `reports.read` | Siempre | Concesión | — |
 | `audit.read_redacted` | Sí | — | — |
-| `audit.read_operational` | — | Sí | — |
-| `administrators.govern` | Sí | — | — |
-| `administrators.provision_approved` | — | Sí | — |
-| `plant_managers.manage` | — | Sí | — |
-| `organization_catalogs.read` | Sí | Sí | Sí |
-| `organization_catalogs.manage` | — | Sí | — |
-| `stations.manage` | — | Sí | — |
+| `audit.read_operational` | Siempre | Concesión | — |
+| `administrators.govern` | Siempre | Concesión | — |
+| `administrators.create` | Siempre | Concesión | — |
+| `administrators.permissions.manage` | Siempre | Concesión | — |
+| `administrators.provision_approved` | Siempre | Concesión | — |
+| `plant_managers.manage` | Siempre | Concesión | — |
+| `organization_catalogs.read` | Siempre | Concesión | Sí |
+| `organization_catalogs.manage` | Siempre | Concesión | — |
+| `stations.manage` | Siempre | Concesión | — |
 | `stations.open` | — | — | Sí |
 | `privilege.elevate` | — | — | Sí |
-| `suppliers.manage` | — | Sí | Sí |
+| `suppliers.manage` | Siempre | Concesión | Sí |
+| `workers.read` | Siempre | Concesión | Sí |
 | `workers.request` | — | — | Sí |
-| `workers.resolve` | — | Sí | — |
-| `cycles.correct_open` | — | Sí | Sí |
-| `cycles.correct_closed` | — | Sí | — |
+| `workers.resolve` | Siempre | Concesión | — |
+| `cycles.correct_open` | Siempre | Concesión | Sí |
+| `cycles.correct_closed` | Siempre | Concesión | — |
 | `attendance.review_recent` | — | — | Sí |
-| `attendance.correct` | — | Sí | — |
-| `inventory.manage` | — | Sí | Sí |
-| `gold_deliveries.confirm` | Sí | — | — |
-| `profile.locale_update` | Sí | Sí | Sí |
+| `attendance.correct` | Siempre | Concesión | — |
+| `inventory.manage` | Siempre | Concesión | Sí |
+| `gold_deliveries.confirm` | Siempre | Concesión | — |
+| `profile.locale_update` | Siempre | Base fija | Sí |
 
 Los permisos de asistencia, inventario y oro reservan la autoridad ya aprobada,
 pero no implementan esas funciones antes de sus sprints. Registrar cajuelas,
@@ -181,7 +187,6 @@ política firmada de estación, no mediante un perfil o fila en
 
 No se modelan:
 
-- permisos directos por usuario;
 - roles personalizados;
 - herencia de roles;
 - permisos editables por organización.
@@ -344,8 +349,22 @@ Una estación no puede enlazarse con una línea de otra planta.
 | `role_id`, `permission_id` | `uuid` | No | PK compuesta; FK a catálogos globales. |
 | `created_at` | `timestamptz` | No | Momento de la versión de matriz. |
 
-No contiene `user_profile_id`: quedan prohibidas excepciones silenciosas por
-cuenta.
+No contiene `user_profile_id`: las excepciones no se ocultan aquí, sino que se
+registran explícitamente en `user_permission_grants`.
+
+### 6.10.1 `user_permission_grants`
+
+| Columna | Tipo | Nulo | Regla |
+| --- | --- | --- | --- |
+| `id` | `uuid` | No | PK del periodo de concesión. |
+| `organization_id`, `user_profile_id` | `uuid` | No | Destino de la misma organización; solo `ADMINISTRADOR`. |
+| `permission_id` | `uuid` | No | Permiso atómico vigente. |
+| `granted_by_profile_id`, `granted_at` | varios | No | Actor y momento de concesión. |
+| `revoked_by_profile_id`, `revoked_at` | varios | Sí | Ambos presentes o ambos ausentes; no se borra la fila. |
+
+Un índice único parcial impide dos concesiones activas del mismo permiso. Las
+funciones de dominio verifican que un administrador solo cambie capacidades que
+él mismo posee.
 
 ### 6.11 `user_profiles`
 
@@ -364,9 +383,8 @@ cuenta.
 | `is_active`, `deactivated_at` | varios | No/Sí | Baja lógica distinta de suspensión temporal. |
 | `created_at`, `updated_at` | `timestamptz` | No | UTC. |
 
-El correo y contraseña permanecen en Supabase Auth; no se duplican aquí. Una
-persona con funciones gerencial y administrativa tiene dos `auth_user_id` y dos
-filas de perfil.
+El correo y contraseña permanecen en Supabase Auth; no se duplican aquí. La
+cuenta `JEFE_EMPRESA` cubre consulta gerencial y administración privilegiada.
 
 ### 6.12 `user_plant_scopes`
 
@@ -593,8 +611,9 @@ columnas repetidas ni reglas de cardinalidad.
 3. Una línea representa molino/rastras como filas configurables.
 4. La estación inicial puede atender las cuatro líneas sin pertenecer a cuatro
    plantas ni duplicarse.
-5. Una cuenta tiene un solo rol; gerente-administrador usa dos cuentas.
-6. Los permisos son fijos por rol, sin excepciones individuales.
+5. Una cuenta tiene un solo rol y `JEFE_EMPRESA` no requiere una segunda cuenta.
+6. Un administrador tiene permisos individuales revocables y no puede delegar
+   capacidades que no posea.
 7. Un jefe puede quedar autorizado para una o más plantas/estaciones.
 8. El PIN solo aparece como verificador versionado y estado de bloqueo.
 9. Una solicitud crea inmediatamente un trabajador provisional.

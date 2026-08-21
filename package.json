@@ -20,6 +20,8 @@
     "lint:typescript": "pnpm --filter @industrias-doradas/api lint && pnpm --filter @industrias-doradas/web lint",
     "lint:dotnet": "dotnet format analyzers apps/desktop/IndustriasDoradas.Desktop.slnx --verify-no-changes --no-restore",
     "build": "pnpm run build:typescript && pnpm run build:dotnet",
+    "contract:generate": "pnpm --filter @industrias-doradas/api build && node scripts/generate-contracts.mjs",
+    "contract:check": "pnpm --filter @industrias-doradas/api build && node scripts/generate-contracts.mjs --check",
     "build:typescript": "pnpm --filter @industrias-doradas/api build && pnpm --filter @industrias-doradas/web build",
     "build:dotnet": "dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release",
     "test": "pnpm run test:db && pnpm run test:api && pnpm run test:web && pnpm run test:desktop",
@@ -28,7 +30,7 @@
     "test:web": "pnpm --filter @industrias-doradas/web test",
     "test:desktop": "dotnet test apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release",
     "secrets:check": "node scripts/check-secrets.mjs",
-    "verify": "pnpm run secrets:check && pnpm run format:check && pnpm run lint && pnpm run build && pnpm run test"
+    "verify": "pnpm run secrets:check && pnpm run format:check && pnpm run lint && pnpm run build && pnpm run contract:check && pnpm run test"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.5",

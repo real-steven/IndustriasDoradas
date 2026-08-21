@@ -43,7 +43,7 @@
 
 ### 7.4 Catálogo y movimientos API
 
-**Prompt:** Implementa casos/API para artículos, movimientos y revisiones. Jefe de planta/administrador registran; ajustes requieren motivo; desactivar conserva kardex; existencia insuficiente siempre rechaza. Una revisión sin diferencias no reescribe cantidades.
+**Prompt:** Implementa casos/API para artículos, movimientos y revisiones. Jefe de planta, `JEFE_EMPRESA` y administradores con permisos de inventario registran; ajustes requieren permiso separado y motivo; desactivar conserva kardex; existencia insuficiente siempre rechaza. Una revisión sin diferencias no reescribe cantidades.
 
 **Pausa:** Swagger recorre entrada→consumo→reverso→ajuste y roles rechazados.
 

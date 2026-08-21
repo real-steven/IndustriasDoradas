@@ -25,8 +25,9 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
 - Una barrida real puede incluir menos, exactamente o más de 50 cajuelas y siempre existe una barrida final al terminar el cargamento.
 - Mercurio y oro se registran por barrida; el oro definitivo del cargamento es la suma de resultados certificados.
 - Interfaz y reportes web soportan español/inglés con preferencia por cuenta.
-- Jefe de empresa consulta/exporta y gobierna cuentas administrativas de forma limitada; administrador modifica/audita; jefe de planta abre la estación y eleva permisos; Modo Operación compartido registra cajuelas y asistencia sin cuenta de operario.
-- Una misma persona usa cuentas separadas para consulta gerencial y administración privilegiada.
+- Jefe de empresa consulta/exporta y actúa como superadministrador; cada administrador modifica o consulta solo según concesiones; jefe de planta abre la estación y eleva permisos; Modo Operación compartido registra cajuelas y asistencia sin cuenta de operario.
+- La cuenta `JEFE_EMPRESA` es única y presenta Administración como módulo separado dentro de la misma sesión.
+- Un administrador no cambia sus propios permisos ni delega capacidades que no posee; toda concesión y revocación se audita y aplica en la solicitud siguiente.
 - Trabajador provisional registra horas desde el primer día; a las 72 horas pasa a vencido sin bloqueo ni pérdida y exige atención administrativa urgente.
 - Check-in/out inicial usa fotografía pendiente; reconocimiento facial y sensor automático son posteriores y condicionados.
 

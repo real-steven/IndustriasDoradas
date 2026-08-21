@@ -25,6 +25,38 @@ select
 from app.roles
 where roles.code = 'ADMINISTRADOR';
 
+insert into app.user_permission_grants (
+  id,
+  organization_id,
+  user_profile_id,
+  permission_id,
+  granted_by_profile_id,
+  granted_at
+)
+select
+  gen_random_uuid(),
+  '30000000-0000-4000-8000-000000000001',
+  'a1000000-0000-4000-8000-000000000001',
+  permissions.id,
+  'a1000000-0000-4000-8000-000000000001',
+  '2026-01-01T00:00:00Z'
+from app.permissions
+where permissions.code in (
+  'audit.read_operational',
+  'administrators.provision_approved',
+  'plant_managers.manage',
+  'organization_catalogs.read',
+  'organization_catalogs.manage',
+  'stations.manage',
+  'suppliers.manage',
+  'workers.resolve',
+  'workers.read',
+  'cycles.correct_open',
+  'cycles.correct_closed',
+  'attendance.correct',
+  'inventory.manage'
+);
+
 insert into app.user_profiles (
   id,
   organization_id,

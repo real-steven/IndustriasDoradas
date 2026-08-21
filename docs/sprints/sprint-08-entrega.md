@@ -57,7 +57,7 @@
 
 ### 8.6 Reportes por módulo
 
-**Prompt:** Añade reportes priorizados de producción/cajuelas, actividad de línea, cargamentos/proveedores, barridas/mercurio/oro/custodia/entregas y asistencia/horas. Inventario/novedades se incluyen solo si fueron aprobados. No muestres pago estimado salvo que tarifa/vigencia hayan sido aprobadas formalmente. Respeta que jefe de empresa genera reportes y cuenta administrativa no. Documenta campos/límites.
+**Prompt:** Añade reportes priorizados de producción/cajuelas, actividad de línea, cargamentos/proveedores, barridas/mercurio/oro/custodia/entregas y asistencia/horas. Inventario/novedades se incluyen solo si fueron aprobados. No muestres pago estimado salvo que tarifa/vigencia hayan sido aprobadas formalmente. `JEFE_EMPRESA` siempre genera reportes; un administrador solo si recibió el permiso correspondiente. Documenta campos/límites.
 
 **Pausa:** cada responsable valida al menos un reporte contra pantalla/fuente.
 

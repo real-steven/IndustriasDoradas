@@ -52,22 +52,24 @@ Los valores ficticios nunca se convierten en reglas. Las decisiones que afecten 
 | Modo Operación | Estado restringido y compartido de la estación, sin cuenta de operario, desde el que se registran cajuelas y se accede al check-in/out. |
 | Trabajador provisional | Persona solicitada desde planta que puede registrar horas antes de la aprobación administrativa; a las 72 horas pasa a provisional vencido sin perder ni bloquear sus marcas. |
 
-## 4. Actores y separación de cuentas
+## 4. Actores y autorización granular
 
-Existen tres roles autenticados y un modo operativo compartido. Una persona puede cumplir varias funciones, pero gerencia y administración siempre usan cuentas diferentes. El “administrador gerencial” es una segunda cuenta `ADMINISTRADOR` en poder del gerente, no un cuarto rol ni una combinación de permisos.
+Existen tres roles autenticados y un modo operativo compartido. `JEFE_EMPRESA` es la cuenta de máxima autoridad: combina consulta gerencial y superadministración sin una segunda cuenta. `ADMINISTRADOR` no recibe acceso total por pertenecer al rol; sus capacidades se seleccionan individualmente y pueden cambiarse o revocarse.
 
 | Rol | Canal | Facultades confirmadas |
 |---|---|---|
-| Jefe de empresa | Web | Consulta toda la operación, estadísticas, notificaciones, auditoría y reportes Excel. Puede confirmar/rechazar entregas físicas de oro, aprobar nuevas cuentas administrativas y suspender administradores. No edita datos operativos ordinarios. |
-| Administrador | Web | Aprueba o rechaza solicitudes de trabajadores; administra cuentas de jefe de planta, PIN, estaciones, líneas y configuración; ejecuta correcciones profundas y protocolos de desactivación/eliminación auditados. No altera auditoría ni consulta/genera reportes desde esta cuenta por ahora. |
+| Jefe de empresa | Web | Superadministrador permanente: consulta toda la operación, estadísticas, notificaciones, auditoría y reportes; puede ejecutar los casos de uso administrativos y operativos de todos los módulos, crear administradores, seleccionar/editar sus permisos y suspenderlos. La interfaz prioriza datos y separa las ediciones en un módulo de Administración dentro de la misma sesión. |
+| Administrador | Web | Cuenta de privilegio mínimo. Solo consulta o modifica los módulos concedidos individualmente. Puede llegar a tener acceso amplio si un jefe de empresa lo decide. Solo crea administradores, gobierna sus estados o asigna permisos cuando recibe cada capacidad específica. |
 | Jefe de planta | Desktop | Inicia y habilita la estación; solicita trabajadores; gestiona proveedores e inventario; asigna responsables; registra/certifica mercurio y oro; revisa asistencia pendiente reciente y corrige durante el ciclo abierto. Eleva temporalmente permisos mediante su PIN individual. |
 | Modo Operación | Desktop compartido | No es una cuenta ni un rol de Supabase. Mantiene el flujo continuo, registra/revierte cajuelas y permite check-in/out; no accede a administración, inventario, certificaciones ni correcciones profundas. |
 
 Reglas de acceso:
 
-- Un gerente que también administra usa una cuenta gerencial y otra administrativa.
+- El gerente usa una única cuenta `JEFE_EMPRESA`; no necesita cerrar sesión ni mantener una cuenta administrativa paralela.
 - Un administrador que también es jefe de planta puede acceder a ambos sistemas con sus credenciales correspondientes.
-- Una cuenta nueva de administrador requiere aprobación de jefe de empresa; ningún administrador puede aprobarse a sí mismo, alterar auditoría ni desactivar la última cuenta gerencial activa.
+- Jefe de empresa crea la cuenta administrativa y elige sus permisos iniciales. Puede añadirlos, retirarlos, suspenderla o reactivarla después.
+- Un administrador solo crea otra cuenta administrativa con `administrators.create`; solo cambia permisos con `administrators.permissions.manage`, y nunca puede conceder o retirar una capacidad que él mismo no posea. No puede modificar sus propios permisos.
+- Ningún perfil puede alterar o borrar auditoría ni desactivar la última cuenta gerencial activa. Los datos históricos se corrigen o desactivan, no se eliminan físicamente.
 - El administrador crea, suspende o revoca cuentas de jefe de planta y administra sus PIN individuales.
 - Los trabajadores regulares no tienen cuenta de acceso. El jefe de planta crea una solicitud y el administrador aprueba, rechaza, reasigna o fusiona el perfil.
 - La estación permanece normalmente en Modo Operación. El Modo Jefe de Planta exige el PIN personal, ofrece salida explícita y vuelve al modo restringido después de dos minutos de inactividad total, con aviso previo. Un bloqueo conserva formularios no enviados para reanudarlos tras reautenticación.
@@ -238,7 +240,7 @@ Reportes iniciales:
 
 | ID | Requerimiento |
 |---|---|
-| RF-01 | Autenticar y autorizar `JEFE_EMPRESA`, `ADMINISTRADOR` y `JEFE_PLANTA`, con cuentas gerencial/administrativa separadas y Modo Operación sin cuenta compartida. |
+| RF-01 | Autenticar y autorizar `JEFE_EMPRESA`, `ADMINISTRADOR` y `JEFE_PLANTA`; usar una cuenta gerencial superadministradora, permisos individuales revocables para administradores y Modo Operación sin cuenta compartida. |
 | RF-02 | Administrar planta, líneas, rastras, estaciones, solicitudes/estados de trabajadores, proveedores y cargamentos. |
 | RF-03 | Asignar un responsable principal y cargamento antes de alimentar una línea. |
 | RF-04 | Registrar y revertir cajuelas localmente mediante eventos inmutables. |
@@ -363,10 +365,12 @@ esté implementado.
 Seguridad, accesibilidad, rendimiento, UTC, decimales, recuperación y
 observabilidad se verifican transversalmente cuando se introduce cada flujo.
 
-## 19. Actualización funcional del 2026-08-17
+## 19. Actualizaciones funcionales
+
+### 19.1 Confirmaciones del 2026-08-17
 
 El responsable confirmó una sola computadora compartida para el MVP, tres roles
-autenticados y cuenta administrativa separada para el gerente, Modo Operación
+autenticados y, en ese momento, cuenta administrativa separada para el gerente, Modo Operación
 sin cuenta de operario, elevación temporal del jefe
 mediante PIN individual, gobierno gerencial limitado sobre administradores,
 trabajadores provisionales con aprobación posterior y check-in inicial mediante
@@ -381,3 +385,13 @@ responsable principal se asigna operativamente. Un trabajador puede responder
 por más de una línea. Cada cargamento pertenece a un proveedor, se procesa en
 exactamente una línea y tiene un único responsable; nunca se reparte entre
 líneas.
+
+### 19.2 Autorización granular del 2026-08-20
+
+La decisión de cuentas gerencial y administrativa separadas queda sustituida.
+`JEFE_EMPRESA` opera como superadministrador desde una sola cuenta. Crea las
+cuentas `ADMINISTRADOR`, selecciona sus permisos y puede añadirlos, retirarlos,
+suspenderlas o reactivarlas. Un administrador solo crea otras cuentas o gestiona
+permisos cuando recibe la capacidad correspondiente; nunca delega ni retira una
+capacidad que él mismo no posea. La interfaz gerencial prioriza datos y reportes,
+y concentra las ediciones en un módulo separado dentro de la misma sesión.

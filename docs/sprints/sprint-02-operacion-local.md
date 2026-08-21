@@ -62,7 +62,7 @@
 
 ### 2.7 Corrección segura
 
-**Prompt:** Implementa reversión de la última cajuela de la línea seleccionada mediante `CAJUELA_REVERSED`; requiere doble paso, usa motivo automático de error inmediato y nunca DELETE/UPDATE. Solo durante ciclo abierto. Correcciones no inmediatas son del jefe de planta antes del cierre y del administrador después. Añade pruebas y auditoría.
+**Prompt:** Implementa reversión de la última cajuela de la línea seleccionada mediante `CAJUELA_REVERSED`; requiere doble paso, usa motivo automático de error inmediato y nunca DELETE/UPDATE. Solo durante ciclo abierto. Correcciones no inmediatas son del jefe de planta antes del cierre y de `JEFE_EMPRESA` o un `ADMINISTRADOR` con el permiso atómico correspondiente después. Añade pruebas y auditoría.
 
 **Pausa:** corregir correcta/incorrecta y demostrar trazabilidad completa.
 

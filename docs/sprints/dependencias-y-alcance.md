@@ -2,7 +2,7 @@
 
 ```text
 Línea base/arquitectura/CI
- → identidad, cuentas separadas, estación compartida, modos y catálogos
+ → identidad, superadministración gerencial, permisos granulares, estación compartida, modos y catálogos
  → cargamento + asignación de línea/responsable
  → evento local de cajuela
  → sincronización idempotente y convergencia multiestación
@@ -24,7 +24,7 @@ La web necesita datos centrales sincronizados; una barrida necesita cajuelas vá
 
 ## Imprescindible
 
-Autenticación de jefe de empresa/administrador/jefe de planta; cuentas gerencial/administrativa separadas; Modo Operación sin cuenta compartida; auditoría; solicitudes y estados de trabajadores; planta/líneas/rastras/estaciones; proveedores/cargamentos; responsables/jornadas; cajuelas y reversos; offline de 24 horas + sincronización; alertas configurables cada 50; barridas reales; mercurio/oro/custodia/entrega; web gerencial bilingüe; Excel y recuperación.
+Autenticación de jefe de empresa/administrador/jefe de planta; cuenta gerencial superadministradora; permisos individuales de administrador; Modo Operación sin cuenta compartida; auditoría; solicitudes y estados de trabajadores; planta/líneas/rastras/estaciones; proveedores/cargamentos; responsables/jornadas; cajuelas y reversos; offline de 24 horas + sincronización; alertas configurables cada 50; barridas reales; mercurio/oro/custodia/entrega; web gerencial bilingüe; Excel y recuperación.
 
 ## Incluido después del núcleo
 
@@ -48,7 +48,7 @@ Los nombres son orientativos y se validan en el sprint responsable. `production_
 
 | Requisito | Sprint responsable | Evidencia mínima |
 |---|---:|---|
-| Identidad, tres roles autenticados, modos y cuentas separadas | 1 | Matriz, elevación, gobierno y accesos rechazados |
+| Identidad, tres roles, cuenta gerencial única, permisos granulares y modos | 1 | Matriz efectiva, delegación, revocación, elevación y accesos rechazados |
 | Catálogos y cuatro líneas configurables | 1 | Planta, líneas, rastras, estaciones y desactivación |
 | Cargamento/responsable/cajuelas | 2 | Operación offline y reverso inmediato |
 | Convergencia multiestación | 3 | Sin pérdida/duplicación y aviso de cambio |

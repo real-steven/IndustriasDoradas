@@ -20,6 +20,9 @@
         <DataTemplate DataType="{x:Type viewModels:DiagnosticsViewModel}">
             <views:DiagnosticsView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:StationViewModel}">
+            <views:StationView />
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -66,6 +69,11 @@
                                Text="NAVEGACIÓN" />
                     <Button Margin="0,0,0,8"
                             HorizontalContentAlignment="Left"
+                            AutomationProperties.Name="Ir a estación"
+                            Command="{Binding ShowStationCommand}"
+                            Content="Estación" />
+                    <Button Margin="0,0,0,8"
+                            HorizontalContentAlignment="Left"
                             AutomationProperties.Name="Ir al inicio"
                             Command="{Binding ShowHomeCommand}"
                             Content="Inicio" />
@@ -78,7 +86,7 @@
                 <TextBlock Grid.Row="3"
                            Foreground="#B7C0C7"
                            FontSize="12"
-                           Text="Base técnica · Sprint 0" />
+                           Text="Identidad y estación · Sprint 1" />
             </Grid>
         </Border>
 

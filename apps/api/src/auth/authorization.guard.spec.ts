@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
+import type { AuditTrailService } from "../audit/audit-trail.service";
 import type { AuthenticatedContext } from "./auth.contracts";
 import {
   ORGANIZATION_PARAM_KEY,
@@ -44,28 +45,43 @@ const AUTH: AuthenticatedContext = {
 
 describe("AuthorizationGuard", () => {
   let guard: AuthorizationGuard;
+  let auditTrail: jest.Mocked<
+    Pick<AuditTrailService, "record" | "recordBestEffort">
+  >;
 
   beforeEach(() => {
-    guard = new AuthorizationGuard(new Reflector());
+    auditTrail = {
+      record: jest.fn().mockResolvedValue(undefined),
+      recordBestEffort: jest.fn().mockResolvedValue(undefined),
+    };
+    guard = new AuthorizationGuard(
+      new Reflector(),
+      auditTrail as unknown as AuditTrailService,
+    );
     Reflect.deleteMetadata(REQUIRED_ROLES_KEY, testHandler);
     Reflect.deleteMetadata(REQUIRED_PERMISSIONS_KEY, testHandler);
     Reflect.deleteMetadata(ORGANIZATION_PARAM_KEY, testHandler);
   });
 
-  it("allows an authenticated request when no additional policy is declared", () => {
+  it("allows an authenticated request when no additional policy is declared", async () => {
     const { context } = createContext(AUTH);
 
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("rejects a role outside the declared policy", () => {
+  it("rejects a role outside the declared policy", async () => {
     Reflect.defineMetadata(REQUIRED_ROLES_KEY, ["ADMINISTRADOR"], testHandler);
     const { context } = createContext(AUTH);
 
-    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonCode: "ROLE_NOT_AUTHORIZED" }),
+    );
   });
 
-  it("rejects a missing permission", () => {
+  it("rejects a missing permission", async () => {
     Reflect.defineMetadata(
       REQUIRED_PERMISSIONS_KEY,
       ["administrators.govern", "reports.read"],
@@ -73,10 +89,15 @@ describe("AuthorizationGuard", () => {
     );
     const { context } = createContext(AUTH);
 
-    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonCode: "PERMISSION_NOT_AUTHORIZED" }),
+    );
   });
 
-  it("rejects a different organization route parameter", () => {
+  it("rejects a different organization route parameter", async () => {
     Reflect.defineMetadata(
       ORGANIZATION_PARAM_KEY,
       "organizationId",
@@ -86,10 +107,15 @@ describe("AuthorizationGuard", () => {
       organizationId: "90000000-0000-4000-8000-000000000001",
     });
 
-    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(auditTrail.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonCode: "ORGANIZATION_NOT_AUTHORIZED" }),
+    );
   });
 
-  it("allows matching role, permissions and organization", () => {
+  it("allows matching role, permissions and organization", async () => {
     Reflect.defineMetadata(REQUIRED_ROLES_KEY, ["JEFE_EMPRESA"], testHandler);
     Reflect.defineMetadata(
       REQUIRED_PERMISSIONS_KEY,
@@ -105,14 +131,16 @@ describe("AuthorizationGuard", () => {
       organizationId: ORGANIZATION_ID,
     });
 
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("rejects a protected policy without authentication context", () => {
+  it("rejects a protected policy without authentication context", async () => {
     Reflect.defineMetadata(REQUIRED_ROLES_KEY, ["JEFE_EMPRESA"], testHandler);
     const { context } = createContext();
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 });
 
@@ -120,7 +148,13 @@ function createContext(
   auth?: AuthenticatedContext,
   params: Record<string, string> = {},
 ): { context: ExecutionContext; request: AuthenticatedRequest } {
-  const request = { auth, params } as unknown as AuthenticatedRequest;
+  const request = {
+    auth,
+    params,
+    method: "GET",
+    path: "/api/v1/test",
+    correlationId: "a9000000-0000-4000-8000-000000000001",
+  } as unknown as AuthenticatedRequest;
   const context = {
     getClass: () => TestController,
     getHandler: () => testHandler,
