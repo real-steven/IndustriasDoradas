@@ -77,6 +77,10 @@ cierre del Sprint 2.
 
 ### 2.4 Esquema SQLite y repositorios locales
 
+**Estado:** aprobado el 2026-08-26 después de verificar dos arranques manuales y
+la base real de la estación; autorizado para iniciar 2.5. Evidencia de diseño y operación en
+[`../architecture/almacenamiento-local-sprint-02.md`](../architecture/almacenamiento-local-sprint-02.md).
+
 **Prompt:** Implementa migraciones SQLite para catálogos cacheados, sesión operativa, eventos y outbox. Configura FK, WAL si resulta seguro, transacciones e índices. Implementa repositorios detrás de interfaces, ruta de base por estación y copia segura para diagnóstico. Prueba migración nueva y actualización.
 
 **Pausa:** inspeccionar base, reiniciar y verificar que datos/catálogo siguen íntegros.

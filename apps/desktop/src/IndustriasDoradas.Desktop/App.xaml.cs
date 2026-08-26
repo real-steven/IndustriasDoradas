@@ -5,6 +5,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Infrastructure.Health;
 using IndustriasDoradas.Desktop.Infrastructure.Auth;
+using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 using IndustriasDoradas.Desktop.Infrastructure.Security;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
 using IndustriasDoradas.Desktop.Presentation;
@@ -92,6 +93,12 @@ public partial class App : System.Windows.Application
             .Validate(options => options.PrivilegedIdleSeconds == 120, "La inactividad privilegiada aprobada es 120 segundos.")
             .Validate(options => options.OfflineHours == 24, "La contingencia offline aprobada es 24 horas.")
             .ValidateOnStart();
+        builder.Services.AddOptions<LocalDatabaseOptions>()
+            .Bind(builder.Configuration.GetSection(LocalDatabaseOptions.SectionName))
+            .Validate(
+                options => options.BusyTimeoutSeconds is >= 1 and <= 30,
+                "LocalDatabase:BusyTimeoutSeconds debe estar entre 1 y 30.")
+            .ValidateOnStart();
 
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(
             static (services, client) =>
@@ -114,6 +121,16 @@ public partial class App : System.Windows.Application
         });
 
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<ILocalDatabasePathProvider, StationDatabasePathProvider>();
+        builder.Services.AddSingleton<ILocalSqliteConnectionFactory, SqliteConnectionFactory>();
+        builder.Services.AddSingleton<SqliteDatabaseMigrator>();
+        builder.Services.AddHostedService<LocalDatabaseInitializationService>();
+        builder.Services.AddSingleton<ILocalCatalogRepository, SqliteCatalogRepository>();
+        builder.Services.AddSingleton<ILocalShipmentRepository, SqliteShipmentRepository>();
+        builder.Services.AddSingleton<ILocalOperationalSessionRepository, SqliteOperationalSessionRepository>();
+        builder.Services.AddSingleton<ILocalProductionEventRepository, SqliteProductionEventRepository>();
+        builder.Services.AddSingleton<ILocalOutboxRepository, SqliteOutboxRepository>();
+        builder.Services.AddSingleton<ILocalDatabaseDiagnostics, SqliteDatabaseDiagnostics>();
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
         builder.Services.AddSingleton<StationCoordinator>();
