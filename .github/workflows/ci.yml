@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - DevSteven
+      - DevHenry
   pull_request:
     branches:
       - main
       - DevSteven
+      - DevHenry
   workflow_dispatch:
 
 permissions:
@@ -54,6 +56,9 @@ jobs:
 
       - name: Compilar API y web
         run: pnpm run build:typescript
+
+      - name: Comprobar contrato OpenAPI y clientes
+        run: pnpm run contract:check
 
       - name: Probar migraciones PostgreSQL
         run: pnpm run test:db

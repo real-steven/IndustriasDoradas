@@ -11,6 +11,7 @@
 *.key
 secrets.json
 appsettings.*.local.json
+appsettings.Local.json
 
 # Node.js / pnpm
 node_modules/
