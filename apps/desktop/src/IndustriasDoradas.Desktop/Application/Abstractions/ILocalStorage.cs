@@ -88,6 +88,27 @@ public sealed record LocalCajuelaRegistration(
     int Total,
     bool WasDuplicate);
 
+public sealed record LocalCajuelaCorrectionTarget(
+    LocalOperationalSession Session,
+    ProductionEvent TargetEvent,
+    int Total);
+
+public sealed record ReverseCajuelaMutation(
+    Guid ReversalEventId,
+    Guid ConfirmationId,
+    LocalOperationalSession ExpectedSession,
+    Guid TargetClientEventId,
+    string ReasonCode,
+    DateTimeOffset PreparedAt,
+    DateTimeOffset ConfirmedAt);
+
+public sealed record LocalCajuelaReversal(
+    ProductionEvent Event,
+    Guid TargetClientEventId,
+    string ReasonCode,
+    int Total,
+    bool WasDuplicate);
+
 public interface ILocalCatalogRepository
 {
     Task UpsertSupplierAsync(CachedSupplier supplier, CancellationToken cancellationToken = default);
@@ -149,6 +170,14 @@ public interface ILocalCajuelaRepository
     Task<int> GetTotalAsync(
         Guid lineId,
         Guid shipmentId,
+        CancellationToken cancellationToken = default);
+
+    Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default);
+
+    Task<LocalCajuelaReversal> ReverseAsync(
+        ReverseCajuelaMutation mutation,
         CancellationToken cancellationToken = default);
 }
 

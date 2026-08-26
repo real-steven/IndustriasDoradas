@@ -16,6 +16,7 @@ public static class SqliteMigrationCatalog
         Read(1, "initial_operation", "001_initial_operation.sql"),
         Read(2, "operation_indexes_and_immutability", "002_operation_indexes_and_immutability.sql"),
         Read(3, "production_counter_read_model", "003_production_counter_read_model.sql"),
+        Read(4, "immediate_cajuela_correction", "004_immediate_cajuela_correction.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

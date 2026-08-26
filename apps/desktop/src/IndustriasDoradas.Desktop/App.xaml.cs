@@ -135,6 +135,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalDatabaseDiagnostics, SqliteDatabaseDiagnostics>();
         builder.Services.AddSingleton<LocalOperationService>();
         builder.Services.AddSingleton<RegisterCajuelaHandler>();
+        builder.Services.AddSingleton<RevertLastCajuelaHandler>();
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
         builder.Services.AddSingleton<StationCoordinator>();

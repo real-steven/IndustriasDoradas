@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 
-public sealed class SqliteCajuelaRepository(ILocalSqliteConnectionFactory connectionFactory)
+public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactory connectionFactory)
     : ILocalCajuelaRepository
 {
     public async Task<LocalCajuelaRegistration> RegisterAsync(

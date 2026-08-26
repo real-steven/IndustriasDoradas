@@ -112,6 +112,11 @@ cargamento/responsable. Cada mutación crea outbox en la misma transacción.
 
 ### 2.7 Corrección segura
 
+**Estado:** aprobada técnica y manualmente por el responsable del proyecto el
+2026-08-26. La migración se comprobó en la base real después de dos arranques
+correctos; autorizado para continuar con 2.8. Evidencia en
+[`../architecture/correccion-cajuela-local-sprint-02.md`](../architecture/correccion-cajuela-local-sprint-02.md).
+
 **Prompt:** Implementa reversión de la última cajuela de la línea seleccionada mediante `CAJUELA_REVERSED`; requiere doble paso, usa motivo automático de error inmediato y nunca DELETE/UPDATE. Solo durante ciclo abierto. Correcciones no inmediatas son del jefe de planta antes del cierre y de `JEFE_EMPRESA` o un `ADMINISTRADOR` con el permiso atómico correspondiente después. Añade pruebas y auditoría.
 
 **Pausa:** corregir correcta/incorrecta y demostrar trazabilidad completa.

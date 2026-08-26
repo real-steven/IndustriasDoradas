@@ -55,8 +55,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(3L, result.CurrentVersion);
-        Assert.AreEqual(3, result.AppliedCount);
+        Assert.AreEqual(4L, result.CurrentVersion);
+        Assert.AreEqual(4, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -65,7 +65,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(4L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -97,7 +97,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(2, result.AppliedCount);
+        Assert.AreEqual(3, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -221,7 +221,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(3L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(4L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -236,8 +236,12 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(1, result.AppliedCount);
+        Assert.AreEqual(2, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_event_corrections';"));
     }
 
     [TestMethod]
@@ -425,6 +429,231 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(0L, await ScalarLongAsync(
             verification,
             "SELECT COUNT(*) FROM outbox_messages WHERE operation_type = 'PRODUCTION_EVENT_CREATED';"));
+    }
+
+    [TestMethod]
+    public async Task DoubleConfirmationReversesLastCajuelaWithImmutableAudit()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        RegisterCajuelaHandler register = database.RegisterHandler(time);
+        IReadOnlyList<RegisterCajuelaResult> registered = await RegisterManyAsync(register, time, 3);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+
+        PreparedCajuelaReversal prepared = await reverse.PrepareAsync(StationId);
+
+        Assert.AreEqual(registered[^1].Event, prepared.TargetEvent);
+        Assert.AreEqual(3, prepared.TotalBeforeCorrection);
+        await using (SqliteConnection before = await database.Factory.OpenAsync())
+        {
+            Assert.AreEqual(3L, await ScalarLongAsync(before, "SELECT COUNT(*) FROM production_events;"));
+            Assert.AreEqual(0L, await ScalarLongAsync(before, "SELECT COUNT(*) FROM production_event_corrections;"));
+        }
+
+        time.SetUtcNow(StartedAt.AddSeconds(1));
+        RevertLastCajuelaResult result = await reverse.ConfirmAsync(prepared);
+
+        Assert.AreEqual(ProductionEventType.CajuelaReversed, result.Event.Type);
+        Assert.AreEqual(registered[^1].Event.ClientEventId, result.TargetClientEventId);
+        Assert.AreEqual(RevertLastCajuelaHandler.ImmediateInputErrorReason, result.ReasonCode);
+        Assert.AreEqual(2, result.Total);
+        Assert.IsFalse(result.WasDuplicate);
+        IReadOnlyList<ProductionEvent> events = await database.Events().ListAsync(
+            LineId,
+            operation.Session!.ShipmentId);
+        Assert.AreEqual(4, events.Count);
+        Assert.AreEqual(2, ProductionEventCounter.ForLineAndShipment(
+            events,
+            LineId,
+            operation.Session.ShipmentId));
+        Assert.AreEqual(2, await database.Cajuelas().GetTotalAsync(LineId, operation.Session.ShipmentId));
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_event_corrections;"));
+        Assert.AreEqual(
+            RevertLastCajuelaHandler.ImmediateInputErrorReason,
+            await ScalarTextAsync(connection, "SELECT reason_code FROM production_event_corrections;"));
+        string payload = await ScalarTextAsync(
+            connection,
+            $"SELECT payload_json FROM outbox_messages WHERE aggregate_id = '{result.Event.ClientEventId:D}';");
+        using JsonDocument payloadDocument = JsonDocument.Parse(payload);
+        Assert.AreEqual(
+            RevertLastCajuelaHandler.ImmediateInputErrorReason,
+            payloadDocument.RootElement.GetProperty("reasonCode").GetString());
+        await Assert.ThrowsExactlyAsync<SqliteException>(
+            () => ExecuteWithoutParametersAsync(
+                connection,
+                "UPDATE production_event_corrections SET reason_code = 'IMMEDIATE_INPUT_ERROR';"));
+        await Assert.ThrowsExactlyAsync<SqliteException>(
+            () => ExecuteWithoutParametersAsync(connection, "DELETE FROM production_event_corrections;"));
+        Assert.AreEqual(4L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+    }
+
+    [TestMethod]
+    public async Task RepeatingSameConfirmationDoesNotDuplicateReversalOrAudit()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        await RegisterManyAsync(database.RegisterHandler(time), time, 1);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+        PreparedCajuelaReversal prepared = await reverse.PrepareAsync(StationId);
+        time.SetUtcNow(StartedAt.AddSeconds(1));
+
+        RevertLastCajuelaResult first = await reverse.ConfirmAsync(prepared);
+        time.SetUtcNow(StartedAt.AddSeconds(2));
+        RevertLastCajuelaResult retry = await reverse.ConfirmAsync(prepared);
+
+        Assert.IsFalse(first.WasDuplicate);
+        Assert.IsTrue(retry.WasDuplicate);
+        Assert.AreEqual(first.Event, retry.Event);
+        Assert.AreEqual(0, retry.Total);
+        Assert.AreEqual(0, await database.Cajuelas().GetTotalAsync(LineId, operation.Session!.ShipmentId));
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_event_corrections;"));
+        Assert.AreEqual(2L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM outbox_messages WHERE operation_type = 'PRODUCTION_EVENT_CREATED';"));
+    }
+
+    [TestMethod]
+    public async Task NewCajuelaInvalidatesPreparedCorrectionWithoutPartialChanges()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        RegisterCajuelaHandler register = database.RegisterHandler(time);
+        await RegisterManyAsync(register, time, 1);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+        PreparedCajuelaReversal stale = await reverse.PrepareAsync(StationId);
+        await RegisterManyAsync(register, time, 1, millisecondOffset: 10);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => reverse.ConfirmAsync(stale));
+
+        Assert.AreEqual(2, await database.Cajuelas().GetTotalAsync(LineId, operation.Session!.ShipmentId));
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_event_corrections;"));
+    }
+
+    [TestMethod]
+    public async Task CorrectionRequiresEventAndOpenUnchangedCycle()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService operation = database.OperationService(time);
+        await StartOperationAsync(operation);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => reverse.PrepareAsync(StationId));
+
+        await RegisterManyAsync(database.RegisterHandler(time), time, 1);
+        PreparedCajuelaReversal prepared = await reverse.PrepareAsync(StationId);
+        time.SetUtcNow(StartedAt.AddMinutes(1));
+        PreparedOperationCompletion completion = await operation.PrepareCompletionAsync(Authority());
+        await operation.ConfirmCompletionAsync(completion);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => reverse.ConfirmAsync(prepared));
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_event_corrections;"));
+    }
+
+    [TestMethod]
+    public async Task ConsecutiveCorrectionsReverseLatestRemainingCajuelaOnly()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        IReadOnlyList<RegisterCajuelaResult> registered = await RegisterManyAsync(
+            database.RegisterHandler(time),
+            time,
+            2);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+
+        PreparedCajuelaReversal second = await reverse.PrepareAsync(StationId);
+        RevertLastCajuelaResult reversedSecond = await reverse.ConfirmAsync(second);
+        PreparedCajuelaReversal first = await reverse.PrepareAsync(StationId);
+        RevertLastCajuelaResult reversedFirst = await reverse.ConfirmAsync(first);
+
+        Assert.AreEqual(registered[1].Event.ClientEventId, reversedSecond.TargetClientEventId);
+        Assert.AreEqual(registered[0].Event.ClientEventId, reversedFirst.TargetClientEventId);
+        Assert.AreEqual(0, reversedFirst.Total);
+        IReadOnlyList<ProductionEvent> events = await database.Events().ListAsync(
+            LineId,
+            operation.Session!.ShipmentId);
+        Assert.AreEqual(0, ProductionEventCounter.ForLineAndShipment(
+            events,
+            LineId,
+            operation.Session.ShipmentId));
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(4L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_event_corrections;"));
+    }
+
+    [TestMethod]
+    public async Task ReversalOutboxFailureRollsBackEventCounterAndAudit()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        await RegisterManyAsync(database.RegisterHandler(time), time, 1);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+        PreparedCajuelaReversal prepared = await reverse.PrepareAsync(StationId);
+        await using (SqliteConnection connection = await database.Factory.OpenAsync())
+        {
+            await using SqliteCommand trigger = connection.CreateCommand();
+            trigger.CommandText = $"""
+                CREATE TRIGGER reject_reversal_outbox
+                BEFORE INSERT ON outbox_messages
+                WHEN NEW.aggregate_id = '{prepared.ReversalEventId:D}'
+                BEGIN
+                    SELECT RAISE(ABORT, 'simulated reversal outbox failure');
+                END;
+                """;
+            await trigger.ExecuteNonQueryAsync();
+        }
+
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => reverse.ConfirmAsync(prepared));
+
+        Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, operation.Session!.ShipmentId));
+        await using SqliteConnection verification = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(verification, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(verification, "SELECT COUNT(*) FROM production_event_corrections;"));
+    }
+
+    [TestMethod]
+    public async Task ImmediateCorrectionReasonCannotBeReplacedByFreeText()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        await StartOperationAsync(database.OperationService(time));
+        await RegisterManyAsync(database.RegisterHandler(time), time, 1);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+        PreparedCajuelaReversal prepared = await reverse.PrepareAsync(StationId);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => reverse.ConfirmAsync(prepared with { ReasonCode = "texto libre" }));
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_event_corrections;"));
     }
 
     [TestMethod]
@@ -680,6 +909,22 @@ public sealed class LocalSqliteStorageTests
         return await service.ConfirmStartAsync(prepared);
     }
 
+    private static async Task<IReadOnlyList<RegisterCajuelaResult>> RegisterManyAsync(
+        RegisterCajuelaHandler handler,
+        MutableTimeProvider time,
+        int count,
+        int millisecondOffset = 0)
+    {
+        var results = new List<RegisterCajuelaResult>();
+        for (int index = 0; index < count; index++)
+        {
+            time.SetUtcNow(StartedAt.AddMilliseconds(millisecondOffset + index + 1));
+            results.Add(await handler.ExecuteAsync(handler.CreateCommand(StationId)));
+        }
+
+        return results;
+    }
+
     private static OperationAuthority Authority() =>
         new(ActorProfileId, OrganizationId, PlantId, StationId, 1);
 
@@ -752,6 +997,15 @@ public sealed class LocalSqliteStorageTests
         return await command.ExecuteNonQueryAsync();
     }
 
+    private static async Task<int> ExecuteWithoutParametersAsync(
+        SqliteConnection connection,
+        string sql)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        return await command.ExecuteNonQueryAsync();
+    }
+
     private static void DeleteRoot(string root)
     {
         SqliteConnection.ClearAllPools();
@@ -802,6 +1056,9 @@ public sealed class LocalSqliteStorageTests
             new(Catalogs(), Sessions(), Operations(), timeProvider);
 
         public RegisterCajuelaHandler RegisterHandler(TimeProvider timeProvider) =>
+            new(Cajuelas(), timeProvider);
+
+        public RevertLastCajuelaHandler RevertHandler(TimeProvider timeProvider) =>
             new(Cajuelas(), timeProvider);
 
         public ValueTask DisposeAsync()
