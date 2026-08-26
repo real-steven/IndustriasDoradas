@@ -245,6 +245,52 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task DashboardSnapshotCombinesActiveContextCounterReliefAndPendingOutbox()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService operations = database.OperationService(time);
+        LocalOperationContext started = await StartOperationAsync(operations);
+        time.SetUtcNow(StartedAt.AddHours(1));
+        PreparedResponsibleRelief relief = await operations.PrepareReliefAsync(
+            SecondWorkerId,
+            Authority());
+        await operations.ConfirmReliefAsync(relief);
+        time.SetUtcNow(StartedAt.AddHours(1).AddMinutes(1));
+        await database.RegisterHandler(time).ExecuteAsync(
+            database.RegisterHandler(time).CreateCommand(StationId));
+
+        LocalOperationDashboardSnapshot snapshot = await database.Dashboard().GetAsync(StationId);
+
+        Assert.IsTrue(snapshot.IsReady);
+        Assert.AreEqual(started.Session!.ShipmentId, snapshot.Session!.ShipmentId);
+        Assert.AreEqual("Línea 1", snapshot.LineName);
+        Assert.AreEqual("La Esperanza", snapshot.SupplierName);
+        Assert.AreEqual("María", snapshot.ResponsibleName);
+        Assert.AreEqual("Juan", snapshot.PreviousResponsibleName);
+        Assert.AreEqual(1, snapshot.Total);
+        Assert.AreEqual(3, snapshot.PendingOutboxCount);
+    }
+
+    [TestMethod]
+    public async Task DashboardWithoutActiveCycleUsesPilotLineAndBlocksRegistrationState()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+
+        LocalOperationDashboardSnapshot snapshot = await database.Dashboard().GetAsync(StationId);
+
+        Assert.IsFalse(snapshot.IsReady);
+        Assert.IsNull(snapshot.Session);
+        Assert.AreEqual("Línea 1", snapshot.LineName);
+        Assert.AreEqual(0, snapshot.Total);
+        Assert.AreEqual(0, snapshot.PendingOutboxCount);
+    }
+
+    [TestMethod]
     public async Task OneTenAndFiftyPulsesMatchEventsOutboxCounterAndTargetLatency()
     {
         foreach (int pulseCount in new[] { 1, 10, 50 })
@@ -1051,6 +1097,8 @@ public sealed class LocalSqliteStorageTests
         public SqliteLocalOperationRepository Operations() => new(Factory);
 
         public SqliteCajuelaRepository Cajuelas() => new(Factory);
+
+        public SqliteOperationDashboardRepository Dashboard() => new(Factory);
 
         public LocalOperationService OperationService(TimeProvider timeProvider) =>
             new(Catalogs(), Sessions(), Operations(), timeProvider);

@@ -109,6 +109,21 @@ public sealed record LocalCajuelaReversal(
     int Total,
     bool WasDuplicate);
 
+public sealed record LocalOperationDashboardSnapshot(
+    LocalOperationalSession? Session,
+    string LineName,
+    string? SupplierName,
+    DateTimeOffset? ShipmentStartedAt,
+    string? ResponsibleName,
+    DateTimeOffset? ResponsibleSince,
+    string? PreviousResponsibleName,
+    DateTimeOffset? PreviousResponsibleUntil,
+    int Total,
+    int PendingOutboxCount)
+{
+    public bool IsReady => Session?.Status == LineFeedCycleStatus.Active;
+}
+
 public interface ILocalCatalogRepository
 {
     Task UpsertSupplierAsync(CachedSupplier supplier, CancellationToken cancellationToken = default);
@@ -178,6 +193,13 @@ public interface ILocalCajuelaRepository
 
     Task<LocalCajuelaReversal> ReverseAsync(
         ReverseCajuelaMutation mutation,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalOperationDashboardRepository
+{
+    Task<LocalOperationDashboardSnapshot> GetAsync(
+        Guid stationId,
         CancellationToken cancellationToken = default);
 }
 

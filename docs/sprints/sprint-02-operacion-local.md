@@ -123,6 +123,11 @@ correctos; autorizado para continuar con 2.8. Evidencia en
 
 ### 2.8 Pantalla multipanel WPF
 
+**Estado:** aprobada técnica y manualmente por el responsable del proyecto el
+2026-08-26. La aplicación inició correctamente dos veces y la presentación fue
+revisada en el monitor objetivo; autorizado para continuar con 2.9. Evidencia en
+[`../architecture/pantalla-operacion-local-sprint-02.md`](../architecture/pantalla-operacion-local-sprint-02.md).
+
 **Prompt:** Construye la pantalla WPF del MVP para una estación y una sola línea,
 con foco visible, total del cargamento, proveedor/hora de inicio, responsable
 vigente, jornada automática, estado local y acción principal. Conserva límites

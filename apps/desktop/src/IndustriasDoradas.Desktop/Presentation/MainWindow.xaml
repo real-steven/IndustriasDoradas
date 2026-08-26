@@ -23,6 +23,9 @@
         <DataTemplate DataType="{x:Type viewModels:StationViewModel}">
             <views:StationView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:OperationViewModel}">
+            <views:OperationView />
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -69,6 +72,11 @@
                                Text="NAVEGACIÓN" />
                     <Button Margin="0,0,0,8"
                             HorizontalContentAlignment="Left"
+                            AutomationProperties.Name="Ir a modo operación"
+                            Command="{Binding ShowOperationCommand}"
+                            Content="Modo Operación" />
+                    <Button Margin="0,0,0,8"
+                            HorizontalContentAlignment="Left"
                             AutomationProperties.Name="Ir a estación"
                             Command="{Binding ShowStationCommand}"
                             Content="Estación" />
@@ -86,7 +94,7 @@
                 <TextBlock Grid.Row="3"
                            Foreground="#B7C0C7"
                            FontSize="12"
-                           Text="Identidad y estación · Sprint 1" />
+                           Text="Operación local · Sprint 2" />
             </Grid>
         </Border>
 

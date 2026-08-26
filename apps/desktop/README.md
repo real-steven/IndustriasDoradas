@@ -1,8 +1,9 @@
 # Aplicación de escritorio WPF
 
 Estación de planta construida con WPF y .NET 10. Incluye login Supabase Auth,
-Modo Operación y elevación temporal de jefe de planta; aún no incluye
-producción, asistencia ni biometría.
+Modo Operación, elevación temporal de jefe de planta y registro/corrección local
+de cajuelas para una línea piloto; aún no incluye sincronización, asistencia ni
+biometría.
 
 ## Organización
 
@@ -14,7 +15,7 @@ crear bibliotecas vacías:
 | `Presentation` | Ventanas, vistas XAML y ViewModels MVVM. |
 | `Application` | Contratos que definen los casos técnicos de la aplicación. |
 | `Domain` | Modelo independiente del resultado de health. |
-| `Infrastructure` | Cliente HTTP que implementa la consulta a NestJS. |
+| `Infrastructure` | Clientes HTTP, almacenamiento SQLite y repositorios locales. |
 | `Configuration` | Opciones validadas de conexión. |
 
 ## Ejecutar desde CLI

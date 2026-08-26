@@ -132,6 +132,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalOutboxRepository, SqliteOutboxRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
+        builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
         builder.Services.AddSingleton<ILocalDatabaseDiagnostics, SqliteDatabaseDiagnostics>();
         builder.Services.AddSingleton<LocalOperationService>();
         builder.Services.AddSingleton<RegisterCajuelaHandler>();
@@ -143,6 +144,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DiagnosticsViewModel>();
         builder.Services.AddSingleton<StationViewModel>();
+        builder.Services.AddSingleton<OperationViewModel>();
         builder.Services.AddSingleton<MainWindowViewModel>();
         builder.Services.AddSingleton<MainWindow>();
 
