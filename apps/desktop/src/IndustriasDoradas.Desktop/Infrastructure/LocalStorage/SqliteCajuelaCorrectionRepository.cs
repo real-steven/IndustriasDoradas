@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain.Production;
 using Microsoft.Data.Sqlite;
@@ -327,7 +328,7 @@ public sealed partial class SqliteCajuelaRepository
     {
         ProductionEventContext context = reversal.Context;
         var payload = new ProductionEventReversalOutboxPayload(
-            1,
+            2,
             reversal.ClientEventId,
             context.OrganizationId,
             context.PlantId,
@@ -345,7 +346,12 @@ public sealed partial class SqliteCajuelaRepository
             mutation.TargetClientEventId,
             mutation.ConfirmationId,
             mutation.ReasonCode,
-            mutation.PreparedAt);
+            mutation.PreparedAt,
+            mutation.InputOrigin.SourceKind,
+            mutation.InputOrigin.ControllerId,
+            mutation.InputOrigin.SignalCode,
+            mutation.InputOrigin.LineSlot,
+            mutation.InputOrigin.IsRepeat);
         string payloadJson = JsonSerializer.Serialize(
             payload,
             LocalStorageJsonSerializerContext.Default.ProductionEventReversalOutboxPayload);

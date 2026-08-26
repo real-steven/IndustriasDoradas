@@ -7,7 +7,8 @@ namespace IndustriasDoradas.Desktop.Application;
 public sealed record RegisterCajuelaCommand(
     Guid CommandId,
     Guid StationId,
-    DateTimeOffset OccurredAt);
+    DateTimeOffset OccurredAt,
+    OperationInputOrigin InputOrigin);
 
 public sealed record RegisterCajuelaResult(
     ProductionEvent Event,
@@ -22,7 +23,29 @@ public sealed class RegisterCajuelaHandler(
     public RegisterCajuelaCommand CreateCommand(Guid stationId)
     {
         EnsureRequired(stationId, nameof(stationId));
-        return new RegisterCajuelaCommand(Guid.NewGuid(), stationId, timeProvider.GetUtcNow());
+        return new RegisterCajuelaCommand(
+            Guid.NewGuid(),
+            stationId,
+            timeProvider.GetUtcNow(),
+            OperationInputOrigin.Application());
+    }
+
+    public static RegisterCajuelaCommand CreateCommand(
+        Guid stationId,
+        OperationInputCommand inputCommand)
+    {
+        EnsureRequired(stationId, nameof(stationId));
+        ArgumentNullException.ThrowIfNull(inputCommand);
+        if (inputCommand.Action != OperationInputAction.RegisterCajuela)
+        {
+            throw new ArgumentException("El comando de entrada no registra una cajuela.", nameof(inputCommand));
+        }
+
+        return new RegisterCajuelaCommand(
+            inputCommand.CommandId,
+            stationId,
+            inputCommand.OccurredAt,
+            inputCommand.Origin);
     }
 
     public async Task<RegisterCajuelaResult> ExecuteAsync(
@@ -32,6 +55,7 @@ public sealed class RegisterCajuelaHandler(
         ArgumentNullException.ThrowIfNull(command);
         EnsureRequired(command.CommandId, nameof(command));
         EnsureRequired(command.StationId, nameof(command));
+        command.InputOrigin.Validate();
 
         long startedAt = Stopwatch.GetTimestamp();
         LocalCajuelaRegistration registration = await repository.RegisterAsync(
@@ -39,7 +63,8 @@ public sealed class RegisterCajuelaHandler(
                     command.CommandId,
                     command.StationId,
                     command.OccurredAt,
-                    timeProvider.GetUtcNow()),
+                    timeProvider.GetUtcNow(),
+                    command.InputOrigin),
                 cancellationToken)
             .ConfigureAwait(false);
         TimeSpan elapsed = Stopwatch.GetElapsedTime(startedAt);

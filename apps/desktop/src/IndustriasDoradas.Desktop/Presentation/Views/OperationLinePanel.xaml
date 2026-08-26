@@ -1,6 +1,7 @@
 <UserControl x:Class="IndustriasDoradas.Desktop.Presentation.Views.OperationLinePanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:application="clr-namespace:IndustriasDoradas.Desktop.Application"
              AutomationProperties.Name="Panel de línea piloto">
     <UserControl.Resources>
         <Style x:Key="PrimaryOperationButton" TargetType="Button">
@@ -115,15 +116,19 @@
             </Border>
 
             <StackPanel Grid.Row="4" Margin="0,26,0,0" HorizontalAlignment="Center">
-                <Button AutomationProperties.HelpText="Registra una cajuela en el almacenamiento local"
+                <Button x:Name="RegisterButton"
+                        AutomationProperties.HelpText="Registra una cajuela en el almacenamiento local"
                         AutomationProperties.Name="Registrar cajuela"
-                        Command="{Binding RegisterCajuelaCommand}"
+                        Command="{Binding DispatchInputCommand}"
+                        CommandParameter="{x:Static application:OperationInputAction.RegisterCajuela}"
                         Content="REGISTRAR CAJUELA"
                         Style="{StaticResource PrimaryOperationButton}" />
-                <Button Margin="0,12,0,0"
+                <Button x:Name="RevertButton"
+                        Margin="0,12,0,0"
                         MinWidth="260"
                         AutomationProperties.Name="Corregir última cajuela"
-                        Command="{Binding PrepareCorrectionCommand}"
+                        Command="{Binding DispatchInputCommand}"
+                        CommandParameter="{x:Static application:OperationInputAction.RevertLastCajuela}"
                         Content="Corregir última cajuela" />
             </StackPanel>
 
@@ -155,12 +160,16 @@
                                Text="{Binding CorrectionSummary}"
                                TextWrapping="Wrap" />
                     <StackPanel Margin="0,16,0,0" Orientation="Horizontal">
-                        <Button AutomationProperties.Name="Confirmar corrección de última cajuela"
-                                Command="{Binding ConfirmCorrectionCommand}"
+                        <Button x:Name="ConfirmButton"
+                                AutomationProperties.Name="Confirmar corrección de última cajuela"
+                                Command="{Binding DispatchInputCommand}"
+                                CommandParameter="{x:Static application:OperationInputAction.Confirm}"
                                 Content="Sí, corregir última" />
-                        <Button Margin="10,0,0,0"
+                        <Button x:Name="CancelButton"
+                                Margin="10,0,0,0"
                                 AutomationProperties.Name="Cancelar corrección"
-                                Command="{Binding CancelCorrectionCommand}"
+                                Command="{Binding DispatchInputCommand}"
+                                CommandParameter="{x:Static application:OperationInputAction.Cancel}"
                                 Content="Cancelar" />
                     </StackPanel>
                 </StackPanel>

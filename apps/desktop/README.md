@@ -54,6 +54,12 @@ recuperar red se revalida y una revocación invalida el modo privilegiado sin
 borrar eventos pendientes. La fotografía futura está desacoplada y hoy se
 registra únicamente como evidencia ausente.
 
+`OperationInput` configura controladores por identificador, tipo de adaptador,
+línea asignada y señales. El teclado inicial usa `1`, `+`, flechas, `Enter`, `R`
+y `Escape`; puede cambiarse en configuración sin modificar el caso de uso. La
+aplicación conserva el origen de clic/teclado/controlador en el sobre Outbox.
+El sensor automático no está incluido.
+
 ## Verificar
 
 ```powershell

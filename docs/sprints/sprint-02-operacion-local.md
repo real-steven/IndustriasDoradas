@@ -138,6 +138,11 @@ ni apruebes todavía el wireframe multipanel; evita ventanas independientes.
 
 ### 2.9 Entrada por teclado/controlador
 
+**Estado:** aprobada técnica y manualmente por el responsable del proyecto el
+2026-08-26. El teclado respondió antes y después de reconectarlo sobre la base
+real sin ciclo; autorizado para continuar con 2.10. Evidencia en
+[`../architecture/entrada-controlador-sprint-02.md`](../architecture/entrada-controlador-sprint-02.md).
+
 **Prompt:** Implementa fuente abstracta de comandos y mapeo configurable por estación/controlador: clic, elegir línea, registrar, flechas, OK y revertir. No dependas de un teclado específico; soporta inicialmente un punto compartido y deja preparado más de un controlador o un adaptador futuro. Añade prueba con teclado convencional. No integres sensor automático en este sprint.
 
 **Pausa:** operar recorrido completo sin mouse y reconectar el teclado durante ejecución.

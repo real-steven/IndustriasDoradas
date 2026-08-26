@@ -371,6 +371,37 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task InputOriginIsPreservedInTheImmutableEventOutboxEnvelope()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        await StartOperationAsync(database.OperationService(time));
+        var input = new OperationInputCommand(
+            EventId(91),
+            OperationInputAction.RegisterCajuela,
+            new OperationInputOrigin("KEYBOARD", "shared-keyboard", "Add", 1, false),
+            StartedAt.AddSeconds(1));
+        RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(StationId, input);
+
+        RegisterCajuelaResult result = await database.RegisterHandler(time).ExecuteAsync(command);
+
+        Assert.AreEqual(input.CommandId, result.Event.ClientEventId);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        string payload = await ScalarTextAsync(
+            connection,
+            $"SELECT payload_json FROM outbox_messages WHERE aggregate_id = '{result.Event.ClientEventId:D}';");
+        using JsonDocument document = JsonDocument.Parse(payload);
+        Assert.AreEqual(2, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.AreEqual("KEYBOARD", document.RootElement.GetProperty("inputSourceKind").GetString());
+        Assert.AreEqual("shared-keyboard", document.RootElement.GetProperty("inputControllerId").GetString());
+        Assert.AreEqual("Add", document.RootElement.GetProperty("inputSignalCode").GetString());
+        Assert.AreEqual(1, document.RootElement.GetProperty("inputLineSlot").GetInt32());
+        Assert.IsFalse(document.RootElement.GetProperty("inputWasRepeat").GetBoolean());
+    }
+
+    [TestMethod]
     public async Task ReusedCommandIdWithDifferentContentIsRejected()
     {
         await using var database = new TestDatabase();
@@ -500,7 +531,9 @@ public sealed class LocalSqliteStorageTests
         }
 
         time.SetUtcNow(StartedAt.AddSeconds(1));
-        RevertLastCajuelaResult result = await reverse.ConfirmAsync(prepared);
+        RevertLastCajuelaResult result = await reverse.ConfirmAsync(
+            prepared,
+            new OperationInputOrigin("KEYBOARD", "shared-keyboard", "Enter", 1, false));
 
         Assert.AreEqual(ProductionEventType.CajuelaReversed, result.Event.Type);
         Assert.AreEqual(registered[^1].Event.ClientEventId, result.TargetClientEventId);
@@ -529,6 +562,12 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(
             RevertLastCajuelaHandler.ImmediateInputErrorReason,
             payloadDocument.RootElement.GetProperty("reasonCode").GetString());
+        Assert.AreEqual(
+            "KEYBOARD",
+            payloadDocument.RootElement.GetProperty("inputSourceKind").GetString());
+        Assert.AreEqual(
+            "Enter",
+            payloadDocument.RootElement.GetProperty("inputSignalCode").GetString());
         await Assert.ThrowsExactlyAsync<SqliteException>(
             () => ExecuteWithoutParametersAsync(
                 connection,

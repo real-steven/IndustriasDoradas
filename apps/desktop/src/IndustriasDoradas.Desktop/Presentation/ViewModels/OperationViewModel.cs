@@ -18,6 +18,7 @@ public sealed class OperationViewModel : ObservableObject
     private readonly RegisterCajuelaHandler registerHandler;
     private readonly RevertLastCajuelaHandler reversalHandler;
     private readonly TimeProvider timeProvider;
+    private readonly IInputCommandSource inputSource;
     private readonly Guid stationId;
     private PreparedCajuelaReversal? preparedReversal;
     private string localStorageStatus = "Preparando almacenamiento local…";
@@ -27,17 +28,20 @@ public sealed class OperationViewModel : ObservableObject
     private bool isBusy;
     private bool isCorrectionPending;
     private bool isLocalStorageAvailable;
+    private OperationFocusTarget focusedTarget = OperationFocusTarget.RegisterCajuela;
 
     public OperationViewModel(
         ILocalOperationDashboardRepository dashboard,
         RegisterCajuelaHandler registerHandler,
         RevertLastCajuelaHandler reversalHandler,
+        IInputCommandSource inputSource,
         IOptions<StationOptions> stationOptions,
         TimeProvider timeProvider)
     {
         this.dashboard = dashboard;
         this.registerHandler = registerHandler;
         this.reversalHandler = reversalHandler;
+        this.inputSource = inputSource;
         this.timeProvider = timeProvider;
         stationId = stationOptions.Value.Id;
         RegisterCajuelaCommand = new AsyncRelayCommand(RegisterCajuelaAsync, CanRegisterCajuela);
@@ -45,9 +49,13 @@ public sealed class OperationViewModel : ObservableObject
         ConfirmCorrectionCommand = new AsyncRelayCommand(ConfirmCorrectionAsync, CanConfirmCorrection);
         CancelCorrectionCommand = new RelayCommand(CancelCorrection, () => IsCorrectionPending && !IsBusy);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
+        DispatchInputCommand = new AsyncRelayCommand<OperationInputAction>(
+            DispatchClickAsync,
+            CanDispatchInput);
     }
 
     public OperationLinePanelViewModel Line { get; } = new();
+    public IInputCommandSource InputSource => inputSource;
     public string LocalStorageStatus
     {
         get => localStorageStatus;
@@ -81,9 +89,18 @@ public sealed class OperationViewModel : ObservableObject
         {
             if (SetProperty(ref isCorrectionPending, value))
             {
+                FocusedTarget = value
+                    ? OperationFocusTarget.Confirm
+                    : OperationFocusTarget.RegisterCajuela;
                 NotifyCommandStates();
             }
         }
+    }
+
+    public OperationFocusTarget FocusedTarget
+    {
+        get => focusedTarget;
+        private set => SetProperty(ref focusedTarget, value);
     }
 
     public IAsyncRelayCommand RegisterCajuelaCommand { get; }
@@ -91,8 +108,75 @@ public sealed class OperationViewModel : ObservableObject
     public IAsyncRelayCommand ConfirmCorrectionCommand { get; }
     public IRelayCommand CancelCorrectionCommand { get; }
     public IAsyncRelayCommand RefreshCommand { get; }
+    public IAsyncRelayCommand<OperationInputAction> DispatchInputCommand { get; }
 
     public Task InitializeAsync() => RefreshAsync();
+
+    public async Task HandleInputCommandAsync(OperationInputCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        command.Origin.Validate();
+        if (command.CommandId == Guid.Empty)
+        {
+            throw new ArgumentException("El UUID del comando de entrada es obligatorio.", nameof(command));
+        }
+
+        if (command.Origin.LineSlot != 1)
+        {
+            LastResult = $"La Línea {command.Origin.LineSlot} aún no está disponible en el piloto.";
+            return;
+        }
+
+        switch (command.Action)
+        {
+            case OperationInputAction.SelectLine:
+                FocusedTarget = OperationFocusTarget.RegisterCajuela;
+                LastResult = "Línea 1 seleccionada para operar.";
+                break;
+            case OperationInputAction.RegisterCajuela:
+                if (CanRegisterCajuela())
+                {
+                    await RegisterCajuelaAsync(command).ConfigureAwait(true);
+                }
+                else
+                {
+                    LastResult = "Registrar cajuela no está disponible en el estado actual.";
+                }
+
+                break;
+            case OperationInputAction.RevertLastCajuela:
+                if (CanPrepareCorrection())
+                {
+                    await PrepareCorrectionAsync().ConfigureAwait(true);
+                }
+                else
+                {
+                    LastResult = "No hay una última cajuela disponible para corregir.";
+                }
+
+                break;
+            case OperationInputAction.MoveUp:
+            case OperationInputAction.MoveLeft:
+                MoveFocus(previous: true);
+                break;
+            case OperationInputAction.MoveDown:
+            case OperationInputAction.MoveRight:
+                MoveFocus(previous: false);
+                break;
+            case OperationInputAction.Confirm:
+                await ActivateFocusedAsync(command).ConfigureAwait(true);
+                break;
+            case OperationInputAction.Cancel:
+                if (IsCorrectionPending)
+                {
+                    CancelCorrection();
+                }
+
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(command), command.Action, "Acción de entrada desconocida.");
+        }
+    }
 
     public async Task RefreshAsync()
     {
@@ -109,11 +193,15 @@ public sealed class OperationViewModel : ObservableObject
         }, "No se pudo leer el estado local. Avise al jefe de planta.").ConfigureAwait(true);
     }
 
-    private async Task RegisterCajuelaAsync()
+    private Task RegisterCajuelaAsync() => RegisterCajuelaAsync(null);
+
+    private async Task RegisterCajuelaAsync(OperationInputCommand? inputCommand)
     {
         await RunAsync(async () =>
         {
-            RegisterCajuelaCommand command = registerHandler.CreateCommand(stationId);
+            RegisterCajuelaCommand command = inputCommand is null
+                ? registerHandler.CreateCommand(stationId)
+                : RegisterCajuelaHandler.CreateCommand(stationId, inputCommand);
             RegisterCajuelaResult result = await registerHandler.ExecuteAsync(command).ConfigureAwait(true);
             Line.Total = result.Total;
             LastResult = result.WasDuplicate
@@ -136,7 +224,9 @@ public sealed class OperationViewModel : ObservableObject
         }, "No hay una última cajuela disponible para corregir.").ConfigureAwait(true);
     }
 
-    private async Task ConfirmCorrectionAsync()
+    private Task ConfirmCorrectionAsync() => ConfirmCorrectionAsync(null);
+
+    private async Task ConfirmCorrectionAsync(OperationInputCommand? inputCommand)
     {
         PreparedCajuelaReversal? prepared = preparedReversal;
         if (prepared is null)
@@ -146,8 +236,9 @@ public sealed class OperationViewModel : ObservableObject
 
         bool confirmed = await RunAsync(async () =>
         {
-            RevertLastCajuelaResult result = await reversalHandler.ConfirmAsync(prepared)
-                .ConfigureAwait(true);
+            RevertLastCajuelaResult result = inputCommand is null
+                ? await reversalHandler.ConfirmAsync(prepared).ConfigureAwait(true)
+                : await reversalHandler.ConfirmAsync(prepared, inputCommand.Origin).ConfigureAwait(true);
             preparedReversal = null;
             IsCorrectionPending = false;
             CorrectionSummary = string.Empty;
@@ -172,6 +263,51 @@ public sealed class OperationViewModel : ObservableObject
         IsCorrectionPending = false;
         CorrectionSummary = string.Empty;
         LastResult = "Corrección cancelada. El conteo no cambió.";
+    }
+
+    private Task DispatchClickAsync(OperationInputAction action) =>
+        HandleInputCommandAsync(new OperationInputCommand(
+            Guid.NewGuid(),
+            action,
+            OperationInputOrigin.Click(action),
+            timeProvider.GetUtcNow()));
+
+    private async Task ActivateFocusedAsync(OperationInputCommand command)
+    {
+        switch (FocusedTarget)
+        {
+            case OperationFocusTarget.RegisterCajuela when CanRegisterCajuela():
+                await RegisterCajuelaAsync(command with { Action = OperationInputAction.RegisterCajuela })
+                    .ConfigureAwait(true);
+                break;
+            case OperationFocusTarget.RevertLastCajuela when CanPrepareCorrection():
+                await PrepareCorrectionAsync().ConfigureAwait(true);
+                break;
+            case OperationFocusTarget.Confirm when CanConfirmCorrection():
+                await ConfirmCorrectionAsync(command).ConfigureAwait(true);
+                break;
+            case OperationFocusTarget.Cancel when IsCorrectionPending:
+                CancelCorrection();
+                break;
+            default:
+                LastResult = "La acción seleccionada no está disponible en el estado actual.";
+                break;
+        }
+    }
+
+    private void MoveFocus(bool previous)
+    {
+        OperationFocusTarget[] targets = IsCorrectionPending
+            ? [OperationFocusTarget.Confirm, OperationFocusTarget.Cancel]
+            : [OperationFocusTarget.RegisterCajuela, OperationFocusTarget.RevertLastCajuela];
+        int current = Array.IndexOf(targets, FocusedTarget);
+        if (current < 0)
+        {
+            current = 0;
+        }
+
+        int offset = previous ? -1 : 1;
+        FocusedTarget = targets[(current + offset + targets.Length) % targets.Length];
     }
 
     private async Task RefreshSnapshotAsync()
@@ -252,6 +388,15 @@ public sealed class OperationViewModel : ObservableObject
         Line.IsReady && IsLocalStorageAvailable && Line.Total > 0 && !IsBusy && !IsCorrectionPending;
     private bool CanConfirmCorrection() => IsCorrectionPending && !IsBusy;
 
+    private bool CanDispatchInput(OperationInputAction action) => action switch
+    {
+        OperationInputAction.RegisterCajuela => CanRegisterCajuela(),
+        OperationInputAction.RevertLastCajuela => CanPrepareCorrection(),
+        OperationInputAction.Confirm => CanConfirmCorrection(),
+        OperationInputAction.Cancel => IsCorrectionPending && !IsBusy,
+        _ => !IsBusy,
+    };
+
     private void NotifyCommandStates()
     {
         RegisterCajuelaCommand.NotifyCanExecuteChanged();
@@ -259,6 +404,7 @@ public sealed class OperationViewModel : ObservableObject
         ConfirmCorrectionCommand.NotifyCanExecuteChanged();
         CancelCorrectionCommand.NotifyCanExecuteChanged();
         RefreshCommand.NotifyCanExecuteChanged();
+        DispatchInputCommand.NotifyCanExecuteChanged();
     }
 
     private static string FormatTime(DateTimeOffset instant) =>
@@ -275,4 +421,12 @@ public sealed class OperationViewModel : ObservableObject
             }
         }
     }
+}
+
+public enum OperationFocusTarget
+{
+    RegisterCajuela,
+    RevertLastCajuela,
+    Confirm,
+    Cancel,
 }

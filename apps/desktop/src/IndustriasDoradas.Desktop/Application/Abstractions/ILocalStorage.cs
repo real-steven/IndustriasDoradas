@@ -1,3 +1,4 @@
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Application.Abstractions;
@@ -81,7 +82,8 @@ public sealed record RegisterCajuelaMutation(
     Guid ClientEventId,
     Guid StationId,
     DateTimeOffset OccurredAt,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    OperationInputOrigin InputOrigin);
 
 public sealed record LocalCajuelaRegistration(
     ProductionEvent Event,
@@ -100,7 +102,8 @@ public sealed record ReverseCajuelaMutation(
     Guid TargetClientEventId,
     string ReasonCode,
     DateTimeOffset PreparedAt,
-    DateTimeOffset ConfirmedAt);
+    DateTimeOffset ConfirmedAt,
+    OperationInputOrigin InputOrigin);
 
 public sealed record LocalCajuelaReversal(
     ProductionEvent Event,

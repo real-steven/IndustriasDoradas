@@ -1,4 +1,5 @@
 using System.Globalization;
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain.Production;
 using Microsoft.Data.Sqlite;
@@ -64,7 +65,12 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
             .ConfigureAwait(false);
         int total = await IncrementCounterAsync(connection, transaction, productionEvent, cancellationToken)
             .ConfigureAwait(false);
-        await InsertOutboxAsync(connection, transaction, productionEvent, cancellationToken)
+        await InsertOutboxAsync(
+                connection,
+                transaction,
+                productionEvent,
+                mutation.InputOrigin,
+                cancellationToken)
             .ConfigureAwait(false);
         transaction.Commit();
         return new LocalCajuelaRegistration(productionEvent, total, false);
@@ -221,11 +227,12 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
         SqliteConnection connection,
         SqliteTransaction transaction,
         ProductionEvent productionEvent,
+        OperationInputOrigin inputOrigin,
         CancellationToken cancellationToken)
     {
         ProductionEventContext context = productionEvent.Context;
         var payload = new ProductionEventOutboxPayload(
-            1,
+            2,
             productionEvent.ClientEventId,
             context.OrganizationId,
             context.PlantId,
@@ -239,7 +246,12 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
             productionEvent.OccurredAt,
             productionEvent.RecordedAt,
             productionEvent.ClientSequence,
-            1);
+            1,
+            inputOrigin.SourceKind,
+            inputOrigin.ControllerId,
+            inputOrigin.SignalCode,
+            inputOrigin.LineSlot,
+            inputOrigin.IsRepeat);
         string payloadJson = System.Text.Json.JsonSerializer.Serialize(
             payload,
             LocalStorageJsonSerializerContext.Default.ProductionEventOutboxPayload);

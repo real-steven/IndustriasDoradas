@@ -5,6 +5,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Infrastructure.Health;
 using IndustriasDoradas.Desktop.Infrastructure.Auth;
+using IndustriasDoradas.Desktop.Infrastructure.Input;
 using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 using IndustriasDoradas.Desktop.Infrastructure.Security;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
@@ -99,6 +100,12 @@ public partial class App : System.Windows.Application
                 options => options.BusyTimeoutSeconds is >= 1 and <= 30,
                 "LocalDatabase:BusyTimeoutSeconds debe estar entre 1 y 30.")
             .ValidateOnStart();
+        builder.Services.AddOptions<OperationInputOptions>()
+            .Bind(builder.Configuration.GetSection(OperationInputOptions.SectionName))
+            .Validate(
+                options => options.IsValid(),
+                "OperationInput debe definir un teclado con línea, +, flechas, aceptar, revertir y cancelar.")
+            .ValidateOnStart();
 
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(
             static (services, client) =>
@@ -121,6 +128,7 @@ public partial class App : System.Windows.Application
         });
 
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<IInputCommandSource, ConfigurableInputCommandSource>();
         builder.Services.AddSingleton<ILocalDatabasePathProvider, StationDatabasePathProvider>();
         builder.Services.AddSingleton<ILocalSqliteConnectionFactory, SqliteConnectionFactory>();
         builder.Services.AddSingleton<SqliteDatabaseMigrator>();

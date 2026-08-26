@@ -17,7 +17,12 @@ internal sealed record ProductionEventOutboxPayload(
     DateTimeOffset OccurredAtUtc,
     DateTimeOffset RecordedAtUtc,
     long ClientSequence,
-    int QuantityDelta);
+    int QuantityDelta,
+    string InputSourceKind,
+    string InputControllerId,
+    string InputSignalCode,
+    int InputLineSlot,
+    bool InputWasRepeat);
 
 internal sealed record ProductionEventReversalOutboxPayload(
     int SchemaVersion,
@@ -38,7 +43,12 @@ internal sealed record ProductionEventReversalOutboxPayload(
     Guid ReversesClientEventId,
     Guid ConfirmationId,
     string ReasonCode,
-    DateTimeOffset PreparedAtUtc);
+    DateTimeOffset PreparedAtUtc,
+    string InputSourceKind,
+    string InputControllerId,
+    string InputSignalCode,
+    int InputLineSlot,
+    bool InputWasRepeat);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ProductionEventOutboxPayload))]

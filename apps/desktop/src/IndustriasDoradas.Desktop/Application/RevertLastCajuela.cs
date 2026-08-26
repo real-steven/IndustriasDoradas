@@ -50,7 +50,21 @@ public sealed class RevertLastCajuelaHandler(
         PreparedCajuelaReversal prepared,
         CancellationToken cancellationToken = default)
     {
+        return await ConfirmAsync(
+                prepared,
+                OperationInputOrigin.Application(),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<RevertLastCajuelaResult> ConfirmAsync(
+        PreparedCajuelaReversal prepared,
+        OperationInputOrigin inputOrigin,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(inputOrigin);
+        inputOrigin.Validate();
         EnsureRequired(prepared.ReversalEventId, nameof(prepared));
         EnsureRequired(prepared.ConfirmationId, nameof(prepared));
         if (!string.Equals(
@@ -70,7 +84,8 @@ public sealed class RevertLastCajuelaHandler(
                     prepared.TargetEvent.ClientEventId,
                     prepared.ReasonCode,
                     prepared.PreparedAt,
-                    timeProvider.GetUtcNow()),
+                    timeProvider.GetUtcNow(),
+                    inputOrigin),
                 cancellationToken)
             .ConfigureAwait(false);
         TimeSpan elapsed = Stopwatch.GetElapsedTime(startedAt);

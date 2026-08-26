@@ -101,6 +101,8 @@ public sealed class OperationViewModelTests
         Assert.AreEqual("LÍNEA SIN PREPARAR", viewModel.Line.StateLabel);
         Assert.IsFalse(viewModel.RegisterCajuelaCommand.CanExecute(null));
         Assert.IsFalse(viewModel.PrepareCorrectionCommand.CanExecute(null));
+        Assert.IsFalse(viewModel.DispatchInputCommand.CanExecute(OperationInputAction.RegisterCajuela));
+        Assert.IsFalse(viewModel.DispatchInputCommand.CanExecute(OperationInputAction.RevertLastCajuela));
     }
 
     [TestMethod]
@@ -132,6 +134,93 @@ public sealed class OperationViewModelTests
         StringAssert.Contains(viewModel.LastResult, "Prepárela nuevamente");
     }
 
+    [TestMethod]
+    public async Task KeyboardRegisterPreservesOriginAndCommandIdentity()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 4),
+            ReadySnapshot(total: 5, pending: 2));
+        var cajuelas = new StubCajuelaRepository(total: 4);
+        OperationViewModel viewModel = Create(dashboard, cajuelas);
+        await viewModel.InitializeAsync();
+        OperationInputCommand input = Input(
+            OperationInputAction.RegisterCajuela,
+            "Add",
+            Guid.Parse("61000000-0000-4000-8000-000000000001"));
+
+        await viewModel.HandleInputCommandAsync(input);
+
+        Assert.AreEqual(1, cajuelas.RegisterCalls);
+        Assert.AreEqual(input.CommandId, cajuelas.LastRegisterMutation!.ClientEventId);
+        Assert.AreEqual("KEYBOARD", cajuelas.LastRegisterMutation.InputOrigin.SourceKind);
+        Assert.AreEqual("Add", cajuelas.LastRegisterMutation.InputOrigin.SignalCode);
+        Assert.AreEqual(5, viewModel.Line.Total);
+    }
+
+    [TestMethod]
+    public async Task ArrowsAndOkNavigateCorrectionWithoutMouse()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 2),
+            ReadySnapshot(total: 1, pending: 2));
+        var cajuelas = new StubCajuelaRepository(total: 2);
+        OperationViewModel viewModel = Create(dashboard, cajuelas);
+        await viewModel.InitializeAsync();
+
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.MoveDown, "Down"));
+        Assert.AreEqual(OperationFocusTarget.RevertLastCajuela, viewModel.FocusedTarget);
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.Confirm, "Enter"));
+        Assert.IsTrue(viewModel.IsCorrectionPending);
+        Assert.AreEqual(OperationFocusTarget.Confirm, viewModel.FocusedTarget);
+
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.MoveRight, "Right"));
+        Assert.AreEqual(OperationFocusTarget.Cancel, viewModel.FocusedTarget);
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.Confirm, "Enter"));
+        Assert.IsFalse(viewModel.IsCorrectionPending);
+        Assert.AreEqual(0, cajuelas.ReverseCalls);
+
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RevertLastCajuela, "R"));
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.Confirm, "Enter"));
+        Assert.AreEqual(1, cajuelas.ReverseCalls);
+        Assert.AreEqual("Enter", cajuelas.LastReverseMutation!.InputOrigin.SignalCode);
+    }
+
+    [TestMethod]
+    public async Task ClickUsesTheSameInputRouterWithTraceableOrigin()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 0),
+            ReadySnapshot(total: 1, pending: 2));
+        var cajuelas = new StubCajuelaRepository(total: 0);
+        OperationViewModel viewModel = Create(dashboard, cajuelas);
+        await viewModel.InitializeAsync();
+
+        await viewModel.DispatchInputCommand.ExecuteAsync(OperationInputAction.RegisterCajuela);
+
+        Assert.AreEqual(1, cajuelas.RegisterCalls);
+        Assert.AreEqual("CLICK", cajuelas.LastRegisterMutation!.InputOrigin.SourceKind);
+        Assert.AreEqual("shared-pointer", cajuelas.LastRegisterMutation.InputOrigin.ControllerId);
+    }
+
+    [TestMethod]
+    public async Task FutureLineCommandIsRejectedWithoutChangingPilotState()
+    {
+        var dashboard = new QueueDashboardRepository(ReadySnapshot(total: 3));
+        var cajuelas = new StubCajuelaRepository(total: 3);
+        OperationViewModel viewModel = Create(dashboard, cajuelas);
+        await viewModel.InitializeAsync();
+        OperationInputCommand command = Input(OperationInputAction.RegisterCajuela, "BUTTON_1") with
+        {
+            Origin = new OperationInputOrigin("HID", "future-controller-2", "BUTTON_1", 2, false),
+        };
+
+        await viewModel.HandleInputCommandAsync(command);
+
+        Assert.AreEqual(0, cajuelas.RegisterCalls);
+        StringAssert.Contains(viewModel.LastResult, "Línea 2");
+        Assert.AreEqual(3, viewModel.Line.Total);
+    }
+
     private static OperationViewModel Create(
         ILocalOperationDashboardRepository dashboard,
         ILocalCajuelaRepository cajuelas)
@@ -141,6 +230,7 @@ public sealed class OperationViewModelTests
             dashboard,
             new RegisterCajuelaHandler(cajuelas, time),
             new RevertLastCajuelaHandler(cajuelas, time),
+            new StubInputCommandSource(),
             Options.Create(new StationOptions { Id = StationId }),
             time);
     }
@@ -171,6 +261,16 @@ public sealed class OperationViewModelTests
             Now.AddMinutes(-15),
             LineFeedCycleStatus.Active);
 
+    private static OperationInputCommand Input(
+        OperationInputAction action,
+        string signal,
+        Guid? commandId = null) =>
+        new(
+            commandId ?? Guid.NewGuid(),
+            action,
+            new OperationInputOrigin("KEYBOARD", "shared-keyboard", signal, 1, false),
+            Now);
+
     private sealed class QueueDashboardRepository(params LocalOperationDashboardSnapshot[] snapshots)
         : ILocalOperationDashboardRepository
     {
@@ -193,12 +293,15 @@ public sealed class OperationViewModelTests
 
         public int RegisterCalls { get; private set; }
         public int ReverseCalls { get; private set; }
+        public RegisterCajuelaMutation? LastRegisterMutation { get; private set; }
+        public ReverseCajuelaMutation? LastReverseMutation { get; private set; }
 
         public Task<LocalCajuelaRegistration> RegisterAsync(
             RegisterCajuelaMutation mutation,
             CancellationToken cancellationToken = default)
         {
             RegisterCalls++;
+            LastRegisterMutation = mutation;
             total++;
             return Task.FromResult(new LocalCajuelaRegistration(
                 Added(mutation.ClientEventId, RegisterCalls + 1),
@@ -226,6 +329,7 @@ public sealed class OperationViewModelTests
             }
 
             ReverseCalls++;
+            LastReverseMutation = mutation;
             total--;
             ProductionEvent reversal = ProductionEvent.CajuelaReversed(
                 mutation.ReversalEventId,
@@ -267,5 +371,30 @@ public sealed class OperationViewModelTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class StubInputCommandSource : IInputCommandSource
+    {
+        public IReadOnlyCollection<string> ControllerIds => [];
+
+        public bool TryCreateForAdapter(
+            string adapterKind,
+            string signalCode,
+            bool isRepeat,
+            out OperationInputCommand? command)
+        {
+            command = null;
+            return false;
+        }
+
+        public bool TryCreateForController(
+            string controllerId,
+            string signalCode,
+            bool isRepeat,
+            out OperationInputCommand? command)
+        {
+            command = null;
+            return false;
+        }
     }
 }
