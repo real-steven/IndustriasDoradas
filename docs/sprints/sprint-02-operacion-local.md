@@ -64,6 +64,13 @@ Implementa dominio puro y pruebas; aún no UI/persistencia.
 
 ### 2.3 Contrato del evento de producción
 
+**Estado:** contrato inmutable, contador derivable y pruebas aprobados
+provisionalmente el 2026-08-26; autorizado para continuar. Evidencia en
+[`../architecture/contrato-evento-produccion-sprint-02.md`](../architecture/contrato-evento-produccion-sprint-02.md).
+La comparación manual sigue pendiente porque el repositorio no contiene cinco
+registros reales de cuaderno/Excel; se conserva como deuda explícita para el
+cierre del Sprint 2.
+
 **Prompt:** Define `production_event` inmutable con UUID cliente, organización/planta/estación/línea, jornada, ciclo, cargamento, responsable asignado, tipo, timestamps y secuencia. Define `CAJUELA_ADDED` y `CAJUELA_REVERSED`. Documenta contador por línea+cargamento sin una verdad paralela editable.
 
 **Pausa:** tomar cinco ejemplos del cuaderno y comprobar que pueden representarse sin campos ambiguos.
