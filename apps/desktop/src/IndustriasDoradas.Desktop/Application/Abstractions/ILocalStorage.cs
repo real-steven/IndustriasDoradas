@@ -77,6 +77,17 @@ public sealed record CompleteLocalOperationMutation(
     DateTimeOffset CompletedAt,
     PendingOutboxMessage OutboxMessage);
 
+public sealed record RegisterCajuelaMutation(
+    Guid ClientEventId,
+    Guid StationId,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset RecordedAt);
+
+public sealed record LocalCajuelaRegistration(
+    ProductionEvent Event,
+    int Total,
+    bool WasDuplicate);
+
 public interface ILocalCatalogRepository
 {
     Task UpsertSupplierAsync(CachedSupplier supplier, CancellationToken cancellationToken = default);
@@ -127,6 +138,18 @@ public interface ILocalOperationRepository
     Task StartAsync(StartLocalOperationMutation mutation, CancellationToken cancellationToken = default);
     Task RelieveAsync(RelieveLocalOperationMutation mutation, CancellationToken cancellationToken = default);
     Task CompleteAsync(CompleteLocalOperationMutation mutation, CancellationToken cancellationToken = default);
+}
+
+public interface ILocalCajuelaRepository
+{
+    Task<LocalCajuelaRegistration> RegisterAsync(
+        RegisterCajuelaMutation mutation,
+        CancellationToken cancellationToken = default);
+
+    Task<int> GetTotalAsync(
+        Guid lineId,
+        Guid shipmentId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ILocalDatabaseDiagnostics

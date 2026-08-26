@@ -131,8 +131,10 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalProductionEventRepository, SqliteProductionEventRepository>();
         builder.Services.AddSingleton<ILocalOutboxRepository, SqliteOutboxRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
+        builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
         builder.Services.AddSingleton<ILocalDatabaseDiagnostics, SqliteDatabaseDiagnostics>();
         builder.Services.AddSingleton<LocalOperationService>();
+        builder.Services.AddSingleton<RegisterCajuelaHandler>();
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
         builder.Services.AddSingleton<StationCoordinator>();

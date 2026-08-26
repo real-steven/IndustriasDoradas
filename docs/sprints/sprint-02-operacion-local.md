@@ -102,6 +102,10 @@ cargamento/responsable. Cada mutación crea outbox en la misma transacción.
 
 ### 2.6 Registro de una cajuela
 
+**Estado:** aprobado técnica y manualmente por el responsable del proyecto el
+2026-08-26; autorizado para continuar con 2.7. Evidencia en
+[`../architecture/registro-cajuela-local-sprint-02.md`](../architecture/registro-cajuela-local-sprint-02.md).
+
 **Prompt:** Implementa `RegisterCajuela` como caso de uso atómico: validar contexto activo, generar UUID, guardar evento + outbox, actualizar read model local derivable y responder inmediatamente. Hazlo idempotente ante repetición del mismo comando y mide duración. No agregues barrida todavía.
 
 **Pausa:** 1, 10 y 50 pulsaciones; comparar eventos, outbox y contador; objetivo <300 ms.
