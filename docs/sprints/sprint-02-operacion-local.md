@@ -43,6 +43,10 @@ Sprint 2.
 
 ### 2.2 Dominio de jornada, cargamento, ciclo y asignación
 
+**Estado:** dominio puro, pruebas y tabla de estados aprobados el 2026-08-26;
+autorizado para continuar con 2.3. Evidencia en
+[`../architecture/dominio-operacion-local-sprint-02.md`](../architecture/dominio-operacion-local-sprint-02.md).
+
 **Prompt:** Modela cargamento, jornada, ciclo de alimentación y asignación de
 línea/responsable para el piloto de una sola línea. Un cargamento pertenece a un
 proveedor, se asigna exactamente a una línea y nunca se reparte. Tiene
