@@ -4,7 +4,7 @@
 
 **Fecha de consolidación:** 2026-08-13
 
-**Última actualización funcional:** 2026-08-17
+**Última actualización funcional:** 2026-08-25
 
 **Proyecto:** Sistema de Gestión y Control de Producción Minera — Industrias Doradas
 
@@ -42,7 +42,7 @@ Los valores ficticios nunca se convierten en reglas. Las decisiones que afecten 
 | Molino | Equipo que rompe inicialmente las piedras grandes. |
 | Rastra | Etapa posterior que continúa reduciendo el material hasta permitir obtener amalgama. Actualmente existen tres por línea. |
 | Cargamento | Entrega específica de material perteneciente a un solo proveedor. Un proveedor puede entregar varios cargamentos, incluso el mismo día. |
-| Jornada | Clasificación diurna o nocturna de las horas trabajadas; no abre ni cierra físicamente una línea. |
+| Jornada | Clasificación automática de la operación por hora local: diurna de 06:00 inclusive a 18:00 exclusiva y nocturna de 18:00 inclusive a 06:00 exclusiva, en `America/Costa_Rica`; no abre ni cierra físicamente una línea. |
 | Asignación de línea | Relación temporal entre una línea activa y su operario principal responsable. |
 | Ciclo de línea | Periodo en el que una línea recibe cajuelas de un cargamento específico hasta terminar su alimentación. |
 | Barrida | Limpieza real del proceso; puede abarcar menos, exactamente o más de 50 cajuelas según el cargamento y la decisión operativa. |
@@ -84,22 +84,30 @@ Reglas de acceso:
 ### 5.1 Preparación y alimentación
 
 1. El jefe de planta registra o selecciona un proveedor existente.
-2. Registra un cargamento con código legible generado automáticamente, fecha y proveedor. Internamente usa UUID.
+2. Registra un cargamento asociado al proveedor. Para el personal se reconoce por
+   el nombre del proveedor/empresa y la hora automática de inicio; internamente
+   usa UUID y no exige un código de negocio visible.
 3. Selecciona una línea, el cargamento y un operario principal desde listas de registros activos.
 4. Una línea no puede comenzar a recibir cajuelas sin responsable principal.
 5. Un operario puede ser responsable simultáneamente de varias líneas; no se trazan ayudantes secundarios.
 6. El punto de control puede ser compartido. La atribución se hace a línea, cargamento, responsable asignado y estación, no a quien pulsó físicamente la tecla.
-7. El responsable permanece durante el ciclo; los cambios excepcionales conservan hora e historial.
-8. Una jornada o cambio de responsable no obliga a detener la línea ni a cambiar cargamento.
+7. Existe exactamente un responsable principal vigente a la vez. Cada relevo
+   conserva responsable anterior, nuevo responsable e instante del cambio, y el
+   resumen final muestra todas las personas responsables del cargamento.
+8. La jornada se calcula automáticamente por la hora local. Su cambio o el
+   relevo de responsable no obliga a detener la línea ni a cambiar cargamento.
 
 ### 5.2 Cargamentos
 
 - Un cargamento siempre pertenece a un único proveedor.
-- Proveedor + fecha no es identificador suficiente; el sistema genera un consecutivo legible y UUID.
+- El sistema usa UUID como identidad técnica. En la operación el cargamento se
+  muestra por proveedor/empresa y hora automática de inicio; por ahora no se
+  exige un consecutivo o código de negocio legible.
 - Un cargamento se asigna exactamente a una línea y nunca se reparte entre varias.
-- Cada cargamento tiene exactamente un operario principal responsable; puede ser
-  responsable simultáneamente de otros cargamentos/líneas sin privilegios
-  adicionales. Ayudantes y demás operarios no se asignan a la línea.
+- Cada cargamento tiene exactamente un operario principal vigente a la vez y
+  puede acumular varios responsables secuenciales mediante relevos auditados.
+  Un operario puede responder simultáneamente por otros cargamentos/líneas sin
+  privilegios adicionales. Ayudantes y demás operarios no se asignan a la línea.
 - La línea asignada lleva el conteo, barridas, mercurio y oro del cargamento.
 - La barrida no cierra el cargamento.
 - Al agotarse el material termina la alimentación de ese ciclo; el material ya introducido sigue su curso hasta obtener amalgama y oro.
@@ -321,7 +329,7 @@ Reportes iniciales:
 | Matriz detallada de permisos, gobierno de cuentas, PIN y acceso offline de 24 horas | Aprobada al iniciar el prompt 1.2 el 2026-08-17 |
 | Cardinalidades y modelo relacional de identidad, organización y catálogos iniciales | Aprobados al iniciar el prompt 1.3 el 2026-08-17 |
 | Comportamiento de check-in cuando la cámara de asistencia no está disponible | Sprint 6 |
-| Horarios diurno/nocturno y regla de horas extra/dobles | Sprint 6 |
+| Regla de horas extra/dobles; la clasificación operativa 06:00/18:00 ya fue confirmada | Sprint 6 |
 | Confirmación o sustitución de la retención indefinida provisional de fotografías; consentimiento, enrolamiento y precisión biométrica | Sprint 6 |
 | Catálogo/unidades definitivas e intervalos de revisión de inventario | Sprint 7 |
 | Fórmulas e indicadores gerenciales | Sprint 8 |
@@ -395,3 +403,37 @@ suspenderlas o reactivarlas. Un administrador solo crea otras cuentas o gestiona
 permisos cuando recibe la capacidad correspondiente; nunca delega ni retira una
 capacidad que él mismo no posea. La interfaz gerencial prioriza datos y reportes,
 y concentra las ediciones en un módulo separado dentro de la misma sesión.
+
+### 19.3 Decisiones provisionales del flujo operativo del 2026-08-25
+
+El desarrollador jefe autorizó usar estas respuestas para iniciar el diseño de
+dominio 2.2, con validación posterior de la empresa y posibilidad de ajustar el
+modelo antes de cerrar el Sprint 2:
+
+- todavía no existen muestras de cuaderno o Excel ni una lista confirmada de
+  columnas; se trabaja con la información disponible sin inventar campos;
+- el término principal es `cargamento` y el personal también usa `camionetada`;
+- la jornada se deriva automáticamente en `America/Costa_Rica`: diurna desde
+  las 06:00 y nocturna desde las 18:00;
+- el cargamento continúa durante un relevo: hay un responsable vigente a la vez
+  y un historial de responsables con la hora de cada cambio;
+- el jefe de planta puede registrar un proveedor faltante e iniciar el nuevo
+  cargamento; el proveedor queda disponible para futuras entregas y una
+  corrección administrativa posterior debe ser auditable;
+- la línea física permanece activa. Mientras se prepara un cambio, el contexto
+  confirmado anterior sigue recibiendo registros y el nuevo contexto se aplica
+  completo al confirmar;
+- no se exige código visible del cargamento: se presenta nombre de
+  proveedor/empresa y hora automática de inicio;
+- durante todo el MVP se diseña y valida una estación con una sola línea. La
+  capacidad de configurar hasta cuatro líneas permanece como evolución futura;
+- `Alimentación actual`, `Línea lista` y `Registrar cajuela` se aceptan como
+  etiquetas provisionales hasta la siguiente reunión con la empresa.
+
+Estas precisiones sustituyen, para Sprint 2, la lectura anterior de «un único
+responsable» como una persona inmutable durante todo el cargamento: la unicidad
+aplica al responsable vigente en cada instante.
+
+Esta autorización no equivale a validación del proceso por usuarios de planta.
+La estructura exacta del Excel y cualquier ajuste visual permanecen como deuda
+explícita de levantamiento.

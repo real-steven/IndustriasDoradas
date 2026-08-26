@@ -11,12 +11,14 @@
 3. Migraciones SQLite y repositorios por interfaz.
 4. `RegistrarCajuela`: validar, UUID, transacción local, contador y outbox.
 5. `RevertirÚltimaCajuela`: doble confirmación, motivo automático y evento compensatorio.
-6. Dashboard WPF adaptable para varias líneas/monitores.
+6. Dashboard WPF de una línea con límites de componente que permitan ampliarlo
+   después.
 7. `IInputCommandSource`: clic, teclado común/USB HID, mapeo de +1, flechas, OK y cancelar; sensor automático queda fuera del MVP pero puede usar este puerto después.
 8. Feedback visual/sonoro, antirrebote y bloqueo de tecla sostenida.
 9. Mostrar guardado local, red y pendientes sin bloquear.
 
-**Pruebas:** 50 pulsaciones = 50 UUID; reinicio abrupto; reverso; doble UUID; 1/4 líneas; uso sin mouse.
+**Pruebas:** 50 pulsaciones = 50 UUID; reinicio abrupto; reverso; doble UUID;
+una línea piloto; uso sin mouse.
 
 **Prueba manual:** offline, 120 registros alternados, correcciones y reinicio; cotejar evento por evento con hoja manual.
 
@@ -26,13 +28,33 @@
 
 ### 2.1 Observación y contrato del flujo real
 
+**Estado:** aprobada provisionalmente por el desarrollador jefe el 2026-08-25 en
+[`../architecture/flujo-operativo-local-sprint-02.md`](../architecture/flujo-operativo-local-sprint-02.md).
+Se autoriza iniciar 2.2 con la información disponible. No se encontraron
+cuadernos ni archivos Excel en el repositorio; sus columnas y los cambios
+visuales quedan como deuda de validación para una reunión posterior con la
+empresa, sin ocultar este riesgo.
+
 **Prompt:** Antes de programar, contrasta cuadernos/Excel con la línea base: una cajuela es un balde variable; una línea tiene molino y rastras; jornada diurna/nocturna no detiene producción; un ciclo necesita cargamento y responsable. Diseña historias/estados/wireframes del Modo Operación para seleccionar proveedor, cargamento, responsable y línea desde listas, pensando en manos sucias, una computadora compartida y elevación breve del jefe sin detener el conteo.
 
-**Pausa:** simular el flujo en papel con un usuario; aprobar palabras, iconos y número de pasos.
+**Pausa:** cumplida de forma provisional con respuestas del desarrollador jefe.
+La simulación con usuarios de planta se mantiene pendiente antes del cierre del
+Sprint 2.
 
 ### 2.2 Dominio de jornada, cargamento, ciclo y asignación
 
-**Prompt:** Modela cargamento, jornada, ciclo de alimentación y asignación de línea/responsable. Un cargamento pertenece a un proveedor, se asigna exactamente a una línea, nunca se reparte y tiene un único operario principal responsable; un operario puede responder por varios cargamentos/líneas. Ayudantes y demás trabajadores solo registran asistencia y no se asignan a la línea. Cambiar cargamento no requiere nueva jornada. Define cierre por fin de cargamento, no por relevo. Implementa dominio puro y pruebas; aún no UI/persistencia.
+**Prompt:** Modela cargamento, jornada, ciclo de alimentación y asignación de
+línea/responsable para el piloto de una sola línea. Un cargamento pertenece a un
+proveedor, se asigna exactamente a una línea y nunca se reparte. Tiene
+exactamente un responsable principal vigente a la vez y conserva responsables
+secuenciales con el instante de cada relevo; un operario puede responder por
+varios cargamentos/líneas. Ayudantes y demás trabajadores solo registran
+asistencia y no se asignan a la línea. La jornada se deriva automáticamente en
+`America/Costa_Rica`: diurna desde las 06:00 y nocturna desde las 18:00. Cambiar
+cargamento no requiere nueva jornada. Define cierre por fin de cargamento, no
+por relevo ni cambio de jornada. Identifica técnicamente el cargamento con UUID
+y, para operación, proveedor más hora de inicio; no inventes código visible.
+Implementa dominio puro y pruebas; aún no UI/persistencia.
 
 **Pausa:** revisar tabla de estados y ejecutar todos los casos inválidos relevantes.
 
@@ -50,7 +72,12 @@
 
 ### 2.5 Inicio/cierre operativo local
 
-**Prompt:** Implementa casos locales para preparar estación, seleccionar jornada, abrir/finalizar ciclo por cargamento y asignar responsable desde catálogos. La línea no se cierra por cambio diurno/nocturno. Bloquea alimentación sin cargamento/responsable. Cada mutación crea outbox en la misma transacción.
+**Prompt:** Implementa casos locales para preparar estación, derivar la jornada
+por hora local, abrir/finalizar ciclo por cargamento y asignar o relevar al
+responsable desde catálogos. La línea no se cierra por cambio diurno/nocturno ni
+por relevo. Mientras se prepara un cambio, conserva el contexto anterior hasta
+confirmar el nuevo de forma atómica. Bloquea alimentación sin
+cargamento/responsable. Cada mutación crea outbox en la misma transacción.
 
 **Pausa:** abrir/cerrar correctamente y provocar cada bloqueo sin necesidad de Internet.
 
@@ -68,7 +95,11 @@
 
 ### 2.8 Pantalla multipanel WPF
 
-**Prompt:** Construye pantalla WPF para 1–4 líneas configurables con panel claro por línea, foco visible, total del cargamento, proveedor/cargamento, responsable, jornada, estado local y acción principal. Optimiza el piloto de una línea y prueba cuatro; evita ventanas independientes.
+**Prompt:** Construye la pantalla WPF del MVP para una estación y una sola línea,
+con foco visible, total del cargamento, proveedor/hora de inicio, responsable
+vigente, jornada automática, estado local y acción principal. Conserva límites
+de componente que permitan evolucionar hasta cuatro líneas, pero no construyas
+ni apruebes todavía el wireframe multipanel; evita ventanas independientes.
 
 **Pausa:** revisar a distancia en monitor objetivo y validar comprensión con usuarios.
 
@@ -92,6 +123,10 @@
 
 ### 2.12 Validación de jornada offline
 
-**Prompt:** Prepara prueba de jornada offline con relevo diurno/nocturno sin cerrar línea, múltiples cargamentos/responsables, 1/4 líneas, 120 cajuelas, reversos y reinicios. Contrasta evento por evento con el cuaderno y documenta Sprint 2.
+**Prompt:** Prepara prueba de jornada offline en la única línea piloto, con
+relevo diurno/nocturno sin cerrar la línea, múltiples cargamentos/responsables,
+120 cajuelas, reversos y reinicios. Contrasta evento por evento con el cuaderno
+cuando la empresa entregue una muestra y documenta Sprint 2. Registra la
+validación hasta cuatro líneas como evolución posterior al MVP estable.
 
 **Pausa:** usuario operativo completa la jornada simulada; cero diferencias y compuerta Sprint 2 aprobada.
