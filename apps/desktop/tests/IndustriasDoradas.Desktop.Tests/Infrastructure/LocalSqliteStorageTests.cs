@@ -1,7 +1,10 @@
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
+using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 using Microsoft.Data.Sqlite;
@@ -20,6 +23,9 @@ public sealed class LocalSqliteStorageTests
     private static readonly Guid ShipmentId = Guid.Parse("41000000-0000-4000-8000-000000000001");
     private static readonly Guid CycleId = Guid.Parse("44000000-0000-4000-8000-000000000001");
     private static readonly Guid WorkerId = Guid.Parse("45000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000002");
+    private static readonly Guid ThirdWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000003");
+    private static readonly Guid ActorProfileId = Guid.Parse("20000000-0000-4000-8000-000000000001");
     private static readonly DateTimeOffset StartedAt = new(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
 
     [TestMethod]
@@ -218,7 +224,219 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(2L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
+    [TestMethod]
+    public async Task PreparingStartKeepsDatabaseUnchangedUntilAtomicConfirmation()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+
+        PreparedOperationStart prepared = await service.PrepareStartAsync(
+            LineId,
+            SupplierId,
+            WorkerId,
+            Authority());
+
+        Assert.IsNull(await database.Sessions().LoadAsync(StationId));
+        Assert.AreEqual(0, (await database.Outbox().ListPendingAsync(10)).Count);
+        LocalOperationContext confirmed = await service.ConfirmStartAsync(prepared);
+
+        Assert.IsTrue(confirmed.CanRegisterCajuela);
+        Assert.AreEqual(WorkPeriod.Day, confirmed.CurrentWorkPeriod);
+        Assert.AreEqual(WorkerId, confirmed.Session?.ResponsibleWorkerId);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM operational_sessions;"));
+        IReadOnlyList<StoredOutboxMessage> pending = await database.Outbox().ListPendingAsync(10);
+        Assert.AreEqual(1, pending.Count);
+        Assert.AreEqual("OPERATION_STARTED", pending[0].Message.OperationType);
+        using JsonDocument payload = JsonDocument.Parse(pending[0].Message.PayloadJson);
+        Assert.AreEqual(
+            ActorProfileId.ToString("D"),
+            payload.RootElement.GetProperty("actorProfileId").GetString());
+    }
+
+    [TestMethod]
+    public async Task PreparingReliefKeepsPreviousResponsibleUntilConfirmation()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        LocalOperationContext started = await StartOperationAsync(service);
+
+        PreparedResponsibleRelief prepared = await service.PrepareReliefAsync(
+            SecondWorkerId,
+            Authority());
+
+        Assert.AreEqual(WorkerId, (await database.Sessions().LoadAsync(StationId))?.ResponsibleWorkerId);
+        time.SetUtcNow(StartedAt.AddHours(1));
+        LocalOperationContext relieved = await service.ConfirmReliefAsync(prepared);
+
+        Assert.AreEqual(started.Session?.ShipmentId, relieved.Session?.ShipmentId);
+        Assert.AreEqual(SecondWorkerId, relieved.Session?.ResponsibleWorkerId);
+        Assert.IsTrue(relieved.CanRegisterCajuela);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM responsibility_assignments WHERE unassigned_at_utc IS NULL;"));
+        Assert.AreEqual(2, (await database.Outbox().ListPendingAsync(10)).Count);
+    }
+
+    [TestMethod]
+    public async Task WorkPeriodChangesWithoutMutatingActiveOperation()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        LocalOperationContext started = await StartOperationAsync(service);
+        DateTimeOffset originalUpdatedAt = started.Session!.UpdatedAt;
+
+        time.SetUtcNow(new DateTimeOffset(2026, 8, 27, 0, 0, 0, TimeSpan.Zero));
+        LocalOperationContext current = await service.GetContextAsync(StationId);
+
+        Assert.AreEqual(WorkPeriod.Night, current.CurrentWorkPeriod);
+        Assert.AreEqual(originalUpdatedAt, current.Session?.UpdatedAt);
+        Assert.IsTrue(current.CanRegisterCajuela);
+    }
+
+    [TestMethod]
+    public async Task CompletionClosesAssignmentAndBlocksFeedingWithoutDeletingHistory()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        await StartOperationAsync(service);
+        time.SetUtcNow(StartedAt.AddHours(2));
+        PreparedOperationCompletion prepared = await service.PrepareCompletionAsync(Authority());
+
+        LocalOperationContext completed = await service.ConfirmCompletionAsync(prepared);
+
+        Assert.IsFalse(completed.CanRegisterCajuela);
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => service.RequireActiveContextAsync(StationId));
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM cached_shipments WHERE status = 'COMPLETED';"));
+        Assert.AreEqual(0L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM responsibility_assignments WHERE unassigned_at_utc IS NULL;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
+        Assert.AreEqual(2, (await database.Outbox().ListPendingAsync(10)).Count);
+    }
+
+    [TestMethod]
+    public async Task StaleReliefCannotOverwriteConfirmedContextAndRollsBackCompletely()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        await StartOperationAsync(service);
+        PreparedResponsibleRelief first = await service.PrepareReliefAsync(SecondWorkerId, Authority());
+        PreparedResponsibleRelief stale = await service.PrepareReliefAsync(ThirdWorkerId, Authority());
+        time.SetUtcNow(StartedAt.AddHours(1));
+        await service.ConfirmReliefAsync(first);
+        time.SetUtcNow(StartedAt.AddHours(2));
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => service.ConfirmReliefAsync(stale));
+
+        Assert.AreEqual(SecondWorkerId, (await database.Sessions().LoadAsync(StationId))?.ResponsibleWorkerId);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
+        Assert.AreEqual(2, (await database.Outbox().ListPendingAsync(10)).Count);
+    }
+
+    [TestMethod]
+    public async Task CatalogChangeAfterPreparationRejectsConfirmationWithoutPartialRows()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        PreparedOperationStart prepared = await service.PrepareStartAsync(
+            LineId,
+            SupplierId,
+            WorkerId,
+            Authority());
+        await database.Catalogs().UpsertSupplierAsync(Supplier() with { IsActive = false });
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => service.ConfirmStartAsync(prepared));
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM operational_sessions;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM outbox_messages;"));
+    }
+
+    [TestMethod]
+    public async Task ActiveContextSurvivesServiceRestartAndBlocksAnotherPreparation()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext started = await StartOperationAsync(database.OperationService(time));
+
+        LocalOperationService restarted = database.OperationService(time);
+        LocalOperationContext restored = await restarted.GetContextAsync(StationId);
+
+        Assert.AreEqual(started.Session, restored.Session);
+        Assert.IsTrue(restored.CanRegisterCajuela);
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => restarted.PrepareStartAsync(
+                LineId,
+                SupplierId,
+                SecondWorkerId,
+                Authority()));
+        Assert.AreEqual(1, (await database.Outbox().ListPendingAsync(10)).Count);
+    }
+
+    [TestMethod]
+    public void AuthorityFactoryRejectsOrganizationMismatch()
+    {
+        var state = new ProtectedStationState(
+            new AuthTokens("access", "refresh", StartedAt.AddHours(1)),
+            new ApiSession(
+                ActorProfileId,
+                OrganizationId,
+                "JEFE_PLANTA",
+                StartedAt.AddHours(1)),
+            new StationAuthorization(
+                StationId,
+                PlantId,
+                Guid.Parse("30000000-0000-4000-8000-000000000099"),
+                "Estación 1",
+                1,
+                "verifier",
+                StartedAt,
+                StartedAt.AddHours(24)),
+            [],
+            OfflinePinState.Empty);
+
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() => OperationAuthority.From(state));
+    }
+
     private static async Task SeedContextAsync(TestDatabase database)
+    {
+        await SeedSelectableCatalogsAsync(database);
+        await database.Shipments().UpsertAsync(Shipment());
+    }
+
+    private static async Task SeedSelectableCatalogsAsync(TestDatabase database)
     {
         SqliteCatalogRepository catalogs = database.Catalogs();
         await catalogs.UpsertSupplierAsync(Supplier());
@@ -235,8 +453,32 @@ public sealed class LocalSqliteStorageTests
             "Línea 1",
             true,
             StartedAt));
-        await database.Shipments().UpsertAsync(Shipment());
+        await catalogs.UpsertWorkerAsync(new CachedWorker(
+            SecondWorkerId,
+            OrganizationId,
+            "María",
+            true,
+            StartedAt));
+        await catalogs.UpsertWorkerAsync(new CachedWorker(
+            ThirdWorkerId,
+            OrganizationId,
+            "Carlos",
+            true,
+            StartedAt));
     }
+
+    private static async Task<LocalOperationContext> StartOperationAsync(LocalOperationService service)
+    {
+        PreparedOperationStart prepared = await service.PrepareStartAsync(
+            LineId,
+            SupplierId,
+            WorkerId,
+            Authority());
+        return await service.ConfirmStartAsync(prepared);
+    }
+
+    private static OperationAuthority Authority() =>
+        new(ActorProfileId, OrganizationId, PlantId, StationId, 1);
 
     private static CachedSupplier Supplier() =>
         new(SupplierId, OrganizationId, "La Esperanza", true, StartedAt);
@@ -349,10 +591,22 @@ public sealed class LocalSqliteStorageTests
 
         public SqliteOutboxRepository Outbox() => new(Factory);
 
+        public SqliteLocalOperationRepository Operations() => new(Factory);
+
+        public LocalOperationService OperationService(TimeProvider timeProvider) =>
+            new(Catalogs(), Sessions(), Operations(), timeProvider);
+
         public ValueTask DisposeAsync()
         {
             DeleteRoot(Root);
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+
+        public void SetUtcNow(DateTimeOffset value) => utcNow = value;
     }
 }

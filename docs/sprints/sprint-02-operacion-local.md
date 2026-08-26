@@ -87,6 +87,10 @@ la base real de la estación; autorizado para iniciar 2.5. Evidencia de diseño 
 
 ### 2.5 Inicio/cierre operativo local
 
+**Estado:** aprobado técnicamente por el responsable del proyecto el 2026-08-26;
+autorizado para continuar con 2.6. Evidencia en
+[`../architecture/casos-operativos-locales-sprint-02.md`](../architecture/casos-operativos-locales-sprint-02.md).
+
 **Prompt:** Implementa casos locales para preparar estación, derivar la jornada
 por hora local, abrir/finalizar ciclo por cargamento y asignar o relevar al
 responsable desde catálogos. La línea no se cierra por cambio diurno/nocturno ni

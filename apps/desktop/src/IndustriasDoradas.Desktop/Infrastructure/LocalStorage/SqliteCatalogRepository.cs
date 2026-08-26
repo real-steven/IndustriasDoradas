@@ -118,6 +118,85 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
         return result;
     }
 
+    public async Task<CachedSupplier?> FindSupplierAsync(
+        Guid supplierId,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await connectionFactory
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, organization_id, name, is_active, updated_at_utc
+            FROM cached_suppliers
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", SqliteLocalStorageConverters.Id(supplierId, nameof(supplierId)));
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? new CachedSupplier(
+                Guid.Parse(reader.GetString(0)),
+                Guid.Parse(reader.GetString(1)),
+                reader.GetString(2),
+                reader.GetInt64(3) == 1,
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4)))
+            : null;
+    }
+
+    public async Task<CachedWorker?> FindWorkerAsync(
+        Guid workerId,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await connectionFactory
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, organization_id, name, is_active, updated_at_utc
+            FROM cached_workers
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", SqliteLocalStorageConverters.Id(workerId, nameof(workerId)));
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? new CachedWorker(
+                Guid.Parse(reader.GetString(0)),
+                Guid.Parse(reader.GetString(1)),
+                reader.GetString(2),
+                reader.GetInt64(3) == 1,
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4)))
+            : null;
+    }
+
+    public async Task<CachedProductionLine?> FindLineAsync(
+        Guid lineId,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await connectionFactory
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, organization_id, plant_id, name, is_active, updated_at_utc
+            FROM cached_production_lines
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", SqliteLocalStorageConverters.Id(lineId, nameof(lineId)));
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? new CachedProductionLine(
+                Guid.Parse(reader.GetString(0)),
+                Guid.Parse(reader.GetString(1)),
+                Guid.Parse(reader.GetString(2)),
+                reader.GetString(3),
+                reader.GetInt64(4) == 1,
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(5)))
+            : null;
+    }
+
     private async Task UpsertAsync(
         string sql,
         Action<SqliteCommand> addParameters,

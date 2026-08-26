@@ -59,6 +59,24 @@ public sealed record StoredOutboxMessage(
     int AttemptCount,
     DateTimeOffset? NextAttemptAt);
 
+public sealed record StartLocalOperationMutation(
+    LocalOperationalSession Session,
+    Guid SupplierId,
+    Guid ResponsibilityAssignmentId,
+    PendingOutboxMessage OutboxMessage);
+
+public sealed record RelieveLocalOperationMutation(
+    LocalOperationalSession ExpectedSession,
+    Guid NextResponsibleWorkerId,
+    Guid ResponsibilityAssignmentId,
+    DateTimeOffset EffectiveAt,
+    PendingOutboxMessage OutboxMessage);
+
+public sealed record CompleteLocalOperationMutation(
+    LocalOperationalSession ExpectedSession,
+    DateTimeOffset CompletedAt,
+    PendingOutboxMessage OutboxMessage);
+
 public interface ILocalCatalogRepository
 {
     Task UpsertSupplierAsync(CachedSupplier supplier, CancellationToken cancellationToken = default);
@@ -67,6 +85,10 @@ public interface ILocalCatalogRepository
     Task<IReadOnlyList<CachedSupplier>> ListActiveSuppliersAsync(
         Guid organizationId,
         CancellationToken cancellationToken = default);
+
+    Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default);
+    Task<CachedWorker?> FindWorkerAsync(Guid workerId, CancellationToken cancellationToken = default);
+    Task<CachedProductionLine?> FindLineAsync(Guid lineId, CancellationToken cancellationToken = default);
 }
 
 public interface ILocalShipmentRepository
@@ -98,6 +120,13 @@ public interface ILocalOutboxRepository
     Task<IReadOnlyList<StoredOutboxMessage>> ListPendingAsync(
         int limit,
         CancellationToken cancellationToken = default);
+}
+
+public interface ILocalOperationRepository
+{
+    Task StartAsync(StartLocalOperationMutation mutation, CancellationToken cancellationToken = default);
+    Task RelieveAsync(RelieveLocalOperationMutation mutation, CancellationToken cancellationToken = default);
+    Task CompleteAsync(CompleteLocalOperationMutation mutation, CancellationToken cancellationToken = default);
 }
 
 public interface ILocalDatabaseDiagnostics
