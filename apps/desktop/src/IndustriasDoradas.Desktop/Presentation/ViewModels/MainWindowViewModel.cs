@@ -1,5 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.IO;
+using System.ComponentModel;
+using IndustriasDoradas.Desktop.Domain;
+using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
@@ -32,13 +36,16 @@ public sealed class MainWindowViewModel : ObservableObject
         Operation = operation;
         currentPage = operation ?? (object?)station ?? home;
         ShowHomeCommand = new RelayCommand(() => CurrentPage = Home);
-        ShowDiagnosticsCommand = new RelayCommand(() => CurrentPage = Diagnostics);
+        ShowDiagnosticsCommand = new RelayCommand(
+            () => CurrentPage = Diagnostics,
+            CanShowDiagnostics);
         ShowStationCommand = new RelayCommand(
             () => CurrentPage = Station!,
             () => Station is not null);
         ShowOperationCommand = new RelayCommand(
             () => CurrentPage = Operation!,
             () => Operation is not null);
+        if (Station is not null) Station.PropertyChanged += OnStationPropertyChanged;
     }
 
     public HomeViewModel Home { get; }
@@ -61,16 +68,36 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        if (Operation is not null)
+        try
         {
-            await Operation.InitializeAsync();
-        }
+            if (Operation is not null)
+            {
+                await Operation.InitializeAsync();
+            }
 
-        if (Station is not null)
+            if (Station is not null)
+            {
+                await Station.InitializeAsync();
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or SqliteException or InvalidOperationException)
         {
-            await Station.InitializeAsync();
+            CurrentPage = Diagnostics;
         }
 
         await Diagnostics.RefreshAsync();
+    }
+
+    private bool CanShowDiagnostics() => Station is null || Station.Mode == StationMode.PlantManager;
+
+    private void OnStationPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(StationViewModel.Mode)) return;
+        ShowDiagnosticsCommand.NotifyCanExecuteChanged();
+        if (!CanShowDiagnostics() && ReferenceEquals(CurrentPage, Diagnostics))
+        {
+            CurrentPage = Operation ?? (object)Home;
+        }
     }
 }

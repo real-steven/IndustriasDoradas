@@ -59,7 +59,6 @@ public sealed partial class SqliteCajuelaRepository
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
         using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
-
         ProductionEvent? existing = await FindEventAsync(
                 connection,
                 transaction,
@@ -78,6 +77,12 @@ public sealed partial class SqliteCajuelaRepository
             transaction.Commit();
             return duplicate;
         }
+
+        await SqliteLocalClockGuard.EnsureNotRolledBackAsync(
+            connection,
+            transaction,
+            mutation.ConfirmedAt,
+            cancellationToken).ConfigureAwait(false);
 
         LocalOperationalSession current = await RequireActiveSessionAsync(
                 connection,

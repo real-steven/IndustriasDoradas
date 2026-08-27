@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:domain="clr-namespace:IndustriasDoradas.Desktop.Domain"
+             xmlns:abstractions="clr-namespace:IndustriasDoradas.Desktop.Application.Abstractions"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DesignHeight="520"
@@ -48,7 +49,85 @@
             <TextBlock Margin="0,12,0,28"
                        Foreground="{StaticResource Ink700Brush}"
                        FontSize="16"
-                       Text="Comunicación entre la estación de planta y la API." />
+                       Text="Salud del guardado local y comunicación con la API." />
+
+            <Border Margin="0,0,0,20"
+                    Padding="28"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding LocalState}"
+                                         Value="{x:Static abstractions:LocalDatabaseHealthState.Healthy}">
+                                <Setter Property="BorderBrush" Value="#A6D6BF" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding LocalState}"
+                                         Value="{x:Static abstractions:LocalDatabaseHealthState.Attention}">
+                                <Setter Property="BorderBrush" Value="#E1C16E" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding LocalState}"
+                                         Value="{x:Static abstractions:LocalDatabaseHealthState.Unavailable}">
+                                <Setter Property="BorderBrush" Value="#F5B7B1" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <TextBlock Foreground="#8A5B0A"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Text="ALMACENAMIENTO LOCAL" />
+                    <TextBlock Margin="0,7,0,0"
+                               AutomationProperties.LiveSetting="Polite"
+                               Foreground="{StaticResource Ink900Brush}"
+                               FontSize="24"
+                               FontWeight="Bold"
+                               Text="{Binding LocalStatusTitle}" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource Ink700Brush}"
+                               FontSize="15"
+                               Text="{Binding LocalStatusMessage}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="#8A5B0A"
+                               FontSize="14"
+                               Text="{Binding LocalRecoveryInstruction}"
+                               TextWrapping="Wrap" />
+                    <Grid Margin="0,22,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Pendientes" />
+                            <TextBlock Margin="0,4,0,0" FontWeight="Bold" Text="{Binding PendingOperations}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Espacio" />
+                            <TextBlock Margin="0,4,0,0" FontWeight="Bold" Text="{Binding AvailableSpace}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Comprobado" />
+                            <TextBlock Margin="0,4,0,0" FontWeight="Bold" Text="{Binding LocalLastChecked}" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Margin="0,24,0,0" Orientation="Horizontal">
+                        <Button Command="{Binding CreateRecoveryCopyCommand}"
+                                Content="Crear copia de recuperación"
+                                AutomationProperties.Name="Crear copia consistente de recuperación" />
+                        <TextBlock Margin="16,0,0,0"
+                                   MaxWidth="440"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource Ink700Brush}"
+                                   Text="{Binding RecoveryCopyStatus}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
             <Border Padding="28"
                     BorderThickness="1"

@@ -16,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop;
 
@@ -36,11 +37,28 @@ public partial class App : System.Windows.Application
             MainWindow.Show();
         }
         catch (Exception exception) when (
-            exception is OptionsValidationException or InvalidOperationException or IOException)
+            exception is OptionsValidationException or InvalidOperationException or IOException or SqliteException)
         {
+            string message;
+            if (exception is OptionsValidationException)
+            {
+                message = "La configuración local está incompleta o se perdió. Restaure appsettings.Local.json " +
+                          "desde el ejemplo, verifique el ID de estación y no borre la base SQLite existente.";
+            }
+            else if (exception is SqliteException or IOException)
+            {
+                LocalStorageFailure failure = LocalStorageFailureClassifier.Classify(exception);
+                message = $"{failure.UserMessage} {failure.RecoveryInstruction}";
+            }
+            else
+            {
+                message = "No se pudo preparar el almacenamiento local. " +
+                          "Conserve los archivos existentes y solicite diagnóstico antes de continuar.";
+            }
+
             MessageBox.Show(
-                $"No se pudo iniciar Industrias Doradas. {exception.Message}",
-                "Configuración inválida",
+                message,
+                "Inicio seguro requerido",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Shutdown(-1);
@@ -110,6 +128,10 @@ public partial class App : System.Windows.Application
         builder.Services.AddOptions<OperationSafetyOptions>()
             .Bind(builder.Configuration.GetSection(OperationSafetyOptions.SectionName))
             .Validate(options => options.IsValid(), "OperationSafety contiene límites inválidos.")
+            .ValidateOnStart();
+        builder.Services.AddOptions<LocalRecoveryOptions>()
+            .Bind(builder.Configuration.GetSection(LocalRecoveryOptions.SectionName))
+            .Validate(options => options.IsValid(), "LocalRecovery contiene límites inválidos.")
             .ValidateOnStart();
 
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(

@@ -21,7 +21,6 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
         using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
-
         ProductionEvent? existing = await FindEventAsync(
                 connection,
                 transaction,
@@ -41,6 +40,12 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
             transaction.Commit();
             return new LocalCajuelaRegistration(existing, existingTotal, true);
         }
+
+        await SqliteLocalClockGuard.EnsureNotRolledBackAsync(
+            connection,
+            transaction,
+            mutation.RecordedAt,
+            cancellationToken).ConfigureAwait(false);
 
         ProductionEventContext context = await RequireActiveContextAsync(
                 connection,

@@ -23,6 +23,8 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
         await ExecuteTransactionAsync(
             async (connection, transaction) =>
             {
+                await SqliteLocalClockGuard.EnsureNotRolledBackAsync(
+                    connection, transaction, session.StartedAt, cancellationToken).ConfigureAwait(false);
                 await EnsureStartCatalogsAsync(connection, transaction, mutation, cancellationToken)
                     .ConfigureAwait(false);
                 await InsertShipmentAsync(connection, transaction, mutation, cancellationToken)
@@ -94,6 +96,8 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
         await ExecuteTransactionAsync(
             async (connection, transaction) =>
             {
+                await SqliteLocalClockGuard.EnsureNotRolledBackAsync(
+                    connection, transaction, mutation.EffectiveAt, cancellationToken).ConfigureAwait(false);
                 await EnsureActiveWorkerAsync(
                         connection,
                         transaction,
@@ -189,6 +193,8 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
         await ExecuteTransactionAsync(
             async (connection, transaction) =>
             {
+                await SqliteLocalClockGuard.EnsureNotRolledBackAsync(
+                    connection, transaction, mutation.CompletedAt, cancellationToken).ConfigureAwait(false);
                 await using SqliteCommand closeAssignment = connection.CreateCommand();
                 closeAssignment.Transaction = transaction;
                 closeAssignment.CommandText = """

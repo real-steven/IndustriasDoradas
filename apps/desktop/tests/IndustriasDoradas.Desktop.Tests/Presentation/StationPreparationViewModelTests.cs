@@ -38,9 +38,15 @@ public sealed class StationPreparationViewModelTests
             operations,
             Options.Create(new StationOptions { Id = StationId, PrivilegedIdleSeconds = 120, OfflineHours = 24 }),
             time);
+        DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
+        MainWindowViewModel shell = new(new HomeViewModel(), diagnostics, viewModel);
 
         await viewModel.InitializeAsync();
+        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
+
         await viewModel.ElevateAsync("123456");
+        Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+
         viewModel.SelectedSupplier = viewModel.Suppliers.Single();
         viewModel.SelectedWorker = viewModel.Workers.Single();
 
@@ -60,6 +66,7 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(SupplierId, operationRepository.LastStart!.SupplierId);
         Assert.AreEqual(WorkerId, operationRepository.LastStart.Session.ResponsibleWorkerId);
         Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
         StringAssert.Contains(viewModel.Status, "Línea lista");
     }
 
@@ -132,5 +139,30 @@ public sealed class StationPreparationViewModelTests
         public Task StartAsync(StartLocalOperationMutation mutation, CancellationToken cancellationToken = default) { StartCalls++; LastStart = mutation; sessions.Current = mutation.Session; return Task.CompletedTask; }
         public Task RelieveAsync(RelieveLocalOperationMutation mutation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task CompleteAsync(CompleteLocalOperationMutation mutation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class StubHealthService : IHealthService
+    {
+        public Task<SystemHealth> CheckAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(SystemHealth.Unavailable("Sin conexión."));
+    }
+
+    private sealed class StubLocalDiagnostics : ILocalDatabaseDiagnostics
+    {
+        public Task<LocalDatabaseHealth> InspectAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LocalDatabaseHealth(
+                LocalDatabaseHealthState.Healthy,
+                LocalDatabaseHealthIssue.None,
+                0,
+                1024,
+                null,
+                DateTimeOffset.UtcNow,
+                "Correcto.",
+                "Sin acción."));
+
+        public Task<string> CreateConsistentCopyAsync(
+            string destinationDirectory,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Empty);
     }
 }

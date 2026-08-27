@@ -71,6 +71,12 @@ visual/sonoro y las métricas locales. Una pulsación normal se procesa sin
 espera; `auto-repeat` siempre se ignora al registrar. Las métricas se escriben
 en segundo plano y no contienen personas, cargamentos, eventos ni controlador.
 
+`Diagnóstico` comprueba por separado API y almacenamiento SQLite: integridad,
+pendientes conservados, espacio libre y retroceso del reloj. Permite crear una
+copia consistente validada en `Documentos\IndustriasDoradas\Recuperacion`; la
+restauración requiere la aplicación cerrada y sigue el procedimiento de
+[`recuperacion-diagnostico-local-sprint-02.md`](../../docs/architecture/recuperacion-diagnostico-local-sprint-02.md).
+
 ## Verificar
 
 ```powershell

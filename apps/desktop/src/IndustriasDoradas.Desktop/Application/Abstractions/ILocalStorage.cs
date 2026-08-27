@@ -215,7 +215,38 @@ public interface ILocalOperationDashboardRepository
 
 public interface ILocalDatabaseDiagnostics
 {
+    Task<LocalDatabaseHealth> InspectAsync(CancellationToken cancellationToken = default);
+
     Task<string> CreateConsistentCopyAsync(
         string destinationDirectory,
         CancellationToken cancellationToken = default);
 }
+
+public enum LocalDatabaseHealthState
+{
+    Healthy,
+    Attention,
+    Unavailable,
+}
+
+public enum LocalDatabaseHealthIssue
+{
+    None,
+    LowDiskSpace,
+    ClockRollback,
+    Locked,
+    DiskFull,
+    Corrupt,
+    Unavailable,
+    Unknown,
+}
+
+public sealed record LocalDatabaseHealth(
+    LocalDatabaseHealthState State,
+    LocalDatabaseHealthIssue Issue,
+    int PendingOutboxCount,
+    long AvailableFreeBytes,
+    DateTimeOffset? LatestRecordedAt,
+    DateTimeOffset CheckedAt,
+    string Summary,
+    string RecoveryInstruction);

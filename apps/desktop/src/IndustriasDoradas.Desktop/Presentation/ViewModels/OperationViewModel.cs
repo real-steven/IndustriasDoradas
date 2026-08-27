@@ -6,6 +6,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain.Production;
+using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
 
@@ -416,6 +417,13 @@ public sealed class OperationViewModel : ObservableObject
             await action().ConfigureAwait(true);
             return true;
         }
+        catch (LocalClockRollbackException exception)
+        {
+            IsLocalStorageAvailable = false;
+            LocalStorageStatus = "Guardado bloqueado: revise el reloj";
+            LastResult = exception.Message;
+            return false;
+        }
         catch (InvalidOperationException)
         {
             LastResult = failureMessage;
@@ -423,9 +431,16 @@ public sealed class OperationViewModel : ObservableObject
         }
         catch (Exception exception) when (exception is IOException or SqliteException)
         {
+            LocalStorageFailure failure = LocalStorageFailureClassifier.Classify(exception);
             IsLocalStorageAvailable = false;
-            LocalStorageStatus = "Guardado local no disponible";
-            LastResult = failureMessage;
+            LocalStorageStatus = failure.Kind switch
+            {
+                LocalStorageFailureKind.Locked => "Guardado local ocupado",
+                LocalStorageFailureKind.DiskFull => "Guardado bloqueado: disco lleno",
+                LocalStorageFailureKind.Corrupt => "Guardado bloqueado: revise integridad",
+                _ => "Guardado local no disponible",
+            };
+            LastResult = $"{failure.UserMessage} {failure.RecoveryInstruction}";
             return false;
         }
         finally

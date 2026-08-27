@@ -261,6 +261,141 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task LocalHealthReportsIntegrityPendingMessagesAndClockRollback()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        time.SetUtcNow(StartedAt.AddMinutes(1));
+        await database.RegisterHandler(time).ExecuteAsync(database.RegisterHandler(time).CreateCommand(StationId));
+        var diagnostics = new SqliteDatabaseDiagnostics(
+            database.Factory,
+            time,
+            Options.Create(new LocalRecoveryOptions()));
+
+        LocalDatabaseHealth healthy = await diagnostics.InspectAsync();
+
+        Assert.AreEqual(LocalDatabaseHealthState.Healthy, healthy.State);
+        Assert.AreEqual(2, healthy.PendingOutboxCount);
+        Assert.AreEqual(operation.Session!.ShipmentId, (await database.Sessions().LoadAsync(StationId))!.ShipmentId);
+
+        time.SetUtcNow(StartedAt.AddMinutes(-10));
+        LocalDatabaseHealth rolledBack = await diagnostics.InspectAsync();
+
+        Assert.AreEqual(LocalDatabaseHealthState.Unavailable, rolledBack.State);
+        Assert.AreEqual(LocalDatabaseHealthIssue.ClockRollback, rolledBack.Issue);
+    }
+
+    [TestMethod]
+    public async Task BackwardClockRejectsNewEventWithoutChangingCounterOrOutbox()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        time.SetUtcNow(StartedAt.AddMinutes(1));
+        RegisterCajuelaHandler handler = database.RegisterHandler(time);
+        await handler.ExecuteAsync(handler.CreateCommand(StationId));
+        time.SetUtcNow(StartedAt.AddMinutes(-10));
+
+        await Assert.ThrowsExactlyAsync<LocalClockRollbackException>(
+            () => handler.ExecuteAsync(handler.CreateCommand(StationId)));
+
+        Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, operation.Session!.ShipmentId));
+        Assert.AreEqual(2, (await database.Outbox().ListPendingAsync(10)).Count);
+    }
+
+    [TestMethod]
+    public async Task CommittedRegistrationSurvivesAbruptProcessStyleRestart()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        time.SetUtcNow(StartedAt.AddSeconds(1));
+        await database.RegisterHandler(time).ExecuteAsync(database.RegisterHandler(time).CreateCommand(StationId));
+
+        SqliteConnection.ClearAllPools();
+        var restartedCajuelas = new SqliteCajuelaRepository(database.Factory);
+        var restartedOutbox = new SqliteOutboxRepository(database.Factory);
+
+        Assert.AreEqual(1, await restartedCajuelas.GetTotalAsync(LineId, operation.Session!.ShipmentId));
+        Assert.AreEqual(2, (await restartedOutbox.ListPendingAsync(10)).Count);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
+    }
+
+    [TestMethod]
+    public async Task CorruptDatabaseIsReportedWithoutReplacingTheOriginalFile()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        SqliteConnection.ClearAllPools();
+        byte[] corruptContent = "not-a-sqlite-database"u8.ToArray();
+        await File.WriteAllBytesAsync(database.Factory.DatabasePath, corruptContent);
+        var diagnostics = new SqliteDatabaseDiagnostics(
+            database.Factory,
+            new MutableTimeProvider(StartedAt),
+            Options.Create(new LocalRecoveryOptions()));
+
+        LocalDatabaseHealth result = await diagnostics.InspectAsync();
+
+        Assert.AreEqual(LocalDatabaseHealthState.Unavailable, result.State);
+        Assert.AreEqual(LocalDatabaseHealthIssue.Corrupt, result.Issue);
+        SqliteConnection.ClearAllPools();
+        CollectionAssert.AreEqual(corruptContent, await File.ReadAllBytesAsync(database.Factory.DatabasePath));
+    }
+
+    [TestMethod]
+    public async Task ConcurrentWriterLockIsClassifiedAndLeavesDatabaseIntact()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await using SqliteConnection blocker = await database.Factory.OpenAsync();
+        await using SqliteCommand begin = blocker.CreateCommand();
+        begin.CommandText = "BEGIN IMMEDIATE;";
+        await begin.ExecuteNonQueryAsync();
+        await using SqliteConnection contender = await database.Factory.OpenAsync();
+        await using SqliteCommand write = contender.CreateCommand();
+        write.CommandText = "BEGIN IMMEDIATE;";
+
+        SqliteException exception = await Assert.ThrowsExactlyAsync<SqliteException>(
+            () => write.ExecuteNonQueryAsync());
+        LocalStorageFailure failure = LocalStorageFailureClassifier.Classify(exception);
+
+        Assert.AreEqual(LocalStorageFailureKind.Locked, failure.Kind);
+        await using SqliteCommand rollback = blocker.CreateCommand();
+        rollback.CommandText = "ROLLBACK;";
+        await rollback.ExecuteNonQueryAsync();
+        Assert.AreEqual("ok", await ScalarTextAsync(blocker, "PRAGMA integrity_check;"), ignoreCase: true);
+    }
+
+    [TestMethod]
+    public async Task SqliteFullFailureIsClassifiedWithoutPartialOperationalWrite()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        long pages = await ScalarLongAsync(connection, "PRAGMA page_count;");
+        await using SqliteCommand limit = connection.CreateCommand();
+        limit.CommandText = $"PRAGMA max_page_count = {pages + 1}; CREATE TABLE simulated_fill(data BLOB);";
+        await limit.ExecuteNonQueryAsync();
+        await using SqliteCommand fill = connection.CreateCommand();
+        fill.CommandText = "INSERT INTO simulated_fill(data) VALUES (zeroblob(10485760));";
+
+        SqliteException exception = await Assert.ThrowsExactlyAsync<SqliteException>(
+            () => fill.ExecuteNonQueryAsync());
+
+        Assert.AreEqual(LocalStorageFailureKind.DiskFull, LocalStorageFailureClassifier.Classify(exception).Kind);
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM outbox_messages;"));
+    }
+
+    [TestMethod]
     public async Task CounterMigrationRebuildsReadModelFromExistingEvents()
     {
         await using var database = new TestDatabase();

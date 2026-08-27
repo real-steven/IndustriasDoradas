@@ -115,7 +115,7 @@ public sealed class OperationViewModelTests
         await viewModel.InitializeAsync();
 
         Assert.AreEqual("Guardado local no disponible", viewModel.LocalStorageStatus);
-        StringAssert.Contains(viewModel.LastResult, "Avise al jefe de planta");
+        StringAssert.Contains(viewModel.LastResult, "almacenamiento local");
         Assert.IsFalse(viewModel.RegisterCajuelaCommand.CanExecute(null));
     }
 

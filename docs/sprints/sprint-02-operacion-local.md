@@ -192,6 +192,11 @@ Sprint 2.
 
 ### 2.11 Recuperación y diagnóstico local
 
+**Estado:** implementada, con pruebas automatizadas y pausa técnica aprobada
+provisionalmente. La comprobación manual de cierre inesperado y cero pérdida se
+ejecutará paso a paso durante el cierre 2.12, junto con `DT-S2-001`. Evidencia en
+[`../architecture/recuperacion-diagnostico-local-sprint-02.md`](../architecture/recuperacion-diagnostico-local-sprint-02.md).
+
 **Prompt:** Maneja cierre inesperado, disco lleno, base bloqueada/corrupta, hora incorrecta y configuración perdida con recuperación segura. Muestra pendientes y salud local para jefe de planta sin exponer complejidad al operario. Documenta copia/restauración de SQLite y no inventes sincronización remota.
 
 **Pausa:** matar proceso tras registrar, reiniciar y comprobar cero pérdida; simular al menos un fallo de escritura.
