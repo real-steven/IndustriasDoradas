@@ -37,6 +37,7 @@ siguen la política de almacén seguro descrita en
 | `002_operation_indexes_and_immutability` | Índices de consulta/pendientes, unicidad de responsable y sesión activos, y triggers que rechazan `UPDATE`/`DELETE` de eventos. |
 | `003_production_counter_read_model` | Contador reconstruible por línea y cargamento; pertenece al paso 2.6. |
 | `004_immediate_cajuela_correction` | Unicidad de reversión y auditoría inmutable de la corrección inmediata; pertenece al paso 2.7. |
+| `005_operation_input_metrics` | Latencia y resultado anónimos de entradas operativas, con historial inmutable; pertenece al paso 2.10. |
 
 `local_schema_migrations` registra versión, nombre y fecha. El migrador rechaza
 un historial que no coincida con el catálogo conocido. Cada versión y su

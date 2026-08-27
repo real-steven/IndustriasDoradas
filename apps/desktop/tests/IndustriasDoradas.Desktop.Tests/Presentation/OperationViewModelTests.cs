@@ -221,16 +221,75 @@ public sealed class OperationViewModelTests
         Assert.AreEqual(3, viewModel.Line.Total);
     }
 
+    [TestMethod]
+    public async Task HeldRegisterIsSuppressedWithoutWriting()
+    {
+        var dashboard = new QueueDashboardRepository(ReadySnapshot(total: 3));
+        var cajuelas = new StubCajuelaRepository(total: 3);
+        var metrics = new RecordingMetrics();
+        var feedback = new RecordingFeedback();
+        OperationViewModel viewModel = Create(dashboard, cajuelas, metrics: metrics, feedback: feedback);
+        await viewModel.InitializeAsync();
+        OperationInputCommand held = Input(OperationInputAction.RegisterCajuela, "Add") with
+        {
+            Origin = new OperationInputOrigin("KEYBOARD", "shared-keyboard", "Add", 1, true),
+        };
+
+        await viewModel.HandleInputCommandAsync(held);
+
+        Assert.AreEqual(0, cajuelas.RegisterCalls);
+        Assert.AreEqual(OperationFeedbackKind.Warning, viewModel.FeedbackKind);
+        Assert.AreEqual(OperationFeedbackKind.Warning, feedback.LastKind);
+        Assert.AreEqual(OperationInputMetricOutcome.Suppressed, metrics.Items.Single().Outcome);
+        Assert.AreEqual("AUTO_REPEAT", metrics.Items.Single().ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task RapidSecondPressIsSuppressedAndPressAtThresholdIsAccepted()
+    {
+        var time = new ManualTimeProvider(Now);
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 0),
+            ReadySnapshot(total: 1),
+            ReadySnapshot(total: 2));
+        var cajuelas = new StubCajuelaRepository(total: 0);
+        var metrics = new RecordingMetrics();
+        OperationViewModel viewModel = Create(dashboard, cajuelas, time, metrics);
+        await viewModel.InitializeAsync();
+
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RegisterCajuela, "Add"));
+        time.Advance(TimeSpan.FromMilliseconds(74));
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RegisterCajuela, "Add"));
+        time.Advance(TimeSpan.FromMilliseconds(1));
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RegisterCajuela, "Add"));
+
+        Assert.AreEqual(2, cajuelas.RegisterCalls);
+        Assert.AreEqual(2, viewModel.Line.Total);
+        CollectionAssert.AreEqual(
+            new[] { OperationInputMetricOutcome.Accepted, OperationInputMetricOutcome.Suppressed, OperationInputMetricOutcome.Accepted },
+            metrics.Items.Select(item => item.Outcome).ToArray());
+        Assert.AreEqual(74d, metrics.Items[1].InputIntervalMilliseconds);
+        Assert.AreEqual(75d, metrics.Items[2].InputIntervalMilliseconds);
+    }
+
     private static OperationViewModel Create(
         ILocalOperationDashboardRepository dashboard,
-        ILocalCajuelaRepository cajuelas)
+        ILocalCajuelaRepository cajuelas,
+        TimeProvider? time = null,
+        RecordingMetrics? metrics = null,
+        RecordingFeedback? feedback = null)
     {
-        var time = new FixedTimeProvider(Now);
+        time ??= new FixedTimeProvider(Now);
+        var safety = Options.Create(new OperationSafetyOptions());
         return new OperationViewModel(
             dashboard,
             new RegisterCajuelaHandler(cajuelas, time),
             new RevertLastCajuelaHandler(cajuelas, time),
             new StubInputCommandSource(),
+            new OperationInputGuard(safety, time),
+            metrics ?? new RecordingMetrics(),
+            feedback ?? new RecordingFeedback(),
+            safety,
             Options.Create(new StationOptions { Id = StationId }),
             time);
     }
@@ -371,6 +430,27 @@ public sealed class OperationViewModelTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class ManualTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        private long milliseconds;
+        public override long TimestampFrequency => 1000;
+        public override DateTimeOffset GetUtcNow() => now.AddMilliseconds(milliseconds);
+        public override long GetTimestamp() => milliseconds;
+        public void Advance(TimeSpan interval) => milliseconds += (long)interval.TotalMilliseconds;
+    }
+
+    private sealed class RecordingMetrics : IOperationInputMetrics
+    {
+        public List<LocalOperationInputMetric> Items { get; } = [];
+        public void Record(LocalOperationInputMetric metric) => Items.Add(metric);
+    }
+
+    private sealed class RecordingFeedback : IOperationFeedbackPlayer
+    {
+        public OperationFeedbackKind LastKind { get; private set; }
+        public void Play(OperationFeedbackKind kind) => LastKind = kind;
     }
 
     private sealed class StubInputCommandSource : IInputCommandSource

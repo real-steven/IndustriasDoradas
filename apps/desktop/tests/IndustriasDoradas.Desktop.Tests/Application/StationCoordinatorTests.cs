@@ -60,7 +60,7 @@ public sealed class StationCoordinatorTests
     }
 
     private static StationCoordinator Create(MemoryStore store, StubApi api, TimeProvider time) =>
-        new(new StubAuth(), api, store, new StubEvidence(),
+        new(new StubAuth(), api, new StubCatalogs(), store, new StubEvidence(),
             Options.Create(new StationOptions { Id = Guid.Parse("34000000-0000-4000-8000-000000000001") }), time);
 
     private static ProtectedStationState Fixture(DateTimeOffset offlineUntil) => new(
@@ -109,5 +109,20 @@ public sealed class StationCoordinatorTests
         public Task<StationAuthorization> GetAuthorizationAsync(Guid organizationId, Guid stationId, string accessToken, CancellationToken cancellationToken = default) =>
             AuthorizationFailure is null ? throw new NotSupportedException() : Task.FromException<StationAuthorization>(AuthorizationFailure);
         public Task<PinAttemptResponse> ElevateAsync(Guid organizationId, Guid stationId, string pin, string accessToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<LocalOperationCatalogSnapshot> GetOperationCatalogAsync(Guid organizationId, Guid plantId, string accessToken, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LocalOperationCatalogSnapshot([], [], []));
+    }
+
+    private sealed class StubCatalogs : ILocalCatalogRepository
+    {
+        public Task UpsertSupplierAsync(CachedSupplier supplier, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UpsertWorkerAsync(CachedWorker worker, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UpsertLineAsync(CachedProductionLine line, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<CachedSupplier>> ListActiveSuppliersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedSupplier>>([]);
+        public Task<IReadOnlyList<CachedWorker>> ListActiveWorkersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedWorker>>([]);
+        public Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(Guid organizationId, Guid plantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedProductionLine>>([]);
+        public Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default) => Task.FromResult<CachedSupplier?>(null);
+        public Task<CachedWorker?> FindWorkerAsync(Guid workerId, CancellationToken cancellationToken = default) => Task.FromResult<CachedWorker?>(null);
+        public Task<CachedProductionLine?> FindLineAsync(Guid lineId, CancellationToken cancellationToken = default) => Task.FromResult<CachedProductionLine?>(null);
     }
 }

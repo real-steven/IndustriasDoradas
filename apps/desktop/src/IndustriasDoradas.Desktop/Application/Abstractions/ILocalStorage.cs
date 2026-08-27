@@ -135,6 +135,13 @@ public interface ILocalCatalogRepository
     Task<IReadOnlyList<CachedSupplier>> ListActiveSuppliersAsync(
         Guid organizationId,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CachedWorker>> ListActiveWorkersAsync(
+        Guid organizationId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(
+        Guid organizationId,
+        Guid plantId,
+        CancellationToken cancellationToken = default);
 
     Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default);
     Task<CachedWorker?> FindWorkerAsync(Guid workerId, CancellationToken cancellationToken = default);

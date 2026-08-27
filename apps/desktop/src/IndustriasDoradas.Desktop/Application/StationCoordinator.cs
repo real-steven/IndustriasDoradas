@@ -11,6 +11,7 @@ namespace IndustriasDoradas.Desktop.Application;
 public sealed class StationCoordinator(
     ISupabaseAuthService auth,
     IStationApi api,
+    ILocalCatalogRepository catalogs,
     IProtectedStationStore store,
     IElevationEvidenceCapture evidence,
     IOptions<StationOptions> stationOptions,
@@ -28,6 +29,7 @@ public sealed class StationCoordinator(
             session.OrganizationId, options.Id, tokens.AccessToken, cancellationToken).ConfigureAwait(false);
         var state = new ProtectedStationState(tokens, session, authorization, [], OfflinePinState.Empty);
         await store.SaveAsync(state, cancellationToken).ConfigureAwait(false);
+        await TryRefreshCatalogsAsync(state, cancellationToken).ConfigureAwait(false);
         return state;
     }
 
@@ -45,6 +47,7 @@ public sealed class StationCoordinator(
                 saved.Session.OrganizationId, options.Id, saved.Tokens.AccessToken, cancellationToken).ConfigureAwait(false);
             var state = saved with { Authorization = refreshed };
             await store.SaveAsync(state, cancellationToken).ConfigureAwait(false);
+            await TryRefreshCatalogsAsync(state, cancellationToken).ConfigureAwait(false);
             return state;
         }
         catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
@@ -99,6 +102,30 @@ public sealed class StationCoordinator(
 
     public Task RequestPasswordRecoveryAsync(string email, CancellationToken cancellationToken = default) =>
         auth.RequestPasswordRecoveryAsync(email, cancellationToken);
+
+    private async Task TryRefreshCatalogsAsync(
+        ProtectedStationState state,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            LocalOperationCatalogSnapshot snapshot = await api.GetOperationCatalogAsync(
+                state.Session.OrganizationId,
+                state.Authorization.PlantId,
+                state.Tokens.AccessToken,
+                cancellationToken).ConfigureAwait(false);
+            foreach (CachedSupplier supplier in snapshot.Suppliers)
+                await catalogs.UpsertSupplierAsync(supplier, cancellationToken).ConfigureAwait(false);
+            foreach (CachedWorker worker in snapshot.Workers)
+                await catalogs.UpsertWorkerAsync(worker, cancellationToken).ConfigureAwait(false);
+            foreach (CachedProductionLine line in snapshot.Lines)
+                await catalogs.UpsertLineAsync(line, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            // La estación conserva el último catálogo local válido para operar offline.
+        }
+    }
 
     private (PinAttemptResponse Response, OfflinePinState State) EvaluateOfflinePin(
         string pin, string verifier, OfflinePinState state)

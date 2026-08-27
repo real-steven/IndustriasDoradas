@@ -2,6 +2,9 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              AutomationProperties.Name="Control de estación">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="48" MaxWidth="680" HorizontalAlignment="Left">
             <TextBlock FontSize="36" FontWeight="Bold" Text="Estación de planta" />
@@ -28,9 +31,67 @@
                     </StackPanel>
                 </StackPanel>
             </GroupBox>
-            <TextBox Margin="0,20,0,0" MinHeight="90" AcceptsReturn="True"
+            <GroupBox Margin="0,20,0,0"
+                      Header="Preparar Línea 1"
+                      Padding="16"
+                      Visibility="{Binding IsPlantManager, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <TextBlock FontSize="18" FontWeight="Bold" Text="{Binding PilotLineName}" />
+                    <TextBlock Margin="0,4,0,14" Foreground="#667085" Text="{Binding WorkPeriodDescription}" />
+
+                    <Label Target="{Binding ElementName=SupplierBox}" Content="Proveedor *" />
+                    <ComboBox x:Name="SupplierBox"
+                              MinWidth="360"
+                              AutomationProperties.Name="Proveedor del cargamento"
+                              DisplayMemberPath="Name"
+                              ItemsSource="{Binding Suppliers}"
+                              SelectedItem="{Binding SelectedSupplier}" />
+
+                    <TextBlock Margin="0,12,0,0" FontWeight="Bold" Text="Cargamento" />
+                    <TextBlock Margin="0,3,0,12"
+                               Foreground="#667085"
+                               Text="Nuevo · inicio automático al confirmar" />
+
+                    <Label Target="{Binding ElementName=WorkerBox}" Content="Responsable principal *" />
+                    <ComboBox x:Name="WorkerBox"
+                              MinWidth="360"
+                              AutomationProperties.Name="Responsable principal"
+                              DisplayMemberPath="Name"
+                              ItemsSource="{Binding Workers}"
+                              SelectedItem="{Binding SelectedWorker}" />
+
+                    <Border Margin="0,16,0,0"
+                            Padding="12"
+                            Background="#FFF8E7"
+                            BorderBrush="#E1C16E"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                        <TextBlock AutomationProperties.LiveSetting="Polite"
+                                   Text="{Binding PreparationSummary}"
+                                   TextWrapping="Wrap" />
+                    </Border>
+
+                    <StackPanel Margin="0,16,0,0" Orientation="Horizontal">
+                        <Button Command="{Binding PrepareLineCommand}"
+                                Content="Preparar resumen"
+                                AutomationProperties.Name="Preparar resumen del cargamento" />
+                        <Button Margin="10,0,0,0"
+                                Command="{Binding ConfirmLineCommand}"
+                                Content="Confirmar y dejar lista"
+                                AutomationProperties.Name="Confirmar cargamento y dejar línea lista" />
+                        <Button Margin="10,0,0,0"
+                                Command="{Binding CancelPreparationCommand}"
+                                Content="Cancelar"
+                                AutomationProperties.Name="Cancelar preparación" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+            <TextBox Margin="0,20,0,0"
+                     MinHeight="70"
+                     AcceptsReturn="True"
                      Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}"
-                     AutomationProperties.Name="Borrador operativo conservado" />
+                     Visibility="{Binding IsPlantManager, Converter={StaticResource BooleanToVisibilityConverter}}"
+                     AutomationProperties.Name="Notas del borrador operativo" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

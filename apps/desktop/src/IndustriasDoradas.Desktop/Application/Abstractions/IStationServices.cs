@@ -13,7 +13,17 @@ public interface IStationApi
     Task<ApiSession> GetSessionAsync(string accessToken, CancellationToken cancellationToken = default);
     Task<StationAuthorization> GetAuthorizationAsync(Guid organizationId, Guid stationId, string accessToken, CancellationToken cancellationToken = default);
     Task<PinAttemptResponse> ElevateAsync(Guid organizationId, Guid stationId, string pin, string accessToken, CancellationToken cancellationToken = default);
+    Task<LocalOperationCatalogSnapshot> GetOperationCatalogAsync(
+        Guid organizationId,
+        Guid plantId,
+        string accessToken,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record LocalOperationCatalogSnapshot(
+    IReadOnlyList<CachedSupplier> Suppliers,
+    IReadOnlyList<CachedWorker> Workers,
+    IReadOnlyList<CachedProductionLine> Lines);
 
 public sealed record PinAttemptResponse(string Result, int? RemainingAttempts, DateTimeOffset? BlockedUntil);
 

@@ -20,13 +20,14 @@ public partial class OperationView : UserControl
 
     private OperationViewModel? ViewModel => DataContext as OperationViewModel;
 
-    private void OnLoaded(object sender, System.Windows.RoutedEventArgs e)
+    private async void OnLoaded(object sender, System.Windows.RoutedEventArgs e)
     {
         if (ViewModel is null)
         {
             return;
         }
 
+        await ViewModel.RefreshAsync();
         keyboardAdapter = new WpfKeyboardInputAdapter(ViewModel.InputSource);
         keyboardAdapter.Connect();
         FocusCurrentTarget();

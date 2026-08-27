@@ -55,8 +55,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(4L, result.CurrentVersion);
-        Assert.AreEqual(4, result.AppliedCount);
+        Assert.AreEqual(5L, result.CurrentVersion);
+        Assert.AreEqual(5, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -65,7 +65,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(4L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(5L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -97,7 +97,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(3, result.AppliedCount);
+        Assert.AreEqual(4, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -202,6 +202,42 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task AnonymousInputMetricsArePersistentReadableAndImmutable()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        var metric = new LocalOperationInputMetric(
+            EventId(90),
+            OperationInputAction.RegisterCajuela,
+            "KEYBOARD",
+            OperationInputMetricOutcome.Suppressed,
+            1.25,
+            42,
+            false,
+            "DEBOUNCE",
+            StartedAt,
+            StartedAt.AddMilliseconds(2));
+
+        await database.Metrics().AppendAsync(metric);
+        LocalOperationInputMetric restored = (await database.Metrics().ListRecentAsync(10)).Single();
+
+        Assert.AreEqual(metric, restored);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*) FROM pragma_table_info('operation_input_metrics')
+            WHERE lower(name) GLOB '*worker*' OR lower(name) GLOB '*shipment*'
+               OR lower(name) GLOB '*controller*' OR lower(name) GLOB '*event*'
+               OR lower(name) GLOB '*supplier*';
+            """));
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => ExecuteWithoutParametersAsync(
+            connection,
+            "UPDATE operation_input_metrics SET latency_ms = 2 WHERE id = '50000000-0000-4000-8000-000000000090';"));
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => ExecuteWithoutParametersAsync(
+            connection,
+            "DELETE FROM operation_input_metrics;"));
+    }
+
+    [TestMethod]
     public async Task DiagnosticCopyIsConsistentAndIndependent()
     {
         await using var database = new TestDatabase();
@@ -221,7 +257,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(4L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(5L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -236,7 +272,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(2, result.AppliedCount);
+        Assert.AreEqual(3, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -1138,6 +1174,8 @@ public sealed class LocalSqliteStorageTests
         public SqliteCajuelaRepository Cajuelas() => new(Factory);
 
         public SqliteOperationDashboardRepository Dashboard() => new(Factory);
+
+        public SqliteOperationInputMetricStore Metrics() => new(Factory);
 
         public LocalOperationService OperationService(TimeProvider timeProvider) =>
             new(Catalogs(), Sessions(), Operations(), timeProvider);

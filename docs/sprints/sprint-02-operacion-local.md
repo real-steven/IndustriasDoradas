@@ -149,9 +149,46 @@ real sin ciclo; autorizado para continuar con 2.10. Evidencia en
 
 ### 2.10 Prevención de pulsaciones accidentales
 
+**Estado:** implementada y con pruebas automatizadas; pendiente de la pausa
+técnica/manual del responsable del proyecto. Evidencia en
+[`../architecture/prevencion-pulsaciones-sprint-02.md`](../architecture/prevencion-pulsaciones-sprint-02.md).
+Durante la pausa se detectó que el wireframe privilegiado de 2.1 no estaba
+conectado a los casos de uso de 2.5. Se añadió la preparación mínima de Línea 1
+y el refresco de catálogos locales para permitir la validación real de 2.10.
+
 **Prompt:** Añade feedback visual/sonoro configurable, antirrebote medido, bloqueo de auto-repeat en registrar y confirmaciones solo para acciones destructivas. No ralentices la pulsación normal. Registra métricas locales anónimas de latencia/errores útiles para prueba.
 
 **Pausa:** pulsación rápida, sostenida y doble deliberada; el comportamiento debe ser predecible y explicado.
+
+#### Deuda técnica DT-S2-001 — validación presencial con PIN
+
+**Estado:** abierta y aceptada provisionalmente para continuar con 2.11.
+
+**Responsable:** `DevHenry`.
+
+**Motivo:** la elevación temporal y la preparación de Línea 1 están
+implementadas y cubiertas por pruebas automatizadas, pero no se dispone todavía
+del procedimiento aprobado por el jefe de desarrollo para configurar el PIN
+individual de la cuenta `JEFE_PLANTA`. El PIN no se comparte, recupera ni
+documenta; el jefe de desarrollo debe confirmar el procedimiento, no entregar
+una credencial en texto claro.
+
+**Impacto:** no bloquea el desarrollo técnico de 2.11 ni la preparación
+automatizada de 2.12. Sí mantiene pendientes la aprobación manual de 2.10, la
+prueba integrada con cargamento/responsable real y el cierre definitivo del
+Sprint 2.
+
+**Criterios de cierre:**
+
+1. confirmar con el jefe de desarrollo el flujo autorizado para que el jefe de
+   planta establezca su propio PIN;
+2. reautenticar la cuenta, configurar el PIN sin exponerlo y elevar la estación;
+3. cargar proveedor, responsable y la única línea piloto desde los catálogos,
+   preparar el resumen y confirmar el cargamento;
+4. ejecutar pulsación individual, sostenida, rápida y doble deliberada, además
+   de la corrección destructiva con confirmación;
+5. registrar la aprobación del jefe de desarrollo antes de declarar cerrado el
+   Sprint 2.
 
 ### 2.11 Recuperación y diagnóstico local
 

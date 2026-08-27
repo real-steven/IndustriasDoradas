@@ -13,9 +13,11 @@ una cajuela con un clic o iniciar la doble confirmación de corrección inmediat
 
 No se construye un wireframe de cuatro líneas ni ventanas independientes. La
 entrada abstracta de teclado/controlador, el antirrebote, bloqueo de tecla
-sostenida y feedback sonoro pertenecen a 2.9–2.10. La preparación privilegiada
-del cargamento y responsable conserva sus casos de uso de 2.5; esta pantalla no
-inventa un CRUD operativo.
+sostenida y feedback sonoro pertenecen a 2.9–2.10. La integración correctiva
+añadida durante 2.10 materializa el wireframe A de 2.1 dentro de `Estación`:
+refresca catálogos autorizados hacia SQLite, fija la única línea piloto, prepara
+un resumen y reutiliza la confirmación atómica de 2.5. No introduce un CRUD
+genérico.
 
 ## 2. Límites de presentación
 

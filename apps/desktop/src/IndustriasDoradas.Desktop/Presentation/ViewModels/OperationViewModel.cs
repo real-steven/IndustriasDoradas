@@ -19,6 +19,10 @@ public sealed class OperationViewModel : ObservableObject
     private readonly RevertLastCajuelaHandler reversalHandler;
     private readonly TimeProvider timeProvider;
     private readonly IInputCommandSource inputSource;
+    private readonly OperationInputGuard inputGuard;
+    private readonly IOperationInputMetrics inputMetrics;
+    private readonly IOperationFeedbackPlayer feedbackPlayer;
+    private readonly OperationSafetyOptions safetyOptions;
     private readonly Guid stationId;
     private PreparedCajuelaReversal? preparedReversal;
     private string localStorageStatus = "Preparando almacenamiento local…";
@@ -29,12 +33,17 @@ public sealed class OperationViewModel : ObservableObject
     private bool isCorrectionPending;
     private bool isLocalStorageAvailable;
     private OperationFocusTarget focusedTarget = OperationFocusTarget.RegisterCajuela;
+    private OperationFeedbackKind feedbackKind;
 
     public OperationViewModel(
         ILocalOperationDashboardRepository dashboard,
         RegisterCajuelaHandler registerHandler,
         RevertLastCajuelaHandler reversalHandler,
         IInputCommandSource inputSource,
+        OperationInputGuard inputGuard,
+        IOperationInputMetrics inputMetrics,
+        IOperationFeedbackPlayer feedbackPlayer,
+        IOptions<OperationSafetyOptions> safetyOptions,
         IOptions<StationOptions> stationOptions,
         TimeProvider timeProvider)
     {
@@ -42,6 +51,10 @@ public sealed class OperationViewModel : ObservableObject
         this.registerHandler = registerHandler;
         this.reversalHandler = reversalHandler;
         this.inputSource = inputSource;
+        this.inputGuard = inputGuard;
+        this.inputMetrics = inputMetrics;
+        this.feedbackPlayer = feedbackPlayer;
+        this.safetyOptions = safetyOptions.Value;
         this.timeProvider = timeProvider;
         stationId = stationOptions.Value.Id;
         RegisterCajuelaCommand = new AsyncRelayCommand(RegisterCajuelaAsync, CanRegisterCajuela);
@@ -64,6 +77,11 @@ public sealed class OperationViewModel : ObservableObject
 
     public string PendingStatus { get => pendingStatus; private set => SetProperty(ref pendingStatus, value); }
     public string LastResult { get => lastResult; private set => SetProperty(ref lastResult, value); }
+    public OperationFeedbackKind FeedbackKind
+    {
+        get => feedbackKind;
+        private set => SetProperty(ref feedbackKind, value);
+    }
     public string CorrectionSummary
     {
         get => correctionSummary;
@@ -134,15 +152,7 @@ public sealed class OperationViewModel : ObservableObject
                 LastResult = "Línea 1 seleccionada para operar.";
                 break;
             case OperationInputAction.RegisterCajuela:
-                if (CanRegisterCajuela())
-                {
-                    await RegisterCajuelaAsync(command).ConfigureAwait(true);
-                }
-                else
-                {
-                    LastResult = "Registrar cajuela no está disponible en el estado actual.";
-                }
-
+                await TryRegisterCajuelaAsync(command).ConfigureAwait(true);
                 break;
             case OperationInputAction.RevertLastCajuela:
                 if (CanPrepareCorrection())
@@ -193,22 +203,64 @@ public sealed class OperationViewModel : ObservableObject
         }, "No se pudo leer el estado local. Avise al jefe de planta.").ConfigureAwait(true);
     }
 
-    private Task RegisterCajuelaAsync() => RegisterCajuelaAsync(null);
+    private Task RegisterCajuelaAsync() => TryRegisterCajuelaAsync(new OperationInputCommand(
+        Guid.NewGuid(),
+        OperationInputAction.RegisterCajuela,
+        OperationInputOrigin.Click(OperationInputAction.RegisterCajuela),
+        timeProvider.GetUtcNow()));
 
-    private async Task RegisterCajuelaAsync(OperationInputCommand? inputCommand)
+    private async Task TryRegisterCajuelaAsync(OperationInputCommand inputCommand)
     {
-        await RunAsync(async () =>
+        long started = timeProvider.GetTimestamp();
+        if (inputCommand.Origin.IsRepeat)
         {
-            RegisterCajuelaCommand command = inputCommand is null
-                ? registerHandler.CreateCommand(stationId)
-                : RegisterCajuelaHandler.CreateCommand(stationId, inputCommand);
+            OperationInputGuardDecision repeat = inputGuard.TryAcceptRegistration(inputCommand);
+            SuppressRegistration(inputCommand, repeat, started);
+            return;
+        }
+
+        if (!Line.IsReady || !IsLocalStorageAvailable || IsCorrectionPending)
+        {
+            ShowFeedback(OperationFeedbackKind.Warning, "Registrar cajuela no está disponible en el estado actual.");
+            RecordMetric(inputCommand, OperationInputMetricOutcome.Unavailable, started, null, "CONTEXT_UNAVAILABLE");
+            return;
+        }
+
+        OperationInputGuardDecision decision = inputGuard.TryAcceptRegistration(inputCommand);
+        if (!decision.IsAccepted)
+        {
+            SuppressRegistration(inputCommand, decision, started);
+            return;
+        }
+
+        if (IsBusy)
+        {
+            ShowFeedback(OperationFeedbackKind.Warning, "La operación anterior todavía está terminando.");
+            RecordMetric(inputCommand, OperationInputMetricOutcome.Unavailable, started, decision.IntervalMilliseconds, "BUSY");
+            return;
+        }
+
+        bool succeeded = await RunAsync(async () =>
+        {
+            RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(stationId, inputCommand);
             RegisterCajuelaResult result = await registerHandler.ExecuteAsync(command).ConfigureAwait(true);
             Line.Total = result.Total;
-            LastResult = result.WasDuplicate
+            ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Cajuela ya registrada. Total: {result.Total}."
-                : $"Cajuela guardada localmente. Total: {result.Total}.";
+                : $"Cajuela guardada localmente. Total: {result.Total}.");
             await RefreshSnapshotAsync().ConfigureAwait(true);
         }, "No se guardó la cajuela. Revise el contexto local.").ConfigureAwait(true);
+        if (!succeeded)
+        {
+            ShowFeedback(OperationFeedbackKind.Error, LastResult);
+        }
+
+        RecordMetric(
+            inputCommand,
+            succeeded ? OperationInputMetricOutcome.Accepted : OperationInputMetricOutcome.Failed,
+            started,
+            decision.IntervalMilliseconds,
+            succeeded ? null : "LOCAL_WRITE_FAILED");
     }
 
     private async Task PrepareCorrectionAsync()
@@ -220,7 +272,7 @@ public sealed class OperationViewModel : ObservableObject
                 $"Se corregirá la última cajuela. El total cambiará de " +
                 $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}.";
             IsCorrectionPending = true;
-            LastResult = "Confirme la corrección o cancele para conservar el conteo.";
+            ShowFeedback(OperationFeedbackKind.Warning, "Confirme la corrección o cancele para conservar el conteo.");
         }, "No hay una última cajuela disponible para corregir.").ConfigureAwait(true);
     }
 
@@ -243,14 +295,15 @@ public sealed class OperationViewModel : ObservableObject
             IsCorrectionPending = false;
             CorrectionSummary = string.Empty;
             Line.Total = result.Total;
-            LastResult = result.WasDuplicate
+            ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Corrección ya aplicada. Total: {result.Total}."
-                : $"Última cajuela corregida con trazabilidad. Total: {result.Total}.";
+                : $"Última cajuela corregida con trazabilidad. Total: {result.Total}.");
             await RefreshSnapshotAsync().ConfigureAwait(true);
         }, "La corrección no se aplicó porque cambió el contexto. Prepárela nuevamente.")
             .ConfigureAwait(true);
         if (!confirmed)
         {
+            ShowFeedback(OperationFeedbackKind.Error, LastResult);
             preparedReversal = null;
             IsCorrectionPending = false;
             CorrectionSummary = string.Empty;
@@ -262,7 +315,7 @@ public sealed class OperationViewModel : ObservableObject
         preparedReversal = null;
         IsCorrectionPending = false;
         CorrectionSummary = string.Empty;
-        LastResult = "Corrección cancelada. El conteo no cambió.";
+        ShowFeedback(OperationFeedbackKind.Neutral, "Corrección cancelada. El conteo no cambió.");
     }
 
     private Task DispatchClickAsync(OperationInputAction action) =>
@@ -277,7 +330,7 @@ public sealed class OperationViewModel : ObservableObject
         switch (FocusedTarget)
         {
             case OperationFocusTarget.RegisterCajuela when CanRegisterCajuela():
-                await RegisterCajuelaAsync(command with { Action = OperationInputAction.RegisterCajuela })
+                await TryRegisterCajuelaAsync(command with { Action = OperationInputAction.RegisterCajuela })
                     .ConfigureAwait(true);
                 break;
             case OperationFocusTarget.RevertLastCajuela when CanPrepareCorrection():
@@ -409,6 +462,49 @@ public sealed class OperationViewModel : ObservableObject
 
     private static string FormatTime(DateTimeOffset instant) =>
         instant.ToOffset(CostaRicaOffset).ToString("HH:mm", CultureInfo.InvariantCulture);
+
+    private void SuppressRegistration(
+        OperationInputCommand command,
+        OperationInputGuardDecision decision,
+        long started)
+    {
+        string message = decision.Suppression == OperationInputSuppression.AutoRepeat
+            ? "Pulsación sostenida ignorada; suelte la tecla para registrar otra cajuela."
+            : $"Pulsación demasiado rápida ignorada ({decision.IntervalMilliseconds:0} ms); vuelva a pulsar deliberadamente.";
+        string code = decision.Suppression == OperationInputSuppression.AutoRepeat ? "AUTO_REPEAT" : "DEBOUNCE";
+        ShowFeedback(OperationFeedbackKind.Warning, message);
+        RecordMetric(command, OperationInputMetricOutcome.Suppressed, started, decision.IntervalMilliseconds, code);
+    }
+
+    private void RecordMetric(
+        OperationInputCommand command,
+        OperationInputMetricOutcome outcome,
+        long started,
+        double? intervalMilliseconds,
+        string? errorCode)
+    {
+        DateTimeOffset recordedAt = timeProvider.GetUtcNow().ToUniversalTime();
+        DateTimeOffset occurredAt = command.OccurredAt.ToUniversalTime();
+        if (recordedAt < occurredAt) recordedAt = occurredAt;
+        inputMetrics.Record(new LocalOperationInputMetric(
+            Guid.NewGuid(),
+            command.Action,
+            command.Origin.SourceKind,
+            outcome,
+            Math.Max(0, timeProvider.GetElapsedTime(started, timeProvider.GetTimestamp()).TotalMilliseconds),
+            intervalMilliseconds,
+            command.Origin.IsRepeat,
+            errorCode,
+            occurredAt,
+            recordedAt));
+    }
+
+    private void ShowFeedback(OperationFeedbackKind kind, string message)
+    {
+        LastResult = message;
+        FeedbackKind = safetyOptions.VisualFeedbackEnabled ? kind : OperationFeedbackKind.Neutral;
+        feedbackPlayer.Play(kind);
+    }
 
     private bool IsLocalStorageAvailable
     {

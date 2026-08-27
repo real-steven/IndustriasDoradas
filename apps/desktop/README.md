@@ -60,6 +60,17 @@ y `Escape`; puede cambiarse en configuración sin modificar el caso de uso. La
 aplicación conserva el origen de clic/teclado/controlador en el sobre Outbox.
 El sensor automático no está incluido.
 
+Al abrir o revalidar la estación, los proveedores, trabajadores y líneas
+autorizados se actualizan en SQLite y permanecen disponibles offline. En Modo
+Jefe de Planta, `Estación` permite elegir proveedor y responsable, revisar el
+resumen del cargamento y confirmar atómicamente la única línea piloto antes de
+registrar cajuelas.
+
+`OperationSafety` controla el antirrebote (75 ms provisional), el feedback
+visual/sonoro y las métricas locales. Una pulsación normal se procesa sin
+espera; `auto-repeat` siempre se ignora al registrar. Las métricas se escriben
+en segundo plano y no contienen personas, cargamentos, eventos ni controlador.
+
 ## Verificar
 
 ```powershell

@@ -11,6 +11,7 @@ using IndustriasDoradas.Desktop.Infrastructure.Security;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
 using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
+using IndustriasDoradas.Desktop.Presentation.Feedback;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -106,6 +107,10 @@ public partial class App : System.Windows.Application
                 options => options.IsValid(),
                 "OperationInput debe definir un teclado con línea, +, flechas, aceptar, revertir y cancelar.")
             .ValidateOnStart();
+        builder.Services.AddOptions<OperationSafetyOptions>()
+            .Bind(builder.Configuration.GetSection(OperationSafetyOptions.SectionName))
+            .Validate(options => options.IsValid(), "OperationSafety contiene límites inválidos.")
+            .ValidateOnStart();
 
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(
             static (services, client) =>
@@ -129,6 +134,8 @@ public partial class App : System.Windows.Application
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<IInputCommandSource, ConfigurableInputCommandSource>();
+        builder.Services.AddSingleton<OperationInputGuard>();
+        builder.Services.AddSingleton<IOperationFeedbackPlayer, WpfOperationFeedbackPlayer>();
         builder.Services.AddSingleton<ILocalDatabasePathProvider, StationDatabasePathProvider>();
         builder.Services.AddSingleton<ILocalSqliteConnectionFactory, SqliteConnectionFactory>();
         builder.Services.AddSingleton<SqliteDatabaseMigrator>();
@@ -141,6 +148,10 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
+        builder.Services.AddSingleton<ILocalOperationInputMetricStore, SqliteOperationInputMetricStore>();
+        builder.Services.AddSingleton<LocalOperationInputMetricService>();
+        builder.Services.AddSingleton<IOperationInputMetrics>(services => services.GetRequiredService<LocalOperationInputMetricService>());
+        builder.Services.AddHostedService(services => services.GetRequiredService<LocalOperationInputMetricService>());
         builder.Services.AddSingleton<ILocalDatabaseDiagnostics, SqliteDatabaseDiagnostics>();
         builder.Services.AddSingleton<LocalOperationService>();
         builder.Services.AddSingleton<RegisterCajuelaHandler>();
