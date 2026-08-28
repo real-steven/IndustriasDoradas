@@ -59,6 +59,24 @@ public sealed class StationCoordinatorTests
         Assert.AreEqual(2, store.State?.PendingEvents.Count);
     }
 
+    [TestMethod]
+    public async Task OnlineElevationTimeoutFallsBackWithoutCrashingTheStation()
+    {
+        var time = new MutableTimeProvider();
+        ProtectedStationState state = Fixture(time.GetUtcNow().AddHours(24));
+        var store = new MemoryStore(state);
+        var api = new StubApi { ElevationFailure = new TaskCanceledException("simulated timeout") };
+        StationCoordinator coordinator = Create(store, api, time);
+
+        PinAttemptResponse response = await coordinator.ElevateAsync(
+            state,
+            "123456",
+            networkAvailable: true);
+
+        Assert.AreEqual("REJECTED", response.Result);
+        Assert.AreEqual(2, store.State?.PendingEvents.Count);
+    }
+
     private static StationCoordinator Create(MemoryStore store, StubApi api, TimeProvider time) =>
         new(new StubAuth(), api, new StubCatalogs(), store, new StubEvidence(),
             Options.Create(new StationOptions { Id = Guid.Parse("34000000-0000-4000-8000-000000000001") }), time);
@@ -105,10 +123,14 @@ public sealed class StationCoordinatorTests
     private sealed class StubApi : IStationApi
     {
         public HttpRequestException? AuthorizationFailure { get; init; }
+        public Exception? ElevationFailure { get; init; }
         public Task<ApiSession> GetSessionAsync(string accessToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<StationAuthorization> GetAuthorizationAsync(Guid organizationId, Guid stationId, string accessToken, CancellationToken cancellationToken = default) =>
             AuthorizationFailure is null ? throw new NotSupportedException() : Task.FromException<StationAuthorization>(AuthorizationFailure);
-        public Task<PinAttemptResponse> ElevateAsync(Guid organizationId, Guid stationId, string pin, string accessToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PinAttemptResponse> ElevateAsync(Guid organizationId, Guid stationId, string pin, string accessToken, CancellationToken cancellationToken = default) =>
+            ElevationFailure is null
+                ? throw new NotSupportedException()
+                : Task.FromException<PinAttemptResponse>(ElevationFailure);
         public Task<LocalOperationCatalogSnapshot> GetOperationCatalogAsync(Guid organizationId, Guid plantId, string accessToken, CancellationToken cancellationToken = default) =>
             Task.FromResult(new LocalOperationCatalogSnapshot([], [], []));
     }

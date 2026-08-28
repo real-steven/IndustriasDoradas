@@ -2,6 +2,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
+using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,7 @@ public sealed class StationPreparationViewModelTests
     private static readonly Guid SupplierId = Guid.Parse("42000000-0000-4000-8000-000000000001");
     private static readonly Guid LineId = Guid.Parse("43000000-0000-4000-8000-000000000001");
     private static readonly Guid WorkerId = Guid.Parse("45000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000002");
     private static readonly DateTimeOffset Now = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
 
     [TestMethod]
@@ -48,7 +50,7 @@ public sealed class StationPreparationViewModelTests
         Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
 
         viewModel.SelectedSupplier = viewModel.Suppliers.Single();
-        viewModel.SelectedWorker = viewModel.Workers.Single();
+        viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
 
         Assert.IsTrue(viewModel.IsPlantManager);
         Assert.AreEqual("Línea 1", viewModel.PilotLineName);
@@ -70,6 +72,112 @@ public sealed class StationPreparationViewModelTests
         StringAssert.Contains(viewModel.Status, "Línea lista");
     }
 
+    [TestMethod]
+    public async Task PlantManagerRelievesResponsibleAndCompletesActiveShipmentWithConfirmation()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, Snapshot()),
+            catalogs,
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        var repository = new RecordingOperationRepository(sessions);
+        var operations = new LocalOperationService(catalogs, sessions, repository, time);
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            operations,
+            Options.Create(new StationOptions { Id = StationId, PrivilegedIdleSeconds = 120, OfflineHours = 24 }),
+            time);
+
+        await viewModel.InitializeAsync();
+        await viewModel.ElevateAsync("123456");
+        viewModel.SelectedSupplier = viewModel.Suppliers.Single();
+        viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
+        await viewModel.PrepareLineCommand.ExecuteAsync(null);
+        await viewModel.ConfirmLineCommand.ExecuteAsync(null);
+
+        Assert.IsTrue(viewModel.HasActiveOperation);
+        Assert.IsFalse(viewModel.CanManageActiveOperation);
+
+        await viewModel.ElevateAsync("123456");
+        viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == SecondWorkerId);
+        Assert.IsTrue(viewModel.CanManageActiveOperation);
+        Assert.IsTrue(viewModel.PrepareReliefCommand.CanExecute(null));
+        await viewModel.PrepareReliefCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(0, repository.ReliefCalls);
+        StringAssert.Contains(viewModel.ManagementSummary, "Marta → Carlos");
+        Assert.IsTrue(viewModel.ConfirmReliefCommand.CanExecute(null));
+        await viewModel.ConfirmReliefCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(1, repository.ReliefCalls);
+        Assert.AreEqual(SecondWorkerId, sessions.Current?.ResponsibleWorkerId);
+        Assert.IsTrue(viewModel.HasActiveOperation);
+        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+
+        await viewModel.ElevateAsync("123456");
+        Assert.IsTrue(viewModel.PrepareCompletionCommand.CanExecute(null));
+        await viewModel.PrepareCompletionCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(0, repository.CompletionCalls);
+        StringAssert.Contains(viewModel.ManagementSummary, "La línea continúa activa hasta confirmar");
+        Assert.IsTrue(viewModel.ConfirmCompletionCommand.CanExecute(null));
+        await viewModel.ConfirmCompletionCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(1, repository.CompletionCalls);
+        Assert.AreEqual(LineFeedCycleStatus.Completed, sessions.Current?.Status);
+        Assert.IsFalse(viewModel.HasActiveOperation);
+        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+    }
+
+    [TestMethod]
+    public async Task RestoredStationExplainsMissingResponsibleCatalogWithoutBlockingElevation()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var snapshot = new LocalOperationCatalogSnapshot(
+            [new CachedSupplier(SupplierId, OrganizationId, "La Esperanza", true, Now)],
+            [],
+            [new CachedProductionLine(LineId, OrganizationId, PlantId, "Línea 1", true, Now)]);
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, snapshot),
+            catalogs,
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(catalogs, sessions, new RecordingOperationRepository(sessions), time),
+            Options.Create(new StationOptions { Id = StationId, PrivilegedIdleSeconds = 120, OfflineHours = 24 }),
+            time);
+
+        await viewModel.InitializeAsync();
+        Assert.IsTrue(viewModel.IsStationOpen);
+        StringAssert.Contains(viewModel.StationSessionStatus, "sesión protegida restaurada");
+
+        Task elevation = viewModel.ElevateAsync("123456");
+        Task completed = await Task.WhenAny(elevation, Task.Delay(TimeSpan.FromSeconds(1)));
+        Assert.AreSame(elevation, completed, "La elevación no debe bloquear la interfaz con catálogo vacío.");
+        await elevation;
+
+        Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
+        Assert.AreEqual(0, viewModel.Workers.Count);
+        Assert.IsFalse(viewModel.PrepareLineCommand.CanExecute(null));
+        StringAssert.Contains(viewModel.Status, "No hay responsables activos asignados a esta planta");
+    }
+
     private static ProtectedStationState State() => new(
         new AuthTokens("access", "refresh", Now.AddHours(1)),
         new ApiSession(Guid.Parse("20000000-0000-4000-8000-000000000001"), OrganizationId, "JEFE_PLANTA", Now.AddHours(1)),
@@ -79,7 +187,10 @@ public sealed class StationPreparationViewModelTests
 
     private static LocalOperationCatalogSnapshot Snapshot() => new(
         [new CachedSupplier(SupplierId, OrganizationId, "La Esperanza", true, Now)],
-        [new CachedWorker(WorkerId, OrganizationId, "Marta", true, Now)],
+        [
+            new CachedWorker(WorkerId, OrganizationId, "Marta", true, Now),
+            new CachedWorker(SecondWorkerId, OrganizationId, "Carlos", true, Now),
+        ],
         [new CachedProductionLine(LineId, OrganizationId, PlantId, "Línea 1", true, Now)]);
 
     private sealed class FixedTimeProvider : TimeProvider
@@ -135,10 +246,30 @@ public sealed class StationPreparationViewModelTests
     private sealed class RecordingOperationRepository(MemorySessions sessions) : ILocalOperationRepository
     {
         public int StartCalls { get; private set; }
+        public int ReliefCalls { get; private set; }
+        public int CompletionCalls { get; private set; }
         public StartLocalOperationMutation? LastStart { get; private set; }
         public Task StartAsync(StartLocalOperationMutation mutation, CancellationToken cancellationToken = default) { StartCalls++; LastStart = mutation; sessions.Current = mutation.Session; return Task.CompletedTask; }
-        public Task RelieveAsync(RelieveLocalOperationMutation mutation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task CompleteAsync(CompleteLocalOperationMutation mutation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RelieveAsync(RelieveLocalOperationMutation mutation, CancellationToken cancellationToken = default)
+        {
+            ReliefCalls++;
+            sessions.Current = mutation.ExpectedSession with
+            {
+                ResponsibleWorkerId = mutation.NextResponsibleWorkerId,
+                UpdatedAt = mutation.EffectiveAt,
+            };
+            return Task.CompletedTask;
+        }
+        public Task CompleteAsync(CompleteLocalOperationMutation mutation, CancellationToken cancellationToken = default)
+        {
+            CompletionCalls++;
+            sessions.Current = mutation.ExpectedSession with
+            {
+                UpdatedAt = mutation.CompletedAt,
+                Status = LineFeedCycleStatus.Completed,
+            };
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubHealthService : IHealthService

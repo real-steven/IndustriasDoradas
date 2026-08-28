@@ -5,4 +5,5 @@ public sealed class SupabaseOptions
     public const string SectionName = "Supabase";
     public string Url { get; init; } = string.Empty;
     public string PublishableKey { get; init; } = string.Empty;
+    public int RequestTimeoutSeconds { get; init; } = 10;
 }

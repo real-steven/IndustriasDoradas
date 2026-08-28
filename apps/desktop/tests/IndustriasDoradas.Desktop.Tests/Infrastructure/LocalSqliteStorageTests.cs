@@ -1094,6 +1094,138 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task OfflineShiftPreservesTwoShipmentsReliefs120CajuelasReversalsAndRestarts()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        DateTimeOffset dayStart = new(2026, 8, 27, 23, 50, 0, TimeSpan.Zero);
+        var time = new MutableTimeProvider(dayStart);
+        LocalOperationService operations = database.OperationService(time);
+        LocalOperationContext first = await StartOperationAsync(operations);
+        RegisterCajuelaHandler register = database.RegisterHandler(time);
+        RevertLastCajuelaHandler reverse = database.RevertHandler(time);
+        var expectedFirstLedger = new List<ProductionEvent>();
+
+        for (int index = 0; index < 30; index++)
+        {
+            time.SetUtcNow(dayStart.AddSeconds(index + 1));
+            expectedFirstLedger.Add((await register.ExecuteAsync(register.CreateCommand(StationId))).Event);
+        }
+
+        operations = database.OperationService(time);
+        register = database.RegisterHandler(time);
+        reverse = database.RevertHandler(time);
+        LocalOperationContext restoredFirst = await operations.GetContextAsync(StationId);
+        Assert.AreEqual(first.Session, restoredFirst.Session);
+
+        time.SetUtcNow(new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero));
+        PreparedResponsibleRelief firstRelief = await operations.PrepareReliefAsync(
+            SecondWorkerId,
+            Authority());
+        LocalOperationContext firstRelieved = await operations.ConfirmReliefAsync(firstRelief);
+        Assert.AreEqual(first.Session!.ShipmentId, firstRelieved.Session!.ShipmentId);
+
+        DateTimeOffset nightStart = time.GetUtcNow();
+        for (int index = 0; index < 30; index++)
+        {
+            time.SetUtcNow(nightStart.AddSeconds(index + 1));
+            expectedFirstLedger.Add((await register.ExecuteAsync(register.CreateCommand(StationId))).Event);
+        }
+
+        time.SetUtcNow(nightStart.AddMinutes(1));
+        PreparedCajuelaReversal firstCorrection = await reverse.PrepareAsync(StationId);
+        expectedFirstLedger.Add((await reverse.ConfirmAsync(firstCorrection)).Event);
+        PreparedOperationCompletion firstCompletion = await operations.PrepareCompletionAsync(Authority());
+        await operations.ConfirmCompletionAsync(firstCompletion);
+
+        operations = database.OperationService(time);
+        register = database.RegisterHandler(time);
+        reverse = database.RevertHandler(time);
+        Assert.IsFalse((await operations.GetContextAsync(StationId)).CanRegisterCajuela);
+
+        time.SetUtcNow(nightStart.AddMinutes(2));
+        PreparedOperationStart secondPrepared = await operations.PrepareStartAsync(
+            LineId,
+            SupplierId,
+            ThirdWorkerId,
+            Authority());
+        LocalOperationContext second = await operations.ConfirmStartAsync(secondPrepared);
+        var expectedSecondLedger = new List<ProductionEvent>();
+
+        for (int index = 0; index < 30; index++)
+        {
+            time.SetUtcNow(nightStart.AddMinutes(2).AddSeconds(index + 1));
+            expectedSecondLedger.Add((await register.ExecuteAsync(register.CreateCommand(StationId))).Event);
+        }
+
+        time.SetUtcNow(nightStart.AddMinutes(3));
+        PreparedResponsibleRelief secondRelief = await operations.PrepareReliefAsync(
+            WorkerId,
+            Authority());
+        LocalOperationContext secondRelieved = await operations.ConfirmReliefAsync(secondRelief);
+        Assert.AreEqual(second.Session!.ShipmentId, secondRelieved.Session!.ShipmentId);
+
+        for (int index = 0; index < 30; index++)
+        {
+            time.SetUtcNow(nightStart.AddMinutes(3).AddSeconds(index + 1));
+            expectedSecondLedger.Add((await register.ExecuteAsync(register.CreateCommand(StationId))).Event);
+        }
+
+        time.SetUtcNow(nightStart.AddMinutes(4));
+        for (int index = 0; index < 2; index++)
+        {
+            PreparedCajuelaReversal correction = await reverse.PrepareAsync(StationId);
+            expectedSecondLedger.Add((await reverse.ConfirmAsync(correction)).Event);
+            time.SetUtcNow(time.GetUtcNow().AddSeconds(1));
+        }
+
+        PreparedOperationCompletion secondCompletion = await operations.PrepareCompletionAsync(Authority());
+        await operations.ConfirmCompletionAsync(secondCompletion);
+
+        IReadOnlyList<ProductionEvent> persistedFirst = await database.Events().ListAsync(
+            LineId,
+            first.Session.ShipmentId);
+        IReadOnlyList<ProductionEvent> persistedSecond = await database.Events().ListAsync(
+            LineId,
+            second.Session.ShipmentId);
+        CollectionAssert.AreEqual(expectedFirstLedger, persistedFirst.ToArray());
+        CollectionAssert.AreEqual(expectedSecondLedger, persistedSecond.ToArray());
+        Assert.AreEqual(61, persistedFirst.Count);
+        Assert.AreEqual(62, persistedSecond.Count);
+        Assert.AreEqual(59, ProductionEventCounter.ForLineAndShipment(
+            persistedFirst,
+            LineId,
+            first.Session.ShipmentId));
+        Assert.AreEqual(58, ProductionEventCounter.ForLineAndShipment(
+            persistedSecond,
+            LineId,
+            second.Session.ShipmentId));
+        Assert.AreEqual(WorkPeriod.Day, persistedFirst[0].WorkPeriod);
+        Assert.AreEqual(WorkPeriod.Night, persistedFirst[30].WorkPeriod);
+        Assert.AreEqual(WorkerId, persistedFirst[29].Context.ResponsibleWorkerId);
+        Assert.AreEqual(SecondWorkerId, persistedFirst[30].Context.ResponsibleWorkerId);
+        Assert.AreEqual(ThirdWorkerId, persistedSecond[29].Context.ResponsibleWorkerId);
+        Assert.AreEqual(WorkerId, persistedSecond[30].Context.ResponsibleWorkerId);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(120L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM production_events WHERE event_type = 'CAJUELA_ADDED';"));
+        Assert.AreEqual(3L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM production_events WHERE event_type = 'CAJUELA_REVERSED';"));
+        Assert.AreEqual(123L, await ScalarLongAsync(connection, "SELECT MAX(client_sequence) FROM production_events;"));
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
+        Assert.AreEqual(4L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM responsibility_assignments WHERE unassigned_at_utc IS NULL;"));
+        Assert.AreEqual(129L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM outbox_messages;"));
+        Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
+    }
+
+    [TestMethod]
     public void AuthorityFactoryRejectsOrganizationMismatch()
     {
         var state = new ProtectedStationState(

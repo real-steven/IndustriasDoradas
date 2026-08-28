@@ -59,6 +59,10 @@ public sealed class StationCoordinator(
         {
             return saved.Authorization.OfflineValidUntil > now ? saved : null;
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return saved.Authorization.OfflineValidUntil > now ? saved : null;
+        }
     }
 
     public async Task<PinAttemptResponse> ElevateAsync(ProtectedStationState state, string pin, bool networkAvailable, CancellationToken cancellationToken = default)
@@ -79,6 +83,12 @@ public sealed class StationCoordinator(
                 return new PinAttemptResponse("REAUTHENTICATION_REQUIRED", null, null);
             }
             catch (HttpRequestException)
+            {
+                if (state.Authorization.OfflineValidUntil <= timeProvider.GetUtcNow())
+                    return new PinAttemptResponse("OFFLINE_EXPIRED", null, null);
+                (response, nextOffline) = EvaluateOfflinePin(pin, state.Authorization.PinVerifier, state.OfflinePin);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 if (state.Authorization.OfflineValidUntil <= timeProvider.GetUtcNow())
                     return new PinAttemptResponse("OFFLINE_EXPIRED", null, null);
@@ -124,6 +134,10 @@ public sealed class StationCoordinator(
         catch (HttpRequestException)
         {
             // La estación conserva el último catálogo local válido para operar offline.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Un timeout de red tampoco invalida el último catálogo local válido.
         }
     }
 

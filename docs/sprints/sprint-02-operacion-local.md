@@ -203,6 +203,13 @@ ejecutará paso a paso durante el cierre 2.12, junto con `DT-S2-001`. Evidencia 
 
 ### 2.12 Validación de jornada offline
 
+**Estado:** preparación técnica implementada; prueba automatizada integral y
+protocolo manual disponibles en
+[`../validation/jornada-offline-sprint-02.md`](../validation/jornada-offline-sprint-02.md).
+La compuerta continúa pendiente de ejecutar C1–C10, cerrar `DT-S2-001`, recibir
+una muestra real de cuaderno/Excel y obtener la aprobación del jefe de
+desarrollo.
+
 **Prompt:** Prepara prueba de jornada offline en la única línea piloto, con
 relevo diurno/nocturno sin cerrar la línea, múltiples cargamentos/responsables,
 120 cajuelas, reversos y reinicios. Contrasta evento por evento con el cuaderno

@@ -42,8 +42,8 @@ public sealed class MainWindowViewModel : ObservableObject
         ShowStationCommand = new RelayCommand(
             () => CurrentPage = Station!,
             () => Station is not null);
-        ShowOperationCommand = new RelayCommand(
-            () => CurrentPage = Operation!,
+        ShowOperationCommand = new AsyncRelayCommand(
+            ShowOperationAsync,
             () => Operation is not null);
         if (Station is not null) Station.PropertyChanged += OnStationPropertyChanged;
     }
@@ -90,6 +90,13 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     private bool CanShowDiagnostics() => Station is null || Station.Mode == StationMode.PlantManager;
+
+    private async Task ShowOperationAsync()
+    {
+        if (Operation is null) return;
+        await Operation.RefreshAsync();
+        CurrentPage = Operation;
+    }
 
     private void OnStationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

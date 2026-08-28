@@ -106,6 +106,9 @@ public partial class App : System.Windows.Application
             .Bind(builder.Configuration.GetSection(SupabaseOptions.SectionName))
             .Validate(options => Uri.TryCreate(options.Url, UriKind.Absolute, out _), "Supabase:Url debe ser absoluta.")
             .Validate(options => options.PublishableKey.StartsWith("sb_publishable_", StringComparison.Ordinal), "Supabase:PublishableKey debe ser publicable.")
+            .Validate(
+                options => options.RequestTimeoutSeconds is >= 1 and <= 30,
+                "Supabase:RequestTimeoutSeconds debe estar entre 1 y 30.")
             .ValidateOnStart();
         builder.Services.AddOptions<StationOptions>()
             .Bind(builder.Configuration.GetSection(StationOptions.SectionName))
@@ -152,6 +155,7 @@ public partial class App : System.Windows.Application
             SupabaseOptions options = services.GetRequiredService<IOptions<SupabaseOptions>>().Value;
             client.BaseAddress = new Uri(options.Url.TrimEnd('/') + '/', UriKind.Absolute);
             client.DefaultRequestHeaders.Add("apikey", options.PublishableKey);
+            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         });
 
         builder.Services.AddSingleton(TimeProvider.System);

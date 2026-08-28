@@ -46,7 +46,9 @@ El Generic Host carga `appsettings.json`, después
 ejemplo local y agrega únicamente URL/clave publicable de Supabase e ID de
 estación; nunca uses la clave secreta del API. La configuración base consulta
 `http://127.0.0.1:3000/`; `Development` reduce el timeout a dos segundos para
-dar retroalimentación rápida. Ambas opciones se validan al iniciar.
+dar retroalimentación rápida. Supabase Auth usa un timeout independiente de diez
+segundos para evitar que una interrupción de red congele el flujo de estación.
+Todas las opciones se validan al iniciar.
 
 Tokens, refresh token y verificador offline se guardan cifrados con DPAPI para
 el usuario Windows actual. La autorización offline vence a las 24 horas; al
@@ -64,7 +66,9 @@ Al abrir o revalidar la estación, los proveedores, trabajadores y líneas
 autorizados se actualizan en SQLite y permanecen disponibles offline. En Modo
 Jefe de Planta, `Estación` permite elegir proveedor y responsable, revisar el
 resumen del cargamento y confirmar atómicamente la única línea piloto antes de
-registrar cajuelas.
+registrar cajuelas. Para una línea activa también permite preparar y confirmar
+un relevo sin detenerla, o finalizar el cargamento en dos pasos antes de
+preparar el siguiente.
 
 `OperationSafety` controla el antirrebote (75 ms provisional), el feedback
 visual/sonoro y las métricas locales. Una pulsación normal se procesa sin
