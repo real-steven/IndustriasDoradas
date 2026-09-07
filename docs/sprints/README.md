@@ -14,6 +14,10 @@ Guía de ejecución del Sistema de Gestión de Producción Minera. Cubre 17 sema
 | 7 | [Inventario](sprint-07-inventario.md) | 2 | Herramientas, movimientos y revisiones trazables | 1, 3 |
 | 8 | [Reportes y entrega](sprint-08-entrega.md) | 2 | Indicadores, Excel, despliegue y recuperación | 4–7 |
 
+El cierre aprobado del Sprint 2 y la guía de contexto para comenzar Sprint 3
+están en
+[`sprint-02-cierre-y-traspaso-sprint-03.md`](sprint-02-cierre-y-traspaso-sprint-03.md).
+
 Documentos transversales:
 
 - [Arquitectura y calidad](arquitectura-y-calidad.md)
@@ -21,6 +25,6 @@ Documentos transversales:
 - [Plantilla de prueba manual](plantilla-pruebas-manuales.md)
 - [Cómo ejecutar los prompts y las pausas](guia-de-prompts.md)
 
-Un sprint no se cierra por “terminar el código”: debe compilar, migrar desde cero, pasar pruebas, conservar la regresión anterior y ser aceptado manualmente sin defectos críticos o altos.
+Un sprint no se cierra por “terminar el código”: debe compilar, migrar desde cero, pasar pruebas, conservar la regresión anterior y ser aceptado manualmente sin defectos críticos o altos. Si el responsable acepta una validación diferida, debe quedar identificada como deuda y nunca como prueba ejecutada.
 
 Los prompts de cada sprint son unidades de trabajo secuenciales. Se ejecuta uno, se revisa su evidencia y se continúa solo si su pausa queda aprobada. El orden puede ajustarse cuando aparezcan hechos nuevos, pero cualquier cambio debe conservar las dependencias de esta tabla.

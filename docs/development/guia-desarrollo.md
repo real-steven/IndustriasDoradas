@@ -1,7 +1,7 @@
 # Guía de desarrollo
 
 Reúne instalación, calidad, ambientes, secretos e integración continua. Todos
-los comandos parten de `C:\Users\titen\IndustriasDoradas`.
+los comandos parten de la raíz del clon local del repositorio.
 
 ## Requisitos
 
@@ -77,7 +77,7 @@ Producción no incorpora la URL del API; se inyecta con `Api__BaseUrl`.
 
 | Valor | API | Web | Desktop |
 | --- | --- | --- | --- |
-| URL/publishable key Supabase | URL en API; publishable no requerido | Público para Auth futuro | No usado todavía |
+| URL/publishable key Supabase | URL en API; publishable no requerido | Público para Auth futuro | URL y clave publicable para Supabase Auth; nunca clave secreta |
 | `SUPABASE_SECRET_KEY`/`service_role` heredado | Solo gestor de secretos del API | Prohibido | Prohibido |
 
 Toda variable `VITE_*` es visible en el navegador. Nunca se versionan `.env`,
@@ -90,8 +90,9 @@ actual no elimina el secreto del historial.
 
 ## Integración continua
 
-`.github/workflows/ci.yml` se ejecuta en pushes/PR de `main` y `DevSteven`, o
-manualmente. Cancela ejecuciones obsoletas, usa `contents: read` y no despliega.
+`.github/workflows/ci.yml` se ejecuta en pushes/PR de `main`, `DevSteven` y
+`DevHenry`, o manualmente. Cancela ejecuciones obsoletas, usa `contents: read` y
+no despliega.
 
 - **Linux:** restaura caché pnpm; revisa secretos, formato, lint, build y pruebas
   de API/web.

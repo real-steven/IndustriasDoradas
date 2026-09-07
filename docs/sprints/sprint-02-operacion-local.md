@@ -4,6 +4,19 @@
 
 **Entregable:** la computadora compartida opera en Modo Operación el piloto de una línea, configurable para las cuatro actuales, asigna cargamento/responsable y registra/corrige en SQLite offline mediante clic, teclado o controlador.
 
+## Cierre del sprint
+
+El responsable del proyecto aprobó el cierre del Sprint 2 el 2026-09-07 para
+iniciar Sprint 3. La implementación técnica y la suite automatizada están
+completas; las comprobaciones presenciales C1–C10, la muestra real de
+cuaderno/Excel, la formalización del PIN y los ajustes de accesibilidad o
+vocabulario de la reunión posterior se conservan como deuda explícita, no como
+evidencia ejecutada.
+
+El resumen técnico, las reglas sustituidas, los riesgos y la guía para abrir un
+nuevo espacio de Codex están en
+[`sprint-02-cierre-y-traspaso-sprint-03.md`](sprint-02-cierre-y-traspaso-sprint-03.md).
+
 ## Orden de trabajo
 
 1. Cargamento/proveedor, jornada, ciclo de línea, asignación y evento inmutable.

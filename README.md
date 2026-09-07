@@ -157,7 +157,7 @@ industrias-doradas/
 - WPF
 - MVVM
 - SQLite
-- Entity Framework Core
+- Microsoft.Data.Sqlite con repositorios SQL parametrizados
 - HttpClient
 - OpenCV u otra biblioteca biométrica por definir
 
@@ -338,9 +338,9 @@ La solución para Visual Studio, la configuración por ambiente y la explicació
 - [x] Creación del repositorio.
 - [x] Configuración del monorepo.
 - [x] Creación del esqueleto del backend NestJS.
-- [ ] Configuración de Supabase.
+- [x] Configuración de Supabase para identidad, catálogos y desarrollo local.
 - [x] Creación del esqueleto de la aplicación WPF.
-- [ ] Implementación de SQLite.
+- [x] Implementación de SQLite local para la operación del Sprint 2.
 - [ ] Implementación de la sincronización.
 - [x] Creación del esqueleto de la aplicación React.
 - [ ] Pruebas con usuarios.

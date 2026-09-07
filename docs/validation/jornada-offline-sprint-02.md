@@ -2,11 +2,13 @@
 
 ## Estado y alcance
 
-La preparación técnica está implementada. La compuerta manual y la aprobación
-final del Sprint 2 permanecen pendientes. La prueba usa una estación, la única
-Línea 1 y SQLite sin sincronización remota. La ampliación y validación simultánea
-de hasta cuatro líneas queda expresamente fuera del MVP hasta estabilizar el
-piloto.
+La preparación técnica está implementada. El responsable del proyecto aprobó
+el cierre del Sprint 2 el 2026-09-07 para permitir el inicio del Sprint 3, y
+aceptó trasladar esta compuerta manual como validación posterior explícita. C1
+permanece parcial y C2–C10 pendientes; no se presentan como pruebas ejecutadas.
+La prueba usa una estación, la única Línea 1 y SQLite sin sincronización remota.
+La ampliación y validación simultánea de hasta cuatro líneas queda expresamente
+fuera del MVP hasta estabilizar el piloto.
 
 La muestra real de cuaderno/Excel aún no fue entregada. Por eso el cotejo con la
 empresa sigue pendiente: esta guía no inventa columnas faltantes ni considera
