@@ -32,7 +32,7 @@
 [`../architecture/identidad-y-acceso-offline.md`](../architecture/identidad-y-acceso-offline.md);
 pausa manual aprobada mediante el `R` que inició el prompt 1.2.
 
-**Prompt:** Define y documenta Supabase Auth → JWT → validación NestJS → perfil/rol propio. Usa `JEFE_EMPRESA` como superadministrador desde una sola cuenta, `ADMINISTRADOR` con permisos individuales revocables y `JEFE_PLANTA` para abrir la estación y elevar permisos físicos. Un administrador solo delega capacidades que posee. No crees cuenta `OPERARIO`: define Modo Operación restringido y Modo Jefe de Planta temporal con PIN individual, salida explícita, aviso y bloqueo tras dos minutos de inactividad total sin perder borradores. Define límite/ventana/enfriamiento de PIN, recuperación con contraseña, autorización offline máxima de 24 horas, revalidación, evidencia fotográfica condicionada y MFA/dispositivos como compuerta previa a producción.
+**Prompt:** Define y documenta Supabase Auth → JWT → validación NestJS → perfil/rol propio. Usa `JEFE_EMPRESA` como superadministrador desde una sola cuenta, `ADMINISTRADOR` con permisos individuales revocables y `JEFE_PLANTA` para abrir la estación y elevar permisos físicos. Un administrador solo delega capacidades que posee. No crees cuenta `OPERARIO`: define Modo Operación restringido, cierre de estación tras una hora de inactividad total y Modo Jefe de Planta temporal con PIN individual, salida explícita, aviso y bloqueo tras cinco minutos de inactividad total sin perder borradores. Define límite/ventana/enfriamiento de PIN, recuperación con contraseña, autorización offline máxima de 24 horas, revalidación, evidencia fotográfica condicionada y MFA/dispositivos como compuerta previa a producción.
 
 **Pausa:** aprobar cuenta gerencial única, matriz granular de administradores, límites de delegación, umbrales de PIN, modos y acciones permitidas durante las 24 horas offline.
 
@@ -130,12 +130,12 @@ manual pendiente.
 autoriza la estación mediante Nest, protege tokens/verificador con DPAPI y
 mantiene contingencia local máxima de 24 horas. La elevación usa PIN individual
 PBKDF2, bloqueo 5/15/15, reautenticación tras el segundo bloqueo en 24 horas y
-retorno automático a Modo Operación tras 120 segundos sin perder el borrador.
+retorno automático a Modo Operación tras 300 segundos sin perder el borrador.
 La evidencia fotográfica es un puerto que actualmente registra ausencia; no hay
 biometría, producción ni asistencia. La migración remota de desarrollo es
 `20260819071212`. Pausa manual pendiente.
 
-**Prompt:** Implementa login WPF del `JEFE_PLANTA`, recuperación de contraseña de Supabase Auth, sesión segura y autorización de la única estación inicial. Crea Modo Operación restringido sin cuenta compartida y Modo Jefe de Planta temporal con PIN individual, salida explícita, aviso y bloqueo tras dos minutos de inactividad total sin perder borradores. Aplica los límites aprobados de PIN; el bloqueo afecta solo la elevación y se recupera con contraseña completa en línea o restablecimiento administrativo. Registra elevaciones y fallos; deja la evidencia fotográfica detrás de un puerto para implementarla solo tras aprobar su política, sin biometría ahora. Permite hasta 24 horas offline tras validación previa, revalida al recuperar conexión y maneja expiración/revocación sin borrar eventos locales. Guarda tokens y verificadores con mecanismo seguro. No implementes producción ni asistencia todavía.
+**Prompt:** Implementa login WPF del `JEFE_PLANTA`, recuperación de contraseña de Supabase Auth, sesión segura y autorización de la única estación inicial. Crea Modo Operación restringido sin cuenta compartida, cierre de estación tras una hora de inactividad total y Modo Jefe de Planta temporal con PIN individual, salida explícita, aviso y bloqueo tras cinco minutos de inactividad total sin perder borradores. Renueva de forma segura la sesión de Supabase mientras exista uso; el vencimiento del access token no equivale a inactividad. Aplica los límites aprobados de PIN; el bloqueo afecta solo la elevación y se recupera con contraseña completa en línea o restablecimiento administrativo. Registra elevaciones y fallos; deja la evidencia fotográfica detrás de un puerto para implementarla solo tras aprobar su política, sin biometría ahora. Permite hasta 24 horas offline tras validación previa, revalida al recuperar conexión y maneja expiración/revocación sin borrar eventos locales. Guarda tokens y verificadores con mecanismo seguro. No implementes producción ni asistencia todavía.
 
 **Pausa:** probar credenciales válidas/inválidas, token vencido, reinicio, offline permitido y revocación.
 

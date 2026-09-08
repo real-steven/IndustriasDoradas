@@ -11,13 +11,13 @@ La aplicación abre en `Modo Operación` y muestra un único panel para la líne
 piloto. El panel presenta el contexto confirmado de SQLite y permite registrar
 una cajuela con un clic o iniciar la doble confirmación de corrección inmediata.
 
-No se construye un wireframe de cuatro líneas ni ventanas independientes. La
+No se construye un wireframe simultáneo de cuatro líneas ni ventanas independientes. La
 entrada abstracta de teclado/controlador, el antirrebote, bloqueo de tecla
 sostenida y feedback sonoro pertenecen a 2.9–2.10. La integración correctiva
 añadida durante 2.10 materializa el wireframe A de 2.1 dentro de `Estación`:
-refresca catálogos autorizados hacia SQLite, fija la única línea piloto, prepara
-un resumen y reutiliza la confirmación atómica de 2.5. No introduce un CRUD
-genérico.
+refresca catálogos autorizados hacia SQLite, permite seleccionar una línea
+administrativamente activa al preparar el cargamento, prepara un resumen y
+reutiliza la confirmación atómica de 2.5. No introduce un CRUD genérico.
 
 ## 2. Límites de presentación
 
@@ -32,9 +32,9 @@ La implementación separa:
 - `OperationLinePanel`: componente visual reutilizable para una línea.
 
 Esta división permite agregar después una colección de paneles sin duplicar el
-caso de uso ni acoplar el dominio a `Línea 1`. En el MVP no aparece un selector
-redundante: la única línea se considera seleccionada y usa borde dorado cuando
-está lista.
+caso de uso ni acoplar el dominio a `Línea 1`. En el MVP, el selector aparece
+solo durante la preparación privilegiada; Modo Operación muestra un único panel
+para la línea confirmada y usa borde dorado cuando está lista.
 
 ## 3. Estados visibles
 

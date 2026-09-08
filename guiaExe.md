@@ -13,7 +13,7 @@ pnpm.cmd --filter @industrias-doradas/web dev
 Web: http://localhost:5173/login
 
 
-3. Desktop WPF
+3. Desktop WPF                                                              
 cd C:\Users\titen\IndustriasDoradas
 $env:DOTNET_ENVIRONMENT="Development"
 dotnet run --project apps/desktop/src/IndustriasDoradas.Desktop/IndustriasDoradas.Desktop.csproj

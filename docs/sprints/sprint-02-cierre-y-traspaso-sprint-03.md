@@ -166,10 +166,11 @@ se deben añadir al manejador local para “facilitar” el Sprint 3.
 
 ### 5.7 Alcance físico del MVP
 
-La planta tiene cuatro líneas configurables, pero el MVP validado usa una
-estación y una sola Línea 1. El dominio y los adaptadores no están acoplados al
-nombre de esa línea, pero la interfaz no debe convertirse todavía en un panel de
-cuatro líneas sin una decisión posterior.
+La planta tiene cuatro líneas configurables. El MVP usa una estación y mantiene
+una sola línea operativa enfocada a la vez: el jefe la selecciona al preparar el
+cargamento y Modo Operación conserva un único panel. El dominio y los adaptadores
+no están acoplados al nombre de Línea 1; la operación simultánea en cuatro
+paneles requiere una decisión posterior.
 
 ### 5.8 Catálogos y datos faltantes
 
@@ -321,9 +322,9 @@ el pull incremental con cursor solicitado para Sprint 3.
 | --- | --- | --- |
 | `Api` | URL externa; timeout base 5 s | La API puede estar caída sin destruir SQLite. |
 | `Supabase` | URL, clave publicable y timeout 10 s | Solo Auth; nunca clave secreta. |
-| `Station` | UUID, elevación 120 s, offline 24 h | El UUID determina autorización y ruta local. |
+| `Station` | UUID, sesión inactiva 3600 s, elevación inactiva 300 s, offline 24 h | El UUID determina autorización y ruta local; el access token se renueva y no actúa como reloj de inactividad. |
 | `OperationInput` | teclado compartido, Línea 1 | El mapeo es configurable por adaptador/controlador. |
-| `OperationSafety` | 75 ms; feedback y métricas activos | Auto-repeat siempre se bloquea. |
+| `OperationSafety` | rebote 75 ms; espera entre registros 3000 ms; feedback y métricas activos | Auto-repeat siempre se bloquea; clic y teclado comparten la espera por línea. |
 | `LocalRecovery` | mínimo 256 MB libres | Espacio menor genera atención. |
 | `LocalDatabase` | timeout ocupado 5 s | No forzar desbloqueos ni compartir el archivo por red. |
 
@@ -335,15 +336,15 @@ PIN, verificadores ni datos reales.
 
 El Sprint 2 implementó feedback por categoría:
 
-- éxito: `SystemSounds.Asterisk`;
-- advertencia: `SystemSounds.Exclamation`;
+- éxito: tono ascendente corto generado localmente;
+- prevención/advertencia: aviso visual silencioso;
 - error: `SystemSounds.Hand`;
 - `SoundFeedbackEnabled` permite activarlo o desactivarlo;
 - `VisualFeedbackEnabled` mantiene color y texto como canal complementario.
 
-Los archivos, tonos, volumen y patrones no son configurables todavía. El puerto
-`IOperationFeedbackPlayer` permite reemplazar el adaptador WPF después sin tocar
-registro, dominio o SQLite.
+El tono de éxito no depende del esquema sonoro de Windows. Los archivos, volumen
+y patrones no son configurables todavía. El puerto `IOperationFeedbackPlayer`
+permite reemplazar el adaptador WPF después sin tocar registro, dominio o SQLite.
 
 ### Pregunta para la reunión posterior
 
@@ -442,7 +443,7 @@ decisión explícita de descarte del responsable.
 | `DT-S2-001` | Formalizar el procedimiento propio y no compartido de PIN; completar la prueba presencial asociada. | No | Cerrar con jefe de desarrollo, sin documentar credenciales. |
 | `DV-S2-EXCEL` | Obtener muestra anonimizada de cuaderno/Excel y contrastar eventos. | No | Reabrir contrato solo si aparece una incompatibilidad real. |
 | `DV-S2-USUARIOS` | Validar términos, orden, lectura a distancia y comprensión con personal. | No | Convertir resultados en cambios pequeños y probados. |
-| `DV-S2-DATOS` | Disponer de proveedor, responsables y exactamente una línea piloto activa. | No | Crear/aprobar datos por API/web; nunca insertar identidades manualmente en SQLite. |
+| `DV-S2-DATOS` | Disponer de proveedor, responsables y al menos una línea administrativamente activa; desktop enfoca una sola al preparar el cargamento. | No | Crear/aprobar datos por API/web; nunca insertar identidades manualmente en SQLite. |
 | `DV-S2-C1-C10` | Ejecutar el protocolo offline presencial. | No | Conservar resultados reales y no sustituirlos con el test automatizado. |
 | `MEJ-S2-SONIDO` | Elegir sonidos más comprensibles y configurables. | No | Resolver después de la reunión mediante el puerto de feedback. |
 | `EV-S2-4-LINEAS` | Diseñar y validar operación simultánea hasta cuatro líneas. | No | Evolución posterior al piloto estable; coordinar con 3.7. |

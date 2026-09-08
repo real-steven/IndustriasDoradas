@@ -48,16 +48,19 @@ clave secreta en Postman, Swagger, web o desktop.
    de otro rol o sin asignación de estación debe ser rechazada.
 4. Con un token recién emitido, configura el PIN una vez mediante
    `POST /api/v1/profile/pin`; no uses el PIN real en Postman compartido.
-5. Eleva con PIN correcto, escribe un borrador, espera 120 segundos sin teclado
+5. Eleva con PIN correcto, escribe un borrador, espera 300 segundos sin teclado
    ni ratón y confirma retorno a Modo Operación con borrador conservado. Prueba
    también el botón de salida explícita.
-6. Falla cinco veces dentro de 15 minutos: solo la elevación se bloquea por 15
+6. Mantén actividad en Modo Operación durante más de una hora y confirma que la
+   renovación del token no cierra la estación. Después deja teclado, ratón y
+   pantalla táctil sin uso durante 3600 segundos y confirma que exige login.
+7. Falla cinco veces dentro de 15 minutos: solo la elevación se bloquea por 15
    minutos. Repite el bloqueo dentro de 24 horas y confirma que exige login
    completo o reset administrativo; Modo Operación sigue disponible.
-7. Tras una validación online, corta red y reinicia: debe continuar hasta 24
+8. Tras una validación online, corta red y reinicia: debe continuar hasta 24
    horas. Al revocar y reconectar, pierde autorización pero no los eventos
    pendientes.
-8. Revisa que `%LOCALAPPDATA%/IndustriasDoradas/station-state.bin` no sea JSON
+9. Revisa que `%LOCALAPPDATA%/IndustriasDoradas/station-state.bin` no sea JSON
    legible. No debe existir fotografía ni dato biométrico.
 
 ## Prompt 1.9 — Login y administración web
@@ -107,7 +110,8 @@ clave secreta en Postman, Swagger, web o desktop.
 4. Recorre web en Chrome y Safari: gerencia prioriza datos, Administración abre
    en la misma sesión y cada administrador muestra solo sus concesiones.
 5. En desktop prueba login de jefe asignado, PIN válido/inválido, salida,
-   inactividad de 120 segundos, reinicio offline permitido y revocación online.
+   elevación inactiva durante 300 segundos, estación inactiva durante 3600
+   segundos, renovación del token, reinicio offline permitido y revocación online.
 6. Crea o verifica la planta, cuatro líneas configurables, un molino y tres
    rastras por línea, estación inicial y proveedores. Duplica y desactiva sin
    borrado físico; confirma consistencia al volver a listar.

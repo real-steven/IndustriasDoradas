@@ -2,7 +2,10 @@ using IndustriasDoradas.Desktop.Domain;
 
 namespace IndustriasDoradas.Desktop.Application;
 
-public sealed class PrivilegeModeController(TimeProvider timeProvider, TimeSpan idleTimeout)
+public sealed class PrivilegeModeController(
+    TimeProvider timeProvider,
+    TimeSpan privilegedIdleTimeout,
+    TimeSpan sessionIdleTimeout)
 {
     private DateTimeOffset lastActivity = timeProvider.GetUtcNow();
 
@@ -25,11 +28,25 @@ public sealed class PrivilegeModeController(TimeProvider timeProvider, TimeSpan 
 
     public bool EvaluateIdleTimeout()
     {
-        if (Mode != StationMode.PlantManager || timeProvider.GetUtcNow() - lastActivity < idleTimeout)
+        if (Mode != StationMode.PlantManager || timeProvider.GetUtcNow() - lastActivity < privilegedIdleTimeout)
             return false;
         Mode = StationMode.Operation;
         return true;
     }
 
-    public void ExitPlantManagerMode() => Mode = StationMode.Operation;
+    public bool EvaluateSessionIdleTimeout()
+    {
+        if (Mode == StationMode.SignedOut || timeProvider.GetUtcNow() - lastActivity < sessionIdleTimeout)
+            return false;
+        Mode = StationMode.SignedOut;
+        return true;
+    }
+
+    public void ExitPlantManagerMode()
+    {
+        Mode = StationMode.Operation;
+        lastActivity = timeProvider.GetUtcNow();
+    }
+
+    public void CloseStation() => Mode = StationMode.SignedOut;
 }

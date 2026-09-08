@@ -39,11 +39,16 @@ public sealed class DpapiStationStore : IProtectedStationStore
         finally { CryptographicOperations.ZeroMemory(plain); }
     }
 
-    public async Task ClearAuthorizationAsync(CancellationToken cancellationToken = default)
+    public async Task CloseSessionAsync(CancellationToken cancellationToken = default)
     {
         ProtectedStationState? state = await LoadAsync(cancellationToken).ConfigureAwait(false);
         if (state is null) return;
-        var expired = state with { Authorization = state.Authorization with { OfflineValidUntil = DateTimeOffset.MinValue } };
-        await SaveAsync(expired, cancellationToken).ConfigureAwait(false);
+        var closed = state with
+        {
+            Tokens = new AuthTokens(string.Empty, string.Empty, DateTimeOffset.MinValue),
+            Authorization = state.Authorization with { OfflineValidUntil = DateTimeOffset.MinValue },
+            IsClosed = true,
+        };
+        await SaveAsync(closed, cancellationToken).ConfigureAwait(false);
     }
 }

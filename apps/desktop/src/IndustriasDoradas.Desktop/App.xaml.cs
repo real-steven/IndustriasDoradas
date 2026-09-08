@@ -113,7 +113,8 @@ public partial class App : System.Windows.Application
         builder.Services.AddOptions<StationOptions>()
             .Bind(builder.Configuration.GetSection(StationOptions.SectionName))
             .Validate(options => options.Id != Guid.Empty, "Station:Id es obligatorio.")
-            .Validate(options => options.PrivilegedIdleSeconds == 120, "La inactividad privilegiada aprobada es 120 segundos.")
+            .Validate(options => options.SessionIdleSeconds == 3600, "La inactividad de estación aprobada es 3600 segundos.")
+            .Validate(options => options.PrivilegedIdleSeconds == 300, "La inactividad privilegiada aprobada es 300 segundos.")
             .Validate(options => options.OfflineHours == 24, "La contingencia offline aprobada es 24 horas.")
             .ValidateOnStart();
         builder.Services.AddOptions<LocalDatabaseOptions>()

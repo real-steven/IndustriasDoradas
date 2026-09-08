@@ -46,7 +46,8 @@ Por tanto:
 ## 3. Reglas aceptadas para iniciar 2.2
 
 1. Una cajuela es un balde de peso variable; no representa kilogramos.
-2. Todo el MVP usa una computadora, una estación y una sola línea piloto.
+2. Todo el MVP usa una computadora, una estación y una sola línea operativa
+   enfocada a la vez, seleccionada al preparar el cargamento.
 3. La arquitectura podrá evolucionar después hasta cuatro líneas configurables,
    pero ese diseño visual no forma parte de la aprobación actual.
 4. Modo Operación no es una cuenta ni un rol de Supabase.

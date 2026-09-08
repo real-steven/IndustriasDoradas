@@ -42,7 +42,8 @@ public sealed record ProtectedStationState(
     ApiSession Session,
     StationAuthorization Authorization,
     IReadOnlyList<PendingStationEvent> PendingEvents,
-    OfflinePinState OfflinePin);
+    OfflinePinState OfflinePin,
+    bool IsClosed = false);
 
 public enum StationMode
 {

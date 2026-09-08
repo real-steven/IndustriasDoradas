@@ -21,13 +21,18 @@ public sealed class StationCoordinator(
 
     public async Task<ProtectedStationState> SignInAsync(string email, string password, CancellationToken cancellationToken = default)
     {
+        ProtectedStationState? previous = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
         AuthTokens tokens = await auth.SignInAsync(email, password, cancellationToken).ConfigureAwait(false);
         ApiSession session = await api.GetSessionAsync(tokens.AccessToken, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(session.Role, "JEFE_PLANTA", StringComparison.Ordinal))
-            throw new UnauthorizedAccessException("La estación requiere una cuenta JEFE_PLANTA.");
+        EnsurePlantManager(session);
         StationAuthorization authorization = await api.GetAuthorizationAsync(
             session.OrganizationId, options.Id, tokens.AccessToken, cancellationToken).ConfigureAwait(false);
-        var state = new ProtectedStationState(tokens, session, authorization, [], OfflinePinState.Empty);
+        var state = new ProtectedStationState(
+            tokens,
+            session,
+            authorization,
+            previous?.PendingEvents ?? [],
+            OfflinePinState.Empty);
         await store.SaveAsync(state, cancellationToken).ConfigureAwait(false);
         await TryRefreshCatalogsAsync(state, cancellationToken).ConfigureAwait(false);
         return state;
@@ -36,13 +41,14 @@ public sealed class StationCoordinator(
     public async Task<ProtectedStationState?> ResumeAsync(bool networkAvailable, CancellationToken cancellationToken = default)
     {
         ProtectedStationState? saved = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
-        if (saved is null) return null;
+        if (saved is null || saved.IsClosed) return null;
         DateTimeOffset now = timeProvider.GetUtcNow();
         if (!networkAvailable)
             return saved.Authorization.OfflineValidUntil > now ? saved : null;
 
         try
         {
+            saved = await RefreshTokensIfRequiredAsync(saved, cancellationToken).ConfigureAwait(false);
             StationAuthorization refreshed = await api.GetAuthorizationAsync(
                 saved.Session.OrganizationId, options.Id, saved.Tokens.AccessToken, cancellationToken).ConfigureAwait(false);
             var state = saved with { Authorization = refreshed };
@@ -50,9 +56,14 @@ public sealed class StationCoordinator(
             await TryRefreshCatalogsAsync(state, cancellationToken).ConfigureAwait(false);
             return state;
         }
-        catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+        catch (HttpRequestException exception) when (IsAuthenticationRejection(exception))
         {
-            await store.ClearAuthorizationAsync(cancellationToken).ConfigureAwait(false);
+            await store.CloseSessionAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await store.CloseSessionAsync(cancellationToken).ConfigureAwait(false);
             return null;
         }
         catch (HttpRequestException)
@@ -74,12 +85,18 @@ public sealed class StationCoordinator(
         {
             try
             {
+                state = await RefreshTokensIfRequiredAsync(state, cancellationToken).ConfigureAwait(false);
                 response = await api.ElevateAsync(state.Session.OrganizationId, options.Id, pin,
                     state.Tokens.AccessToken, cancellationToken).ConfigureAwait(false);
             }
-            catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            catch (HttpRequestException exception) when (IsAuthenticationRejection(exception))
             {
-                await store.ClearAuthorizationAsync(cancellationToken).ConfigureAwait(false);
+                await store.CloseSessionAsync(cancellationToken).ConfigureAwait(false);
+                return new PinAttemptResponse("REAUTHENTICATION_REQUIRED", null, null);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await store.CloseSessionAsync(cancellationToken).ConfigureAwait(false);
                 return new PinAttemptResponse("REAUTHENTICATION_REQUIRED", null, null);
             }
             catch (HttpRequestException)
@@ -112,6 +129,70 @@ public sealed class StationCoordinator(
 
     public Task RequestPasswordRecoveryAsync(string email, CancellationToken cancellationToken = default) =>
         auth.RequestPasswordRecoveryAsync(email, cancellationToken);
+
+    public Task CloseSessionAsync(CancellationToken cancellationToken = default) =>
+        store.CloseSessionAsync(cancellationToken);
+
+    public async Task<ProtectedStationState?> MaintainSessionAsync(
+        ProtectedStationState state,
+        bool networkAvailable,
+        CancellationToken cancellationToken = default)
+    {
+        state = await store.LoadAsync(cancellationToken).ConfigureAwait(false) ?? state;
+        if (state.IsClosed) return null;
+        if (!networkAvailable) return state;
+
+        try
+        {
+            return await RefreshTokensIfRequiredAsync(state, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException exception) when (IsAuthenticationRejection(exception))
+        {
+            await store.CloseSessionAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await store.CloseSessionAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return state;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return state;
+        }
+    }
+
+    private async Task<ProtectedStationState> RefreshTokensIfRequiredAsync(
+        ProtectedStationState state,
+        CancellationToken cancellationToken)
+    {
+        if (state.Tokens.ExpiresAt > timeProvider.GetUtcNow().AddMinutes(5))
+            return state;
+
+        AuthTokens tokens = await auth.RefreshSessionAsync(state.Tokens.RefreshToken, cancellationToken)
+            .ConfigureAwait(false);
+        ApiSession session = await api.GetSessionAsync(tokens.AccessToken, cancellationToken).ConfigureAwait(false);
+        EnsurePlantManager(session);
+        if (session.ProfileId != state.Session.ProfileId || session.OrganizationId != state.Session.OrganizationId)
+            throw new UnauthorizedAccessException("La sesión renovada no corresponde a la estación abierta.");
+
+        var refreshed = state with { Tokens = tokens, Session = session };
+        await store.SaveAsync(refreshed, cancellationToken).ConfigureAwait(false);
+        return refreshed;
+    }
+
+    private static void EnsurePlantManager(ApiSession session)
+    {
+        if (!string.Equals(session.Role, "JEFE_PLANTA", StringComparison.Ordinal))
+            throw new UnauthorizedAccessException("La estación requiere una cuenta JEFE_PLANTA.");
+    }
+
+    private static bool IsAuthenticationRejection(HttpRequestException exception) =>
+        exception.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
 
     private async Task TryRefreshCatalogsAsync(
         ProtectedStationState state,

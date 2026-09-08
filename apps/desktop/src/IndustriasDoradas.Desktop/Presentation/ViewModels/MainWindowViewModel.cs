@@ -89,6 +89,8 @@ public sealed class MainWindowViewModel : ObservableObject
         await Diagnostics.RefreshAsync();
     }
 
+    public void RecordActivity() => Station?.RecordActivity();
+
     private bool CanShowDiagnostics() => Station is null || Station.Mode == StationMode.PlantManager;
 
     private async Task ShowOperationAsync()

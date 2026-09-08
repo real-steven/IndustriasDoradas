@@ -72,7 +72,8 @@ Reglas de acceso:
 - Ningún perfil puede alterar o borrar auditoría ni desactivar la última cuenta gerencial activa. Los datos históricos se corrigen o desactivan, no se eliminan físicamente.
 - El administrador crea, suspende o revoca cuentas de jefe de planta y administra sus PIN individuales.
 - Los trabajadores regulares no tienen cuenta de acceso. El jefe de planta crea una solicitud y el administrador aprueba, rechaza, reasigna o fusiona el perfil.
-- La estación permanece normalmente en Modo Operación. El Modo Jefe de Planta exige el PIN personal, ofrece salida explícita y vuelve al modo restringido después de dos minutos de inactividad total, con aviso previo. Un bloqueo conserva formularios no enviados para reanudarlos tras reautenticación.
+- Tras la autenticación del jefe de planta, la estación permanece normalmente en Modo Operación y renueva de forma segura la sesión de Supabase mientras exista uso. Cierra la sesión local después de una hora de inactividad total y exige autenticación completa para volver a abrirla.
+- El Modo Jefe de Planta exige el PIN personal, ofrece salida explícita y vuelve al modo restringido después de cinco minutos de inactividad total, con aviso previo. Un bloqueo conserva formularios no enviados para reanudarlos tras reautenticación.
 - Los intentos fallidos de PIN tienen límite y alerta configurables. Al excederlos se bloquea únicamente la elevación privilegiada: Modo Operación continúa. La recuperación exige contraseña completa en línea o restablecimiento administrativo; nunca se envía ni recupera el PIN por correo.
 - Toda cuenta autenticada usa un correo válido para recuperación de contraseña mediante Supabase Auth. El correo opcional del trabajador es solo contacto y no participa en autenticación.
 - Antes del reconocimiento facial, la estación se abre con usuario/contraseña y el jefe eleva permisos con PIN. Cuando exista captura aprobada, el uso del PIN intentará guardar una fotografía de auditoría; una cámara ausente o dañada no bloquea la continuidad, registra el acceso sin foto y genera una alerta administrativa.
@@ -118,6 +119,11 @@ Reglas de acceso:
 
 - Cada pulsación válida crea un evento inmutable `CAJUELA_ADDED` con UUID.
 - La confirmación local debe tardar menos de 300 ms en el equipo objetivo.
+- La primera pulsación se guarda inmediatamente. Durante los tres segundos
+  siguientes se ignora cualquier intento adicional sobre la misma línea,
+  incluso si cambia entre clic y teclado, para evitar registros dobles
+  accidentales. Cada registro aceptado emite confirmación visual y un tono
+  breve de éxito; los intentos suprimidos son visibles pero silenciosos.
 - Desde el Modo Operación se puede revertir únicamente la última cajuela de la línea seleccionada mientras el ciclo está abierto.
 - La reversión requiere un segundo paso de confirmación, no texto libre, y usa un motivo automático de error inmediato.
 - Visualmente resta uno; técnicamente crea `CAJUELA_REVERSED` y conserva el original.
@@ -425,8 +431,10 @@ modelo antes de cerrar el Sprint 2:
   completo al confirmar;
 - no se exige código visible del cargamento: se presenta nombre de
   proveedor/empresa y hora automática de inicio;
-- durante todo el MVP se diseña y valida una estación con una sola línea. La
-  capacidad de configurar hasta cuatro líneas permanece como evolución futura;
+- durante el MVP la estación mantiene una sola línea operativa enfocada a la
+  vez. El jefe de planta la selecciona entre las líneas administrativamente
+  activas al preparar cada cargamento; la operación simultánea de hasta cuatro
+  líneas permanece como evolución futura;
 - `Alimentación actual`, `Línea lista` y `Registrar cajuela` se aceptan como
   etiquetas provisionales hasta la siguiente reunión con la empresa.
 

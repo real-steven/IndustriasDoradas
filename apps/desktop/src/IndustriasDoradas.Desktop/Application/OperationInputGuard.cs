@@ -8,6 +8,7 @@ public enum OperationInputSuppression
     None,
     AutoRepeat,
     Debounce,
+    Cooldown,
 }
 
 public sealed record OperationInputGuardDecision(
@@ -20,8 +21,11 @@ public sealed class OperationInputGuard(
     TimeProvider timeProvider)
 {
     private readonly object gate = new();
-    private readonly Dictionary<InputGuardKey, long> lastAccepted = [];
+    private readonly Dictionary<InputGuardKey, long> lastAcceptedByController = [];
+    private readonly Dictionary<int, long> lastAcceptedByLine = [];
     private readonly TimeSpan debounce = TimeSpan.FromMilliseconds(options.Value.DebounceMilliseconds);
+    private readonly TimeSpan registrationCooldown =
+        TimeSpan.FromMilliseconds(options.Value.RegistrationCooldownMilliseconds);
 
     public OperationInputGuardDecision TryAcceptRegistration(OperationInputCommand command)
     {
@@ -41,21 +45,34 @@ public sealed class OperationInputGuard(
         double? acceptedInterval = null;
         lock (gate)
         {
-            if (lastAccepted.TryGetValue(key, out long previous))
+            if (lastAcceptedByController.TryGetValue(key, out long previousController))
             {
-                TimeSpan interval = timeProvider.GetElapsedTime(previous, now);
-                if (interval < debounce)
+                TimeSpan controllerInterval = timeProvider.GetElapsedTime(previousController, now);
+                if (controllerInterval < debounce)
                 {
                     return new OperationInputGuardDecision(
                         false,
                         OperationInputSuppression.Debounce,
-                        interval.TotalMilliseconds);
+                        controllerInterval.TotalMilliseconds);
                 }
-
-                acceptedInterval = interval.TotalMilliseconds;
             }
 
-            lastAccepted[key] = now;
+            if (lastAcceptedByLine.TryGetValue(command.Origin.LineSlot, out long previousLine))
+            {
+                TimeSpan lineInterval = timeProvider.GetElapsedTime(previousLine, now);
+                if (lineInterval < registrationCooldown)
+                {
+                    return new OperationInputGuardDecision(
+                        false,
+                        OperationInputSuppression.Cooldown,
+                        lineInterval.TotalMilliseconds);
+                }
+
+                acceptedInterval = lineInterval.TotalMilliseconds;
+            }
+
+            lastAcceptedByController[key] = now;
+            lastAcceptedByLine[command.Origin.LineSlot] = now;
         }
 
         return new OperationInputGuardDecision(true, OperationInputSuppression.None, acceptedInterval);

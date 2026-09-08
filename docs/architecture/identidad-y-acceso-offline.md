@@ -171,6 +171,13 @@ La autorización offline no es un access token alternativo para llamar a la API.
 Es un comprobante local que documenta qué permisos estaban vigentes al perder
 conectividad.
 
+Modo Operación se mantiene abierto mientras exista interacción humana y cierra
+la sesión local tras una hora de inactividad total. El access token de Supabase
+puede vencer antes sin cerrar la estación: online se renueva mediante rotación
+del refresh token protegido. Un cierre por inactividad descarta localmente los
+tokens, conserva la auditoría pendiente y exige autenticación completa para
+volver a abrir la estación.
+
 ### 6.2 Datos locales de seguridad
 
 | Dato | Ubicación | Regla |
@@ -193,7 +200,7 @@ Supabase o guardar el verificador en SQLite.
 - Un segundo bloqueo dentro de 24 horas exige contraseña completa online o
   restablecimiento administrativo antes de volver a usar PIN.
 - El bloqueo afecta solo la elevación; Modo Operación continúa.
-- El modo privilegiado muestra aviso antes de cerrarse y se bloquea tras dos
+- El modo privilegiado muestra aviso antes de cerrarse y se bloquea tras cinco
   minutos sin interacción real del jefe.
 - Registros de cajuelas, check-in, sincronización y actividad de fondo no
   renuevan el temporizador privilegiado.
@@ -313,7 +320,9 @@ No se adelantan en 1.1, pero son obligatorias antes de producción:
 - Administrador delegado no puede conceder o retirar permisos que no posea.
 - Jefe abre la estación; trabajador usa Modo Operación sin cuenta.
 - Cinco PIN incorrectos bloquean solo la elevación; producción continúa.
-- Formulario privilegiado se conserva detrás del bloqueo de dos minutos.
+- La estación se cierra tras una hora sin interacción humana, no por el simple
+  vencimiento del access token.
+- Formulario privilegiado se conserva detrás del bloqueo de cinco minutos.
 - Cuenta o estación suspendida recibe rechazo online.
 - Desconexión de 24 horas mantiene las funciones permitidas.
 - Vencimiento entra en contingencia sin perder cajuelas/check-in.

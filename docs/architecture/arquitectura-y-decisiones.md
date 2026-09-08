@@ -198,9 +198,15 @@ en
 
 - **Decisión:** el MVP usa una sola computadora compartida. Un jefe de planta
   autentica y habilita la estación; la interfaz permanece normalmente en Modo
-  Operación, que no es una cuenta de Supabase.
+  Operación, que no es una cuenta de Supabase. La estación cierra la sesión
+  local tras una hora sin interacción humana y requiere autenticación completa
+  para abrirla de nuevo.
+- **Sesión Supabase:** el vencimiento normal del access token no representa
+  inactividad. Mientras la estación está abierta se usa el refresh token
+  protegido para rotar el access token; un rechazo definitivo cierra la sesión
+  sin eliminar eventos operativos pendientes.
 - **Elevación:** cada jefe usa un PIN individual para entrar temporalmente al
-  Modo Jefe de Planta. Existe salida explícita y bloqueo tras dos minutos de
+  Modo Jefe de Planta. Existe salida explícita y bloqueo tras cinco minutos de
   inactividad total con aviso previo; un formulario incompleto se conserva
   detrás del bloqueo.
 - **Auditoría:** cada elevación registra jefe, estación, hora y resultado. Cuando

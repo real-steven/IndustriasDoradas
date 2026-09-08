@@ -171,7 +171,7 @@ y el refresco de catálogos locales para permitir la validación real de 2.10.
 
 **Prompt:** Añade feedback visual/sonoro configurable, antirrebote medido, bloqueo de auto-repeat en registrar y confirmaciones solo para acciones destructivas. No ralentices la pulsación normal. Registra métricas locales anónimas de latencia/errores útiles para prueba.
 
-**Pausa:** pulsación rápida, sostenida y doble deliberada; el comportamiento debe ser predecible y explicado.
+**Pausa:** pulsación rápida, sostenida y doble; la primera debe guardarse al instante, los intentos durante tres segundos deben ignorarse sin sonido molesto y el siguiente registro válido debe emitir confirmación de éxito.
 
 #### Deuda técnica DT-S2-001 — validación presencial con PIN
 

@@ -54,13 +54,22 @@
                 </StackPanel>
             </GroupBox>
             <GroupBox Margin="0,20,0,0"
-                      Header="Preparar Línea 1"
+                      Header="{Binding PrepareLineHeader}"
                       IsEnabled="{Binding CanPrepareNewShipment}"
                       Padding="16"
                       Visibility="{Binding IsPlantManager, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
                     <TextBlock FontSize="18" FontWeight="Bold" Text="{Binding PilotLineName}" />
                     <TextBlock Margin="0,4,0,14" Foreground="#667085" Text="{Binding WorkPeriodDescription}" />
+
+                    <Label Target="{Binding ElementName=LineBox}" Content="Línea operativa *" />
+                    <ComboBox x:Name="LineBox"
+                              MinWidth="360"
+                              Margin="0,0,0,12"
+                              AutomationProperties.Name="Línea del cargamento"
+                              DisplayMemberPath="Name"
+                              ItemsSource="{Binding Lines}"
+                              SelectedItem="{Binding SelectedLine}" />
 
                     <Label Target="{Binding ElementName=SupplierBox}" Content="Proveedor *" />
                     <ComboBox x:Name="SupplierBox"

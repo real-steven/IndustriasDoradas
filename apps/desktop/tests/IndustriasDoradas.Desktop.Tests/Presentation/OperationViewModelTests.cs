@@ -44,7 +44,8 @@ public sealed class OperationViewModelTests
             ReadySnapshot(total: 7),
             ReadySnapshot(total: 8, pending: 2));
         var cajuelas = new StubCajuelaRepository(total: 7);
-        OperationViewModel viewModel = Create(dashboard, cajuelas);
+        var feedback = new RecordingFeedback();
+        OperationViewModel viewModel = Create(dashboard, cajuelas, feedback: feedback);
         await viewModel.InitializeAsync();
 
         await viewModel.RegisterCajuelaCommand.ExecuteAsync(null);
@@ -53,6 +54,7 @@ public sealed class OperationViewModelTests
         Assert.AreEqual(8, viewModel.Line.Total);
         StringAssert.Contains(viewModel.LastResult, "guardada localmente");
         Assert.AreEqual("2 pendientes por enviar", viewModel.PendingStatus);
+        Assert.AreEqual(OperationFeedbackKind.Success, feedback.LastKind);
     }
 
     [TestMethod]
@@ -245,7 +247,7 @@ public sealed class OperationViewModelTests
     }
 
     [TestMethod]
-    public async Task RapidSecondPressIsSuppressedAndPressAtThresholdIsAccepted()
+    public async Task SecondRegistrationInsideCooldownIsSuppressedAcrossInputSources()
     {
         var time = new ManualTimeProvider(Now);
         var dashboard = new QueueDashboardRepository(
@@ -258,8 +260,12 @@ public sealed class OperationViewModelTests
         await viewModel.InitializeAsync();
 
         await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RegisterCajuela, "Add"));
-        time.Advance(TimeSpan.FromMilliseconds(74));
-        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RegisterCajuela, "Add"));
+        time.Advance(TimeSpan.FromMilliseconds(2999));
+        await viewModel.HandleInputCommandAsync(new OperationInputCommand(
+            Guid.NewGuid(),
+            OperationInputAction.RegisterCajuela,
+            OperationInputOrigin.Click(OperationInputAction.RegisterCajuela),
+            time.GetUtcNow()));
         time.Advance(TimeSpan.FromMilliseconds(1));
         await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RegisterCajuela, "Add"));
 
@@ -268,8 +274,9 @@ public sealed class OperationViewModelTests
         CollectionAssert.AreEqual(
             new[] { OperationInputMetricOutcome.Accepted, OperationInputMetricOutcome.Suppressed, OperationInputMetricOutcome.Accepted },
             metrics.Items.Select(item => item.Outcome).ToArray());
-        Assert.AreEqual(74d, metrics.Items[1].InputIntervalMilliseconds);
-        Assert.AreEqual(75d, metrics.Items[2].InputIntervalMilliseconds);
+        Assert.AreEqual(2999d, metrics.Items[1].InputIntervalMilliseconds);
+        Assert.AreEqual("REGISTRATION_COOLDOWN", metrics.Items[1].ErrorCode);
+        Assert.AreEqual(3000d, metrics.Items[2].InputIntervalMilliseconds);
     }
 
     private static OperationViewModel Create(

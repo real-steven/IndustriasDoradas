@@ -10,8 +10,10 @@ continuar con 2.10
 El Modo Operación recibe clic y teclado mediante un mismo enrutador de comandos.
 La fuente es configurable por controlador y línea, no conoce SQLite ni ejecuta
 casos de uso directamente. El piloto conserva una estación, un punto compartido
-y una sola línea; una orden destinada a otra línea se rechaza sin mutar el
-conteo.
+y una sola línea enfocada. El canal `LineSlot = 1` actúa sobre la línea
+confirmada en la sesión local; una orden destinada a otro canal se rechaza sin
+mutar el conteo. La asignación simultánea de canales físicos a varias líneas se
+difiere al diseño multínea.
 
 No se integra sensor, PLC, lectura industrial ni HID de fabricante. Un adaptador
 futuro puede implementar el mismo `IInputCommandSource`. El antirrebote, bloqueo

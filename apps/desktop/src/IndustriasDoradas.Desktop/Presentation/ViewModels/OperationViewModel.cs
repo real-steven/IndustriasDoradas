@@ -150,7 +150,7 @@ public sealed class OperationViewModel : ObservableObject
         {
             case OperationInputAction.SelectLine:
                 FocusedTarget = OperationFocusTarget.RegisterCajuela;
-                LastResult = "Línea 1 seleccionada para operar.";
+                LastResult = $"{Line.LineName} seleccionada para operar.";
                 break;
             case OperationInputAction.RegisterCajuela:
                 await TryRegisterCajuelaAsync(command).ConfigureAwait(true);
@@ -483,10 +483,21 @@ public sealed class OperationViewModel : ObservableObject
         OperationInputGuardDecision decision,
         long started)
     {
-        string message = decision.Suppression == OperationInputSuppression.AutoRepeat
-            ? "Pulsación sostenida ignorada; suelte la tecla para registrar otra cajuela."
-            : $"Pulsación demasiado rápida ignorada ({decision.IntervalMilliseconds:0} ms); vuelva a pulsar deliberadamente.";
-        string code = decision.Suppression == OperationInputSuppression.AutoRepeat ? "AUTO_REPEAT" : "DEBOUNCE";
+        string message = decision.Suppression switch
+        {
+            OperationInputSuppression.AutoRepeat =>
+                "Pulsación sostenida ignorada; suelte la tecla para registrar otra cajuela.",
+            OperationInputSuppression.Cooldown =>
+                "Pulsación ignorada para evitar un registro doble; espere tres segundos desde la última cajuela.",
+            _ =>
+                $"Rebote ignorado ({decision.IntervalMilliseconds:0} ms); vuelva a pulsar deliberadamente.",
+        };
+        string code = decision.Suppression switch
+        {
+            OperationInputSuppression.AutoRepeat => "AUTO_REPEAT",
+            OperationInputSuppression.Cooldown => "REGISTRATION_COOLDOWN",
+            _ => "DEBOUNCE",
+        };
         ShowFeedback(OperationFeedbackKind.Warning, message);
         RecordMetric(command, OperationInputMetricOutcome.Suppressed, started, decision.IntervalMilliseconds, code);
     }

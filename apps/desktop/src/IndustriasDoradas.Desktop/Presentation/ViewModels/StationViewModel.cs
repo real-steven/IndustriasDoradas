@@ -21,6 +21,9 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly LocalOperationService operations;
     private readonly TimeProvider timeProvider;
     private readonly DispatcherTimer idleTimer;
+    private bool isClosingForIdle;
+    private bool isMaintainingSession;
+    private DateTimeOffset nextSessionMaintenanceAt = DateTimeOffset.MinValue;
     private ProtectedStationState? state;
     private string status = "Inicia sesión como jefe de planta para abrir la estación.";
     private string stationSessionStatus = "Estación cerrada.";
@@ -29,6 +32,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private string draft = string.Empty;
     private IReadOnlyList<CachedSupplier> suppliers = [];
     private IReadOnlyList<CachedWorker> workers = [];
+    private IReadOnlyList<CachedProductionLine> lines = [];
     private CachedSupplier? selectedSupplier;
     private CachedWorker? selectedWorker;
     private CachedProductionLine? pilotLine;
@@ -51,19 +55,24 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         this.catalogs = catalogs;
         this.operations = operations;
         this.timeProvider = timeProvider;
-        modeController = new PrivilegeModeController(timeProvider, TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds));
+        modeController = new PrivilegeModeController(
+            timeProvider,
+            TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds),
+            TimeSpan.FromSeconds(options.Value.SessionIdleSeconds));
         ExitManagerModeCommand = new RelayCommand(ExitManagerMode);
         PrepareLineCommand = new AsyncRelayCommand(PrepareLineAsync, CanPrepareLine);
-        ConfirmLineCommand = new AsyncRelayCommand(ConfirmLineAsync, () => preparedStart is not null && !IsBusy);
+        ConfirmLineCommand = new AsyncRelayCommand(
+            ConfirmLineAsync,
+            () => IsPlantManager && preparedStart is not null && !IsBusy);
         CancelPreparationCommand = new RelayCommand(CancelPreparation, () => IsPlantManager && !IsBusy);
         PrepareReliefCommand = new AsyncRelayCommand(PrepareReliefAsync, CanPrepareRelief);
         ConfirmReliefCommand = new AsyncRelayCommand(
             ConfirmReliefAsync,
-            () => preparedRelief is not null && !IsBusy);
+            () => IsPlantManager && preparedRelief is not null && !IsBusy);
         PrepareCompletionCommand = new AsyncRelayCommand(PrepareCompletionAsync, CanPrepareCompletion);
         ConfirmCompletionCommand = new AsyncRelayCommand(
             ConfirmCompletionAsync,
-            () => preparedCompletion is not null && !IsBusy);
+            () => IsPlantManager && preparedCompletion is not null && !IsBusy);
         CancelManagementChangeCommand = new RelayCommand(
             CancelManagementChange,
             () => IsPlantManager && !IsBusy && (preparedRelief is not null || preparedCompletion is not null));
@@ -120,6 +129,22 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         get => workers;
         private set => SetProperty(ref workers, value);
     }
+    public IReadOnlyList<CachedProductionLine> Lines
+    {
+        get => lines;
+        private set => SetProperty(ref lines, value);
+    }
+    public CachedProductionLine? SelectedLine
+    {
+        get => pilotLine;
+        set
+        {
+            if (!SetProperty(ref pilotLine, value)) return;
+            OnPropertyChanged(nameof(PilotLineName));
+            OnPropertyChanged(nameof(PrepareLineHeader));
+            SelectionChanged();
+        }
+    }
     public CachedSupplier? SelectedSupplier
     {
         get => selectedSupplier;
@@ -136,7 +161,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             if (SetProperty(ref selectedWorker, value)) SelectionChanged();
         }
     }
-    public string PilotLineName => pilotLine?.Name ?? "Línea 1 no disponible";
+    public string PilotLineName => pilotLine?.Name ?? "Seleccione una línea";
+    public string PrepareLineHeader => pilotLine is null ? "Preparar línea" : $"Preparar {pilotLine.Name}";
     public string WorkPeriodDescription => WorkPeriodSchedule.At(timeProvider.GetUtcNow()) == WorkPeriod.Day
         ? "Diurna · calculada automáticamente desde las 06:00"
         : "Nocturna · calculada automáticamente desde las 18:00";
@@ -205,7 +231,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             {
                 modeController.EnterPlantManagerMode();
                 Mode = modeController.Mode;
-                Status = "Modo Jefe de Planta activo. Se cerrará tras dos minutos de inactividad total.";
+                Status = "Modo Jefe de Planta activo. Se cerrará tras cinco minutos de inactividad total.";
                 await LoadPreparationCatalogsAsync().ConfigureAwait(true);
             }
             else Status = $"Elevación rechazada: {result.Result}. Modo Operación continúa activo.";
@@ -229,7 +255,13 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         finally { IsBusy = false; }
     }
 
-    private void OpenOperationMode(string message) { modeController.OpenOperationMode(); Mode = modeController.Mode; Status = message; }
+    private void OpenOperationMode(string message)
+    {
+        modeController.OpenOperationMode();
+        Mode = modeController.Mode;
+        nextSessionMaintenanceAt = timeProvider.GetUtcNow();
+        Status = message;
+    }
     private void ExitManagerMode()
     {
         CancelPreparation();
@@ -238,13 +270,82 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         Mode = modeController.Mode;
         Status = "Modo Operación activo.";
     }
-    private void OnIdleTick(object? sender, EventArgs e)
+    private async void OnIdleTick(object? sender, EventArgs e)
     {
-        if (!modeController.EvaluateIdleTimeout()) return;
-        CancelPreparation();
-        CancelManagementChange();
-        Mode = modeController.Mode;
-        Status = "Modo Jefe de Planta cerrado por inactividad. El borrador se conserva.";
+        if (isClosingForIdle || isMaintainingSession) return;
+        if (modeController.EvaluateSessionIdleTimeout())
+        {
+            await CloseForIdleAsync().ConfigureAwait(true);
+            return;
+        }
+        if (modeController.EvaluateIdleTimeout())
+        {
+            Mode = modeController.Mode;
+            Status = "Modo Jefe de Planta cerrado por inactividad. Los cambios sin confirmar se conservan.";
+        }
+        await MaintainSessionIfRequiredAsync().ConfigureAwait(true);
+    }
+
+    private async Task CloseForIdleAsync()
+    {
+        if (isClosingForIdle) return;
+        isClosingForIdle = true;
+        try
+        {
+            await coordinator.CloseSessionAsync().ConfigureAwait(true);
+            Status = "Estación cerrada tras una hora sin actividad. Inicie sesión para continuar.";
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            Status = "La estación se cerró por inactividad, pero no se pudo actualizar el estado protegido local.";
+        }
+        finally
+        {
+            state = null;
+            Mode = modeController.Mode;
+            StationSessionStatus = "Estación cerrada por inactividad.";
+            OnPropertyChanged(nameof(IsStationOpen));
+            isClosingForIdle = false;
+        }
+    }
+
+    private async Task MaintainSessionIfRequiredAsync()
+    {
+        if (state is null || isMaintainingSession || timeProvider.GetUtcNow() < nextSessionMaintenanceAt)
+            return;
+
+        isMaintainingSession = true;
+        nextSessionMaintenanceAt = timeProvider.GetUtcNow().AddMinutes(1);
+        try
+        {
+            ProtectedStationState? maintained = await coordinator.MaintainSessionAsync(
+                state,
+                networkAvailable: true).ConfigureAwait(true);
+            if (maintained is null)
+            {
+                state = null;
+                modeController.CloseStation();
+                Mode = modeController.Mode;
+                StationSessionStatus = "Estación cerrada; la sesión ya no es válida.";
+                Status = "La sesión fue revocada o venció. Inicie sesión para continuar.";
+                OnPropertyChanged(nameof(IsStationOpen));
+                return;
+            }
+
+            state = maintained;
+            DateTimeOffset refreshAt = maintained.Tokens.ExpiresAt.AddMinutes(-5);
+            nextSessionMaintenanceAt = refreshAt > timeProvider.GetUtcNow().AddMinutes(1)
+                ? refreshAt
+                : timeProvider.GetUtcNow().AddMinutes(1);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            nextSessionMaintenanceAt = timeProvider.GetUtcNow().AddMinutes(1);
+        }
+        finally
+        {
+            isMaintainingSession = false;
+        }
     }
 
     private async Task LoadPreparationCatalogsAsync()
@@ -252,17 +353,16 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         if (state is null) return;
         Suppliers = await catalogs.ListActiveSuppliersAsync(state.Session.OrganizationId).ConfigureAwait(true);
         Workers = await catalogs.ListActiveWorkersAsync(state.Session.OrganizationId).ConfigureAwait(true);
-        IReadOnlyList<CachedProductionLine> lines = await catalogs.ListActiveLinesAsync(
+        Guid? previousLineId = SelectedLine?.Id;
+        Lines = await catalogs.ListActiveLinesAsync(
             state.Session.OrganizationId,
             state.Authorization.PlantId).ConfigureAwait(true);
-        pilotLine = lines.Count == 1 ? lines[0] : null;
-        OnPropertyChanged(nameof(PilotLineName));
+        SelectedLine = Lines.FirstOrDefault(line => line.Id == previousLineId) ??
+            (Lines.Count == 0 ? null : Lines[0]);
         OnPropertyChanged(nameof(WorkPeriodDescription));
-        if (lines.Count != 1)
+        if (Lines.Count == 0)
         {
-            Status = lines.Count == 0
-                ? "No hay una línea activa en el catálogo local. Revise la configuración del piloto."
-                : "El piloto requiere exactamente una línea activa antes de preparar el cargamento.";
+            Status = "No hay líneas disponibles en el catálogo local. Revise su activación administrativa.";
         }
         else if (Suppliers.Count == 0 && Workers.Count == 0)
         {

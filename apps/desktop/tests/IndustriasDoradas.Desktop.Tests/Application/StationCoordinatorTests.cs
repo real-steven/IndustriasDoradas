@@ -34,7 +34,58 @@ public sealed class StationCoordinatorTests
         StationCoordinator coordinator = Create(store, api, time);
 
         Assert.IsNull(await coordinator.ResumeAsync(networkAvailable: true));
+        Assert.IsTrue(store.State?.IsClosed);
         Assert.AreEqual(DateTimeOffset.MinValue, store.State?.Authorization.OfflineValidUntil);
+        Assert.AreEqual(1, store.State?.PendingEvents.Count);
+    }
+
+    [TestMethod]
+    public async Task OnlineResumeRotatesExpiredTokenAndKeepsStationOpen()
+    {
+        var time = new MutableTimeProvider();
+        ProtectedStationState original = Fixture(time.GetUtcNow().AddHours(24)) with
+        {
+            Tokens = new AuthTokens("expired-access", "old-refresh", time.GetUtcNow().AddMinutes(-1)),
+        };
+        var store = new MemoryStore(original);
+        var api = new StubApi
+        {
+            AuthorizationResult = original.Authorization,
+            SessionResult = original.Session with { ExpiresAt = time.GetUtcNow().AddHours(1) },
+        };
+        var auth = new StubAuth
+        {
+            RefreshResult = new AuthTokens("new-access", "new-refresh", time.GetUtcNow().AddHours(1)),
+        };
+        StationCoordinator coordinator = Create(store, api, time, auth);
+
+        ProtectedStationState? resumed = await coordinator.ResumeAsync(networkAvailable: true);
+
+        Assert.IsNotNull(resumed);
+        Assert.AreEqual(1, auth.RefreshCalls);
+        Assert.AreEqual("new-access", resumed.Tokens.AccessToken);
+        Assert.AreEqual("new-refresh", store.State?.Tokens.RefreshToken);
+        Assert.AreEqual("new-access", api.LastAuthorizationAccessToken);
+    }
+
+    [TestMethod]
+    public async Task RejectedRefreshClosesSessionWithoutDeletingPendingEvents()
+    {
+        var time = new MutableTimeProvider();
+        ProtectedStationState original = Fixture(time.GetUtcNow().AddHours(24)) with
+        {
+            Tokens = new AuthTokens("expired-access", "rejected-refresh", time.GetUtcNow().AddMinutes(-1)),
+        };
+        var store = new MemoryStore(original);
+        var auth = new StubAuth
+        {
+            RefreshFailure = new HttpRequestException("invalid refresh token", null, HttpStatusCode.BadRequest),
+        };
+        StationCoordinator coordinator = Create(store, new StubApi(), time, auth);
+
+        Assert.IsNull(await coordinator.ResumeAsync(networkAvailable: true));
+        Assert.IsTrue(store.State?.IsClosed);
+        Assert.AreEqual(string.Empty, store.State?.Tokens.RefreshToken);
         Assert.AreEqual(1, store.State?.PendingEvents.Count);
     }
 
@@ -77,8 +128,12 @@ public sealed class StationCoordinatorTests
         Assert.AreEqual(2, store.State?.PendingEvents.Count);
     }
 
-    private static StationCoordinator Create(MemoryStore store, StubApi api, TimeProvider time) =>
-        new(new StubAuth(), api, new StubCatalogs(), store, new StubEvidence(),
+    private static StationCoordinator Create(
+        MemoryStore store,
+        StubApi api,
+        TimeProvider time,
+        StubAuth? auth = null) =>
+        new(auth ?? new StubAuth(), api, new StubCatalogs(), store, new StubEvidence(),
             Options.Create(new StationOptions { Id = Guid.Parse("34000000-0000-4000-8000-000000000001") }), time);
 
     private static ProtectedStationState Fixture(DateTimeOffset offlineUntil) => new(
@@ -102,16 +157,34 @@ public sealed class StationCoordinatorTests
         public ProtectedStationState? State { get; private set; } = state;
         public Task SaveAsync(ProtectedStationState value, CancellationToken cancellationToken = default) { State = value; return Task.CompletedTask; }
         public Task<ProtectedStationState?> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult(State);
-        public Task ClearAuthorizationAsync(CancellationToken cancellationToken = default)
+        public Task CloseSessionAsync(CancellationToken cancellationToken = default)
         {
-            if (State is not null) State = State with { Authorization = State.Authorization with { OfflineValidUntil = DateTimeOffset.MinValue } };
+            if (State is not null)
+            {
+                State = State with
+                {
+                    Tokens = new AuthTokens(string.Empty, string.Empty, DateTimeOffset.MinValue),
+                    Authorization = State.Authorization with { OfflineValidUntil = DateTimeOffset.MinValue },
+                    IsClosed = true,
+                };
+            }
             return Task.CompletedTask;
         }
     }
 
     private sealed class StubAuth : ISupabaseAuthService
     {
+        public AuthTokens? RefreshResult { get; init; }
+        public HttpRequestException? RefreshFailure { get; init; }
+        public int RefreshCalls { get; private set; }
         public Task<AuthTokens> SignInAsync(string email, string password, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<AuthTokens> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
+        {
+            RefreshCalls++;
+            return RefreshFailure is null
+                ? Task.FromResult(RefreshResult ?? throw new NotSupportedException())
+                : Task.FromException<AuthTokens>(RefreshFailure);
+        }
         public Task RequestPasswordRecoveryAsync(string email, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
@@ -123,10 +196,19 @@ public sealed class StationCoordinatorTests
     private sealed class StubApi : IStationApi
     {
         public HttpRequestException? AuthorizationFailure { get; init; }
+        public StationAuthorization? AuthorizationResult { get; init; }
+        public ApiSession? SessionResult { get; init; }
         public Exception? ElevationFailure { get; init; }
-        public Task<ApiSession> GetSessionAsync(string accessToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<StationAuthorization> GetAuthorizationAsync(Guid organizationId, Guid stationId, string accessToken, CancellationToken cancellationToken = default) =>
-            AuthorizationFailure is null ? throw new NotSupportedException() : Task.FromException<StationAuthorization>(AuthorizationFailure);
+        public string? LastAuthorizationAccessToken { get; private set; }
+        public Task<ApiSession> GetSessionAsync(string accessToken, CancellationToken cancellationToken = default) =>
+            Task.FromResult(SessionResult ?? throw new NotSupportedException());
+        public Task<StationAuthorization> GetAuthorizationAsync(Guid organizationId, Guid stationId, string accessToken, CancellationToken cancellationToken = default)
+        {
+            LastAuthorizationAccessToken = accessToken;
+            return AuthorizationFailure is not null
+                ? Task.FromException<StationAuthorization>(AuthorizationFailure)
+                : Task.FromResult(AuthorizationResult ?? throw new NotSupportedException());
+        }
         public Task<PinAttemptResponse> ElevateAsync(Guid organizationId, Guid stationId, string pin, string accessToken, CancellationToken cancellationToken = default) =>
             ElevationFailure is null
                 ? throw new NotSupportedException()

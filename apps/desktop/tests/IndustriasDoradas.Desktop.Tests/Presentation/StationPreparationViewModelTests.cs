@@ -17,6 +17,9 @@ public sealed class StationPreparationViewModelTests
     private static readonly Guid StationId = Guid.Parse("34000000-0000-4000-8000-000000000001");
     private static readonly Guid SupplierId = Guid.Parse("42000000-0000-4000-8000-000000000001");
     private static readonly Guid LineId = Guid.Parse("43000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondLineId = Guid.Parse("43000000-0000-4000-8000-000000000002");
+    private static readonly Guid ThirdLineId = Guid.Parse("43000000-0000-4000-8000-000000000003");
+    private static readonly Guid FourthLineId = Guid.Parse("43000000-0000-4000-8000-000000000004");
     private static readonly Guid WorkerId = Guid.Parse("45000000-0000-4000-8000-000000000001");
     private static readonly Guid SecondWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000002");
     private static readonly DateTimeOffset Now = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
@@ -38,7 +41,7 @@ public sealed class StationPreparationViewModelTests
             coordinator,
             catalogs,
             operations,
-            Options.Create(new StationOptions { Id = StationId, PrivilegedIdleSeconds = 120, OfflineHours = 24 }),
+            Options.Create(new StationOptions { Id = StationId }),
             time);
         DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
         MainWindowViewModel shell = new(new HomeViewModel(), diagnostics, viewModel);
@@ -53,6 +56,7 @@ public sealed class StationPreparationViewModelTests
         viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
 
         Assert.IsTrue(viewModel.IsPlantManager);
+        Assert.AreEqual(4, viewModel.Lines.Count);
         Assert.AreEqual("Línea 1", viewModel.PilotLineName);
         Assert.IsTrue(viewModel.PrepareLineCommand.CanExecute(null));
         await viewModel.PrepareLineCommand.ExecuteAsync(null);
@@ -93,7 +97,7 @@ public sealed class StationPreparationViewModelTests
             coordinator,
             catalogs,
             operations,
-            Options.Create(new StationOptions { Id = StationId, PrivilegedIdleSeconds = 120, OfflineHours = 24 }),
+            Options.Create(new StationOptions { Id = StationId }),
             time);
 
         await viewModel.InitializeAsync();
@@ -160,7 +164,7 @@ public sealed class StationPreparationViewModelTests
             coordinator,
             catalogs,
             new LocalOperationService(catalogs, sessions, new RecordingOperationRepository(sessions), time),
-            Options.Create(new StationOptions { Id = StationId, PrivilegedIdleSeconds = 120, OfflineHours = 24 }),
+            Options.Create(new StationOptions { Id = StationId }),
             time);
 
         await viewModel.InitializeAsync();
@@ -191,7 +195,12 @@ public sealed class StationPreparationViewModelTests
             new CachedWorker(WorkerId, OrganizationId, "Marta", true, Now),
             new CachedWorker(SecondWorkerId, OrganizationId, "Carlos", true, Now),
         ],
-        [new CachedProductionLine(LineId, OrganizationId, PlantId, "Línea 1", true, Now)]);
+        [
+            new CachedProductionLine(LineId, OrganizationId, PlantId, "Línea 1", true, Now),
+            new CachedProductionLine(SecondLineId, OrganizationId, PlantId, "Línea 2", true, Now),
+            new CachedProductionLine(ThirdLineId, OrganizationId, PlantId, "Línea 3", true, Now),
+            new CachedProductionLine(FourthLineId, OrganizationId, PlantId, "Línea 4", true, Now),
+        ]);
 
     private sealed class FixedTimeProvider : TimeProvider
     {
@@ -201,6 +210,7 @@ public sealed class StationPreparationViewModelTests
     private sealed class StubAuth : ISupabaseAuthService
     {
         public Task<AuthTokens> SignInAsync(string email, string password, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<AuthTokens> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task RequestPasswordRecoveryAsync(string email, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
@@ -217,7 +227,19 @@ public sealed class StationPreparationViewModelTests
         private ProtectedStationState? current = state;
         public Task SaveAsync(ProtectedStationState value, CancellationToken cancellationToken = default) { current = value; return Task.CompletedTask; }
         public Task<ProtectedStationState?> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult(current);
-        public Task ClearAuthorizationAsync(CancellationToken cancellationToken = default) { current = null; return Task.CompletedTask; }
+        public Task CloseSessionAsync(CancellationToken cancellationToken = default)
+        {
+            if (current is not null)
+            {
+                current = current with
+                {
+                    Tokens = new AuthTokens(string.Empty, string.Empty, DateTimeOffset.MinValue),
+                    Authorization = current.Authorization with { OfflineValidUntil = DateTimeOffset.MinValue },
+                    IsClosed = true,
+                };
+            }
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class MemoryCatalogs : ILocalCatalogRepository

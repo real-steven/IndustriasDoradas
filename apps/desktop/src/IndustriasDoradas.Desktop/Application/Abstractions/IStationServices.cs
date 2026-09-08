@@ -5,6 +5,7 @@ namespace IndustriasDoradas.Desktop.Application.Abstractions;
 public interface ISupabaseAuthService
 {
     Task<AuthTokens> SignInAsync(string email, string password, CancellationToken cancellationToken = default);
+    Task<AuthTokens> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default);
     Task RequestPasswordRecoveryAsync(string email, CancellationToken cancellationToken = default);
 }
 
@@ -31,7 +32,7 @@ public interface IProtectedStationStore
 {
     Task SaveAsync(ProtectedStationState state, CancellationToken cancellationToken = default);
     Task<ProtectedStationState?> LoadAsync(CancellationToken cancellationToken = default);
-    Task ClearAuthorizationAsync(CancellationToken cancellationToken = default);
+    Task CloseSessionAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IElevationEvidenceCapture
