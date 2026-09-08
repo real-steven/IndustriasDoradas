@@ -20,13 +20,13 @@
 
 **Prueba manual:** dos equipos para líneas 1–2 y 3–4, luego superposición deliberada; comparar SQLite/API/PostgreSQL.
 
-**Aceptación:** cero eventos perdidos/duplicados; operario no resuelve errores técnicos; jefe de planta ve pendientes.
+**Aceptación:** cero eventos perdidos/duplicados; Modo Operación no expone errores técnicos; jefe de planta ve pendientes.
 
 ## Mini pasos, pausas y prompts
 
 ### 3.1 Contrato y estados de sincronización
 
-**Prompt:** Diseña push/pull y propagación de cambios: envelope, versión, UUID, secuencia, lotes, cursor, respuestas parciales, idempotencia, timestamps y estados. Cada mutación se confirma primero en SQLite, se envía inmediatamente si hay red y nunca depende de la nube para responder al operario. Define confirmado central, correcciones administrativas entrantes y datos que nunca se sobrescriben.
+**Prompt:** Diseña push/pull y propagación de cambios: envelope, versión, UUID, secuencia, lotes, cursor, respuestas parciales, idempotencia, timestamps y estados. Cada mutación se confirma primero en SQLite, se envía inmediatamente si hay red y nunca depende de la nube para responder al Modo Operación. Define confirmado central, revalidación de la estación al recuperar conexión, correcciones administrativas entrantes y datos que nunca se sobrescriben.
 
 **Pausa:** representar en papel reintento después de perder respuesta sin producir duplicado.
 
@@ -68,7 +68,7 @@
 
 ### 3.8 Estado y diagnóstico
 
-**Prompt:** Crea vista de jefe de planta con última sincronización, pendientes, fallidos, versión, estación, red, desviación horaria y correcciones web recibidas. Una notificación breve abre auditoría con administrador, motivo y cambios. La vista operaria solo muestra estados simples.
+**Prompt:** Crea vista de jefe de planta con última sincronización, pendientes, fallidos, versión, estación, red, desviación horaria y correcciones web recibidas. Una notificación breve abre auditoría con administrador, motivo y cambios. El Modo Operación solo muestra estados simples y nunca permite resolver fallos técnicos.
 
 **Pausa:** partiendo de un evento fallido, localizar su causa usando pantalla + diagnóstico sin abrir base.
 

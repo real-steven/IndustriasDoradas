@@ -11,7 +11,7 @@ public sealed class MainWindowViewModelTests
     public void NavigationCommandsChangeTheCurrentPage()
     {
         HomeViewModel home = new();
-        DiagnosticsViewModel diagnostics = new(new StubHealthService());
+        DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
         MainWindowViewModel viewModel = new(home, diagnostics);
 
         Assert.AreSame(home, viewModel.CurrentPage);
@@ -27,5 +27,24 @@ public sealed class MainWindowViewModelTests
     {
         public Task<SystemHealth> CheckAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(SystemHealth.Unavailable("Sin conexión."));
+    }
+
+    private sealed class StubLocalDiagnostics : ILocalDatabaseDiagnostics
+    {
+        public Task<LocalDatabaseHealth> InspectAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LocalDatabaseHealth(
+                LocalDatabaseHealthState.Healthy,
+                LocalDatabaseHealthIssue.None,
+                0,
+                1024,
+                null,
+                DateTimeOffset.UtcNow,
+                "Correcto.",
+                "Sin acción."));
+
+        public Task<string> CreateConsistentCopyAsync(
+            string destinationDirectory,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Empty);
     }
 }

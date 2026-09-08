@@ -8,15 +8,19 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 
+import type { CorrelatedRequest } from "./correlation-id.middleware";
+
 interface ErrorBody {
   statusCode: number;
   code: string;
   message: string | string[];
   path: string;
   timestamp: string;
+  correlationId: string;
 }
 
 interface NestHttpExceptionBody {
+  code?: unknown;
   message?: unknown;
 }
 
@@ -26,7 +30,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
-    const request = context.getRequest<Request>();
+    const request = context.getRequest<Request & CorrelatedRequest>();
     const response = context.getResponse<Response>();
     const statusCode =
       exception instanceof HttpException
@@ -34,17 +38,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
         : HttpStatus.INTERNAL_SERVER_ERROR;
     const body: ErrorBody = {
       statusCode,
-      code: `HTTP_${statusCode}`,
-      message: this.getPublicMessage(exception),
-      path: request.originalUrl,
+      code: this.getPublicCode(exception, statusCode),
+      message: this.removeQueryString(
+        this.getPublicMessage(exception),
+        request.originalUrl,
+        request.path,
+      ),
+      path: request.path,
       timestamp: new Date().toISOString(),
+      correlationId: request.correlationId ?? "unavailable",
     };
 
     const logContext = {
       event: "http_request_failed",
       method: request.method,
-      path: request.originalUrl,
+      path: request.path,
       statusCode,
+      correlationId: body.correlationId,
     };
 
     if (statusCode >= 500) {
@@ -78,6 +88,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
     return exception.message;
   }
 
+  private getPublicCode(exception: unknown, statusCode: number): string {
+    if (exception instanceof HttpException) {
+      const response = exception.getResponse();
+      if (
+        typeof response !== "string" &&
+        this.isNestHttpExceptionBody(response) &&
+        typeof response.code === "string" &&
+        /^[A-Z][A-Z0-9_]*$/u.test(response.code)
+      ) {
+        return response.code;
+      }
+    }
+
+    return `HTTP_${statusCode}`;
+  }
+
   private isNestHttpExceptionBody(
     value: object,
   ): value is NestHttpExceptionBody {
@@ -88,5 +114,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
     return (
       Array.isArray(value) && value.every((item) => typeof item === "string")
     );
+  }
+
+  private removeQueryString(
+    message: string | string[],
+    originalUrl: string,
+    path: string,
+  ): string | string[] {
+    if (originalUrl === path) {
+      return message;
+    }
+
+    const sanitize = (value: string): string =>
+      value.split(originalUrl).join(path);
+    return Array.isArray(message) ? message.map(sanitize) : sanitize(message);
   }
 }

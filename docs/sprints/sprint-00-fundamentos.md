@@ -4,7 +4,7 @@
 
 **Entregable:** clon limpio → API `health`, shell WPF, shell React y CI en verde.
 
-**Estado 0.1:** línea base funcional consolidada en `docs/requirements/linea-base-funcional-v0.1.md`. Confirma una planta con cuatro líneas (piloto en una), roles/cuentas separadas, cajuelas y cargamentos, alertas 50–55, barridas reales, mercurio/oro, operación offline, web bilingüe, asistencia básica, inventario y decisiones diferidas por sprint.
+**Estado 0.1:** línea base funcional consolidada en `docs/requirements/linea-base-funcional-v0.1.md`. Confirma una planta con cuatro líneas (piloto en una), tres roles y autorización granular revisada el 2026-08-20, cajuelas y cargamentos, alertas 50–55, barridas reales, mercurio/oro, operación offline, web bilingüe, asistencia básica, inventario y decisiones diferidas por sprint.
 
 ## Orden de trabajo
 

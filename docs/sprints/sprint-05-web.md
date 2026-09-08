@@ -1,8 +1,8 @@
 # Sprint 5 — Portal web gerencial (semanas 10–11)
 
-**Objetivo:** seguimiento remoto bilingüe, claro y seguro, separado de la administración.
+**Objetivo:** seguimiento remoto bilingüe, claro y seguro, con datos priorizados y administración separada por módulo dentro de la misma sesión gerencial.
 
-**Entregable:** jefe de empresa consulta toda la operación y confirma/rechaza entregas de oro desde móvil/PC en español o inglés.
+**Entregable:** jefe de empresa consulta toda la operación y auditoría y, como superadministrador, accede a ediciones y gobierno granular de administradores desde móvil/PC en español o inglés.
 
 ## Orden de trabajo
 
@@ -12,7 +12,7 @@
 4. Oro bajo custodia y entrega: notificación, confirmación/rechazo y discrepancia.
 5. Historial/detalle/auditoría, diferenciando hora de dispositivo/servidor.
 6. React mobile-first bilingüe; vacío/carga/error/offline en Safari iOS y Chrome.
-7. Cuenta jefe de empresa informativa y cuenta administrador separada.
+7. Una cuenta jefe de empresa; navegación orientada a datos y módulo Administración separado, con edición auditada y permisos granulares de administradores.
 8. Actualización casi en tiempo real con frescura visible y respaldo incremental.
 9. Rendimiento con datos proyectados de un año.
 
@@ -20,13 +20,13 @@
 
 **Prueba manual:** iPhone Safari, Android Chrome y PC con red lenta; comparar con API/desktop.
 
-**Aceptación:** se distingue dato actualizado/offline; mismos filtros = mismos totales; gerencia no muta operación salvo confirmar/rechazar entrega de oro.
+**Aceptación:** se distingue dato actualizado/offline; mismos filtros = mismos totales; gerencia puede administrar todos los módulos sin cambiar de cuenta y cada administrador queda limitado a sus concesiones vigentes.
 
 ## Mini pasos, pausas y prompts
 
 ### 5.1 Necesidades gerenciales y wireframes
 
-**Prompt:** Diseña wireframes mobile-first para jefe de empresa: resumen, línea, cargamento, barrida, oro/custodia, asistencia, inventario e historial. Incluye español/inglés, preferencia por cuenta y frescura. No muestres acciones administrativas; la única mutación gerencial es confirmar/rechazar entrega de oro autorizada.
+**Prompt:** Diseña wireframes mobile-first para jefe de empresa: resumen, línea, cargamento, barrida, oro/custodia, asistencia, inventario, historial y gobierno de administradores. Incluye español/inglés, preferencia y frescura. Prioriza datos; coloca altas, correcciones y edición de permisos en un módulo Administración claramente separado dentro de la misma sesión. Toda mutación queda auditada.
 
 **Pausa:** gerente encuentra tres respuestas clave en prototipo sin explicación del desarrollador.
 
@@ -58,7 +58,7 @@
 
 **Prompt:** Añade vista de auditoría de lectura para roles permitidos con actor, acción, entidad, motivo y correlación, redactando datos sensibles. El jefe de empresa ve estado/revisiones relevantes; el administrador ve detalle de mutaciones. No expongas tokens ni fotos.
 
-**Pausa:** un usuario autorizado explica quién corrigió un dato y por qué; operario recibe 403.
+**Pausa:** un usuario autorizado explica quién corrigió un dato y por qué; una cuenta no autorizada recibe 403 y ningún trabajador posee acceso web.
 
 ### 5.7 Responsive, accesibilidad y navegadores
 
@@ -80,6 +80,6 @@
 
 ### 5.10 E2E y aceptación gerencial
 
-**Prompt:** Automatiza E2E es/en: login→dashboard→línea→cargamento→barrida→entrega de oro→auditoría. Verifica cuenta gerencial frente a administrativa en iPhone/Android/PC, compara totales y corrige críticos/altos.
+**Prompt:** Automatiza E2E es/en: login gerencial único→dashboard→línea→cargamento→barrida→entrega de oro→auditoría→Administración→permisos. Verifica revocación inmediata y distintas cuentas administrativas por área en iPhone/Android/PC; impide autoasignación, delegación fuera del subconjunto y fuga de permisos/caché, compara totales y corrige críticos/altos.
 
 **Pausa:** gerente completa tareas sin ayuda; compuerta aprobada.

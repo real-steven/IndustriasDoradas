@@ -132,7 +132,9 @@ industrias-doradas/
 │
 ├── supabase/
 │   ├── migrations/             # Migraciones de PostgreSQL
-│   └── seed/                   # Datos de desarrollo
+│   ├── tests/                  # Pruebas de restricciones y aislamiento
+│   ├── seed.sql                # Datos ficticios idempotentes
+│   └── demo/                   # Esquema visual no productivo
 │
 ├── docs/
 │   ├── architecture/           # Arquitectura
@@ -155,7 +157,7 @@ industrias-doradas/
 - WPF
 - MVVM
 - SQLite
-- Entity Framework Core
+- Microsoft.Data.Sqlite con repositorios SQL parametrizados
 - HttpClient
 - OpenCV u otra biblioteca biométrica por definir
 
@@ -336,9 +338,9 @@ La solución para Visual Studio, la configuración por ambiente y la explicació
 - [x] Creación del repositorio.
 - [x] Configuración del monorepo.
 - [x] Creación del esqueleto del backend NestJS.
-- [ ] Configuración de Supabase.
+- [x] Configuración de Supabase para identidad, catálogos y desarrollo local.
 - [x] Creación del esqueleto de la aplicación WPF.
-- [ ] Implementación de SQLite.
+- [x] Implementación de SQLite local para la operación del Sprint 2.
 - [ ] Implementación de la sincronización.
 - [x] Creación del esqueleto de la aplicación React.
 - [ ] Pruebas con usuarios.
@@ -401,7 +403,8 @@ Debido a que el sistema administrará información operativa, financiera y posib
 - Copias de seguridad.
 - Recuperación ante fallos.
 - Variables de entorno para secretos.
-- Cuentas separadas para consulta gerencial y administración privilegiada.
+- Una cuenta `JEFE_EMPRESA` superadministradora y permisos individuales de
+  mínimo privilegio para cada `ADMINISTRADOR`.
 - MFA y dispositivos administrativos autorizados antes de producción.
 
 > Ninguna contraseña, clave privada o credencial de Supabase debe almacenarse en el repositorio.

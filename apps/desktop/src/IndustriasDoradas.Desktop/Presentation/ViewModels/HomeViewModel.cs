@@ -5,5 +5,5 @@ public sealed class HomeViewModel
     public string Title { get; } = "Operación de planta";
 
     public string Message { get; } =
-        "La base de escritorio está lista. Los módulos operativos se agregarán en los próximos sprints.";
+        "La estación cuenta con registro local de cajuelas. Abre Modo Operación para usar la línea piloto.";
 }

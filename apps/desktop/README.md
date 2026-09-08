@@ -1,8 +1,9 @@
 # Aplicación de escritorio WPF
 
-Shell técnico de la estación de planta construido con WPF y .NET 10. En este
-paso contiene navegación mínima y diagnóstico de comunicación con la API; no
-incluye todavía módulos operativos, SQLite ni sincronización.
+Estación de planta construida con WPF y .NET 10. Incluye login Supabase Auth,
+Modo Operación, elevación temporal de jefe de planta y registro/corrección local
+de cajuelas para una línea piloto; aún no incluye sincronización, asistencia ni
+biometría.
 
 ## Organización
 
@@ -14,7 +15,7 @@ crear bibliotecas vacías:
 | `Presentation` | Ventanas, vistas XAML y ViewModels MVVM. |
 | `Application` | Contratos que definen los casos técnicos de la aplicación. |
 | `Domain` | Modelo independiente del resultado de health. |
-| `Infrastructure` | Cliente HTTP que implementa la consulta a NestJS. |
+| `Infrastructure` | Clientes HTTP, almacenamiento SQLite y repositorios locales. |
 | `Configuration` | Opciones validadas de conexión. |
 
 ## Ejecutar desde CLI
@@ -40,10 +41,45 @@ Visual Studio permite ejecutar las pruebas desde **Test > Test Explorer**.
 
 ## Configuración por ambiente
 
-El Generic Host carga `appsettings.json` y después
-`appsettings.{DOTNET_ENVIRONMENT}.json`. La configuración base consulta
+El Generic Host carga `appsettings.json`, después
+`appsettings.{DOTNET_ENVIRONMENT}.json` y `appsettings.Local.json`. Copia el
+ejemplo local y agrega únicamente URL/clave publicable de Supabase e ID de
+estación; nunca uses la clave secreta del API. La configuración base consulta
 `http://127.0.0.1:3000/`; `Development` reduce el timeout a dos segundos para
-dar retroalimentación rápida. Ambas opciones se validan al iniciar.
+dar retroalimentación rápida. Supabase Auth usa un timeout independiente de diez
+segundos para evitar que una interrupción de red congele el flujo de estación.
+Todas las opciones se validan al iniciar.
+
+Tokens, refresh token y verificador offline se guardan cifrados con DPAPI para
+el usuario Windows actual. La autorización offline vence a las 24 horas; al
+recuperar red se revalida y una revocación invalida el modo privilegiado sin
+borrar eventos pendientes. La fotografía futura está desacoplada y hoy se
+registra únicamente como evidencia ausente.
+
+`OperationInput` configura controladores por identificador, tipo de adaptador,
+línea asignada y señales. El teclado inicial usa `1`, `+`, flechas, `Enter`, `R`
+y `Escape`; puede cambiarse en configuración sin modificar el caso de uso. La
+aplicación conserva el origen de clic/teclado/controlador en el sobre Outbox.
+El sensor automático no está incluido.
+
+Al abrir o revalidar la estación, los proveedores, trabajadores y líneas
+autorizados se actualizan en SQLite y permanecen disponibles offline. En Modo
+Jefe de Planta, `Estación` permite elegir proveedor y responsable, revisar el
+resumen del cargamento y confirmar atómicamente la única línea piloto antes de
+registrar cajuelas. Para una línea activa también permite preparar y confirmar
+un relevo sin detenerla, o finalizar el cargamento en dos pasos antes de
+preparar el siguiente.
+
+`OperationSafety` controla el antirrebote (75 ms provisional), el feedback
+visual/sonoro y las métricas locales. Una pulsación normal se procesa sin
+espera; `auto-repeat` siempre se ignora al registrar. Las métricas se escriben
+en segundo plano y no contienen personas, cargamentos, eventos ni controlador.
+
+`Diagnóstico` comprueba por separado API y almacenamiento SQLite: integridad,
+pendientes conservados, espacio libre y retroceso del reloj. Permite crear una
+copia consistente validada en `Documentos\IndustriasDoradas\Recuperacion`; la
+restauración requiere la aplicación cerrada y sigue el procedimiento de
+[`recuperacion-diagnostico-local-sprint-02.md`](../../docs/architecture/recuperacion-diagnostico-local-sprint-02.md).
 
 ## Verificar
 

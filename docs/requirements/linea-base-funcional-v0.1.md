@@ -4,6 +4,8 @@
 
 **Fecha de consolidación:** 2026-08-13
 
+**Última actualización funcional:** 2026-08-25
+
 **Proyecto:** Sistema de Gestión y Control de Producción Minera — Industrias Doradas
 
 **Alcance:** requerimientos, actores, procesos, reglas confirmadas, supuestos y preguntas abiertas previos a implementación.
@@ -25,9 +27,9 @@ Los valores ficticios nunca se convierten en reglas. Las decisiones que afecten 
 - Industrias Doradas procesa material minero en Abangares, Guanacaste.
 - Las cajuelas, asistencia y otros datos se registran actualmente en cuadernos y se consolidan en Excel.
 - La planta actual tiene cuatro líneas; cada línea posee un molino y tres rastras.
-- El piloto empieza con una línea y un punto de control, pero líneas, rastras, estaciones y controladores serán configurables.
+- El MVP empieza con una sola computadora compartida como estación y un punto de control para el piloto de una línea; el modelo conserva líneas, rastras, estaciones y controladores configurables para crecer después.
 - La planta opera normalmente de lunes a sábado de forma continua. El domingo no hay producción regular.
-- La conectividad satelital suele funcionar, pero una caída puede durar hasta uno o dos días.
+- La conectividad satelital suele funcionar. La estación autorizada podrá continuar hasta 24 horas desde su última validación central y deberá reautenticarse al recuperar conexión.
 - El escritorio debe confirmar siempre primero en SQLite y sincronizar en segundo plano; la nube consolida, pero nunca bloquea la operación local.
 - Con varias estaciones conectadas, los cambios deben propagarse casi en tiempo real. Sin conexión, convergen al recuperar red.
 
@@ -40,31 +42,41 @@ Los valores ficticios nunca se convierten en reglas. Las decisiones que afecten 
 | Molino | Equipo que rompe inicialmente las piedras grandes. |
 | Rastra | Etapa posterior que continúa reduciendo el material hasta permitir obtener amalgama. Actualmente existen tres por línea. |
 | Cargamento | Entrega específica de material perteneciente a un solo proveedor. Un proveedor puede entregar varios cargamentos, incluso el mismo día. |
-| Jornada | Clasificación diurna o nocturna de las horas trabajadas; no abre ni cierra físicamente una línea. |
+| Jornada | Clasificación automática de la operación por hora local: diurna de 06:00 inclusive a 18:00 exclusiva y nocturna de 18:00 inclusive a 06:00 exclusiva, en `America/Costa_Rica`; no abre ni cierra físicamente una línea. |
 | Asignación de línea | Relación temporal entre una línea activa y su operario principal responsable. |
 | Ciclo de línea | Periodo en el que una línea recibe cajuelas de un cargamento específico hasta terminar su alimentación. |
 | Barrida | Limpieza real del proceso; puede abarcar menos, exactamente o más de 50 cajuelas según el cargamento y la decisión operativa. |
 | Palo | Unidad tradicional para oro. Para la línea base, `1 palo = 0,1 g` y `10 palos = 1 g`; redondeo y variación real quedan pendientes. |
 | Outbox | Cola local de operaciones confirmadas en SQLite pendientes de aceptación central. |
 | Corrección compensatoria | Nuevo registro que revierte o ajusta el efecto de otro sin borrar el historial. |
+| Modo Operación | Estado restringido y compartido de la estación, sin cuenta de operario, desde el que se registran cajuelas y se accede al check-in/out. |
+| Trabajador provisional | Persona solicitada desde planta que puede registrar horas antes de la aprobación administrativa; a las 72 horas pasa a provisional vencido sin perder ni bloquear sus marcas. |
 
-## 4. Actores y separación de cuentas
+## 4. Actores y autorización granular
 
-Existen cuatro roles funcionales. Una persona puede cumplir varios, pero los accesos privilegiados se separan en cuentas diferentes para reducir errores.
+Existen tres roles autenticados y un modo operativo compartido. `JEFE_EMPRESA` es la cuenta de máxima autoridad: combina consulta gerencial y superadministración sin una segunda cuenta. `ADMINISTRADOR` no recibe acceso total por pertenecer al rol; sus capacidades se seleccionan individualmente y pueden cambiarse o revocarse.
 
 | Rol | Canal | Facultades confirmadas |
 |---|---|---|
-| Jefe de empresa | Web | Consulta de toda la operación, estadísticas, notificaciones y reportes Excel. No modifica datos sensibles. Puede confirmar o rechazar entregas físicas de oro. |
-| Administrador | Web | Crea, edita, corrige, desactiva y ejecuta protocolos de eliminación; administra usuarios privilegiados, líneas, estaciones y configuración. No consulta ni genera reportes desde esta cuenta por ahora. |
-| Jefe de planta | Desktop | Prepara la operación, crea trabajadores, gestiona proveedores e inventario, asigna responsables, registra/certifica mercurio y oro, revisa asistencia pendiente y corrige durante el ciclo abierto. |
-| Operario | Desktop compartido | Registra cajuelas, confirma una reversión inmediata y puede seleccionar el responsable principal. No registra mercurio ni oro. |
+| Jefe de empresa | Web | Superadministrador permanente: consulta toda la operación, estadísticas, notificaciones, auditoría y reportes; puede ejecutar los casos de uso administrativos y operativos de todos los módulos, crear administradores, seleccionar/editar sus permisos y suspenderlos. La interfaz prioriza datos y separa las ediciones en un módulo de Administración dentro de la misma sesión. |
+| Administrador | Web | Cuenta de privilegio mínimo. Solo consulta o modifica los módulos concedidos individualmente. Puede llegar a tener acceso amplio si un jefe de empresa lo decide. Solo crea administradores, gobierna sus estados o asigna permisos cuando recibe cada capacidad específica. |
+| Jefe de planta | Desktop | Inicia y habilita la estación; solicita trabajadores; gestiona proveedores e inventario; asigna responsables; registra/certifica mercurio y oro; revisa asistencia pendiente reciente y corrige durante el ciclo abierto. Eleva temporalmente permisos mediante su PIN individual. |
+| Modo Operación | Desktop compartido | No es una cuenta ni un rol de Supabase. Mantiene el flujo continuo, registra/revierte cajuelas y permite check-in/out; no accede a administración, inventario, certificaciones ni correcciones profundas. |
 
 Reglas de acceso:
 
-- Un gerente que también administra usa una cuenta gerencial y otra administrativa.
+- El gerente usa una única cuenta `JEFE_EMPRESA`; no necesita cerrar sesión ni mantener una cuenta administrativa paralela.
 - Un administrador que también es jefe de planta puede acceder a ambos sistemas con sus credenciales correspondientes.
-- Solo un administrador crea cuentas de administrador o jefe de empresa.
-- El jefe de planta puede crear trabajadores operativos sin aprobación administrativa adicional.
+- Jefe de empresa crea la cuenta administrativa y elige sus permisos iniciales. Puede añadirlos, retirarlos, suspenderla o reactivarla después.
+- Un administrador solo crea otra cuenta administrativa con `administrators.create`; solo cambia permisos con `administrators.permissions.manage`, y nunca puede conceder o retirar una capacidad que él mismo no posea. No puede modificar sus propios permisos.
+- Ningún perfil puede alterar o borrar auditoría ni desactivar la última cuenta gerencial activa. Los datos históricos se corrigen o desactivan, no se eliminan físicamente.
+- El administrador crea, suspende o revoca cuentas de jefe de planta y administra sus PIN individuales.
+- Los trabajadores regulares no tienen cuenta de acceso. El jefe de planta crea una solicitud y el administrador aprueba, rechaza, reasigna o fusiona el perfil.
+- Tras la autenticación del jefe de planta, la estación permanece normalmente en Modo Operación y renueva de forma segura la sesión de Supabase mientras exista uso. Cierra la sesión local después de una hora de inactividad total y exige autenticación completa para volver a abrirla.
+- El Modo Jefe de Planta exige el PIN personal, ofrece salida explícita y vuelve al modo restringido después de cinco minutos de inactividad total, con aviso previo. Un bloqueo conserva formularios no enviados para reanudarlos tras reautenticación.
+- Los intentos fallidos de PIN tienen límite y alerta configurables. Al excederlos se bloquea únicamente la elevación privilegiada: Modo Operación continúa. La recuperación exige contraseña completa en línea o restablecimiento administrativo; nunca se envía ni recupera el PIN por correo.
+- Toda cuenta autenticada usa un correo válido para recuperación de contraseña mediante Supabase Auth. El correo opcional del trabajador es solo contacto y no participa en autenticación.
+- Antes del reconocimiento facial, la estación se abre con usuario/contraseña y el jefe eleva permisos con PIN. Cuando exista captura aprobada, el uso del PIN intentará guardar una fotografía de auditoría; una cámara ausente o dañada no bloquea la continuidad, registra el acceso sin foto y genera una alerta administrativa.
 - La interfaz es española por defecto; cada cuenta guarda una preferencia editable `es` o `en`.
 - MFA y enrolamiento/revocación de dispositivos administrativos son obligatorios antes de producción, aunque se implementen al final del proyecto.
 
@@ -73,20 +85,31 @@ Reglas de acceso:
 ### 5.1 Preparación y alimentación
 
 1. El jefe de planta registra o selecciona un proveedor existente.
-2. Registra un cargamento con código legible generado automáticamente, fecha y proveedor. Internamente usa UUID.
+2. Registra un cargamento asociado al proveedor. Para el personal se reconoce por
+   el nombre del proveedor/empresa y la hora automática de inicio; internamente
+   usa UUID y no exige un código de negocio visible.
 3. Selecciona una línea, el cargamento y un operario principal desde listas de registros activos.
 4. Una línea no puede comenzar a recibir cajuelas sin responsable principal.
 5. Un operario puede ser responsable simultáneamente de varias líneas; no se trazan ayudantes secundarios.
 6. El punto de control puede ser compartido. La atribución se hace a línea, cargamento, responsable asignado y estación, no a quien pulsó físicamente la tecla.
-7. El responsable permanece durante el ciclo; los cambios excepcionales conservan hora e historial.
-8. Una jornada o cambio de responsable no obliga a detener la línea ni a cambiar cargamento.
+7. Existe exactamente un responsable principal vigente a la vez. Cada relevo
+   conserva responsable anterior, nuevo responsable e instante del cambio, y el
+   resumen final muestra todas las personas responsables del cargamento.
+8. La jornada se calcula automáticamente por la hora local. Su cambio o el
+   relevo de responsable no obliga a detener la línea ni a cambiar cargamento.
 
 ### 5.2 Cargamentos
 
 - Un cargamento siempre pertenece a un único proveedor.
-- Proveedor + fecha no es identificador suficiente; el sistema genera un consecutivo legible y UUID.
-- Un cargamento puede procesarse en varias líneas.
-- Cada línea lleva su conteo, barridas, mercurio y oro; el cargamento consolida todas las líneas.
+- El sistema usa UUID como identidad técnica. En la operación el cargamento se
+  muestra por proveedor/empresa y hora automática de inicio; por ahora no se
+  exige un consecutivo o código de negocio legible.
+- Un cargamento se asigna exactamente a una línea y nunca se reparte entre varias.
+- Cada cargamento tiene exactamente un operario principal vigente a la vez y
+  puede acumular varios responsables secuenciales mediante relevos auditados.
+  Un operario puede responder simultáneamente por otros cargamentos/líneas sin
+  privilegios adicionales. Ayudantes y demás operarios no se asignan a la línea.
+- La línea asignada lleva el conteo, barridas, mercurio y oro del cargamento.
 - La barrida no cierra el cargamento.
 - Al agotarse el material termina la alimentación de ese ciclo; el material ya introducido sigue su curso hasta obtener amalgama y oro.
 - Un nuevo cargamento puede comenzar sin crear una nueva jornada.
@@ -96,7 +119,12 @@ Reglas de acceso:
 
 - Cada pulsación válida crea un evento inmutable `CAJUELA_ADDED` con UUID.
 - La confirmación local debe tardar menos de 300 ms en el equipo objetivo.
-- El operario puede revertir únicamente la última cajuela de la línea seleccionada mientras el ciclo está abierto.
+- La primera pulsación se guarda inmediatamente. Durante los tres segundos
+  siguientes se ignora cualquier intento adicional sobre la misma línea,
+  incluso si cambia entre clic y teclado, para evitar registros dobles
+  accidentales. Cada registro aceptado emite confirmación visual y un tono
+  breve de éxito; los intentos suprimidos son visibles pero silenciosos.
+- Desde el Modo Operación se puede revertir únicamente la última cajuela de la línea seleccionada mientras el ciclo está abierto.
 - La reversión requiere un segundo paso de confirmación, no texto libre, y usa un motivo automático de error inmediato.
 - Visualmente resta uno; técnicamente crea `CAJUELA_REVERSED` y conserva el original.
 - El jefe de planta puede corregir registros operativos antes del cierre/revisión del ciclo correspondiente.
@@ -121,7 +149,8 @@ Reglas de acceso:
 - La unidad provisional es gramos decimales; unidad definitiva, precisión y rangos se validan en el Sprint 4.
 - El operario puede medir o comunicar el resultado; el jefe de planta lo verifica, registra y certifica.
 - Cada barrida produce un resultado parcial de oro en gramos.
-- El resultado definitivo del cargamento es la suma automática de sus barridas y líneas.
+- El resultado definitivo del cargamento es la suma automática de sus barridas
+  en la única línea asignada.
 - Los totales se consultan por barrida, línea, jornada, día, cargamento y proveedor.
 - El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
 - La conversión inicial es `1 palo = 0,1 g`; no se implementa redondeo hasta validarlo.
@@ -142,7 +171,12 @@ El umbral para avisar que ya conviene recoger oro queda pendiente y será config
 - Jornada diurna/nocturna clasifica horas y no representa el estado de la línea.
 - Actualmente el jefe de planta anota entradas y salidas en cuaderno.
 - La primera versión digital registra solo check-in y check-out; no descansos ni almuerzo.
-- El jefe de planta selecciona al trabajador y registra la hora mientras se pospone biometría.
+- El trabajador accede desde el Modo Operación, selecciona su perfil y la estación toma una fotografía para crear una marca pendiente con su hora original. No necesita una cuenta ni contraseña.
+- El jefe de planta confirma o rechaza marcas pendientes recientes desde su modo temporal. El administrador conserva revisión global y corrige decisiones mediante ajustes auditados, nunca borrando el evento original.
+- El jefe de planta puede consultar evidencia pendiente y reciente durante las primeras 24 horas. Después, la fotografía queda visible solo para el administrador mediante acceso temporal y auditado.
+- El jefe de planta solicita un trabajador con nombre como dato mínimo y correo opcional de contacto. El perfil nace `PROVISIONAL`, puede marcar y acumular horas inmediatamente y espera aprobación administrativa.
+- A las 72 horas sin resolución pasa a `PROVISIONAL_VENCIDO`: muestra aviso visible y alertas urgentes para administrador/gerencia, pero continúa registrando horas sin descartarlas ni bloquear la operación.
+- Si la solicitud se rechaza o era duplicada, las horas y evidencias se conservan. El administrador debe reasignarlas al trabajador correcto, fusionar perfiles o documentar el rechazo.
 - La jornada habitual es hasta 8 horas y puede extenderse aproximadamente hasta 10; la regla exacta de horas extra/dobles queda pendiente.
 - El sistema calcula duración e incidencias, no salarios, impuestos ni deducciones.
 - Olvidos o marcas históricas se corrigen por administrador mediante ajuste auditable.
@@ -152,7 +186,7 @@ El umbral para avisar que ya conviene recoger oro queda pendiente y será config
 
 - Reconocimiento facial no es requisito del núcleo inicial.
 - Antes de activarlo se aprueban consentimiento, retención, precisión, enrolamiento y alternativa segura.
-- El enrolamiento debe capturar varios ángulos; detalles técnicos quedan para el Sprint 6.
+- El enrolamiento debe capturar varios ángulos y superar una prueba de reconocimiento antes de considerarse válido; el trabajador permanece provisional hasta la aprobación administrativa.
 - Un intento fallido guarda foto, hora original, trabajador propuesto, estación y tipo de marca.
 - El jefe de planta puede ver la evidencia y aceptar/rechazar; al aceptar se conserva la hora del intento.
 - No se usará PIN como sustituto ordinario porque permitiría marcar a un trabajador ausente.
@@ -190,6 +224,7 @@ El perfil jefe de empresa consulta en modo informativo:
 - inventario, última revisión y novedades;
 - estado/frescura de sincronización;
 - entregas de oro pendientes y confirmadas.
+- historial de cambios y alertas de acceso administrativo, sin posibilidad de alterar la auditoría.
 
 Reportes iniciales:
 
@@ -203,8 +238,10 @@ Reportes iniciales:
 - Toda mutación de planta se guarda primero en SQLite y outbox dentro de una transacción.
 - Se intenta sincronizar inmediatamente sin bloquear la interfaz.
 - Reiniciar, cerrar la aplicación o perder electricidad no elimina operaciones confirmadas localmente.
-- La estación soporta uno o dos días offline y reanuda automáticamente.
-- El acceso offline se limita a usuarios previamente autenticados y estación autorizada; no permite administración privilegiada.
+- La estación soporta hasta 24 horas offline desde la última validación central y reanuda automáticamente.
+- El acceso offline requiere que un jefe de planta haya autenticado previamente la única estación inicial. Permite Modo Operación y elevación local limitada del jefe, pero no administración web ni cambios privilegiados fuera de la política cacheada.
+- Al vencer las 24 horas sin red, la estación entra en contingencia: continúan cajuelas, reverso inmediato y check-in/out, se bloquea el Modo Jefe y cada evento queda pendiente de revisión por autorización vencida.
+- Al recuperar conexión, la estación revalida cuenta, PIN/privilegios, autorización del dispositivo y revocaciones; los eventos locales confirmados nunca se descartan por el resultado de esa revalidación.
 - NestJS valida identidad, permisos, organización, estación, versión e idempotencia.
 - PostgreSQL consolida la verdad central; los clientes reciben cambios incrementales, no una descarga completa.
 - Con Internet, varias estaciones se actualizan casi en tiempo real; sin Internet se garantiza convergencia posterior, no simultaneidad.
@@ -217,16 +254,16 @@ Reportes iniciales:
 
 | ID | Requerimiento |
 |---|---|
-| RF-01 | Autenticar y autorizar los cuatro roles con cuentas privilegiadas separadas. |
-| RF-02 | Administrar planta, líneas, rastras, estaciones, trabajadores, proveedores y cargamentos. |
+| RF-01 | Autenticar y autorizar `JEFE_EMPRESA`, `ADMINISTRADOR` y `JEFE_PLANTA`; usar una cuenta gerencial superadministradora, permisos individuales revocables para administradores y Modo Operación sin cuenta compartida. |
+| RF-02 | Administrar planta, líneas, rastras, estaciones, solicitudes/estados de trabajadores, proveedores y cargamentos. |
 | RF-03 | Asignar un responsable principal y cargamento antes de alimentar una línea. |
 | RF-04 | Registrar y revertir cajuelas localmente mediante eventos inmutables. |
-| RF-05 | Operar uno o dos días offline y sincronizar sin pérdida o duplicación. |
+| RF-05 | Operar hasta 24 horas offline desde la última validación y sincronizar sin pérdida o duplicación. |
 | RF-06 | Alertar en cada múltiplo configurable de 50 sin bloquear producción. |
 | RF-07 | Registrar barridas reales, mercurio y oro parcial/definitivo con trazabilidad al cargamento. |
 | RF-08 | Registrar entrega y confirmación/rechazo de oro bajo custodia. |
 | RF-09 | Consultar operación central desde web responsive en español e inglés. |
-| RF-10 | Registrar asistencia básica de entrada/salida y calcular horas revisables. |
+| RF-10 | Registrar check-in/out con fotografía pendiente, trabajadores provisionales y vencidos, aprobación/reasignación auditable y horas revisables sin bloqueo. |
 | RF-11 | Gestionar inventario básico sin existencias negativas y registrar revisiones. |
 | RF-12 | Registrar novedades simples de paro, mantenimiento, emergencia o cierre. |
 | RF-13 | Generar reportes Excel bilingües según permisos. |
@@ -242,6 +279,7 @@ Reportes iniciales:
 - JWT de Supabase validado por NestJS; `service_role` solo en backend.
 - Logs sin tokens, claves, fotografías o plantillas biométricas.
 - Fotografías privadas con acceso temporal y auditado.
+- Una falla de cámara no bloquea la elevación del jefe ni la continuidad de la operación; genera evidencia de ausencia y alerta prioritaria.
 - MFA y dispositivos administrativos autorizados antes de producción.
 - Instalación, respaldo y restauración ensayados.
 - Monolito modular, sin microservicios ni servidor local de planta hasta que una necesidad medida lo justifique.
@@ -253,7 +291,11 @@ Reportes iniciales:
 - Un administrador puede iniciar una eliminación manual bajo protocolo, siempre que no rompa referencias legales u operativas.
 - La fotografía/plantilla biométrica tiene ciclo de vida separado del historial laboral.
 - Administrador accede a evidencias privadas desde funciones protegidas de la web, no directamente a la base de datos.
-- Jefe de planta accede únicamente a fotografías necesarias para resolver intentos pendientes.
+- Jefe de planta accede únicamente a fotografías pendientes o recientes necesarias para resolver intentos durante las primeras 24 horas.
+- Por ahora las fotografías no tienen eliminación automática y se conservan indefinidamente como evidencia vinculada a auditoría, hasta que Sprint 6 apruebe una política definitiva. Deben monitorearse volumen y costo; conservar no significa hacerlas públicas ni permitir acceso irrestricto.
+- La fotografía vive en almacenamiento privado; la auditoría guarda identificador, ruta lógica, checksum, actor, motivo y fechas, no el binario de la imagen ni una URL permanente.
+- Nombre es el único dato obligatorio inicial del trabajador; correo y demás datos de contacto son opcionales y no sirven para iniciar sesión.
+- Horas, fotos y decisiones ya registradas no se eliminan al vencer, rechazar o fusionar un perfil provisional.
 
 ## 15. Alcance y exclusiones
 
@@ -267,13 +309,14 @@ Reportes iniciales:
 
 ### Posterior dentro del plan
 
-- Asistencia básica sin biometría.
+- Asistencia básica con fotografía pendiente, sin reconocimiento facial inicial.
 - Inventario básico.
 - Reconocimiento facial condicionado.
+- Sensor sencillo de cajuelas como mejora futura, solo después de validar clic/teclado/controlador; no condiciona la aceptación del MVP.
 
 ### Fuera de alcance
 
-- Sensores, PLC, IoT, SCADA y automatización física.
+- Sensores automáticos durante el MVP, PLC, IoT, SCADA y automatización física. El posible sensor sencillo queda en backlog y no sustituye la entrada manual.
 - Medición automática de material, mercurio u oro.
 - Contabilidad, banca, nómina completa y cálculo definitivo de salarios.
 - PDF en la primera versión.
@@ -289,11 +332,14 @@ Reportes iniciales:
 | Variación real y redondeo de palos ↔ gramos | Sprint 4 |
 | Umbral de oro para notificar recogida | Sprint 4/5 |
 | Política exacta de corrección administrativa y eliminación | Sprint 1 |
-| Matriz detallada de permisos y acceso offline | Sprint 1 |
-| Horarios diurno/nocturno y regla de horas extra/dobles | Sprint 6 |
-| Consentimiento, retención, enrolamiento y precisión biométrica | Sprint 6 |
+| Matriz detallada de permisos, gobierno de cuentas, PIN y acceso offline de 24 horas | Aprobada al iniciar el prompt 1.2 el 2026-08-17 |
+| Cardinalidades y modelo relacional de identidad, organización y catálogos iniciales | Aprobados al iniciar el prompt 1.3 el 2026-08-17 |
+| Comportamiento de check-in cuando la cámara de asistencia no está disponible | Sprint 6 |
+| Regla de horas extra/dobles; la clasificación operativa 06:00/18:00 ya fue confirmada | Sprint 6 |
+| Confirmación o sustitución de la retención indefinida provisional de fotografías; consentimiento, enrolamiento y precisión biométrica | Sprint 6 |
 | Catálogo/unidades definitivas e intervalos de revisión de inventario | Sprint 7 |
 | Fórmulas e indicadores gerenciales | Sprint 8 |
+| Tarifa horaria y estimación de costo laboral, solo si se aprueban sin convertir el sistema en nómina | Sprint 6/8 |
 
 ## 17. Aprobación de la pausa 0.1
 
@@ -332,3 +378,70 @@ esté implementado.
 
 Seguridad, accesibilidad, rendimiento, UTC, decimales, recuperación y
 observabilidad se verifican transversalmente cuando se introduce cada flujo.
+
+## 19. Actualizaciones funcionales
+
+### 19.1 Confirmaciones del 2026-08-17
+
+El responsable confirmó una sola computadora compartida para el MVP, tres roles
+autenticados y, en ese momento, cuenta administrativa separada para el gerente, Modo Operación
+sin cuenta de operario, elevación temporal del jefe
+mediante PIN individual, gobierno gerencial limitado sobre administradores,
+trabajadores provisionales con aprobación posterior y check-in inicial mediante
+fotografía pendiente. También confirmó que las horas nunca se eliminan, que la
+operación continúa ante fallos técnicos y que sensor, reconocimiento facial y
+estimaciones de pago se incorporan únicamente después de estabilizar sus flujos
+base y aprobar sus políticas específicas.
+
+También confirmó que la planta actual tiene un solo jefe de planta, que todos
+los trabajadores registran horas independientemente de la línea y que solo el
+responsable principal se asigna operativamente. Un trabajador puede responder
+por más de una línea. Cada cargamento pertenece a un proveedor, se procesa en
+exactamente una línea y tiene un único responsable; nunca se reparte entre
+líneas.
+
+### 19.2 Autorización granular del 2026-08-20
+
+La decisión de cuentas gerencial y administrativa separadas queda sustituida.
+`JEFE_EMPRESA` opera como superadministrador desde una sola cuenta. Crea las
+cuentas `ADMINISTRADOR`, selecciona sus permisos y puede añadirlos, retirarlos,
+suspenderlas o reactivarlas. Un administrador solo crea otras cuentas o gestiona
+permisos cuando recibe la capacidad correspondiente; nunca delega ni retira una
+capacidad que él mismo no posea. La interfaz gerencial prioriza datos y reportes,
+y concentra las ediciones en un módulo separado dentro de la misma sesión.
+
+### 19.3 Decisiones provisionales del flujo operativo del 2026-08-25
+
+El desarrollador jefe autorizó usar estas respuestas para iniciar el diseño de
+dominio 2.2, con validación posterior de la empresa y posibilidad de ajustar el
+modelo antes de cerrar el Sprint 2:
+
+- todavía no existen muestras de cuaderno o Excel ni una lista confirmada de
+  columnas; se trabaja con la información disponible sin inventar campos;
+- el término principal es `cargamento` y el personal también usa `camionetada`;
+- la jornada se deriva automáticamente en `America/Costa_Rica`: diurna desde
+  las 06:00 y nocturna desde las 18:00;
+- el cargamento continúa durante un relevo: hay un responsable vigente a la vez
+  y un historial de responsables con la hora de cada cambio;
+- el jefe de planta puede registrar un proveedor faltante e iniciar el nuevo
+  cargamento; el proveedor queda disponible para futuras entregas y una
+  corrección administrativa posterior debe ser auditable;
+- la línea física permanece activa. Mientras se prepara un cambio, el contexto
+  confirmado anterior sigue recibiendo registros y el nuevo contexto se aplica
+  completo al confirmar;
+- no se exige código visible del cargamento: se presenta nombre de
+  proveedor/empresa y hora automática de inicio;
+- durante el MVP la estación mantiene una sola línea operativa enfocada a la
+  vez. El jefe de planta la selecciona entre las líneas administrativamente
+  activas al preparar cada cargamento; la operación simultánea de hasta cuatro
+  líneas permanece como evolución futura;
+- `Alimentación actual`, `Línea lista` y `Registrar cajuela` se aceptan como
+  etiquetas provisionales hasta la siguiente reunión con la empresa.
+
+Estas precisiones sustituyen, para Sprint 2, la lectura anterior de «un único
+responsable» como una persona inmutable durante todo el cargamento: la unicidad
+aplica al responsable vigente en cada instante.
+
+Esta autorización no equivale a validación del proceso por usuarios de planta.
+La estructura exacta del Excel y cualquier ajuste visual permanecen como deuda
+explícita de levantamiento.

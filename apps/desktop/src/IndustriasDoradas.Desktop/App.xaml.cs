@@ -1,13 +1,22 @@
 using System.IO;
 using System.Windows;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Infrastructure.Health;
+using IndustriasDoradas.Desktop.Infrastructure.Auth;
+using IndustriasDoradas.Desktop.Infrastructure.Input;
+using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
+using IndustriasDoradas.Desktop.Infrastructure.Security;
+using IndustriasDoradas.Desktop.Infrastructure.Station;
 using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
+using IndustriasDoradas.Desktop.Presentation.Feedback;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop;
 
@@ -28,11 +37,28 @@ public partial class App : System.Windows.Application
             MainWindow.Show();
         }
         catch (Exception exception) when (
-            exception is OptionsValidationException or InvalidOperationException or IOException)
+            exception is OptionsValidationException or InvalidOperationException or IOException or SqliteException)
         {
+            string message;
+            if (exception is OptionsValidationException)
+            {
+                message = "La configuración local está incompleta o se perdió. Restaure appsettings.Local.json " +
+                          "desde el ejemplo, verifique el ID de estación y no borre la base SQLite existente.";
+            }
+            else if (exception is SqliteException or IOException)
+            {
+                LocalStorageFailure failure = LocalStorageFailureClassifier.Classify(exception);
+                message = $"{failure.UserMessage} {failure.RecoveryInstruction}";
+            }
+            else
+            {
+                message = "No se pudo preparar el almacenamiento local. " +
+                          "Conserve los archivos existentes y solicite diagnóstico antes de continuar.";
+            }
+
             MessageBox.Show(
-                $"No se pudo iniciar Industrias Doradas. {exception.Message}",
-                "Configuración inválida",
+                message,
+                "Inicio seguro requerido",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Shutdown(-1);
@@ -62,6 +88,7 @@ public partial class App : System.Windows.Application
                 ContentRootPath = AppContext.BaseDirectory,
                 EnvironmentName = environmentName,
             });
+        builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
 
         builder.Services
             .AddOptions<ApiOptions>()
@@ -75,6 +102,42 @@ public partial class App : System.Windows.Application
                 "Api:RequestTimeoutSeconds debe estar entre 1 y 30.")
             .ValidateOnStart();
 
+        builder.Services.AddOptions<SupabaseOptions>()
+            .Bind(builder.Configuration.GetSection(SupabaseOptions.SectionName))
+            .Validate(options => Uri.TryCreate(options.Url, UriKind.Absolute, out _), "Supabase:Url debe ser absoluta.")
+            .Validate(options => options.PublishableKey.StartsWith("sb_publishable_", StringComparison.Ordinal), "Supabase:PublishableKey debe ser publicable.")
+            .Validate(
+                options => options.RequestTimeoutSeconds is >= 1 and <= 30,
+                "Supabase:RequestTimeoutSeconds debe estar entre 1 y 30.")
+            .ValidateOnStart();
+        builder.Services.AddOptions<StationOptions>()
+            .Bind(builder.Configuration.GetSection(StationOptions.SectionName))
+            .Validate(options => options.Id != Guid.Empty, "Station:Id es obligatorio.")
+            .Validate(options => options.SessionIdleSeconds == 3600, "La inactividad de estación aprobada es 3600 segundos.")
+            .Validate(options => options.PrivilegedIdleSeconds == 300, "La inactividad privilegiada aprobada es 300 segundos.")
+            .Validate(options => options.OfflineHours == 24, "La contingencia offline aprobada es 24 horas.")
+            .ValidateOnStart();
+        builder.Services.AddOptions<LocalDatabaseOptions>()
+            .Bind(builder.Configuration.GetSection(LocalDatabaseOptions.SectionName))
+            .Validate(
+                options => options.BusyTimeoutSeconds is >= 1 and <= 30,
+                "LocalDatabase:BusyTimeoutSeconds debe estar entre 1 y 30.")
+            .ValidateOnStart();
+        builder.Services.AddOptions<OperationInputOptions>()
+            .Bind(builder.Configuration.GetSection(OperationInputOptions.SectionName))
+            .Validate(
+                options => options.IsValid(),
+                "OperationInput debe definir un teclado con línea, +, flechas, aceptar, revertir y cancelar.")
+            .ValidateOnStart();
+        builder.Services.AddOptions<OperationSafetyOptions>()
+            .Bind(builder.Configuration.GetSection(OperationSafetyOptions.SectionName))
+            .Validate(options => options.IsValid(), "OperationSafety contiene límites inválidos.")
+            .ValidateOnStart();
+        builder.Services.AddOptions<LocalRecoveryOptions>()
+            .Bind(builder.Configuration.GetSection(LocalRecoveryOptions.SectionName))
+            .Validate(options => options.IsValid(), "LocalRecovery contiene límites inválidos.")
+            .ValidateOnStart();
+
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(
             static (services, client) =>
             {
@@ -82,9 +145,52 @@ public partial class App : System.Windows.Application
                 client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
             });
+        builder.Services.AddHttpClient<IStationApi, StationApi>(static (services, client) =>
+        {
+            ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        });
+        builder.Services.AddHttpClient<ISupabaseAuthService, SupabaseAuthService>(static (services, client) =>
+        {
+            SupabaseOptions options = services.GetRequiredService<IOptions<SupabaseOptions>>().Value;
+            client.BaseAddress = new Uri(options.Url.TrimEnd('/') + '/', UriKind.Absolute);
+            client.DefaultRequestHeaders.Add("apikey", options.PublishableKey);
+            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        });
+
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<IInputCommandSource, ConfigurableInputCommandSource>();
+        builder.Services.AddSingleton<OperationInputGuard>();
+        builder.Services.AddSingleton<IOperationFeedbackPlayer, WpfOperationFeedbackPlayer>();
+        builder.Services.AddSingleton<ILocalDatabasePathProvider, StationDatabasePathProvider>();
+        builder.Services.AddSingleton<ILocalSqliteConnectionFactory, SqliteConnectionFactory>();
+        builder.Services.AddSingleton<SqliteDatabaseMigrator>();
+        builder.Services.AddHostedService<LocalDatabaseInitializationService>();
+        builder.Services.AddSingleton<ILocalCatalogRepository, SqliteCatalogRepository>();
+        builder.Services.AddSingleton<ILocalShipmentRepository, SqliteShipmentRepository>();
+        builder.Services.AddSingleton<ILocalOperationalSessionRepository, SqliteOperationalSessionRepository>();
+        builder.Services.AddSingleton<ILocalProductionEventRepository, SqliteProductionEventRepository>();
+        builder.Services.AddSingleton<ILocalOutboxRepository, SqliteOutboxRepository>();
+        builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
+        builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
+        builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
+        builder.Services.AddSingleton<ILocalOperationInputMetricStore, SqliteOperationInputMetricStore>();
+        builder.Services.AddSingleton<LocalOperationInputMetricService>();
+        builder.Services.AddSingleton<IOperationInputMetrics>(services => services.GetRequiredService<LocalOperationInputMetricService>());
+        builder.Services.AddHostedService(services => services.GetRequiredService<LocalOperationInputMetricService>());
+        builder.Services.AddSingleton<ILocalDatabaseDiagnostics, SqliteDatabaseDiagnostics>();
+        builder.Services.AddSingleton<LocalOperationService>();
+        builder.Services.AddSingleton<RegisterCajuelaHandler>();
+        builder.Services.AddSingleton<RevertLastCajuelaHandler>();
+        builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
+        builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
+        builder.Services.AddSingleton<StationCoordinator>();
 
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DiagnosticsViewModel>();
+        builder.Services.AddSingleton<StationViewModel>();
+        builder.Services.AddSingleton<OperationViewModel>();
         builder.Services.AddSingleton<MainWindowViewModel>();
         builder.Services.AddSingleton<MainWindow>();
 

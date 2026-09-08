@@ -78,6 +78,17 @@ button:hover,
   background: #27343c;
 }
 
+button.secondary {
+  border-color: var(--border);
+  color: var(--ink-900);
+  background: var(--surface);
+}
+
+button.danger {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
 button:disabled {
   cursor: wait;
   opacity: 0.65;
@@ -311,6 +322,297 @@ main {
   margin-top: 1.5rem;
 }
 
+.auth-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+.auth-card {
+  width: min(100% - 2rem, 34rem);
+  padding: clamp(1.5rem, 5vw, 3rem);
+}
+
+.auth-card h1,
+.portal-page h1 {
+  margin: 0;
+  color: var(--ink-900);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.form-stack,
+.recovery-form,
+.inline-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+}
+
+input,
+select {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--ink-900);
+  background: #fff;
+  font: inherit;
+}
+
+.locale-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.suspension-form {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.suspension-form label {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.permission-selector {
+  display: grid;
+  gap: 1rem;
+  margin-block: 0.75rem;
+}
+
+.permission-selection-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.permission-selection-heading > div,
+.permission-group-card > span,
+.permission-grid label > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.permission-selection-heading span,
+.permission-group-card small,
+.permission-grid small {
+  color: var(--ink-700);
+}
+
+.permission-selection-heading > span {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  color: var(--gold-700);
+  background: var(--gold-100);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.permission-group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.permission-group-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  padding: 1rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.permission-group-card:has(input:checked) {
+  border-color: var(--gold-500);
+  background: var(--gold-100);
+}
+
+.permission-group-card input,
+.permission-grid input {
+  margin-top: 0.25rem;
+}
+
+.permission-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.permission-advanced {
+  max-width: none;
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+.permission-advanced summary {
+  color: var(--ink-900);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.message,
+.notice {
+  border-left: 4px solid var(--gold-500);
+  padding: 0.8rem 1rem;
+  background: var(--gold-100);
+}
+
+.message.error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.portal-page {
+  display: grid;
+  gap: 2rem;
+}
+
+.admin-module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.admin-module-card {
+  display: grid;
+  min-height: 14rem;
+  align-content: start;
+  gap: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.4rem;
+  color: var(--ink-900);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(23 32 38 / 6%);
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.admin-module-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-500);
+  box-shadow: var(--shadow);
+}
+
+.admin-module-card strong {
+  font-size: 1.25rem;
+}
+
+.admin-module-card > span:not(.admin-module-number, .admin-module-action) {
+  color: var(--ink-700);
+}
+
+.admin-module-number {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border-radius: 0.7rem;
+  color: var(--gold-700);
+  background: var(--gold-100);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.admin-module-action {
+  align-self: end;
+  margin-top: auto;
+  color: var(--gold-700);
+  font-weight: 800;
+}
+
+.admin-section-toolbar {
+  display: flex;
+}
+
+.button-link.secondary-link {
+  border-color: var(--border);
+  color: var(--ink-900);
+  background: var(--surface);
+}
+
+.button-link.secondary-link:hover {
+  border-color: var(--gold-500);
+  background: var(--gold-100);
+}
+
+.portal-page section {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  background: var(--surface);
+}
+
+.item-list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.item-list li,
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.item-list li {
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+
+.permission-grid {
+  display: grid;
+  gap: 0.65rem;
+  margin-block: 0.75rem;
+}
+
+.permission-grid label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+}
+
+details {
+  max-width: 42rem;
+}
+
+.item-list li > div:first-child {
+  display: grid;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem;
+  text-align: left;
+}
+
 footer {
   display: flex;
   justify-content: space-between;
@@ -347,6 +649,22 @@ footer {
 
   .status-details {
     grid-template-columns: 1fr;
+  }
+
+  .admin-module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .permission-group-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .locale-form,
+  .permission-selection-heading,
+  .item-list li,
+  .row-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

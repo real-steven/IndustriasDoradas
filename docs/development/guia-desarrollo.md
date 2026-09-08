@@ -1,7 +1,7 @@
 # Guía de desarrollo
 
 Reúne instalación, calidad, ambientes, secretos e integración continua. Todos
-los comandos parten de `C:\Users\titen\IndustriasDoradas`.
+los comandos parten de la raíz del clon local del repositorio.
 
 ## Requisitos
 
@@ -28,7 +28,8 @@ pnpm.cmd run setup
 | `pnpm.cmd run format` | Corrige formato TypeScript y .NET. |
 | `pnpm.cmd run lint` | Ejecuta ESLint y analizadores .NET. |
 | `pnpm.cmd run build` | Compila API, web y desktop Release. |
-| `pnpm.cmd test` | Ejecuta pruebas API, web, E2E y desktop. |
+| `pnpm.cmd test` | Ejecuta pruebas de base, API, web, E2E y desktop. |
+| `pnpm.cmd run test:db` | Aplica migraciones desde cero, repite el seed y prueba restricciones/RLS en PostgreSQL efímero. |
 | `pnpm.cmd run verify` | Ejecuta secretos, formato, lint, build y pruebas. |
 
 Antes de compartir cambios:
@@ -76,8 +77,8 @@ Producción no incorpora la URL del API; se inyecta con `Api__BaseUrl`.
 
 | Valor | API | Web | Desktop |
 | --- | --- | --- | --- |
-| URL/anon key Supabase | Permitido | Público para Auth futuro | No usado todavía |
-| `service_role` | Solo gestor de secretos del API | Prohibido | Prohibido |
+| URL/publishable key Supabase | URL en API; publishable no requerido | Público para Auth futuro | URL y clave publicable para Supabase Auth; nunca clave secreta |
+| `SUPABASE_SECRET_KEY`/`service_role` heredado | Solo gestor de secretos del API | Prohibido | Prohibido |
 
 Toda variable `VITE_*` es visible en el navegador. Nunca se versionan `.env`,
 claves privadas, `secrets.json`, appsettings locales, SQLite, fotos, diagnósticos
@@ -89,8 +90,9 @@ actual no elimina el secreto del historial.
 
 ## Integración continua
 
-`.github/workflows/ci.yml` se ejecuta en pushes/PR de `main` y `DevSteven`, o
-manualmente. Cancela ejecuciones obsoletas, usa `contents: read` y no despliega.
+`.github/workflows/ci.yml` se ejecuta en pushes/PR de `main`, `DevSteven` y
+`DevHenry`, o manualmente. Cancela ejecuciones obsoletas, usa `contents: read` y
+no despliega.
 
 - **Linux:** restaura caché pnpm; revisa secretos, formato, lint, build y pruebas
   de API/web.
@@ -103,6 +105,7 @@ pnpm.cmd run secrets:check
 pnpm.cmd run format:typescript:check
 pnpm.cmd run lint:typescript
 pnpm.cmd run build:typescript
+pnpm.cmd run test:db
 pnpm.cmd run test:api
 pnpm.cmd run test:web
 ```
@@ -127,4 +130,3 @@ Un fallo de CI se reproduce ejecutando localmente el comando del paso rojo.
   nombrando variables, nunca valores.
 - Para validar un clon: ejecuta `setup`, `verify` y abre API, web y desktop según
   README.
-

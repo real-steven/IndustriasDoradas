@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 
 namespace IndustriasDoradas.Desktop.Presentation;
@@ -13,6 +14,9 @@ public partial class MainWindow : Window
         this.viewModel = viewModel;
         DataContext = viewModel;
         Loaded += OnLoaded;
+        PreviewKeyDown += OnActivity;
+        PreviewMouseDown += OnActivity;
+        PreviewTouchDown += OnActivity;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -20,4 +24,6 @@ public partial class MainWindow : Window
         Loaded -= OnLoaded;
         await viewModel.InitializeAsync();
     }
+
+    private void OnActivity(object? sender, InputEventArgs e) => viewModel.RecordActivity();
 }
