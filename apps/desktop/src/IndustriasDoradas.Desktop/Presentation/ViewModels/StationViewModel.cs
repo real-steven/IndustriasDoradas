@@ -424,6 +424,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             preparedCompletion = null;
             preparedRelief = await operations.PrepareReliefAsync(
+                activeSession!.LineId,
                 SelectedWorker.Id,
                 OperationAuthority.From(state)).ConfigureAwait(true);
             string currentName = WorkerName(preparedRelief.ExpectedSession.ResponsibleWorkerId);
@@ -456,6 +457,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             preparedRelief = null;
             preparedCompletion = await operations.PrepareCompletionAsync(
+                activeSession!.LineId,
                 OperationAuthority.From(state)).ConfigureAwait(true);
             ManagementSummary =
                 "Cierre pendiente: finalizará el cargamento y bloqueará nuevos registros. " +

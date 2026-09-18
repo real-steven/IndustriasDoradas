@@ -8,7 +8,8 @@ public sealed record RegisterCajuelaCommand(
     Guid CommandId,
     Guid StationId,
     DateTimeOffset OccurredAt,
-    OperationInputOrigin InputOrigin);
+    OperationInputOrigin InputOrigin,
+    Guid? LineId = null);
 
 public sealed record RegisterCajuelaResult(
     ProductionEvent Event,
@@ -48,6 +49,15 @@ public sealed class RegisterCajuelaHandler(
             inputCommand.Origin);
     }
 
+    public static RegisterCajuelaCommand CreateCommand(
+        Guid stationId,
+        Guid lineId,
+        OperationInputCommand inputCommand)
+    {
+        EnsureRequired(lineId, nameof(lineId));
+        return CreateCommand(stationId, inputCommand) with { LineId = lineId };
+    }
+
     public async Task<RegisterCajuelaResult> ExecuteAsync(
         RegisterCajuelaCommand command,
         CancellationToken cancellationToken = default)
@@ -64,7 +74,8 @@ public sealed class RegisterCajuelaHandler(
                     command.StationId,
                     command.OccurredAt,
                     timeProvider.GetUtcNow(),
-                    command.InputOrigin),
+                    command.InputOrigin,
+                    command.LineId),
                 cancellationToken)
             .ConfigureAwait(false);
         TimeSpan elapsed = Stopwatch.GetElapsedTime(startedAt);

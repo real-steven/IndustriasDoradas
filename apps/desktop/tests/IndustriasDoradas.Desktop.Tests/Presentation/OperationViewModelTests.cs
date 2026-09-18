@@ -86,6 +86,7 @@ public sealed class OperationViewModelTests
     {
         var dashboard = new QueueDashboardRepository(new LocalOperationDashboardSnapshot(
             null,
+            LineId,
             "Línea 1",
             null,
             null,
@@ -304,6 +305,7 @@ public sealed class OperationViewModelTests
     private static LocalOperationDashboardSnapshot ReadySnapshot(int total, int pending = 1) =>
         new(
             Session(),
+            LineId,
             "Línea 1",
             "La Esperanza",
             Now.AddHours(-1),
@@ -351,6 +353,11 @@ public sealed class OperationViewModelTests
             index++;
             return Task.FromResult(result);
         }
+
+        public async Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) =>
+            [await GetAsync(stationId, cancellationToken)];
     }
 
     private sealed class StubCajuelaRepository(int total, bool rejectReversal = false) : ILocalCajuelaRepository
@@ -384,6 +391,15 @@ public sealed class OperationViewModelTests
             Guid stationId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new LocalCajuelaCorrectionTarget(Session(), target, total));
+
+        public Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
+            Guid stationId,
+            Guid lineId,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.AreEqual(LineId, lineId);
+            return Task.FromResult(new LocalCajuelaCorrectionTarget(Session(), target, total));
+        }
 
         public Task<LocalCajuelaReversal> ReverseAsync(
             ReverseCajuelaMutation mutation,
@@ -429,6 +445,11 @@ public sealed class OperationViewModelTests
     private sealed class ThrowingDashboardRepository : ILocalOperationDashboardRepository
     {
         public Task<LocalOperationDashboardSnapshot> GetAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) =>
+            throw new IOException("Base local no disponible.");
+
+        public Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
             Guid stationId,
             CancellationToken cancellationToken = default) =>
             throw new IOException("Base local no disponible.");

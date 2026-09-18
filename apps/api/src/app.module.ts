@@ -12,6 +12,7 @@ import { AllExceptionsFilter } from "./common/http/all-exceptions.filter";
 import { validateEnvironment } from "./config/environment";
 import { HealthModule } from "./health/health.module";
 import { StationModule } from "./station/station.module";
+import { SyncModule } from "./sync/sync.module";
 import { WorkersModule } from "./workers/workers.module";
 
 const nodeEnvironment = process.env.NODE_ENV;
@@ -38,6 +39,7 @@ const environmentFiles = nodeEnvironment
     CatalogsModule,
     HealthModule,
     StationModule,
+    SyncModule,
     WorkersModule,
   ],
   providers: [

@@ -263,6 +263,11 @@ public sealed class StationPreparationViewModelTests
         public LocalOperationalSession? Current { get; set; }
         public Task SaveAsync(LocalOperationalSession session, CancellationToken cancellationToken = default) { Current = session; return Task.CompletedTask; }
         public Task<LocalOperationalSession?> LoadAsync(Guid stationId, CancellationToken cancellationToken = default) => Task.FromResult(Current);
+        public Task<LocalOperationalSession?> LoadAsync(Guid stationId, Guid lineId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Current?.LineId == lineId ? Current : null);
+        public Task<IReadOnlyList<LocalOperationalSession>> ListActiveAsync(Guid stationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<LocalOperationalSession>>(
+                Current?.Status == LineFeedCycleStatus.Active ? [Current] : []);
     }
 
     private sealed class RecordingOperationRepository(MemorySessions sessions) : ILocalOperationRepository

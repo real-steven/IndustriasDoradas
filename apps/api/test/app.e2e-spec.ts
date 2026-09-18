@@ -37,6 +37,10 @@ import {
   STATION_REPOSITORY,
   type StationRepository,
 } from "../src/station/station.contracts";
+import {
+  SYNC_REPOSITORY,
+  type SyncRepository,
+} from "../src/sync/sync.contracts";
 
 const VERIFIED_TOKEN: VerifiedAccessToken = {
   subject: "a0000000-0000-4000-8000-000000000001",
@@ -84,6 +88,7 @@ describe("API smoke (e2e)", () => {
   let workers: jest.Mocked<WorkersRepository>;
   let accounts: jest.Mocked<AccountsRepository>;
   let stations: jest.Mocked<StationRepository>;
+  let sync: jest.Mocked<SyncRepository>;
 
   beforeAll(async () => {
     tokenVerifier = { verify: jest.fn() };
@@ -154,6 +159,10 @@ describe("API smoke (e2e)", () => {
       setPinVerifier: jest.fn(),
       resetPinBlocks: jest.fn(),
     };
+    sync = {
+      findActiveStationScope: jest.fn(),
+      ingestItem: jest.fn(),
+    };
     const testingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -173,6 +182,8 @@ describe("API smoke (e2e)", () => {
       .useValue(accounts)
       .overrideProvider(STATION_REPOSITORY)
       .useValue(stations)
+      .overrideProvider(SYNC_REPOSITORY)
+      .useValue(sync)
       .compile();
 
     app = testingModule.createNestApplication();
@@ -189,6 +200,8 @@ describe("API smoke (e2e)", () => {
     accounts.find.mockResolvedValue(null);
     accounts.createAdministrator.mockClear();
     accounts.replaceAdministratorPermissions.mockClear();
+    sync.findActiveStationScope.mockReset();
+    sync.ingestItem.mockReset();
     tokenVerifier.verify.mockImplementation((token) => {
       if (token === "valid-token") {
         return Promise.resolve(VERIFIED_TOKEN);
@@ -586,6 +599,38 @@ describe("API smoke (e2e)", () => {
     });
     expect(JSON.stringify(response.body)).not.toContain("authUserId");
   });
+
+  it("accepts a versioned sync batch for an assigned plant manager", async () => {
+    profiles.findByAuthUserId.mockResolvedValueOnce({
+      ...ACTIVE_PROFILE,
+      role: { ...ACTIVE_PROFILE.role, code: "JEFE_PLANTA" },
+      permissions: ["station.open"],
+    });
+    sync.findActiveStationScope.mockResolvedValueOnce({ permissionVersion: 1 });
+    sync.ingestItem.mockImplementationOnce((input) =>
+      Promise.resolve({
+        outboxMessageId: input.item.outboxMessageId,
+        stationSequence: input.item.stationSequence,
+        status: "APPLIED",
+        receiptId: "49000000-0000-4000-8000-000000000001",
+        code: "APPLIED",
+        processedAtUtc: "2026-09-15T18:10:00.000Z",
+      }),
+    );
+
+    const response = await request(httpServer)
+      .post(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/stations/34000000-0000-4000-8000-000000000001/sync/push`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .send(syncEnvelope())
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      contractVersion: 1,
+      results: [{ status: "APPLIED", code: "APPLIED" }],
+    });
+  });
 });
 
 function administratorAccount() {
@@ -600,5 +645,47 @@ function administratorAccount() {
     isActive: true,
     createdAt: "2026-08-20T00:00:00.000Z",
     updatedAt: "2026-08-20T00:00:00.000Z",
+  };
+}
+
+function syncEnvelope() {
+  return {
+    contractVersion: 1,
+    batchId: "40000000-0000-4000-8000-000000000001",
+    sentAtUtc: "2026-09-15T18:10:00.000Z",
+    client: { application: "desktop", applicationVersion: "0.1.0" },
+    scope: {
+      organizationId: ACTIVE_PROFILE.organizationId,
+      plantId: "31000000-0000-4000-8000-000000000001",
+      stationId: "34000000-0000-4000-8000-000000000001",
+    },
+    items: [
+      {
+        outboxMessageId: "41000000-0000-4000-8000-000000000001",
+        stationSequence: 1,
+        operationType: "OPERATION_STARTED",
+        aggregateType: "shipment",
+        aggregateId: "42000000-0000-4000-8000-000000000001",
+        payloadSchemaVersion: 1,
+        createdAtUtc: "2026-09-15T18:00:00.000Z",
+        authorization: {
+          actorProfileId: "a1000000-0000-4000-8000-000000000002",
+          permissionVersion: 1,
+          validatedAtUtc: "2026-09-15T17:55:00.000Z",
+          offlineValidUntilUtc: "2026-09-16T17:55:00.000Z",
+          stateAtCapture: "VALID",
+        },
+        payload: {
+          organizationId: ACTIVE_PROFILE.organizationId,
+          plantId: "31000000-0000-4000-8000-000000000001",
+          stationId: "34000000-0000-4000-8000-000000000001",
+          productionLineId: "32000000-0000-4000-8000-000000000001",
+          inputLineSlot: 1,
+          supplierId: "35000000-0000-4000-8000-000000000001",
+          responsibleWorkerId: "b1000000-0000-4000-8000-000000000001",
+          startedAtUtc: "2026-09-15T18:00:00.000Z",
+        },
+      },
+    ],
   };
 }

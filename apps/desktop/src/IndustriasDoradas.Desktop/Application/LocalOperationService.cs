@@ -162,10 +162,37 @@ public sealed class LocalOperationService(
     public async Task<PreparedResponsibleRelief> PrepareReliefAsync(
         Guid nextResponsibleWorkerId,
         OperationAuthority authority,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await PrepareReliefCoreAsync(
+                null,
+                nextResponsibleWorkerId,
+                authority,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<PreparedResponsibleRelief> PrepareReliefAsync(
+        Guid lineId,
+        Guid nextResponsibleWorkerId,
+        OperationAuthority authority,
+        CancellationToken cancellationToken = default) =>
+        await PrepareReliefCoreAsync(
+                lineId,
+                nextResponsibleWorkerId,
+                authority,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    private async Task<PreparedResponsibleRelief> PrepareReliefCoreAsync(
+        Guid? lineId,
+        Guid nextResponsibleWorkerId,
+        OperationAuthority authority,
+        CancellationToken cancellationToken)
     {
         ValidateAuthority(authority);
-        LocalOperationalSession current = await RequireActiveSessionAsync(authority.StationId, cancellationToken)
+        LocalOperationalSession current = await RequireActiveSessionAsync(
+                authority.StationId,
+                lineId,
+                cancellationToken)
             .ConfigureAwait(false);
         EnsureAuthorityScope(authority, current.OrganizationId, current.PlantId, current.StationId);
         CachedWorker worker = await RequireWorkerAsync(
@@ -226,10 +253,25 @@ public sealed class LocalOperationService(
 
     public async Task<PreparedOperationCompletion> PrepareCompletionAsync(
         OperationAuthority authority,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await PrepareCompletionCoreAsync(null, authority, cancellationToken).ConfigureAwait(false);
+
+    public async Task<PreparedOperationCompletion> PrepareCompletionAsync(
+        Guid lineId,
+        OperationAuthority authority,
+        CancellationToken cancellationToken = default) =>
+        await PrepareCompletionCoreAsync(lineId, authority, cancellationToken).ConfigureAwait(false);
+
+    private async Task<PreparedOperationCompletion> PrepareCompletionCoreAsync(
+        Guid? lineId,
+        OperationAuthority authority,
+        CancellationToken cancellationToken)
     {
         ValidateAuthority(authority);
-        LocalOperationalSession current = await RequireActiveSessionAsync(authority.StationId, cancellationToken)
+        LocalOperationalSession current = await RequireActiveSessionAsync(
+                authority.StationId,
+                lineId,
+                cancellationToken)
             .ConfigureAwait(false);
         EnsureAuthorityScope(authority, current.OrganizationId, current.PlantId, current.StationId);
         return new PreparedOperationCompletion(current, authority);
@@ -285,10 +327,40 @@ public sealed class LocalOperationService(
         return new LocalOperationContext(current, WorkPeriodSchedule.At(timeProvider.GetUtcNow()));
     }
 
+    public async Task<LocalOperationContext> GetContextAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureRequired(stationId, nameof(stationId));
+        EnsureRequired(lineId, nameof(lineId));
+        LocalOperationalSession? current = await sessions.LoadAsync(stationId, lineId, cancellationToken)
+            .ConfigureAwait(false);
+        return new LocalOperationContext(current, WorkPeriodSchedule.At(timeProvider.GetUtcNow()));
+    }
+
+    public async Task<IReadOnlyList<LocalOperationContext>> GetContextsAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureRequired(stationId, nameof(stationId));
+        IReadOnlyList<LocalOperationalSession> current = await sessions
+            .ListActiveAsync(stationId, cancellationToken)
+            .ConfigureAwait(false);
+        WorkPeriod workPeriod = WorkPeriodSchedule.At(timeProvider.GetUtcNow());
+        return current.Select(session => new LocalOperationContext(session, workPeriod)).ToArray();
+    }
+
     public async Task<LocalOperationalSession> RequireActiveContextAsync(
         Guid stationId,
         CancellationToken cancellationToken = default) =>
-        await RequireActiveSessionAsync(stationId, cancellationToken).ConfigureAwait(false);
+        await RequireActiveSessionAsync(stationId, null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<LocalOperationalSession> RequireActiveContextAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default) =>
+        await RequireActiveSessionAsync(stationId, lineId, cancellationToken).ConfigureAwait(false);
 
     private async Task<CachedSupplier> RequireSupplierAsync(
         Guid supplierId,
@@ -341,11 +413,34 @@ public sealed class LocalOperationService(
 
     private async Task<LocalOperationalSession> RequireActiveSessionAsync(
         Guid stationId,
+        Guid? lineId,
         CancellationToken cancellationToken)
     {
         EnsureRequired(stationId, nameof(stationId));
-        LocalOperationalSession? session = await sessions.LoadAsync(stationId, cancellationToken)
-            .ConfigureAwait(false);
+        if (lineId.HasValue)
+        {
+            EnsureRequired(lineId.Value, nameof(lineId));
+        }
+
+        LocalOperationalSession? session;
+        if (lineId.HasValue)
+        {
+            session = await sessions.LoadAsync(stationId, lineId.Value, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            IReadOnlyList<LocalOperationalSession> active = await sessions
+                .ListActiveAsync(stationId, cancellationToken)
+                .ConfigureAwait(false);
+            if (active.Count > 1)
+            {
+                throw new InvalidOperationException(
+                    "Hay varias líneas activas; seleccione la línea antes de continuar.");
+            }
+
+            session = active.Count == 0 ? null : active[0];
+        }
         if (session?.Status != LineFeedCycleStatus.Active)
         {
             throw new InvalidOperationException("La estación no tiene un cargamento activo con responsable.");

@@ -243,7 +243,10 @@ public sealed class OperationViewModel : ObservableObject
 
         bool succeeded = await RunAsync(async () =>
         {
-            RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(stationId, inputCommand);
+            RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(
+                stationId,
+                Line.LineId,
+                inputCommand);
             RegisterCajuelaResult result = await registerHandler.ExecuteAsync(command).ConfigureAwait(true);
             Line.Total = result.Total;
             ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
@@ -268,7 +271,8 @@ public sealed class OperationViewModel : ObservableObject
     {
         await RunAsync(async () =>
         {
-            preparedReversal = await reversalHandler.PrepareAsync(stationId).ConfigureAwait(true);
+            preparedReversal = await reversalHandler.PrepareAsync(stationId, Line.LineId)
+                .ConfigureAwait(true);
             CorrectionSummary =
                 $"Se corregirá la última cajuela. El total cambiará de " +
                 $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}.";
@@ -376,6 +380,8 @@ public sealed class OperationViewModel : ObservableObject
 
     private void Apply(LocalOperationDashboardSnapshot snapshot)
     {
+        Line.LineId = snapshot.LineId;
+        Line.LineSlot = 1;
         Line.LineName = snapshot.LineName;
         Line.IsReady = snapshot.IsReady;
         Line.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
@@ -450,10 +456,11 @@ public sealed class OperationViewModel : ObservableObject
     }
 
     private bool CanRegisterCajuela() =>
-        Line.IsReady && IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending;
+        Line.LineId != Guid.Empty && Line.IsReady && IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending;
 
     private bool CanPrepareCorrection() =>
-        Line.IsReady && IsLocalStorageAvailable && Line.Total > 0 && !IsBusy && !IsCorrectionPending;
+        Line.LineId != Guid.Empty && Line.IsReady && IsLocalStorageAvailable &&
+        Line.Total > 0 && !IsBusy && !IsCorrectionPending;
     private bool CanConfirmCorrection() => IsCorrectionPending && !IsBusy;
 
     private bool CanDispatchInput(OperationInputAction action) => action switch

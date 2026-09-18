@@ -46,6 +46,28 @@ public sealed class RevertLastCajuelaHandler(
             target.Total);
     }
 
+    public async Task<PreparedCajuelaReversal> PrepareAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureRequired(stationId, nameof(stationId));
+        EnsureRequired(lineId, nameof(lineId));
+        LocalCajuelaCorrectionTarget target = await repository.FindCorrectionTargetAsync(
+                stationId,
+                lineId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new PreparedCajuelaReversal(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            target.Session,
+            target.TargetEvent,
+            ImmediateInputErrorReason,
+            timeProvider.GetUtcNow(),
+            target.Total);
+    }
+
     public async Task<RevertLastCajuelaResult> ConfirmAsync(
         PreparedCajuelaReversal prepared,
         CancellationToken cancellationToken = default)

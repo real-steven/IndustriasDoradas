@@ -4,6 +4,8 @@ namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
 public sealed class OperationLinePanelViewModel : ObservableObject
 {
+    private Guid lineId;
+    private int lineSlot = 1;
     private string lineName = "Línea piloto";
     private string stateLabel = "SIN PREPARAR";
     private string feedDescription = "El jefe de planta debe preparar un cargamento.";
@@ -14,6 +16,8 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     private bool isReady;
     private bool hasPreviousResponsible;
 
+    public Guid LineId { get => lineId; set => SetProperty(ref lineId, value); }
+    public int LineSlot { get => lineSlot; set => SetProperty(ref lineSlot, value); }
     public string LineName { get => lineName; set => SetProperty(ref lineName, value); }
     public string StateLabel { get => stateLabel; set => SetProperty(ref stateLabel, value); }
     public string FeedDescription { get => feedDescription; set => SetProperty(ref feedDescription, value); }

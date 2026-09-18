@@ -15,6 +15,25 @@ public sealed partial class SqliteCajuelaRepository
         Guid stationId,
         CancellationToken cancellationToken = default)
     {
+        return await FindCorrectionTargetCoreAsync(stationId, null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default)
+    {
+        SqliteLocalStorageConverters.Id(lineId, nameof(lineId));
+        return await FindCorrectionTargetCoreAsync(stationId, lineId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetCoreAsync(
+        Guid stationId,
+        Guid? lineId,
+        CancellationToken cancellationToken)
+    {
         SqliteLocalStorageConverters.Id(stationId, nameof(stationId));
         await using SqliteConnection connection = await connectionFactory
             .OpenAsync(cancellationToken)
@@ -24,6 +43,7 @@ public sealed partial class SqliteCajuelaRepository
                 connection,
                 transaction,
                 stationId,
+                lineId,
                 cancellationToken)
             .ConfigureAwait(false);
         ProductionEvent target = await RequireLatestEffectiveAddedAsync(
@@ -88,6 +108,7 @@ public sealed partial class SqliteCajuelaRepository
                 connection,
                 transaction,
                 mutation.ExpectedSession.StationId,
+                mutation.ExpectedSession.LineId,
                 cancellationToken)
             .ConfigureAwait(false);
         if (current != mutation.ExpectedSession)
@@ -148,6 +169,7 @@ public sealed partial class SqliteCajuelaRepository
         SqliteConnection connection,
         SqliteTransaction transaction,
         Guid stationId,
+        Guid? lineId,
         CancellationToken cancellationToken)
     {
         await using SqliteCommand command = connection.CreateCommand();
@@ -171,12 +193,20 @@ public sealed partial class SqliteCajuelaRepository
                AND responsibility.worker_id = session.responsible_worker_id
                AND responsibility.unassigned_at_utc IS NULL
             WHERE session.station_id = $stationId
+              AND ($lineId IS NULL OR session.line_id = $lineId)
               AND session.status = 'ACTIVE'
-              AND shipment.status = 'ACTIVE';
+              AND shipment.status = 'ACTIVE'
+            ORDER BY session.line_id
+            LIMIT 2;
             """;
         command.Parameters.AddWithValue(
             "$stationId",
             SqliteLocalStorageConverters.Id(stationId, nameof(stationId)));
+        command.Parameters.AddWithValue(
+            "$lineId",
+            lineId is null
+                ? DBNull.Value
+                : SqliteLocalStorageConverters.Id(lineId.Value, nameof(lineId)));
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -185,7 +215,7 @@ public sealed partial class SqliteCajuelaRepository
                 "La corrección inmediata requiere un cargamento y responsable activos.");
         }
 
-        return new LocalOperationalSession(
+        LocalOperationalSession session = new(
             Guid.Parse(reader.GetString(0)),
             Guid.Parse(reader.GetString(1)),
             Guid.Parse(reader.GetString(2)),
@@ -196,6 +226,13 @@ public sealed partial class SqliteCajuelaRepository
             SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(7)),
             SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(8)),
             SqliteLocalStorageConverters.ReadStatus(reader.GetString(9)));
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException(
+                "Hay varias líneas activas; seleccione la línea antes de corregir.");
+        }
+
+        return session;
     }
 
     private static async Task<ProductionEvent> RequireLatestEffectiveAddedAsync(

@@ -326,6 +326,106 @@
         "required": ["active"],
         "type": "object"
       },
+      "SyncAuthorizationDto": {
+        "properties": {
+          "actorProfileId": { "format": "uuid", "type": "string" },
+          "offlineValidUntilUtc": { "type": "string" },
+          "permissionVersion": { "minimum": 1, "type": "number" },
+          "stateAtCapture": {
+            "enum": ["VALID", "EXPIRED_CONTINGENCY", "LEGACY_UNAVAILABLE"],
+            "type": "string"
+          },
+          "validatedAtUtc": { "type": "string" }
+        },
+        "required": [
+          "actorProfileId",
+          "permissionVersion",
+          "validatedAtUtc",
+          "offlineValidUntilUtc",
+          "stateAtCapture"
+        ],
+        "type": "object"
+      },
+      "SyncClientDto": {
+        "properties": {
+          "application": { "enum": ["desktop"], "type": "string" },
+          "applicationVersion": {
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
+            "type": "string"
+          }
+        },
+        "required": ["application", "applicationVersion"],
+        "type": "object"
+      },
+      "SyncItemDto": {
+        "properties": {
+          "aggregateId": { "format": "uuid", "type": "string" },
+          "aggregateType": {
+            "maxLength": 80,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "authorization": {
+            "$ref": "#/components/schemas/SyncAuthorizationDto"
+          },
+          "createdAtUtc": { "type": "string" },
+          "operationType": {
+            "maxLength": 80,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "outboxMessageId": { "format": "uuid", "type": "string" },
+          "payload": { "additionalProperties": true, "type": "object" },
+          "payloadSchemaVersion": { "minimum": 1, "type": "number" },
+          "stationSequence": { "minimum": 1, "type": "number" }
+        },
+        "required": [
+          "outboxMessageId",
+          "stationSequence",
+          "operationType",
+          "aggregateType",
+          "aggregateId",
+          "payloadSchemaVersion",
+          "createdAtUtc",
+          "authorization",
+          "payload"
+        ],
+        "type": "object"
+      },
+      "SyncPushDto": {
+        "properties": {
+          "batchId": { "format": "uuid", "type": "string" },
+          "client": { "$ref": "#/components/schemas/SyncClientDto" },
+          "contractVersion": { "minimum": 1, "type": "number" },
+          "items": {
+            "items": { "$ref": "#/components/schemas/SyncItemDto" },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array"
+          },
+          "scope": { "$ref": "#/components/schemas/SyncScopeDto" },
+          "sentAtUtc": { "type": "string" }
+        },
+        "required": [
+          "contractVersion",
+          "batchId",
+          "sentAtUtc",
+          "client",
+          "scope",
+          "items"
+        ],
+        "type": "object"
+      },
+      "SyncScopeDto": {
+        "properties": {
+          "organizationId": { "format": "uuid", "type": "string" },
+          "plantId": { "format": "uuid", "type": "string" },
+          "stationId": { "format": "uuid", "type": "string" }
+        },
+        "required": ["organizationId", "plantId", "stationId"],
+        "type": "object"
+      },
       "UpdateLineComponentDto": {
         "properties": {
           "code": {
@@ -3422,6 +3522,99 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Station"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/stations/{stationId}/sync/push": {
+      "post": {
+        "operationId": "SyncController_push",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "stationId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SyncPushDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Sync"]
       }
     },
     "/api/v1/organizations/{organizationId}/suppliers": {

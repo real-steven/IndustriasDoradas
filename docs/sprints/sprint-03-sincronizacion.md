@@ -26,17 +26,31 @@
 
 ### 3.1 Contrato y estados de sincronización
 
+**Estado:** aprobado para implementación mediante la orden `R`; diseñado el
+2026-09-08 y contrastado con la Outbox SQLite real. Contrato en
+[`../architecture/contrato-sincronizacion-sprint-03.md`](../architecture/contrato-sincronizacion-sprint-03.md).
+
 **Prompt:** Diseña push/pull y propagación de cambios: envelope, versión, UUID, secuencia, lotes, cursor, respuestas parciales, idempotencia, timestamps y estados. Cada mutación se confirma primero en SQLite, se envía inmediatamente si hay red y nunca depende de la nube para responder al Modo Operación. Define confirmado central, revalidación de la estación al recuperar conexión, correcciones administrativas entrantes y datos que nunca se sobrescriben.
 
 **Pausa:** representar en papel reintento después de perder respuesta sin producir duplicado.
 
 ### 3.2 Ingesta idempotente en API
 
+**Estado:** implementado el 2026-09-15; pendiente de la pausa manual. El API
+procesa cada elemento en su propia transacción PostgreSQL, conserva recibos
+centrales y devuelve resultados parciales estables. El pull permanece fuera de
+alcance.
+
 **Prompt:** Implementa endpoint versionado de ingesta por lotes para los eventos existentes. Valida organización/estación, autorización, esquema y versión; procesa transaccionalmente o responde por elemento según contrato; devuelve resultado estable. No implementes pull aún. Añade integración con PostgreSQL.
 
 **Pausa:** enviar lote válido, duplicado, mixto e inválido; revisar respuesta y base.
 
 ### 3.3 Restricciones y recibos centrales
+
+**Estado:** implementado el 2026-09-15; pendiente de la pausa manual. PostgreSQL
+serializa cada `(organization_id, station_id, outbox_message_id)` mediante un
+bloqueo transaccional, conserva restricciones únicas como defensa final y
+mantiene la misma correlación entre recibo y auditoría.
 
 **Prompt:** Refuerza idempotencia en PostgreSQL con claves/índices únicos y recibos de sincronización, no solo memoria de aplicación. Maneja carreras concurrentes y correlación. Prueba dos solicitudes simultáneas con el mismo UUID y confirma un único efecto/auditoría coherente.
 

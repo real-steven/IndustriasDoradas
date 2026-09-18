@@ -51,6 +51,7 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
                 connection,
                 transaction,
                 mutation.StationId,
+                mutation.LineId,
                 cancellationToken)
             .ConfigureAwait(false);
         long sequence = await NextSequenceAsync(
@@ -97,6 +98,7 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
         SqliteConnection connection,
         SqliteTransaction transaction,
         Guid stationId,
+        Guid? lineId,
         CancellationToken cancellationToken)
     {
         await using SqliteCommand command = connection.CreateCommand();
@@ -119,12 +121,20 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
                AND responsibility.worker_id = session.responsible_worker_id
                AND responsibility.unassigned_at_utc IS NULL
             WHERE session.station_id = $stationId
+              AND ($lineId IS NULL OR session.line_id = $lineId)
               AND session.status = 'ACTIVE'
-              AND shipment.status = 'ACTIVE';
+              AND shipment.status = 'ACTIVE'
+            ORDER BY session.line_id
+            LIMIT 2;
             """;
         command.Parameters.AddWithValue(
             "$stationId",
             SqliteLocalStorageConverters.Id(stationId, nameof(stationId)));
+        command.Parameters.AddWithValue(
+            "$lineId",
+            lineId is null
+                ? DBNull.Value
+                : SqliteLocalStorageConverters.Id(lineId.Value, nameof(lineId)));
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -133,7 +143,7 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
                 "No se puede registrar una cajuela sin cargamento y responsable activos.");
         }
 
-        return ProductionEventContext.Create(
+        ProductionEventContext context = ProductionEventContext.Create(
             Guid.Parse(reader.GetString(0)),
             Guid.Parse(reader.GetString(1)),
             Guid.Parse(reader.GetString(2)),
@@ -141,6 +151,13 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
             Guid.Parse(reader.GetString(4)),
             Guid.Parse(reader.GetString(5)),
             Guid.Parse(reader.GetString(6)));
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException(
+                "Hay varias líneas activas; seleccione la línea antes de registrar la cajuela.");
+        }
+
+        return context;
     }
 
     private static async Task<long> NextSequenceAsync(
@@ -391,6 +408,7 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
     {
         if (existing.Type != ProductionEventType.CajuelaAdded ||
             existing.Context.StationId != mutation.StationId ||
+            (mutation.LineId is not null && existing.Context.LineId != mutation.LineId) ||
             existing.OccurredAt != mutation.OccurredAt.ToUniversalTime())
         {
             throw new InvalidOperationException(

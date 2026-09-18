@@ -83,7 +83,8 @@ public sealed record RegisterCajuelaMutation(
     Guid StationId,
     DateTimeOffset OccurredAt,
     DateTimeOffset RecordedAt,
-    OperationInputOrigin InputOrigin);
+    OperationInputOrigin InputOrigin,
+    Guid? LineId = null);
 
 public sealed record LocalCajuelaRegistration(
     ProductionEvent Event,
@@ -114,6 +115,7 @@ public sealed record LocalCajuelaReversal(
 
 public sealed record LocalOperationDashboardSnapshot(
     LocalOperationalSession? Session,
+    Guid LineId,
     string LineName,
     string? SupplierName,
     DateTimeOffset? ShipmentStartedAt,
@@ -157,6 +159,13 @@ public interface ILocalOperationalSessionRepository
 {
     Task SaveAsync(LocalOperationalSession session, CancellationToken cancellationToken = default);
     Task<LocalOperationalSession?> LoadAsync(Guid stationId, CancellationToken cancellationToken = default);
+    Task<LocalOperationalSession?> LoadAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LocalOperationalSession>> ListActiveAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ILocalProductionEventRepository
@@ -200,6 +209,10 @@ public interface ILocalCajuelaRepository
     Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
         Guid stationId,
         CancellationToken cancellationToken = default);
+    Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default);
 
     Task<LocalCajuelaReversal> ReverseAsync(
         ReverseCajuelaMutation mutation,
@@ -209,6 +222,9 @@ public interface ILocalCajuelaRepository
 public interface ILocalOperationDashboardRepository
 {
     Task<LocalOperationDashboardSnapshot> GetAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
         Guid stationId,
         CancellationToken cancellationToken = default);
 }

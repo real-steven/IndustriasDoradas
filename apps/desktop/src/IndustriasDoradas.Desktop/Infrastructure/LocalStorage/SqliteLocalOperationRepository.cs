@@ -48,7 +48,7 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
                     VALUES (
                         $stationId, $organizationId, $plantId, $lineId, $shipmentId,
                         $feedCycleId, $responsibleWorkerId, $startedAtUtc, $updatedAtUtc, 'ACTIVE')
-                    ON CONFLICT(station_id) DO UPDATE SET
+                    ON CONFLICT(station_id, line_id) DO UPDATE SET
                         organization_id = excluded.organization_id,
                         plant_id = excluded.plant_id,
                         line_id = excluded.line_id,
