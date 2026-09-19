@@ -9,6 +9,7 @@ using IndustriasDoradas.Desktop.Infrastructure.Input;
 using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 using IndustriasDoradas.Desktop.Infrastructure.Security;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
+using IndustriasDoradas.Desktop.Infrastructure.Sync;
 using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using IndustriasDoradas.Desktop.Presentation.Feedback;
@@ -137,6 +138,10 @@ public partial class App : System.Windows.Application
             .Bind(builder.Configuration.GetSection(LocalRecoveryOptions.SectionName))
             .Validate(options => options.IsValid(), "LocalRecovery contiene límites inválidos.")
             .ValidateOnStart();
+        builder.Services.AddOptions<SyncOptions>()
+            .Bind(builder.Configuration.GetSection(SyncOptions.SectionName))
+            .Validate(options => options.IsValid(), "Sync contiene límites inválidos.")
+            .ValidateOnStart();
 
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(
             static (services, client) =>
@@ -156,6 +161,12 @@ public partial class App : System.Windows.Application
             SupabaseOptions options = services.GetRequiredService<IOptions<SupabaseOptions>>().Value;
             client.BaseAddress = new Uri(options.Url.TrimEnd('/') + '/', UriKind.Absolute);
             client.DefaultRequestHeaders.Add("apikey", options.PublishableKey);
+            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        });
+        builder.Services.AddHttpClient<ISyncApi, SyncApi>(static (services, client) =>
+        {
+            ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         });
 
@@ -186,6 +197,10 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
         builder.Services.AddSingleton<StationCoordinator>();
+        builder.Services.AddSingleton<ISyncStationContext, SyncStationContext>();
+        builder.Services.AddSingleton<ISyncJitter, SystemSyncJitter>();
+        builder.Services.AddSingleton<OutboxSyncProcessor>();
+        builder.Services.AddHostedService<OutboxSyncWorker>();
 
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DiagnosticsViewModel>();

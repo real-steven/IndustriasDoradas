@@ -62,7 +62,7 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
 
             int pending = checked((int)await ScalarLongAsync(
                 connection,
-                "SELECT COUNT(*) FROM outbox_messages WHERE state IN ('PENDING', 'FAILED');",
+                "SELECT COUNT(*) FROM outbox_messages WHERE state IN ('PENDING', 'SYNCING', 'FAILED_REVIEW');",
                 cancellationToken).ConfigureAwait(false));
             DateTimeOffset? latest = await ReadLatestRecordedAtAsync(connection, cancellationToken)
                 .ConfigureAwait(false);

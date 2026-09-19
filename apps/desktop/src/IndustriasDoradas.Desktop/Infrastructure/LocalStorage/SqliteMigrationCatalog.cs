@@ -19,6 +19,7 @@ public static class SqliteMigrationCatalog
         Read(4, "immediate_cajuela_correction", "004_immediate_cajuela_correction.sql"),
         Read(5, "operation_input_metrics", "005_operation_input_metrics.sql"),
         Read(6, "multi_line_operations", "006_multi_line_operations.sql"),
+        Read(7, "outbox_sync_worker", "007_outbox_sync_worker.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

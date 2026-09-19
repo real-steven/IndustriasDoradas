@@ -10,7 +10,10 @@ public sealed record OperationAuthority(
     Guid OrganizationId,
     Guid PlantId,
     Guid StationId,
-    int PermissionVersion)
+    int PermissionVersion,
+    DateTimeOffset? AuthorizationValidatedAt = null,
+    DateTimeOffset? AuthorizationOfflineUntil = null,
+    string AuthorizationState = "VALID")
 {
     public static OperationAuthority From(ProtectedStationState state)
     {
@@ -26,7 +29,9 @@ public sealed record OperationAuthority(
             state.Authorization.OrganizationId,
             state.Authorization.PlantId,
             state.Authorization.StationId,
-            state.Authorization.PermissionVersion);
+            state.Authorization.PermissionVersion,
+            state.Authorization.ValidatedAt,
+            state.Authorization.OfflineValidUntil);
     }
 }
 
@@ -150,7 +155,8 @@ public sealed class LocalOperationService(
                 prepared.Authority.ActorProfileId,
                 prepared.Authority.PermissionVersion,
                 occurredAtUtc = now,
-            });
+            },
+            prepared.Authority);
 
         await operations.StartAsync(
                 new StartLocalOperationMutation(session, prepared.SupplierId, assignmentId, outbox),
@@ -242,7 +248,8 @@ public sealed class LocalOperationService(
                 prepared.Authority.ActorProfileId,
                 prepared.Authority.PermissionVersion,
                 occurredAtUtc = now,
-            });
+            },
+            prepared.Authority);
 
         await operations.RelieveAsync(
                 new RelieveLocalOperationMutation(current, prepared.NextResponsibleWorkerId, assignmentId, now, outbox),
@@ -308,7 +315,8 @@ public sealed class LocalOperationService(
                 prepared.Authority.ActorProfileId,
                 prepared.Authority.PermissionVersion,
                 occurredAtUtc = now,
-            });
+            },
+            prepared.Authority);
 
         await operations.CompleteAsync(
                 new CompleteLocalOperationMutation(current, now, outbox),
@@ -453,14 +461,23 @@ public sealed class LocalOperationService(
         string operationType,
         Guid shipmentId,
         DateTimeOffset occurredAt,
-        object payload) =>
+        object payload,
+        OperationAuthority authority) =>
         new(
             Guid.NewGuid(),
             operationType,
             "shipment",
             shipmentId,
             JsonSerializer.Serialize(payload, JsonOptions),
-            occurredAt);
+            occurredAt,
+            authority.AuthorizationValidatedAt is null || authority.AuthorizationOfflineUntil is null
+                ? null
+                : new OutboxAuthorizationEvidence(
+                    authority.ActorProfileId,
+                    authority.PermissionVersion,
+                    authority.AuthorizationValidatedAt.Value,
+                    authority.AuthorizationOfflineUntil.Value,
+                    authority.AuthorizationState));
 
     private static void ValidateAuthority(OperationAuthority authority)
     {

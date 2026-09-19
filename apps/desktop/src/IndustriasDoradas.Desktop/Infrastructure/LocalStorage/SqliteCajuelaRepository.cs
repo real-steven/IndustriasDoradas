@@ -76,6 +76,7 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
                 transaction,
                 productionEvent,
                 mutation.InputOrigin,
+                mutation.Authorization,
                 cancellationToken)
             .ConfigureAwait(false);
         transaction.Commit();
@@ -250,6 +251,7 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
         SqliteTransaction transaction,
         ProductionEvent productionEvent,
         OperationInputOrigin inputOrigin,
+        OutboxAuthorizationEvidence? authorization,
         CancellationToken cancellationToken)
     {
         ProductionEventContext context = productionEvent.Context;
@@ -282,10 +284,16 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO outbox_messages(
-                id, operation_type, aggregate_type, aggregate_id, payload_json,
+                id, station_id, station_sequence, operation_type, aggregate_type, aggregate_id, payload_json,
+                actor_profile_id, permission_version, authorization_validated_at_utc,
+                authorization_offline_until_utc, authorization_state,
                 state, attempt_count, created_at_utc, updated_at_utc)
             VALUES (
-                $id, 'PRODUCTION_EVENT_CREATED', 'production_event', $aggregateId, $payloadJson,
+                $id, json_extract($payloadJson, '$.stationId'),
+                COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages), 1),
+                'PRODUCTION_EVENT_CREATED', 'production_event', $aggregateId, $payloadJson,
+                $actorProfileId, $permissionVersion, $authorizationValidatedAt,
+                $authorizationOfflineUntil, $authorizationState,
                 'PENDING', 0, $createdAtUtc, $createdAtUtc);
             """;
         command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
@@ -294,6 +302,7 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
         command.Parameters.AddWithValue(
             "$createdAtUtc",
             SqliteLocalStorageConverters.Timestamp(productionEvent.RecordedAt));
+        SqliteLocalStorageConverters.AddAuthorizationParameters(command, authorization);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Application;
@@ -23,7 +24,8 @@ public sealed record RevertLastCajuelaResult(
 
 public sealed class RevertLastCajuelaHandler(
     ILocalCajuelaRepository repository,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IProtectedStationStore? stationStore = null)
 {
     public const string ImmediateInputErrorReason = "IMMEDIATE_INPUT_ERROR";
 
@@ -98,6 +100,8 @@ public sealed class RevertLastCajuelaHandler(
         }
 
         long startedAt = Stopwatch.GetTimestamp();
+        OutboxAuthorizationEvidence? authorization = await CaptureAuthorizationAsync(
+            prepared.ExpectedSession.StationId, cancellationToken).ConfigureAwait(false);
         LocalCajuelaReversal reversal = await repository.ReverseAsync(
                 new ReverseCajuelaMutation(
                     prepared.ReversalEventId,
@@ -107,7 +111,8 @@ public sealed class RevertLastCajuelaHandler(
                     prepared.ReasonCode,
                     prepared.PreparedAt,
                     timeProvider.GetUtcNow(),
-                    inputOrigin),
+                    inputOrigin,
+                    authorization),
                 cancellationToken)
             .ConfigureAwait(false);
         TimeSpan elapsed = Stopwatch.GetElapsedTime(startedAt);
@@ -118,6 +123,22 @@ public sealed class RevertLastCajuelaHandler(
             reversal.Total,
             reversal.WasDuplicate,
             elapsed);
+    }
+
+    private async Task<OutboxAuthorizationEvidence?> CaptureAuthorizationAsync(
+        Guid stationId,
+        CancellationToken cancellationToken)
+    {
+        if (stationStore is null) return null;
+        ProtectedStationState? state = await stationStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (state is null || state.IsClosed || state.Authorization.StationId != stationId)
+            throw new UnauthorizedAccessException("No existe una autorización activa para corregir producción.");
+        return new OutboxAuthorizationEvidence(
+            state.Session.ProfileId,
+            state.Authorization.PermissionVersion,
+            state.Authorization.ValidatedAt,
+            state.Authorization.OfflineValidUntil,
+            "VALID");
     }
 
     private static void EnsureRequired(Guid value, string parameterName)

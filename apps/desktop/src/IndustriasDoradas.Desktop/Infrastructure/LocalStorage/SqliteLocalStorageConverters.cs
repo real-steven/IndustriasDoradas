@@ -1,10 +1,32 @@
 using System.Globalization;
+using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 
 internal static class SqliteLocalStorageConverters
 {
+    public static void AddAuthorizationParameters(
+        Microsoft.Data.Sqlite.SqliteCommand command,
+        OutboxAuthorizationEvidence? authorization)
+    {
+        command.Parameters.AddWithValue(
+            "$actorProfileId",
+            (object?)authorization?.ActorProfileId.ToString("D") ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$permissionVersion",
+            (object?)authorization?.PermissionVersion ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$authorizationValidatedAt",
+            authorization is null ? DBNull.Value : Timestamp(authorization.ValidatedAt));
+        command.Parameters.AddWithValue(
+            "$authorizationOfflineUntil",
+            authorization is null ? DBNull.Value : Timestamp(authorization.OfflineValidUntil));
+        command.Parameters.AddWithValue(
+            "$authorizationState",
+            (object?)authorization?.StateAtCapture ?? DBNull.Value);
+    }
+
     public static string Id(Guid value, string parameterName)
     {
         if (value == Guid.Empty)

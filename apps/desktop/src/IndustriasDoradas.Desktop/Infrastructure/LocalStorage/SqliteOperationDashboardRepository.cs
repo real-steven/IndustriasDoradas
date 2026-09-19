@@ -178,7 +178,7 @@ public sealed class SqliteOperationDashboardRepository(
         command.CommandText = """
             SELECT COUNT(*)
             FROM outbox_messages
-            WHERE state IN ('PENDING', 'FAILED');
+            WHERE state IN ('PENDING', 'SYNCING', 'FAILED_REVIEW');
             """;
         object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);

@@ -53,12 +53,33 @@ public sealed record PendingOutboxMessage(
     string AggregateType,
     Guid AggregateId,
     string PayloadJson,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record StoredOutboxMessage(
     PendingOutboxMessage Message,
     int AttemptCount,
     DateTimeOffset? NextAttemptAt);
+
+public sealed record OutboxAuthorizationEvidence(
+    Guid ActorProfileId,
+    int PermissionVersion,
+    DateTimeOffset ValidatedAt,
+    DateTimeOffset OfflineValidUntil,
+    string StateAtCapture);
+
+public sealed record ClaimedOutboxMessage(
+    PendingOutboxMessage Message,
+    long StationSequence,
+    int AttemptCount,
+    OutboxAuthorizationEvidence Authorization);
+
+public sealed record OutboxItemDisposition(
+    Guid OutboxMessageId,
+    string Status,
+    string Code,
+    Guid? ReceiptId,
+    int? HttpStatus = null);
 
 public sealed record StartLocalOperationMutation(
     LocalOperationalSession Session,
@@ -84,7 +105,8 @@ public sealed record RegisterCajuelaMutation(
     DateTimeOffset OccurredAt,
     DateTimeOffset RecordedAt,
     OperationInputOrigin InputOrigin,
-    Guid? LineId = null);
+    Guid? LineId = null,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record LocalCajuelaRegistration(
     ProductionEvent Event,
@@ -104,7 +126,8 @@ public sealed record ReverseCajuelaMutation(
     string ReasonCode,
     DateTimeOffset PreparedAt,
     DateTimeOffset ConfirmedAt,
-    OperationInputOrigin InputOrigin);
+    OperationInputOrigin InputOrigin,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record LocalCajuelaReversal(
     ProductionEvent Event,
@@ -185,6 +208,31 @@ public interface ILocalOutboxRepository
 {
     Task<IReadOnlyList<StoredOutboxMessage>> ListPendingAsync(
         int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ClaimedOutboxMessage>> ClaimAsync(
+        Guid stationId,
+        Guid claimId,
+        int limit,
+        DateTimeOffset now,
+        DateTimeOffset leaseUntil,
+        OutboxAuthorizationEvidence authorization,
+        CancellationToken cancellationToken = default);
+
+    Task CompleteClaimAsync(
+        Guid claimId,
+        IReadOnlyList<OutboxItemDisposition> dispositions,
+        DateTimeOffset now,
+        Func<int, TimeSpan> retryDelay,
+        CancellationToken cancellationToken = default);
+
+    Task ReleaseClaimAsync(
+        Guid claimId,
+        string errorCode,
+        int? httpStatus,
+        DateTimeOffset now,
+        Func<int, TimeSpan> retryDelay,
+        bool permanent,
         CancellationToken cancellationToken = default);
 }
 

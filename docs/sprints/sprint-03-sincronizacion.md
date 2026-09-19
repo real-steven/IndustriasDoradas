@@ -64,6 +64,13 @@ sustituyen la pausa manual ni la prueba de concurrencia con conexiones reales.
 
 ### 3.4 Worker de subida desktop
 
+**Estado:** implementado localmente en `DevHenry` el 2026-09-19; pendiente de
+la pausa manual. La Outbox usa estados `PENDING/SYNCING/SYNCED/FAILED_REVIEW`,
+secuencia por estación, reclamo atómico con lease, respuesta por elemento y
+backoff exponencial con jitter. La autorización se captura al crear la mutación,
+no al enviarla. Evidencia en
+[`../testing/sprint-03-4-worker-subida.md`](../testing/sprint-03-4-worker-subida.md).
+
 **Prompt:** Implementa worker en segundo plano que reclame elementos outbox, envíe lotes, marque confirmados y reintente con backoff+jitter. Distingue red/5xx/429 de 4xx permanente, libera elementos `SYNCING` abandonados tras reinicio y nunca bloquea UI. Añade reloj/inyección para pruebas deterministas.
 
 **Pausa:** cortar conexión antes, durante y después de respuesta; observar recuperación automática.

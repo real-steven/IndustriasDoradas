@@ -55,8 +55,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(6L, result.CurrentVersion);
-        Assert.AreEqual(6, result.AppliedCount);
+        Assert.AreEqual(7L, result.CurrentVersion);
+        Assert.AreEqual(7, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -65,7 +65,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(6L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(7L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -97,7 +97,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(5, result.AppliedCount);
+        Assert.AreEqual(6, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -257,7 +257,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(6L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(7L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -401,18 +401,87 @@ public sealed class LocalSqliteStorageTests
         await using var database = new TestDatabase();
         await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(2).ToArray());
         await SeedContextAsync(database);
-        await database.Events().AppendWithOutboxAsync(
-            Added(EventId(1), 1),
-            Outbox(EventId(10), EventId(1)));
+        await InsertLegacyEventWithOutboxAsync(database.Factory);
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(4, result.AppliedCount);
+        Assert.AreEqual(5, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_event_corrections';"));
+    }
+
+    [TestMethod]
+    public async Task OutboxClaimRetriesWithLeaseAndStoresCentralReceipt()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedContextAsync(database);
+        var capturedAuthorization = new OutboxAuthorizationEvidence(
+            ActorProfileId, 4, StartedAt.AddHours(-1), StartedAt.AddHours(24), "VALID");
+        PendingOutboxMessage message = Outbox(EventId(10), EventId(1)) with
+        {
+            Authorization = capturedAuthorization,
+        };
+        await database.Events().AppendWithOutboxAsync(Added(EventId(1), 1), message);
+        var currentAuthorization = new OutboxAuthorizationEvidence(
+            Guid.NewGuid(), 9, StartedAt, StartedAt.AddHours(48), "VALID");
+        Guid firstClaim = Guid.NewGuid();
+
+        IReadOnlyList<ClaimedOutboxMessage> first = await database.Outbox().ClaimAsync(
+            StationId, firstClaim, 10, StartedAt.AddMinutes(2), StartedAt.AddMinutes(3), currentAuthorization);
+
+        Assert.AreEqual(1, first.Count);
+        Assert.AreEqual(1L, first[0].StationSequence);
+        Assert.AreEqual(1, first[0].AttemptCount);
+        Assert.AreEqual(ActorProfileId, first[0].Authorization.ActorProfileId);
+        await database.Outbox().CompleteClaimAsync(
+            firstClaim,
+            [new(message.Id, "RETRY_LATER", "NETWORK_UNAVAILABLE", null)],
+            StartedAt.AddMinutes(2),
+            _ => TimeSpan.FromSeconds(10));
+        Assert.AreEqual(0, (await database.Outbox().ClaimAsync(
+            StationId, Guid.NewGuid(), 10, StartedAt.AddMinutes(2).AddSeconds(9),
+            StartedAt.AddMinutes(4), currentAuthorization)).Count);
+
+        Guid secondClaim = Guid.NewGuid();
+        IReadOnlyList<ClaimedOutboxMessage> second = await database.Outbox().ClaimAsync(
+            StationId, secondClaim, 10, StartedAt.AddMinutes(2).AddSeconds(10),
+            StartedAt.AddMinutes(4), currentAuthorization);
+        Guid receiptId = Guid.NewGuid();
+        Assert.AreEqual(2, second[0].AttemptCount);
+        await database.Outbox().CompleteClaimAsync(
+            secondClaim,
+            [new(message.Id, "APPLIED", "APPLIED", receiptId)],
+            StartedAt.AddMinutes(2).AddSeconds(11),
+            _ => TimeSpan.Zero);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual("SYNCED", await ScalarTextAsync(
+            connection, "SELECT state FROM outbox_messages WHERE id = '50000000-0000-4000-8000-000000000010';"));
+        Assert.AreEqual(receiptId.ToString("D"), await ScalarTextAsync(
+            connection, "SELECT central_receipt_id FROM outbox_messages WHERE id = '50000000-0000-4000-8000-000000000010';"));
+    }
+
+    [TestMethod]
+    public async Task ExpiredOutboxLeaseIsRecoveredAfterRestart()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedContextAsync(database);
+        await database.Events().AppendWithOutboxAsync(Added(EventId(1), 1), Outbox(EventId(10), EventId(1)));
+        var authorization = new OutboxAuthorizationEvidence(
+            ActorProfileId, 1, StartedAt.AddHours(-1), StartedAt.AddHours(24), "VALID");
+        await database.Outbox().ClaimAsync(
+            StationId, Guid.NewGuid(), 10, StartedAt, StartedAt.AddMinutes(1), authorization);
+
+        IReadOnlyList<ClaimedOutboxMessage> recovered = await database.Outbox().ClaimAsync(
+            StationId, Guid.NewGuid(), 10, StartedAt.AddMinutes(1), StartedAt.AddMinutes(2), authorization);
+
+        Assert.AreEqual(1, recovered.Count);
+        Assert.AreEqual(2, recovered[0].AttemptCount);
     }
 
     [TestMethod]
@@ -1346,7 +1415,13 @@ public sealed class LocalSqliteStorageTests
             StartedAt.AddMinutes(sequence).AddMilliseconds(25));
 
     private static PendingOutboxMessage Outbox(Guid id, Guid aggregateId) =>
-        new(id, "PRODUCTION_EVENT_CREATED", "production_event", aggregateId, "{}", StartedAt);
+        new(
+            id,
+            "PRODUCTION_EVENT_CREATED",
+            "production_event",
+            aggregateId,
+            $"{{\"schemaVersion\":2,\"stationId\":\"{StationId:D}\"}}",
+            StartedAt);
 
     private static Guid EventId(int suffix) =>
         Guid.Parse($"50000000-0000-4000-8000-{suffix:D12}");
@@ -1392,6 +1467,44 @@ public sealed class LocalSqliteStorageTests
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         return await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task InsertLegacyEventWithOutboxAsync(SqliteConnectionFactory factory)
+    {
+        ProductionEvent productionEvent = Added(EventId(1), 1);
+        await using SqliteConnection connection = await factory.OpenAsync();
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO production_events(
+                client_event_id, organization_id, plant_id, station_id, line_id,
+                feed_cycle_id, shipment_id, responsible_worker_id, event_type,
+                work_period, occurred_at_utc, recorded_at_utc, client_sequence,
+                reverses_client_event_id)
+            VALUES ($eventId, $organizationId, $plantId, $stationId, $lineId,
+                $cycleId, $shipmentId, $workerId, 'CAJUELA_ADDED', 'DAY',
+                $occurredAt, $recordedAt, 1, NULL);
+            INSERT INTO outbox_messages(
+                id, operation_type, aggregate_type, aggregate_id, payload_json,
+                state, attempt_count, created_at_utc, updated_at_utc)
+            VALUES ($outboxId, 'PRODUCTION_EVENT_CREATED', 'production_event', $eventId,
+                $payload, 'PENDING', 0, $recordedAt, $recordedAt);
+            """;
+        command.Parameters.AddWithValue("$eventId", productionEvent.ClientEventId.ToString("D"));
+        command.Parameters.AddWithValue("$organizationId", OrganizationId.ToString("D"));
+        command.Parameters.AddWithValue("$plantId", PlantId.ToString("D"));
+        command.Parameters.AddWithValue("$stationId", StationId.ToString("D"));
+        command.Parameters.AddWithValue("$lineId", LineId.ToString("D"));
+        command.Parameters.AddWithValue("$cycleId", CycleId.ToString("D"));
+        command.Parameters.AddWithValue("$shipmentId", ShipmentId.ToString("D"));
+        command.Parameters.AddWithValue("$workerId", WorkerId.ToString("D"));
+        command.Parameters.AddWithValue("$occurredAt", productionEvent.OccurredAt.ToString("O"));
+        command.Parameters.AddWithValue("$recordedAt", productionEvent.RecordedAt.ToString("O"));
+        command.Parameters.AddWithValue("$outboxId", EventId(10).ToString("D"));
+        command.Parameters.AddWithValue("$payload", Outbox(EventId(10), EventId(1)).PayloadJson);
+        await command.ExecuteNonQueryAsync();
+        transaction.Commit();
     }
 
     private static void DeleteRoot(string root)

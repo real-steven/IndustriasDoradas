@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Application;
@@ -19,7 +20,8 @@ public sealed record RegisterCajuelaResult(
 
 public sealed class RegisterCajuelaHandler(
     ILocalCajuelaRepository repository,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IProtectedStationStore? stationStore = null)
 {
     public RegisterCajuelaCommand CreateCommand(Guid stationId)
     {
@@ -68,6 +70,8 @@ public sealed class RegisterCajuelaHandler(
         command.InputOrigin.Validate();
 
         long startedAt = Stopwatch.GetTimestamp();
+        OutboxAuthorizationEvidence? authorization = await CaptureAuthorizationAsync(
+            command.StationId, cancellationToken).ConfigureAwait(false);
         LocalCajuelaRegistration registration = await repository.RegisterAsync(
                 new RegisterCajuelaMutation(
                     command.CommandId,
@@ -75,7 +79,8 @@ public sealed class RegisterCajuelaHandler(
                     command.OccurredAt,
                     timeProvider.GetUtcNow(),
                     command.InputOrigin,
-                    command.LineId),
+                    command.LineId,
+                    authorization),
                 cancellationToken)
             .ConfigureAwait(false);
         TimeSpan elapsed = Stopwatch.GetElapsedTime(startedAt);
@@ -85,6 +90,22 @@ public sealed class RegisterCajuelaHandler(
             registration.Total,
             registration.WasDuplicate,
             elapsed);
+    }
+
+    private async Task<OutboxAuthorizationEvidence?> CaptureAuthorizationAsync(
+        Guid stationId,
+        CancellationToken cancellationToken)
+    {
+        if (stationStore is null) return null;
+        ProtectedStationState? state = await stationStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (state is null || state.IsClosed || state.Authorization.StationId != stationId)
+            throw new UnauthorizedAccessException("No existe una autorización activa para registrar producción.");
+        return new OutboxAuthorizationEvidence(
+            state.Session.ProfileId,
+            state.Authorization.PermissionVersion,
+            state.Authorization.ValidatedAt,
+            state.Authorization.OfflineValidUntil,
+            "VALID");
     }
 
     private static void EnsureRequired(Guid value, string parameterName)
