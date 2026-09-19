@@ -8,6 +8,35 @@ const scope = {
 };
 
 describe("normalizeSyncItem", () => {
+  it("accepts a cajuela with authorization in the envelope only", () => {
+    const item = productionEvent();
+    expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
+  });
+
+  it("accepts an immediate reversal without adding authorization to its payload", () => {
+    const item = productionEvent();
+    Object.assign(item.payload, {
+      eventType: "CAJUELA_REVERSED",
+      quantityDelta: -1,
+      reversesClientEventId: "45000000-0000-4000-8000-000000000002",
+      confirmationId: "46000000-0000-4000-8000-000000000001",
+      reasonCode: "IMMEDIATE_INPUT_ERROR",
+      preparedAtUtc: "2026-09-15T18:00:59.000Z",
+    });
+    expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
+  });
+
+  it.each([
+    ["organizationId", "30000000-0000-4000-8000-000000000099"],
+    ["workPeriod", "NIGHT"],
+    ["occurredAtUtc", "2026-09-17T18:01:00.000Z"],
+    ["actorProfileId", "a1000000-0000-4000-8000-000000000002"],
+  ])("still rejects an invalid production field %s", (field, value) => {
+    const item = productionEvent();
+    item.payload[field] = value;
+    expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
+  });
+
   it("produces the same fingerprint for equivalent property ordering", () => {
     const first = operationStarted();
     const second = operationStarted();

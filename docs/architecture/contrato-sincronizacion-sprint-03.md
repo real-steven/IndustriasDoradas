@@ -460,6 +460,9 @@ como puerta de negocio.
 - `UNSUPPORTED_PAYLOAD_SCHEMA`
 - `IDEMPOTENCY_CONTENT_MISMATCH`
 - `STATION_SEQUENCE_CONFLICT`
+- `PRODUCTION_SEQUENCE_CONFLICT`
+- `REVERSAL_CONFLICT`
+- `DATABASE_CONSTRAINT_VIOLATION`
 - `SCOPE_MISMATCH`
 - `STATION_REVOKED`
 - `AUTHORIZATION_EXPIRED_CONTINGENCY`
@@ -469,6 +472,18 @@ como puerta de negocio.
 - `CLOCK_SKEW_REVIEW`
 
 Los mensajes humanos pueden traducirse; estos códigos no cambian por idioma.
+
+Una dependencia operativa que todavía no llegó devuelve `DEPENDENCY_NOT_READY`
+sin crear recibo terminal. Un antecedente identificado y rechazado previamente
+devuelve `DEPENDENCY_REJECTED`. Los recibos de relevo identifican el cargamento,
+no al trabajador de destino: su ausencia no permite inferir un rechazo permanente.
+
+`STATION_SEQUENCE_CONFLICT` devuelve `FAILED_REVIEW` sin `receiptId`, porque la
+secuencia ya pertenece a otro UUID y no admite un segundo recibo. El worker debe
+conservar el mensaje para revisión; nunca confirmarlo con el recibo ajeno.
+Los conflictos de integridad detectados dentro de la RPC revierten el intento
+y conservan un recibo de rechazo. El respaldo de clasificación SQLSTATE de la API
+puede devolver rechazo sin recibo si el fallo escapó de la RPC.
 
 ## 15. Pruebas exigidas a los pasos siguientes
 

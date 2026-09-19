@@ -52,6 +52,12 @@ serializa cada `(organization_id, station_id, outbox_message_id)` mediante un
 bloqueo transaccional, conserva restricciones únicas como defensa final y
 mantiene la misma correlación entre recibo y auditoría.
 
+**Correcciones locales del 2026-09-19:** normalización de producción v2,
+dependencias pendientes reintentables y conflictos permanentes aislados.
+Ver [evidencia y pendientes](../testing/sprint-03-correcciones-ingesta.md).
+La migración nueva requiere aplicación al entorno destino; estas pruebas no
+sustituyen la pausa manual ni la prueba de concurrencia con conexiones reales.
+
 **Prompt:** Refuerza idempotencia en PostgreSQL con claves/índices únicos y recibos de sincronización, no solo memoria de aplicación. Maneja carreras concurrentes y correlación. Prueba dos solicitudes simultáneas con el mismo UUID y confirma un único efecto/auditoría coherente.
 
 **Pausa:** prueba de concurrencia repetida sin duplicados ni 500 inesperado.

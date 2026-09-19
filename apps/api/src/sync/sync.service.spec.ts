@@ -104,6 +104,56 @@ describe("SyncService", () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(repository.ingestItem.mock.calls).toHaveLength(0);
   });
+
+  it.each(["23505", "23503", "23514", "23502", "22P02", "22003"])(
+    "does not retry a permanent database rejection (%s)",
+    async (databaseCode) => {
+      repository.ingestItem.mockRejectedValueOnce(
+        new SyncRepositoryError(databaseCode),
+      );
+      const body = envelope();
+      body.items.push({
+        ...body.items[0]!,
+        stationSequence: 2,
+        outboxMessageId: "41000000-0000-4000-8000-000000000002",
+      });
+      const response = await service.push(
+        body.scope.organizationId,
+        body.scope.stationId,
+        body,
+        auth(),
+        "4a000000-0000-4000-8000-000000000001",
+      );
+      expect(response.results[0]).toMatchObject({
+        status: "FAILED_REVIEW",
+        code: databaseCode.startsWith("23")
+          ? "DATABASE_CONSTRAINT_VIOLATION"
+          : "INVALID_EVENT",
+      });
+      expect(response.results[1]?.status).toBe("APPLIED");
+    },
+  );
+
+  it.each(["40001", "40P01", "55P03", "NETWORK_ERROR", "HTTP_429", "HTTP_503"])(
+    "keeps transient database or transport failures retryable (%s)",
+    async (databaseCode) => {
+      repository.ingestItem.mockRejectedValueOnce(
+        new SyncRepositoryError(databaseCode),
+      );
+      const body = envelope();
+      const response = await service.push(
+        body.scope.organizationId,
+        body.scope.stationId,
+        body,
+        auth(),
+        "4a000000-0000-4000-8000-000000000001",
+      );
+      expect(response.results[0]).toMatchObject({
+        status: "RETRY_LATER",
+        code: "SERVER_TEMPORARY_FAILURE",
+      });
+    },
+  );
 });
 
 function envelope(): SyncPushDto {

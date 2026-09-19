@@ -105,6 +105,9 @@ function normalizePayload(
 ): PayloadResult {
   try {
     const payload = item.payload;
+    if (operationType === "PRODUCTION_EVENT_CREATED") {
+      return normalizeProductionEvent(payload, item, scope);
+    }
     const common = normalizeOperationalCommon(payload, scope, item);
     if (operationType === "OPERATION_STARTED") {
       requireExactKeys(payload, [
@@ -192,7 +195,7 @@ function normalizePayload(
       return { payload: canonicalObject(normalized), code: null };
     }
 
-    return normalizeProductionEvent(payload, item, scope);
+    throw new Error("unsupported operation type");
   } catch {
     return { payload: canonicalObject(item.payload), code: "INVALID_EVENT" };
   }

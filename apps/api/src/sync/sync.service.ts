@@ -75,11 +75,18 @@ export class SyncService {
         );
       } catch (error) {
         if (!(error instanceof SyncRepositoryError)) throw error;
+        // SQLSTATE class 22: invalid data; class 23: integrity violation.
+        // Retrying an unchanged item cannot repair either. Never expose SQL details.
+        const permanentCode = /^23[0-9A-Z]{3}$/u.test(error.databaseCode)
+          ? "DATABASE_CONSTRAINT_VIOLATION"
+          : /^22[0-9A-Z]{3}$/u.test(error.databaseCode)
+            ? "INVALID_EVENT"
+            : null;
         results.push({
           outboxMessageId: item.outboxMessageId,
           stationSequence: item.stationSequence,
-          status: "RETRY_LATER",
-          code: "SERVER_TEMPORARY_FAILURE",
+          status: permanentCode === null ? "RETRY_LATER" : "FAILED_REVIEW",
+          code: permanentCode ?? "SERVER_TEMPORARY_FAILURE",
           processedAtUtc: new Date().toISOString(),
         });
       }
