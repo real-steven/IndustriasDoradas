@@ -147,7 +147,9 @@ public sealed record LocalOperationDashboardSnapshot(
     string? PreviousResponsibleName,
     DateTimeOffset? PreviousResponsibleUntil,
     int Total,
-    int PendingOutboxCount)
+    int PendingOutboxCount,
+    int FailedReviewOutboxCount = 0,
+    int SyncedOutboxCount = 0)
 {
     public bool IsReady => Session?.Status == LineFeedCycleStatus.Active;
 }
@@ -313,4 +315,6 @@ public sealed record LocalDatabaseHealth(
     DateTimeOffset? LatestRecordedAt,
     DateTimeOffset CheckedAt,
     string Summary,
-    string RecoveryInstruction);
+    string RecoveryInstruction,
+    int FailedReviewOutboxCount = 0,
+    int SyncedOutboxCount = 0);

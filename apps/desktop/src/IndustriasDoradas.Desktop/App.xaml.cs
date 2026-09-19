@@ -166,8 +166,9 @@ public partial class App : System.Windows.Application
         builder.Services.AddHttpClient<ISyncApi, SyncApi>(static (services, client) =>
         {
             ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            SyncOptions syncOptions = services.GetRequiredService<IOptions<SyncOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
-            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+            client.Timeout = TimeSpan.FromSeconds(syncOptions.RequestTimeoutSeconds);
         });
 
         builder.Services.AddSingleton(TimeProvider.System);

@@ -60,10 +60,8 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                     "Detenga la operación y solicite diagnóstico; no edite las tablas manualmente.");
             }
 
-            int pending = checked((int)await ScalarLongAsync(
-                connection,
-                "SELECT COUNT(*) FROM outbox_messages WHERE state IN ('PENDING', 'SYNCING', 'FAILED_REVIEW');",
-                cancellationToken).ConfigureAwait(false));
+            OutboxCounts outbox = await ReadOutboxCountsAsync(connection, cancellationToken)
+                .ConfigureAwait(false);
             DateTimeOffset? latest = await ReadLatestRecordedAtAsync(connection, cancellationToken)
                 .ConfigureAwait(false);
             long freeBytes = ReadAvailableFreeBytes(connectionFactory.DatabasePath);
@@ -72,12 +70,14 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                 return new LocalDatabaseHealth(
                     LocalDatabaseHealthState.Unavailable,
                     LocalDatabaseHealthIssue.ClockRollback,
-                    pending,
+                    outbox.Pending,
                     freeBytes,
                     latest,
                     checkedAt,
                     "El reloj del equipo está atrasado respecto de la última operación local.",
-                    "Corrija fecha, hora y zona horaria antes de registrar nuevos eventos.");
+                    "Corrija fecha, hora y zona horaria antes de registrar nuevos eventos.",
+                    outbox.FailedReview,
+                    outbox.Synced);
             }
 
             long minimumBytes = options.MinimumFreeMegabytes * 1024L * 1024L;
@@ -86,25 +86,29 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                 return new LocalDatabaseHealth(
                     LocalDatabaseHealthState.Attention,
                     LocalDatabaseHealthIssue.LowDiskSpace,
-                    pending,
+                    outbox.Pending,
                     freeBytes,
                     latest,
                     checkedAt,
                     "Queda poco espacio en el disco de operación.",
-                    "Libere espacio antes de continuar una jornada prolongada.");
+                    "Libere espacio antes de continuar una jornada prolongada.",
+                    outbox.FailedReview,
+                    outbox.Synced);
             }
 
             return new LocalDatabaseHealth(
                 LocalDatabaseHealthState.Healthy,
                 LocalDatabaseHealthIssue.None,
-                pending,
+                outbox.Pending,
                 freeBytes,
                 latest,
                 checkedAt,
                 "Guardado local disponible e íntegro.",
-                pending == 0
-                    ? "No hay acciones locales pendientes."
-                    : "Los pendientes están conservados localmente; no se enviarán en este sprint.");
+                outbox.Pending == 0
+                    ? "No hay acciones locales pendientes de envío."
+                    : "Las acciones pendientes están conservadas y el worker seguirá intentando enviarlas.",
+                outbox.FailedReview,
+                outbox.Synced);
         }
         catch (Exception exception) when (exception is SqliteException or IOException or InvalidOperationException)
         {
@@ -180,6 +184,24 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
             CultureInfo.InvariantCulture);
     }
 
+    private static async Task<OutboxCounts> ReadOutboxCountsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                COALESCE(SUM(CASE WHEN state IN ('PENDING', 'SYNCING') THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'FAILED_REVIEW' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'SYNCED' THEN 1 ELSE 0 END), 0)
+            FROM outbox_messages;
+            """;
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        return new OutboxCounts(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
+    }
+
     private static async Task<DateTimeOffset?> ReadLatestRecordedAtAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)
@@ -222,4 +244,6 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
         LocalStorageFailureKind.Unavailable => LocalDatabaseHealthIssue.Unavailable,
         _ => LocalDatabaseHealthIssue.Unknown,
     };
+
+    private sealed record OutboxCounts(int Pending, int FailedReview, int Synced);
 }

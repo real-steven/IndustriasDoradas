@@ -39,7 +39,7 @@ public sealed class SqliteOperationDashboardRepository(
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
         using SqliteTransaction transaction = connection.BeginTransaction();
-        int pending = await ReadPendingCountAsync(connection, transaction, cancellationToken)
+        OutboxCounts outbox = await ReadOutboxCountsAsync(connection, transaction, cancellationToken)
             .ConfigureAwait(false);
         IReadOnlyList<(Guid Id, string Name)> catalogLines = await ReadLinesAsync(
                 connection,
@@ -68,8 +68,15 @@ public sealed class SqliteOperationDashboardRepository(
                     null,
                     null,
                     0,
-                    pending)
-                : active with { PendingOutboxCount = pending });
+                    outbox.Pending,
+                    outbox.FailedReview,
+                    outbox.Synced)
+                : active with
+                {
+                    PendingOutboxCount = outbox.Pending,
+                    FailedReviewOutboxCount = outbox.FailedReview,
+                    SyncedOutboxCount = outbox.Synced,
+                });
         }
         transaction.Commit();
         return result;
@@ -168,7 +175,7 @@ public sealed class SqliteOperationDashboardRepository(
             0);
     }
 
-    private static async Task<int> ReadPendingCountAsync(
+    private static async Task<OutboxCounts> ReadOutboxCountsAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         CancellationToken cancellationToken)
@@ -176,12 +183,16 @@ public sealed class SqliteOperationDashboardRepository(
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT COUNT(*)
-            FROM outbox_messages
-            WHERE state IN ('PENDING', 'SYNCING', 'FAILED_REVIEW');
+            SELECT
+                COALESCE(SUM(CASE WHEN state IN ('PENDING', 'SYNCING') THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'FAILED_REVIEW' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'SYNCED' THEN 1 ELSE 0 END), 0)
+            FROM outbox_messages;
             """;
-        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        return new OutboxCounts(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
     }
 
     private static async Task<IReadOnlyList<(Guid Id, string Name)>> ReadLinesAsync(
@@ -208,4 +219,6 @@ public sealed class SqliteOperationDashboardRepository(
 
         return result;
     }
+
+    private sealed record OutboxCounts(int Pending, int FailedReview, int Synced);
 }

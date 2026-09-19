@@ -50,7 +50,9 @@ public sealed class DiagnosticsViewModelTests
             new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 8, 27, 12, 1, 0, TimeSpan.Zero),
             "Queda poco espacio.",
-            "Libere espacio antes de continuar.");
+            "Libere espacio antes de continuar.",
+            3,
+            11);
         DiagnosticsViewModel viewModel = new(
             new StubHealthService(SystemHealth.Unavailable("Sin red.")),
             new StubLocalDiagnostics(local));
@@ -58,7 +60,9 @@ public sealed class DiagnosticsViewModelTests
         await viewModel.RefreshAsync();
 
         Assert.AreEqual(LocalDatabaseHealthState.Attention, viewModel.LocalState);
-        Assert.AreEqual("7 pendientes conservados", viewModel.PendingOperations);
+        Assert.AreEqual(
+            "7 pendientes · 3 requieren revisión · 11 sincronizados",
+            viewModel.PendingOperations);
         Assert.AreEqual("90 MB libres", viewModel.AvailableSpace);
         StringAssert.Contains(viewModel.LocalRecoveryInstruction, "Libere espacio");
         Assert.AreEqual("API no disponible", viewModel.StatusTitle);

@@ -125,9 +125,9 @@ public sealed class DiagnosticsViewModel : ObservableObject
         };
         LocalStatusMessage = local.Summary;
         LocalRecoveryInstruction = local.RecoveryInstruction;
-        PendingOperations = local.PendingOutboxCount == 1
-            ? "1 pendiente conservado"
-            : $"{local.PendingOutboxCount} pendientes conservados";
+        PendingOperations = $"{local.PendingOutboxCount} pendientes · " +
+            $"{local.FailedReviewOutboxCount} requieren revisión · " +
+            $"{local.SyncedOutboxCount} sincronizados";
         AvailableSpace = local.AvailableFreeBytes < 0
             ? "No disponible"
             : FormatBytes(local.AvailableFreeBytes);

@@ -512,6 +512,36 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("Juan", snapshot.PreviousResponsibleName);
         Assert.AreEqual(1, snapshot.Total);
         Assert.AreEqual(3, snapshot.PendingOutboxCount);
+
+        var authorization = new OutboxAuthorizationEvidence(
+            ActorProfileId,
+            1,
+            StartedAt.AddHours(-1),
+            StartedAt.AddHours(24),
+            "VALID");
+        Guid claimId = Guid.NewGuid();
+        IReadOnlyList<ClaimedOutboxMessage> claimed = await database.Outbox().ClaimAsync(
+            StationId,
+            claimId,
+            10,
+            StartedAt.AddHours(1).AddMinutes(2),
+            StartedAt.AddHours(1).AddMinutes(3),
+            authorization);
+        Assert.AreEqual(3, claimed.Count);
+        await database.Outbox().CompleteClaimAsync(
+            claimId,
+            [
+                new(claimed[0].Message.Id, "APPLIED", "APPLIED", Guid.NewGuid()),
+                new(claimed[1].Message.Id, "FAILED_REVIEW", "INVALID_EVENT", Guid.NewGuid()),
+                new(claimed[2].Message.Id, "RETRY_LATER", "REQUEST_TIMEOUT", null),
+            ],
+            StartedAt.AddHours(1).AddMinutes(2),
+            _ => TimeSpan.FromSeconds(10));
+
+        LocalOperationDashboardSnapshot afterSync = await database.Dashboard().GetAsync(StationId);
+        Assert.AreEqual(1, afterSync.PendingOutboxCount);
+        Assert.AreEqual(1, afterSync.FailedReviewOutboxCount);
+        Assert.AreEqual(1, afterSync.SyncedOutboxCount);
     }
 
     [TestMethod]

@@ -4,7 +4,8 @@ public sealed class SyncOptions
 {
     public const string SectionName = "Sync";
 
-    public int BatchSize { get; init; } = 100;
+    public int BatchSize { get; init; } = 10;
+    public int RequestTimeoutSeconds { get; init; } = 30;
     public int PollIntervalSeconds { get; init; } = 5;
     public int LeaseSeconds { get; init; } = 60;
     public int BaseRetrySeconds { get; init; } = 2;
@@ -13,6 +14,7 @@ public sealed class SyncOptions
 
     public bool IsValid() =>
         BatchSize is >= 1 and <= 500 &&
+        RequestTimeoutSeconds is >= 5 and <= 120 &&
         PollIntervalSeconds is >= 1 and <= 60 &&
         LeaseSeconds is >= 15 and <= 600 &&
         BaseRetrySeconds is >= 1 and <= 60 &&

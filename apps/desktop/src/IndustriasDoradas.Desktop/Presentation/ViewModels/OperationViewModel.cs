@@ -198,9 +198,7 @@ public sealed class OperationViewModel : ObservableObject
             Apply(snapshot);
             IsLocalStorageAvailable = true;
             LocalStorageStatus = "Guardado local disponible";
-            PendingStatus = snapshot.PendingOutboxCount == 1
-                ? "1 pendiente por enviar"
-                : $"{snapshot.PendingOutboxCount} pendientes por enviar";
+            PendingStatus = FormatOutboxStatus(snapshot);
         }, "No se pudo leer el estado local. Avise al jefe de planta.").ConfigureAwait(true);
     }
 
@@ -373,9 +371,7 @@ public sealed class OperationViewModel : ObservableObject
         LocalOperationDashboardSnapshot snapshot = await dashboard.GetAsync(stationId)
             .ConfigureAwait(true);
         Apply(snapshot);
-        PendingStatus = snapshot.PendingOutboxCount == 1
-            ? "1 pendiente por enviar"
-            : $"{snapshot.PendingOutboxCount} pendientes por enviar";
+        PendingStatus = FormatOutboxStatus(snapshot);
     }
 
     private void Apply(LocalOperationDashboardSnapshot snapshot)
@@ -414,6 +410,11 @@ public sealed class OperationViewModel : ObservableObject
             : string.Empty;
         NotifyCommandStates();
     }
+
+    private static string FormatOutboxStatus(LocalOperationDashboardSnapshot snapshot) =>
+        $"{snapshot.PendingOutboxCount} pendientes · " +
+        $"{snapshot.FailedReviewOutboxCount} requieren revisión · " +
+        $"{snapshot.SyncedOutboxCount} sincronizados";
 
     private async Task<bool> RunAsync(Func<Task> action, string failureMessage)
     {
