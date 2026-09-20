@@ -105,12 +105,15 @@ preserva el código seguro devuelto por el API. Evidencia en
 
 ### 3.7 Coordinación de varias estaciones
 
-**Estado:** implementado y validado localmente en `DevHenry` el 2026-09-20;
-pendiente de aplicar la migración central y ejecutar la pausa manual. La política elegida
-bloquea un segundo cargamento activo sobre la misma línea con
+**Estado:** completado en `DevHenry` el 2026-09-20. La migración central quedó
+aplicada, el historial local/remoto está alineado y las pruebas automáticas y
+manuales fueron aprobadas. La política elegida bloquea un segundo cargamento activo sobre la misma línea con
 `FAILED_REVIEW/LINE_OPERATION_CONFLICT`, permite estaciones concurrentes en
 líneas diferentes y registra versión/último contacto por estación. Desktop ya
-no cambia automáticamente de línea cuando cambia el catálogo. Evidencia y pasos
+no cambia automáticamente de línea cuando cambia el catálogo. La prueba física
+con una segunda estación queda en 3.10 porque el entorno actual solo tiene
+`ESTACION_1`; los escenarios multiestación de 3.7 quedaron cubiertos en SQL y
+API. Evidencia y resultados
 en [`../testing/sprint-03-7-coordinacion-estaciones.md`](../testing/sprint-03-7-coordinacion-estaciones.md).
 
 **Hallazgo de entrada:** al desactivar la Línea 1 seleccionada, desktop cambió
