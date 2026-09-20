@@ -40,7 +40,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private PreparedOperationStart? preparedStart;
     private PreparedResponsibleRelief? preparedRelief;
     private PreparedOperationCompletion? preparedCompletion;
-    private string preparationSummary = "Seleccione proveedor y responsable para preparar la línea.";
+    private string preparationSummary =
+        "Seleccione línea, proveedor y responsable para preparar el cargamento.";
     private string activeOperationSummary = "No hay un cargamento activo.";
     private string managementSummary = "Seleccione una acción para el cargamento activo.";
 
