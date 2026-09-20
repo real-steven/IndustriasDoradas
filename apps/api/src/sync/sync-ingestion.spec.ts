@@ -326,6 +326,7 @@ describe("sync ingestion with PostgreSQL", () => {
     await push([first]);
     const second = scenario().start;
     second.stationSequence = 2;
+    second.payload.lineId = "32000000-0000-4000-8000-000000000002";
     second.payload.responsibilityAssignmentId =
       first.payload.responsibilityAssignmentId;
     const result = (await push([second])).results[0];
@@ -347,6 +348,23 @@ describe("sync ingestion with PostgreSQL", () => {
       [result!.receiptId],
     );
     expect(receipt.rows[0]?.correlation_id).toBe(audit.rows[0]?.correlation_id);
+  });
+
+  it("durably rejects a second active shipment on the same line", async () => {
+    const first = scenario().start;
+    await push([first]);
+    const second = scenario().start;
+    second.stationSequence = 2;
+
+    const result = (await push([second])).results[0];
+    expect(result).toMatchObject({
+      status: "FAILED_REVIEW",
+      code: "LINE_OPERATION_CONFLICT",
+    });
+    expect(result?.receiptId).toBeDefined();
+    expect((await push([second])).results[0]).toEqual(result);
+    expect(await count("shipments")).toBe(1);
+    expect(await count("sync_receipts")).toBe(2);
   });
 });
 
