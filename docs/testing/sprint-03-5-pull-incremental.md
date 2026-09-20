@@ -1,6 +1,7 @@
 # Sprint 3.5 — Pull incremental de configuración
 
-Fecha de implementación local: 2026-09-19. Rama: `DevHenry`.
+Fecha de implementación local: 2026-09-19. Cierre validado: 2026-09-20.
+Rama: `DevHenry`.
 
 ## Comportamiento implementado
 
@@ -28,22 +29,25 @@ Fecha de implementación local: 2026-09-19. Rama: `DevHenry`.
 
 - 122 pruebas desktop aprobadas, incluida la señal SSE y el rollback de cursor.
 - 79 pruebas API aprobadas, incluida la señal sin contenido de negocio.
+- 21 pruebas API E2E aprobadas después de actualizar el doble de
+  `SyncRepository` con las operaciones de pull.
 - 10 pruebas SQL aprobadas desde una base vacía, con seed repetido.
 - Compilaciones API y desktop sin errores.
 
 ## Estado del Supabase compartido
 
-La consulta MCP de solo lectura mostró que el proyecto
-`ebwedyowyluxjfpdipex` llega hasta `20260916035845_sync_receipt_concurrency`.
-No se aplicaron cambios remotos. Antes de una prueba real deben aplicarse, en
-orden, estas migraciones revisadas:
+El 2026-09-20 se aplicaron al proyecto `ebwedyowyluxjfpdipex`, en orden, las
+siguientes migraciones revisadas:
 
 1. `20260919205346_sync_ingestion_error_recovery.sql`.
 2. `20260920013000_sync_incremental_pull.sql`.
 
-## Pruebas manuales disponibles ahora
+`supabase migration list --linked` confirmó que las diez migraciones locales y
+remotas quedaron alineadas.
 
-Sin modificar Supabase se puede comprobar:
+## Pruebas manuales
+
+Comprobaciones locales y de tolerancia a fallos:
 
 1. Abrir la aplicación compilada y confirmar que la migración SQLite 008 inicia
    sin perder el total, la sesión o la Outbox anterior.
@@ -51,11 +55,10 @@ Sin modificar Supabase se puede comprobar:
    estados locales deben conservarse.
 3. En **Diagnóstico**, comprobar que API no disponible no bloquea el guardado
    local y que pendientes, revisión y sincronizados permanecen separados.
-4. Restaurar Internet. Mientras las migraciones remotas sigan pendientes, el
-   pull puede recibir error del API, pero WPF debe continuar operando y el
-   cursor local no debe avanzar.
+4. Restaurar Internet. Ante cualquier error del API, WPF debe continuar
+   operando y el cursor local no debe avanzar parcialmente.
 
-Después de aplicar las migraciones centrales:
+Comprobaciones contra el Supabase migrado:
 
 1. Iniciar sesión y esperar el bootstrap. Reiniciar WPF y confirmar que la
    segunda ejecución continúa desde el cursor sin duplicar catálogos.
@@ -67,4 +70,9 @@ Después de aplicar las migraciones centrales:
 4. Cortar la red durante una página y restaurarla. Ningún cambio parcial ni
    cursor adelantado debe quedar en SQLite.
 
-No se hizo push, merge ni migración remota.
+## Resultado de la pausa manual
+
+Las validaciones manuales fueron informadas como aprobadas el 2026-09-20. La
+evidencia visual final mostró 0 elementos pendientes; los resultados terminales
+permanecieron separados entre revisión y sincronizados. El cierre de 3.5 no
+incluyó push ni merge de Git.
