@@ -45,6 +45,42 @@ public interface ISyncApi
         CancellationToken cancellationToken = default);
 }
 
+public sealed record SyncChange(
+    Guid ChangeId,
+    long ServerSequence,
+    string EntityType,
+    Guid EntityId,
+    long EntityVersion,
+    string Action,
+    DateTimeOffset ChangedAtUtc,
+    int PayloadSchemaVersion,
+    JsonElement Payload);
+
+public sealed record SyncPullPage(
+    int ContractVersion,
+    string? RequestedCursor,
+    string NextCursor,
+    bool HasMore,
+    DateTimeOffset ServerTimeUtc,
+    IReadOnlyList<SyncChange> Changes);
+
+public interface ISyncPullApi
+{
+    Task<SyncPullPage> PullAsync(
+        Guid organizationId,
+        Guid stationId,
+        string? cursor,
+        int limit,
+        string accessToken,
+        CancellationToken cancellationToken = default);
+    Task WaitForSignalAsync(
+        Guid organizationId,
+        Guid stationId,
+        string? cursor,
+        string accessToken,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed class SyncTransportException(
     string code,
     bool isTransient,

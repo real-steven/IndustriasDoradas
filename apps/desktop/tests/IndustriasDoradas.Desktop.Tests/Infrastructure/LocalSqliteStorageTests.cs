@@ -55,8 +55,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(7L, result.CurrentVersion);
-        Assert.AreEqual(7, result.AppliedCount);
+        Assert.AreEqual(8L, result.CurrentVersion);
+        Assert.AreEqual(8, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -65,7 +65,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(7L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(8L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -97,7 +97,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(6, result.AppliedCount);
+        Assert.AreEqual(7, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -257,7 +257,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(7L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(8L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -380,9 +380,11 @@ public sealed class LocalSqliteStorageTests
         await using var database = new TestDatabase();
         await database.Migrator.MigrateAsync();
         await using SqliteConnection connection = await database.Factory.OpenAsync();
-        long pages = await ScalarLongAsync(connection, "PRAGMA page_count;");
         await using SqliteCommand limit = connection.CreateCommand();
-        limit.CommandText = $"PRAGMA max_page_count = {pages + 1}; CREATE TABLE simulated_fill(data BLOB);";
+        limit.CommandText = "CREATE TABLE simulated_fill(data BLOB);";
+        await limit.ExecuteNonQueryAsync();
+        long pages = await ScalarLongAsync(connection, "PRAGMA page_count;");
+        limit.CommandText = $"PRAGMA max_page_count = {pages};";
         await limit.ExecuteNonQueryAsync();
         await using SqliteCommand fill = connection.CreateCommand();
         fill.CommandText = "INSERT INTO simulated_fill(data) VALUES (zeroblob(10485760));";
@@ -405,7 +407,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(5, result.AppliedCount);
+        Assert.AreEqual(6, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -558,6 +560,40 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("Línea 1", snapshot.LineName);
         Assert.AreEqual(0, snapshot.Total);
         Assert.AreEqual(0, snapshot.PendingOutboxCount);
+    }
+
+    [TestMethod]
+    public async Task IncrementalPullAppliesPageAndCursorAtomically()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        var repository = new SqliteSyncChangeRepository(database.Factory);
+        Guid supplierId = Guid.NewGuid();
+        using JsonDocument supplier = JsonDocument.Parse($$"""
+            {"id":"{{supplierId:D}}","organization_id":"{{OrganizationId:D}}",
+             "name":"Proveedor incremental","is_active":true,"updated_at":"{{StartedAt:O}}"}
+            """);
+        var first = new SyncPullPage(
+            1, null, "cursor-1", false, StartedAt,
+            [new SyncChange(Guid.NewGuid(), 1, "SUPPLIER", supplierId, 1, "UPSERT",
+                StartedAt, 1, supplier.RootElement.Clone())]);
+
+        await repository.ApplyPageAsync(first);
+
+        Assert.AreEqual("cursor-1", await repository.GetCursorAsync());
+        CachedSupplier cached = (await database.Catalogs().FindSupplierAsync(supplierId))!;
+        Assert.AreEqual("Proveedor incremental", cached.Name);
+
+        using JsonDocument invalid = JsonDocument.Parse($$"""
+            {"id":"{{Guid.NewGuid():D}}","organization_id":"{{OrganizationId:D}}","is_active":true}
+            """);
+        var second = new SyncPullPage(
+            1, "cursor-1", "cursor-2", false, StartedAt.AddMinutes(1),
+            [new SyncChange(Guid.NewGuid(), 2, "SUPPLIER", Guid.NewGuid(), 2, "UPSERT",
+                StartedAt.AddMinutes(1), 1, invalid.RootElement.Clone())]);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => repository.ApplyPageAsync(second));
+        Assert.AreEqual("cursor-1", await repository.GetCursorAsync());
     }
 
     [TestMethod]

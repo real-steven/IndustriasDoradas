@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   SyncRepositoryError,
+  type SyncChange,
   type SyncItemResult,
   type SyncRepository,
   type SyncStationScope,
@@ -14,8 +15,7 @@ interface SupabaseErrorBody {
   code?: unknown;
 }
 
-type Scalar = string | number | boolean | null;
-type Row = Record<string, Scalar>;
+type Row = Record<string, unknown>;
 
 @Injectable()
 export class SupabaseSyncRepository implements SyncRepository {
@@ -63,6 +63,64 @@ export class SupabaseSyncRepository implements SyncRepository {
       throw new SyncRepositoryError("INVALID_ROW");
     }
     return { permissionVersion };
+  }
+
+  async findActivePullScope(input: {
+    organizationId: string;
+    stationId: string;
+    profileId: string;
+  }): Promise<SyncStationScope | null> {
+    const station = await this.one(
+      "stations",
+      new URLSearchParams({
+        organization_id: `eq.${input.organizationId}`,
+        id: `eq.${input.stationId}`,
+        is_active: "eq.true",
+        limit: "1",
+        select: "plant_id,permission_version",
+      }),
+    );
+    if (station === null) return null;
+    const plantId = station.plant_id;
+    const permissionVersion = station.permission_version;
+    if (typeof plantId !== "string" || typeof permissionVersion !== "number") {
+      throw new SyncRepositoryError("INVALID_ROW");
+    }
+    const authorization = await this.one(
+      "station_user_authorizations",
+      new URLSearchParams({
+        organization_id: `eq.${input.organizationId}`,
+        plant_id: `eq.${plantId}`,
+        station_id: `eq.${input.stationId}`,
+        user_profile_id: `eq.${input.profileId}`,
+        is_active: "eq.true",
+        limit: "1",
+        select: "id",
+      }),
+    );
+    return authorization === null ? null : { plantId, permissionVersion };
+  }
+
+  async listChanges(
+    input: Parameters<SyncRepository["listChanges"]>[0],
+  ): Promise<SyncChange[]> {
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${input.organizationId}`,
+      server_sequence: `gt.${input.afterSequence}`,
+      order: "server_sequence.asc",
+      limit: String(input.limit),
+      select:
+        "change_id,server_sequence,entity_type,entity_id,entity_version,action,changed_at_utc,payload_schema_version,payload",
+    });
+    parameters.append(
+      "and",
+      `(or(plant_id.is.null,plant_id.eq.${input.plantId}),or(station_id.is.null,station_id.eq.${input.stationId}))`,
+    );
+    const response = await this.request(
+      `sync_changes?${parameters.toString()}`,
+    );
+    const rows = (await response.json()) as Row[];
+    return rows.map((row) => this.toSyncChange(row));
   }
 
   async ingestItem(
@@ -155,5 +213,44 @@ export class SupabaseSyncRepository implements SyncRepository {
       typeof result.code === "string" &&
       typeof result.processedAtUtc === "string"
     );
+  }
+
+  private toSyncChange(row: Row): SyncChange {
+    const serverSequence = this.safeInteger(row.server_sequence);
+    const entityVersion = this.safeInteger(row.entity_version);
+    const action = row.action;
+    if (
+      typeof row.change_id !== "string" ||
+      serverSequence === null ||
+      typeof row.entity_type !== "string" ||
+      typeof row.entity_id !== "string" ||
+      entityVersion === null ||
+      !["UPSERT", "DEACTIVATE", "CORRECTION_APPENDED"].includes(
+        String(action),
+      ) ||
+      typeof row.changed_at_utc !== "string" ||
+      typeof row.payload_schema_version !== "number" ||
+      row.payload === null ||
+      typeof row.payload !== "object" ||
+      Array.isArray(row.payload)
+    ) {
+      throw new SyncRepositoryError("INVALID_ROW");
+    }
+    return {
+      changeId: row.change_id,
+      serverSequence,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      entityVersion,
+      action: action as SyncChange["action"],
+      changedAtUtc: row.changed_at_utc,
+      payloadSchemaVersion: row.payload_schema_version,
+      payload: row.payload as Record<string, unknown>,
+    };
+  }
+
+  private safeInteger(value: unknown): number | null {
+    const parsed = typeof value === "number" ? value : Number(value);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
   }
 }

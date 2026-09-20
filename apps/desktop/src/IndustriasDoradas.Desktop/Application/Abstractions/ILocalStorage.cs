@@ -238,6 +238,12 @@ public interface ILocalOutboxRepository
         CancellationToken cancellationToken = default);
 }
 
+public interface ILocalSyncChangeRepository
+{
+    Task<string?> GetCursorAsync(CancellationToken cancellationToken = default);
+    Task ApplyPageAsync(SyncPullPage page, CancellationToken cancellationToken = default);
+}
+
 public interface ILocalOperationRepository
 {
     Task StartAsync(StartLocalOperationMutation mutation, CancellationToken cancellationToken = default);

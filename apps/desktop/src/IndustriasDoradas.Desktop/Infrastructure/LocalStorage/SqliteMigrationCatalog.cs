@@ -20,6 +20,7 @@ public static class SqliteMigrationCatalog
         Read(5, "operation_input_metrics", "005_operation_input_metrics.sql"),
         Read(6, "multi_line_operations", "006_multi_line_operations.sql"),
         Read(7, "outbox_sync_worker", "007_outbox_sync_worker.sql"),
+        Read(8, "incremental_pull", "008_incremental_pull.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

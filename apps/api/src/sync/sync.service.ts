@@ -12,9 +12,11 @@ import {
   type SyncRepository,
 } from "./sync.contracts";
 import type { SyncPushDto } from "./sync.dto";
+import type { SyncPullQueryDto } from "./sync.dto";
 import { normalizeSyncItem } from "./sync-normalization";
 import type { AuthenticatedContext } from "../auth/auth.contracts";
 import { ApplicationError } from "../common/errors/application-error";
+import { concatMap, filter, map, type Observable, take, timer } from "rxjs";
 
 @Injectable()
 export class SyncService {
@@ -99,5 +101,93 @@ export class SyncService {
       serverCompletedAtUtc: new Date().toISOString(),
       results,
     };
+  }
+
+  async pull(
+    organizationId: string,
+    stationId: string,
+    query: SyncPullQueryDto,
+    auth: AuthenticatedContext,
+  ) {
+    const requestedCursor = query.cursor ?? null;
+    const afterSequence = this.decodeCursor(requestedCursor);
+    const scope = await this.repository.findActivePullScope({
+      organizationId,
+      stationId,
+      profileId: auth.profile.id,
+    });
+    if (scope?.plantId === undefined) {
+      throw new ForbiddenException("Station authorization is not active");
+    }
+    const rows = await this.repository.listChanges({
+      organizationId,
+      plantId: scope.plantId,
+      stationId,
+      afterSequence,
+      limit: query.limit + 1,
+    });
+    const hasMore = rows.length > query.limit;
+    const changes = rows.slice(0, query.limit);
+    const nextSequence = changes.at(-1)?.serverSequence ?? afterSequence;
+    return {
+      contractVersion: 1,
+      requestedCursor,
+      nextCursor: this.encodeCursor(nextSequence),
+      hasMore,
+      serverTimeUtc: new Date().toISOString(),
+      changes,
+    };
+  }
+
+  async signal(
+    organizationId: string,
+    stationId: string,
+    query: SyncPullQueryDto,
+    auth: AuthenticatedContext,
+  ): Promise<Observable<{ data: { type: string } }>> {
+    const afterSequence = this.decodeCursor(query.cursor ?? null);
+    const scope = await this.repository.findActivePullScope({
+      organizationId,
+      stationId,
+      profileId: auth.profile.id,
+    });
+    if (scope?.plantId === undefined) {
+      throw new ForbiddenException("Station authorization is not active");
+    }
+    return timer(0, 2000).pipe(
+      concatMap(() =>
+        this.repository.listChanges({
+          organizationId,
+          plantId: scope.plantId!,
+          stationId,
+          afterSequence,
+          limit: 1,
+        }),
+      ),
+      filter((changes) => changes.length > 0),
+      take(1),
+      map(() => ({ data: { type: "changes_available" } })),
+    );
+  }
+
+  private decodeCursor(cursor: string | null): number {
+    if (cursor === null) return 0;
+    try {
+      const decoded = Buffer.from(cursor, "base64url").toString("utf8");
+      const match = /^v1:(\d+)$/u.exec(decoded);
+      const sequence = match === null ? Number.NaN : Number(match[1]);
+      if (!Number.isSafeInteger(sequence) || sequence < 0) throw new Error();
+      return sequence;
+    } catch {
+      throw new ApplicationError(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        "INVALID_SYNC_CURSOR",
+        "Sync cursor is invalid",
+      );
+    }
+  }
+
+  private encodeCursor(sequence: number): string {
+    return Buffer.from(`v1:${sequence}`, "utf8").toString("base64url");
   }
 }

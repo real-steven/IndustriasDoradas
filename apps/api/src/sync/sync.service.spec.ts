@@ -8,6 +8,7 @@ import {
 import type { SyncPushDto } from "./sync.dto";
 import { SyncService } from "./sync.service";
 import type { AuthenticatedContext } from "../auth/auth.contracts";
+import { firstValueFrom } from "rxjs";
 
 describe("SyncService", () => {
   type IngestItemInput = Parameters<SyncRepository["ingestItem"]>[0];
@@ -33,6 +34,11 @@ describe("SyncService", () => {
       );
     repository = {
       findActiveStationScope,
+      findActivePullScope: jest.fn().mockResolvedValue({
+        plantId: "31000000-0000-4000-8000-000000000001",
+        permissionVersion: 1,
+      }),
+      listChanges: jest.fn().mockResolvedValue([]),
       ingestItem,
     };
     service = new SyncService(repository);
@@ -154,7 +160,77 @@ describe("SyncService", () => {
       });
     },
   );
+
+  it("pulls two pages with an opaque cursor", async () => {
+    repository.listChanges
+      .mockResolvedValueOnce([change(1), change(2), change(3)])
+      .mockResolvedValueOnce([change(3)]);
+
+    const first = await service.pull(
+      "30000000-0000-4000-8000-000000000001",
+      "34000000-0000-4000-8000-000000000001",
+      { limit: 2 },
+      auth(),
+    );
+    expect(first.hasMore).toBe(true);
+    expect(first.changes.map((item) => item.serverSequence)).toEqual([1, 2]);
+
+    const second = await service.pull(
+      "30000000-0000-4000-8000-000000000001",
+      "34000000-0000-4000-8000-000000000001",
+      { limit: 2, cursor: first.nextCursor },
+      auth(),
+    );
+    expect(repository.listChanges.mock.calls[1]?.[0].afterSequence).toBe(2);
+    expect(second.changes[0]?.serverSequence).toBe(3);
+  });
+
+  it("rejects a fabricated pull cursor", async () => {
+    await expect(
+      service.pull(
+        "30000000-0000-4000-8000-000000000001",
+        "34000000-0000-4000-8000-000000000001",
+        { limit: 10, cursor: "not-a-cursor" },
+        auth(),
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        code: "INVALID_SYNC_CURSOR",
+        message: "Sync cursor is invalid",
+      },
+    });
+    expect(repository.listChanges.mock.calls).toHaveLength(0);
+  });
+
+  it("emits a content-free signal when a later change exists", async () => {
+    repository.listChanges.mockResolvedValueOnce([change(9)]);
+
+    const signal = await service.signal(
+      "30000000-0000-4000-8000-000000000001",
+      "34000000-0000-4000-8000-000000000001",
+      { limit: 100, cursor: Buffer.from("v1:8").toString("base64url") },
+      auth(),
+    );
+
+    await expect(firstValueFrom(signal)).resolves.toEqual({
+      data: { type: "changes_available" },
+    });
+  });
 });
+
+function change(serverSequence: number) {
+  return {
+    changeId: `51000000-0000-4000-8000-${String(serverSequence).padStart(12, "0")}`,
+    serverSequence,
+    entityType: "SUPPLIER",
+    entityId: "35000000-0000-4000-8000-000000000001",
+    entityVersion: serverSequence,
+    action: "UPSERT" as const,
+    changedAtUtc: "2026-09-20T01:30:00.000Z",
+    payloadSchemaVersion: 1,
+    payload: { name: "Proveedor ficticio" },
+  };
+}
 
 function envelope(): SyncPushDto {
   const organizationId = "30000000-0000-4000-8000-000000000001";

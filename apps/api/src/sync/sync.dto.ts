@@ -11,6 +11,8 @@ import {
   IsUUID,
   Matches,
   MaxLength,
+  IsOptional,
+  Max,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -120,4 +122,17 @@ export class SyncPushDto {
   @ValidateNested({ each: true })
   @Type(() => SyncItemDto)
   items!: SyncItemDto[];
+}
+
+export class SyncPullQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  cursor?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 100;
 }

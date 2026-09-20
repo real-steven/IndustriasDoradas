@@ -27,12 +27,24 @@ public sealed class SyncApiTests
             Assert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.AreEqual(7, json.RootElement.GetProperty("items")[0]
                 .GetProperty("stationSequence").GetInt64());
-            string response = $$"""
-                {"contractVersion":1,"batchId":"{{json.RootElement.GetProperty("batchId").GetGuid():D}}",
-                "serverReceivedAtUtc":"2026-09-19T18:00:01Z","serverCompletedAtUtc":"2026-09-19T18:00:02Z",
-                "results":[{"outboxMessageId":"{{MessageId:D}}","stationSequence":7,
-                "status":"RETRY_LATER","code":"DEPENDENCY_NOT_READY","processedAtUtc":"2026-09-19T18:00:02Z"}]}
-                """;
+            string response = JsonSerializer.Serialize(new
+            {
+                contractVersion = 1,
+                batchId = json.RootElement.GetProperty("batchId").GetGuid(),
+                serverReceivedAtUtc = "2026-09-19T18:00:01Z",
+                serverCompletedAtUtc = "2026-09-19T18:00:02Z",
+                results = new[]
+                {
+                    new
+                    {
+                        outboxMessageId = MessageId,
+                        stationSequence = 7,
+                        status = "RETRY_LATER",
+                        code = "DEPENDENCY_NOT_READY",
+                        processedAtUtc = "2026-09-19T18:00:02Z",
+                    },
+                },
+            });
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(response, Encoding.UTF8, "application/json"),
@@ -63,6 +75,72 @@ public sealed class SyncApiTests
         Assert.AreEqual(transient, exception.IsTransient);
         Assert.AreEqual(code, exception.Code);
         Assert.AreEqual((int)status, exception.HttpStatus);
+    }
+
+    [TestMethod]
+    public async Task PullSendsOpaqueCursorAndReadsIncrementalPage()
+    {
+        var handler = new DelegateHandler(request =>
+        {
+            Assert.AreEqual("Bearer", request.Headers.Authorization!.Scheme);
+            Assert.AreEqual("access-token", request.Headers.Authorization.Parameter);
+            StringAssert.Contains(request.RequestUri!.Query, "cursor=djE6Nw");
+            StringAssert.Contains(request.RequestUri.Query, "limit=2");
+            string response = JsonSerializer.Serialize(new
+            {
+                contractVersion = 1,
+                requestedCursor = "djE6Nw",
+                nextCursor = "djE6OA",
+                hasMore = false,
+                serverTimeUtc = "2026-09-19T18:00:02Z",
+                changes = new[]
+                {
+                    new
+                    {
+                        changeId = MessageId,
+                        serverSequence = 8,
+                        entityType = "SUPPLIER",
+                        entityId = MessageId,
+                        entityVersion = 8,
+                        action = "UPSERT",
+                        changedAtUtc = "2026-09-19T18:00:01Z",
+                        payloadSchemaVersion = 1,
+                        payload = new { id = MessageId, name = "Proveedor" },
+                    },
+                },
+            });
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8, "application/json"),
+            });
+        });
+        var api = new SyncPullApi(new HttpClient(handler) { BaseAddress = new Uri("https://api.example.invalid/") });
+
+        SyncPullPage page = await api.PullAsync(
+            OrganizationId, StationId, "djE6Nw", 2, "access-token");
+
+        Assert.AreEqual("djE6OA", page.NextCursor);
+        Assert.AreEqual(8L, page.Changes.Single().ServerSequence);
+    }
+
+    [TestMethod]
+    public async Task SignalReturnsWhenServerAnnouncesAvailableChanges()
+    {
+        var handler = new DelegateHandler(request =>
+        {
+            StringAssert.EndsWith(request.RequestUri!.AbsolutePath, "/sync/signal");
+            StringAssert.Contains(request.RequestUri.Query, "cursor=djE6OA");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "event: message\ndata: {\"type\":\"changes_available\"}\n\n",
+                    Encoding.UTF8,
+                    "text/event-stream"),
+            });
+        });
+        var api = new SyncPullApi(new HttpClient(handler) { BaseAddress = new Uri("https://api.example.invalid/") });
+
+        await api.WaitForSignalAsync(OrganizationId, StationId, "djE6OA", "access-token");
     }
 
     private static SyncPushBatch Batch()

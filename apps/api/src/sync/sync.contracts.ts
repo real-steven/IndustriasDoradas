@@ -50,7 +50,22 @@ export interface SyncItemResult {
 }
 
 export interface SyncStationScope {
+  plantId?: string;
   permissionVersion: number;
+}
+
+export type SyncChangeAction = "UPSERT" | "DEACTIVATE" | "CORRECTION_APPENDED";
+
+export interface SyncChange {
+  changeId: string;
+  serverSequence: number;
+  entityType: string;
+  entityId: string;
+  entityVersion: number;
+  action: SyncChangeAction;
+  changedAtUtc: string;
+  payloadSchemaVersion: number;
+  payload: Record<string, unknown>;
 }
 
 export interface SyncRepository {
@@ -60,6 +75,18 @@ export interface SyncRepository {
     stationId: string;
     profileId: string;
   }): Promise<SyncStationScope | null>;
+  findActivePullScope(input: {
+    organizationId: string;
+    stationId: string;
+    profileId: string;
+  }): Promise<SyncStationScope | null>;
+  listChanges(input: {
+    organizationId: string;
+    plantId: string;
+    stationId: string;
+    afterSequence: number;
+    limit: number;
+  }): Promise<SyncChange[]>;
   ingestItem(input: {
     organizationId: string;
     plantId: string;

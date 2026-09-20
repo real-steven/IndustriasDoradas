@@ -85,6 +85,8 @@ describe("sync ingestion with PostgreSQL", () => {
     await db.exec("begin; set local role service_role;");
     repository = {
       findActiveStationScope: () => Promise.resolve({ permissionVersion: 1 }),
+      findActivePullScope: () => Promise.resolve(null),
+      listChanges: () => Promise.resolve([]),
       ingestItem: async (input) => {
         const result = await db.query<{ result: SyncItemResult }>(
           "select app.ingest_sync_item_v1($1::jsonb) as result",

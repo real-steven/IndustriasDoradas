@@ -77,6 +77,13 @@ no al enviarla. Evidencia en
 
 ### 3.5 Pull incremental de configuración
 
+**Estado:** implementado localmente en `DevHenry` el 2026-09-19; pendiente de
+aplicar las migraciones centrales y ejecutar la pausa manual. El API entrega un
+cursor opaco por páginas y una señal SSE que solo anuncia disponibilidad. WPF
+aplica cada página y su cursor en una transacción SQLite, conserva inactivos,
+versiones, recibos y revisiones, y mantiene polling como respaldo. Evidencia en
+[`../testing/sprint-03-5-pull-incremental.md`](../testing/sprint-03-5-pull-incremental.md).
+
 **Prompt:** Implementa feed incremental con cursor para líneas/componentes, estaciones, trabajadores, proveedores, cargamentos, asignaciones y correcciones administrativas. Aplica transaccionalmente y avanza cursor al completar. Añade señal de cambios para actualización casi en tiempo real cuando hay red, con polling incremental de respaldo; no descargues la base completa.
 
 **Pausa:** bootstrap, dos páginas, interrupción intermedia, reinicio y desactivación sin pérdida local.

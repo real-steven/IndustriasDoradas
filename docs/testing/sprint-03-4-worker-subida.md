@@ -50,7 +50,8 @@ cerrar el proceso con un lote `SYNCING` y confirmar recuperación sin duplicados
 También debe comprobarse visualmente que la captura de cajuelas conserva su
 latencia y que la UI continúa respondiendo.
 
-No se aplicaron migraciones remotas, no se hizo push y no se inició el pull 3.5.
+Al cerrar 3.4 no se aplicaron migraciones remotas ni se hizo push. El pull 3.5
+se inició después y tiene su propia evidencia de pruebas.
 
 ## Entorno aislado para repetir la aceptación
 

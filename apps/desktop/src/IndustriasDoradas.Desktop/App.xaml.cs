@@ -170,6 +170,13 @@ public partial class App : System.Windows.Application
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(syncOptions.RequestTimeoutSeconds);
         });
+        builder.Services.AddHttpClient<ISyncPullApi, SyncPullApi>(static (services, client) =>
+        {
+            ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            SyncOptions syncOptions = services.GetRequiredService<IOptions<SyncOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(syncOptions.RequestTimeoutSeconds);
+        });
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<IInputCommandSource, ConfigurableInputCommandSource>();
@@ -184,6 +191,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalOperationalSessionRepository, SqliteOperationalSessionRepository>();
         builder.Services.AddSingleton<ILocalProductionEventRepository, SqliteProductionEventRepository>();
         builder.Services.AddSingleton<ILocalOutboxRepository, SqliteOutboxRepository>();
+        builder.Services.AddSingleton<ILocalSyncChangeRepository, SqliteSyncChangeRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
@@ -202,6 +210,9 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ISyncJitter, SystemSyncJitter>();
         builder.Services.AddSingleton<OutboxSyncProcessor>();
         builder.Services.AddHostedService<OutboxSyncWorker>();
+        builder.Services.AddSingleton<IncrementalPullProcessor>();
+        builder.Services.AddHostedService<IncrementalPullWorker>();
+        builder.Services.AddHostedService<IncrementalPullSignalWorker>();
 
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DiagnosticsViewModel>();
