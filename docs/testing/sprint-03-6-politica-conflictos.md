@@ -1,6 +1,6 @@
 # Sprint 3.6 — Política de conflictos
 
-Fecha de implementación local: 2026-09-20. Rama: `DevHenry`.
+Fecha de implementación y cierre: 2026-09-20. Rama: `DevHenry`.
 
 ## Comportamiento implementado
 
@@ -21,12 +21,13 @@ Fecha de implementación local: 2026-09-20. Rama: `DevHenry`.
 
 ## Cambio de base de datos
 
-La migración pendiente para el Supabase compartido es:
+La migración aplicada al Supabase compartido es:
 
 `20260920173623_sync_conflict_policy.sql`
 
 La migración mantiene las funciones en el esquema privado `app`, usa
 `security invoker` y concede ejecución únicamente a `service_role`.
+`supabase migration list` confirmó las once migraciones alineadas.
 
 ## Verificación automática
 
@@ -37,22 +38,27 @@ La migración mantiene las funciones en el esquema privado `app`, usa
 - 123 pruebas desktop aprobadas.
 - Build de NestJS, ESLint, Prettier y `dotnet format` aprobados.
 
-## Pausa manual
+## Resultado de la pausa manual
 
-Después de aplicar la migración central:
+La validación manual fue aprobada con la Línea ficticia 1:
 
-1. Registrar una cajuela normal con estación y línea activas. Debe terminar en
-   sincronizada y no en revisión.
-2. Desconectar la estación antes de desactivar temporalmente la línea o su
-   alcance central; registrar offline y recuperar la red. El elemento debe
-   quedar en revisión con `LINE_REVOKED`, conservarse en SQLite y no aumentar
-   el total central.
-3. Reactivar la línea, renovar la autorización y registrar otra cajuela. El
-   nuevo elemento debe sincronizar sin cambiar el elemento anterior.
-4. Para estación revocada y reloj desviado se recomienda usar la prueba SQL
-   automatizada o un entorno de prueba separado; no alterar la estación ni el
-   reloj de una jornada real.
-5. Confirmar que el contador local y los eventos históricos siguen visibles y
-   que no queda ningún elemento en `SYNCING`.
+1. Con la API detenida y la línea desactivada centralmente, una cajuela local
+   pasó de pendiente a revisión al recuperar conexión: revisión aumentó de 30
+   a 31.
+2. Después de reactivar la línea, una nueva cajuela sincronizó correctamente:
+   sincronizados aumentó de 18 a 19.
+3. El rechazo anterior permaneció en revisión y no desapareció ni se convirtió
+   en sincronizado.
+4. Al desactivar la Línea 1 seleccionada, la interfaz mostró automáticamente
+   Línea 2; al reactivarla volvió a Línea 1. El dato no invalida 3.6 y queda
+   registrado como entrada obligatoria de diseño para 3.7.
 
-No se hizo push, merge ni aplicación remota de la migración 3.6.
+Los asesores de Supabase no detectaron una exposición nueva por esta migración.
+Persisten avisos generales previos: [protección de contraseñas
+filtradas](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
+desactivada y [tablas privadas con RLS sin
+políticas](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
+`app.sync_changes` continúa sin acceso de clientes y solo el backend con
+`service_role` consulta el feed.
+
+No se hizo push ni merge de Git.

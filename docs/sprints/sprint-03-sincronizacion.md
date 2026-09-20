@@ -91,12 +91,12 @@ revisiones, y mantiene polling como respaldo. Evidencia en
 
 ### 3.6 Política de conflictos
 
-**Estado:** implementado localmente en `DevHenry` el 2026-09-20; pendiente de
-aplicar la migración central y ejecutar la pausa manual. PostgreSQL clasifica
-estación o línea revocada, versión de permisos obsoleta y reloj futuro sin
-crear efectos de negocio, pero conserva un recibo y auditoría de
-`FAILED_REVIEW`. El cliente preserva el código seguro devuelto por el API.
-Evidencia en
+**Estado:** completado en `DevHenry` el 2026-09-20. La migración central quedó
+aplicada, el historial remoto quedó alineado y la pausa manual confirmó rechazo
+durable y recuperación posterior. PostgreSQL clasifica estación o línea
+revocada, versión de permisos obsoleta y reloj futuro sin crear efectos de
+negocio, pero conserva un recibo y auditoría de `FAILED_REVIEW`. El cliente
+preserva el código seguro devuelto por el API. Evidencia en
 [`../testing/sprint-03-6-politica-conflictos.md`](../testing/sprint-03-6-politica-conflictos.md).
 
 **Prompt:** Implementa la política documentada: eventos operativos append-only; configuración central prevalece; referencias históricas se conservan; conflicto no resoluble pasa a `FAILED_REVIEW` con causa. No uses “última escritura gana” indiscriminadamente. Añade casos de estación/línea revocada y reloj desviado.
@@ -104,6 +104,11 @@ Evidencia en
 **Pausa:** provocar cada conflicto y confirmar que ninguno desaparece silenciosamente.
 
 ### 3.7 Coordinación de varias estaciones
+
+**Hallazgo de entrada:** al desactivar la Línea 1 seleccionada, desktop cambió
+automáticamente a Línea 2 y regresó a Línea 1 al reactivarla. 3.7 debe definir
+una selección visible y estable para evitar que un cambio de catálogo dirija
+una operación a otra línea sin decisión del usuario.
 
 **Prompt:** Añade clientes de sincronización, asignación de líneas y política de solapamiento. Piloto: un punto/una línea; configuración actual: cuatro líneas; futuro: varias líneas por PC y varias PC. Impide o advierte doble operación sobre la misma línea según decisión aprobada.
 
