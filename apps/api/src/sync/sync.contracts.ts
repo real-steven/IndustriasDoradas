@@ -92,6 +92,11 @@ export interface SyncRepository {
     plantId: string;
     stationId: string;
     correlationId: string;
+    batchId: string;
+    clientApplication: string;
+    clientApplicationVersion: string;
+    clientSentAtUtc: string;
+    serverReceivedAtUtc: string;
     item: NormalizedSyncItem;
   }): Promise<SyncItemResult>;
 }

@@ -357,8 +357,12 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         Lines = await catalogs.ListActiveLinesAsync(
             state.Session.OrganizationId,
             state.Authorization.PlantId).ConfigureAwait(true);
-        SelectedLine = Lines.FirstOrDefault(line => line.Id == previousLineId) ??
-            (Lines.Count == 0 ? null : Lines[0]);
+        CachedProductionLine? preservedLine = previousLineId.HasValue
+            ? Lines.FirstOrDefault(line => line.Id == previousLineId.Value)
+            : null;
+        bool previousLineBecameUnavailable = previousLineId.HasValue && preservedLine is null;
+        SelectedLine = preservedLine ??
+            (!previousLineId.HasValue && Lines.Count == 1 ? Lines[0] : null);
         OnPropertyChanged(nameof(WorkPeriodDescription));
         if (Lines.Count == 0)
         {
@@ -377,6 +381,16 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             Status =
                 "No hay responsables activos asignados a esta planta. " +
                 "Deben solicitarse y aprobarse en el catálogo antes de preparar un cargamento.";
+        }
+        else if (previousLineBecameUnavailable)
+        {
+            Status =
+                "La línea seleccionada ya no está disponible. Seleccione explícitamente otra línea antes de operar.";
+        }
+        else if (Lines.Count > 1 && SelectedLine is null)
+        {
+            Status =
+                "Hay varias líneas asignadas. Seleccione explícitamente la línea antes de preparar el cargamento.";
         }
         await RefreshActiveOperationAsync().ConfigureAwait(true);
         NotifyOperationCommands();
@@ -510,8 +524,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
         preparedStart = null;
         preparedRelief = null;
-        PreparationSummary = SelectedSupplier is null || SelectedWorker is null
-            ? "Seleccione proveedor y responsable para preparar la línea."
+        PreparationSummary = SelectedLine is null || SelectedSupplier is null || SelectedWorker is null
+            ? "Seleccione línea, proveedor y responsable para preparar el cargamento."
             : $"{PilotLineName} · {SelectedSupplier.Name} · responsable {SelectedWorker.Name}.";
         NotifyOperationCommands();
     }
@@ -532,13 +546,16 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanManageActiveOperation));
         ActiveOperationSummary = session is null
             ? "No hay un cargamento activo."
-            : $"{PilotLineName} · cargamento iniciado {FormatLocalTime(session.StartedAt)} · " +
+            : $"{LineName(session.LineId)} · cargamento iniciado {FormatLocalTime(session.StartedAt)} · " +
               $"responsable {WorkerName(session.ResponsibleWorkerId)}.";
         NotifyOperationCommands();
     }
 
     private string WorkerName(Guid workerId) =>
         Workers.FirstOrDefault(worker => worker.Id == workerId)?.Name ?? "responsable registrado";
+
+    private string LineName(Guid lineId) =>
+        Lines.FirstOrDefault(line => line.Id == lineId)?.Name ?? "Línea registrada";
 
     private static string FormatLocalTime(DateTimeOffset instant) =>
         instant.ToOffset(TimeSpan.FromHours(-6)).ToString(

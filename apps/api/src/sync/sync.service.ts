@@ -76,6 +76,11 @@ export class SyncService {
             plantId: body.scope.plantId,
             stationId,
             correlationId,
+            batchId: body.batchId,
+            clientApplication: body.client.application,
+            clientApplicationVersion: body.client.applicationVersion,
+            clientSentAtUtc: body.sentAtUtc,
+            serverReceivedAtUtc,
             item,
           }),
         );

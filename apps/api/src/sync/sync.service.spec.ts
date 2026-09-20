@@ -70,6 +70,12 @@ describe("SyncService", () => {
     expect(repository.ingestItem.mock.calls[0]?.[0].item.precheckCode).toBe(
       "UNSUPPORTED_PAYLOAD_SCHEMA",
     );
+    expect(repository.ingestItem.mock.calls[0]?.[0]).toMatchObject({
+      batchId: body.batchId,
+      clientApplication: "desktop",
+      clientApplicationVersion: "0.1.0",
+      clientSentAtUtc: body.sentAtUtc,
+    });
     expect(response.results).toHaveLength(2);
   });
 

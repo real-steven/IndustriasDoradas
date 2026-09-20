@@ -52,6 +52,8 @@ public sealed class StationPreparationViewModelTests
         await viewModel.ElevateAsync("123456");
         Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
 
+        Assert.IsNull(viewModel.SelectedLine);
+        viewModel.SelectedLine = viewModel.Lines.Single(line => line.Id == LineId);
         viewModel.SelectedSupplier = viewModel.Suppliers.Single();
         viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
 
@@ -102,6 +104,7 @@ public sealed class StationPreparationViewModelTests
 
         await viewModel.InitializeAsync();
         await viewModel.ElevateAsync("123456");
+        viewModel.SelectedLine = viewModel.Lines.Single(line => line.Id == LineId);
         viewModel.SelectedSupplier = viewModel.Suppliers.Single();
         viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
         await viewModel.PrepareLineCommand.ExecuteAsync(null);
@@ -139,6 +142,51 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(LineFeedCycleStatus.Completed, sessions.Current?.Status);
         Assert.IsFalse(viewModel.HasActiveOperation);
         Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+    }
+
+    [TestMethod]
+    public async Task CatalogRefreshNeverReplacesUnavailableSelectedLineImplicitly()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, Snapshot()),
+            catalogs,
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(catalogs, sessions, new RecordingOperationRepository(sessions), time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+
+        await viewModel.InitializeAsync();
+        await viewModel.ElevateAsync("123456");
+
+        Assert.AreEqual(4, viewModel.Lines.Count);
+        Assert.IsNull(viewModel.SelectedLine);
+        StringAssert.Contains(viewModel.Status, "Seleccione explícitamente");
+
+        CachedProductionLine firstLine = viewModel.Lines.Single(line => line.Id == LineId);
+        viewModel.SelectedLine = firstLine;
+        await catalogs.UpsertLineAsync(firstLine with { IsActive = false, UpdatedAt = Now.AddMinutes(1) });
+        await viewModel.ElevateAsync("123456");
+
+        Assert.IsNull(viewModel.SelectedLine);
+        Assert.IsTrue(viewModel.Lines.Any(line => line.Id == SecondLineId));
+        StringAssert.Contains(viewModel.Status, "ya no está disponible");
+
+        await catalogs.UpsertLineAsync(firstLine with { IsActive = true, UpdatedAt = Now.AddMinutes(2) });
+        await viewModel.ElevateAsync("123456");
+
+        Assert.IsNull(viewModel.SelectedLine);
+        StringAssert.Contains(viewModel.Status, "Seleccione explícitamente");
     }
 
     [TestMethod]

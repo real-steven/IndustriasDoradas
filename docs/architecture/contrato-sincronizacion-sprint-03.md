@@ -337,6 +337,12 @@ estable disponible; no se modifican sus payloads ni tiempos.
 | `syncedAtUtc` | Estación | Hora local de aplicación de la respuesta. |
 | `changedAtUtc` | Servidor | Hora autoritativa del cambio entregado por pull. |
 
+Desde 3.7, `app.sync_clients` conserva una fila privada por estación registrada.
+En el contrato v1 una estación corresponde a una instalación desktop. La fila
+guarda aplicación, versión, último lote, última comunicación y la diferencia
+entre `sentAtUtc` y `serverReceivedAtUtc`. Solo `service_role` puede leerla o
+actualizarla; el cliente no accede directamente a esta telemetría.
+
 La respuesta incluye hora de servidor para medir desviación. Una desviación no
 reescribe hechos; se muestra en diagnóstico y puede clasificar nuevos elementos
 para revisión según la política de 3.6.
@@ -422,6 +428,24 @@ un bootstrap controlado, nunca un borrado previo de SQLite.
   secuencia que ya pertenecen a otro UUID. Ninguna regla actualiza o elimina
   eventos de producción existentes.
 
+### 11.2 Coordinación aplicada en 3.7
+
+- `station_line_scopes` es la asignación autoritativa N:M: una estación puede
+  recibir varias líneas y una línea puede estar visible en varias estaciones.
+- El inicio de operación se serializa por organización, planta y línea. Si ya
+  existe un cargamento central `ACTIVE` distinto, el nuevo inicio produce
+  `FAILED_REVIEW/LINE_OPERATION_CONFLICT`, con recibo y sin efecto de negocio.
+- Dos estaciones pueden iniciar operaciones sobre líneas asignadas distintas.
+  Cuando el cargamento activo termina, otra estación puede iniciar esa línea.
+- Los solapamientos creados antes de 3.7 se conservan y deben finalizar por el
+  flujo operativo normal. La migración no reescribe historia para resolverlos.
+- Con varias líneas visibles, desktop exige selección explícita. Si la línea
+  seleccionada se desactiva o pierde alcance, la selección queda vacía y nunca
+  salta silenciosamente a otra línea.
+- Sin red, la estación conserva su operación local. La primera operación que
+  alcance PostgreSQL sobre una línea libre es la aceptada; cualquier inicio
+  solapado posterior queda visible para revisión.
+
 ## 12. Datos que nunca se sobrescriben
 
 - UUID del evento, Outbox, cargamento, ciclo, asignación y confirmación;
@@ -482,6 +506,7 @@ como puerta de negocio.
 - `SCOPE_MISMATCH`
 - `STATION_REVOKED`
 - `LINE_REVOKED`
+- `LINE_OPERATION_CONFLICT`
 - `PERMISSION_VERSION_MISMATCH`
 - `AUTHORIZATION_EXPIRED_CONTINGENCY`
 - `LEGACY_AUTHORIZATION_UNAVAILABLE`

@@ -16,13 +16,13 @@ begin
 
   update app.production_lines
   set is_active = true, deactivated_at = null, updated_at = now()
-  where id = '32000000-0000-4000-8000-000000000001';
+  where id = '32000000-0000-4000-8000-000000000002';
 
   update app.station_line_scopes
   set is_active = true, deactivated_at = null, updated_at = now()
   where organization_id = '30000000-0000-4000-8000-000000000001'
     and station_id = '34000000-0000-4000-8000-000000000001'
-    and production_line_id = '32000000-0000-4000-8000-000000000001';
+    and production_line_id = '32000000-0000-4000-8000-000000000002';
 
   select count(*) into production_count_before from app.production_events;
 
@@ -57,7 +57,7 @@ begin
       'organizationId', '30000000-0000-4000-8000-000000000001',
       'plantId', '31000000-0000-4000-8000-000000000001',
       'stationId', '34000000-0000-4000-8000-000000000001',
-      'lineId', '32000000-0000-4000-8000-000000000001',
+      'lineId', '32000000-0000-4000-8000-000000000002',
       'supplierId', '35000000-0000-4000-8000-000000000001',
       'responsibleWorkerId', 'b1000000-0000-4000-8000-000000000001',
       'actorProfileId', 'a1000000-0000-4000-8000-000000000002',
@@ -81,7 +81,7 @@ begin
   where id = '34000000-0000-4000-8000-000000000001';
   update app.production_lines
   set is_active = false, deactivated_at = now(), updated_at = now()
-  where id = '32000000-0000-4000-8000-000000000001';
+  where id = '32000000-0000-4000-8000-000000000002';
   attempt := base_input || jsonb_build_object(
     'correlationId', 'da000000-0000-4000-8000-000000000002',
     'receiptId', 'db000000-0000-4000-8000-000000000002',
@@ -104,7 +104,7 @@ begin
 
   update app.production_lines
   set is_active = true, deactivated_at = null, updated_at = now()
-  where id = '32000000-0000-4000-8000-000000000001';
+  where id = '32000000-0000-4000-8000-000000000002';
   attempt := base_input || jsonb_build_object(
     'correlationId', 'da000000-0000-4000-8000-000000000003',
     'receiptId', 'db000000-0000-4000-8000-000000000003',
