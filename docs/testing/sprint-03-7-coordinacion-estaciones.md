@@ -32,7 +32,18 @@ inicio sobre Línea 1 será rechazado para revisión.
 - `apps/api/src/sync/supabase-sync.repository.ts`
 - `apps/desktop/src/IndustriasDoradas.Desktop/Presentation/ViewModels/StationViewModel.cs`
 
-## Validación automática pendiente
+## Validación automática
+
+La validación local fue aprobada el 2026-09-20:
+
+- 12 pruebas SQL desde una base vacía.
+- 80 pruebas unitarias/de integración de API.
+- 21 pruebas E2E de API.
+- 14 pruebas web.
+- 124 pruebas desktop.
+- Secretos, formato, lint, compilación y contrato generable aprobados.
+
+Los comandos de referencia desde la raíz del repositorio son:
 
 Desde la raíz del repositorio:
 

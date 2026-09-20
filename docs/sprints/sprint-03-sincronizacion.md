@@ -105,8 +105,8 @@ preserva el código seguro devuelto por el API. Evidencia en
 
 ### 3.7 Coordinación de varias estaciones
 
-**Estado:** implementado localmente en `DevHenry` el 2026-09-20; pendiente de
-aplicar la migración central y ejecutar la pausa manual. La política elegida
+**Estado:** implementado y validado localmente en `DevHenry` el 2026-09-20;
+pendiente de aplicar la migración central y ejecutar la pausa manual. La política elegida
 bloquea un segundo cargamento activo sobre la misma línea con
 `FAILED_REVIEW/LINE_OPERATION_CONFLICT`, permite estaciones concurrentes en
 líneas diferentes y registra versión/último contacto por estación. Desktop ya
