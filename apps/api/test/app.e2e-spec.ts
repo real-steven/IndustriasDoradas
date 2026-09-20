@@ -161,6 +161,8 @@ describe("API smoke (e2e)", () => {
     };
     sync = {
       findActiveStationScope: jest.fn(),
+      findActivePullScope: jest.fn(),
+      listChanges: jest.fn(),
       ingestItem: jest.fn(),
     };
     const testingModule = await Test.createTestingModule({
@@ -201,6 +203,8 @@ describe("API smoke (e2e)", () => {
     accounts.createAdministrator.mockClear();
     accounts.replaceAdministratorPermissions.mockClear();
     sync.findActiveStationScope.mockReset();
+    sync.findActivePullScope.mockReset();
+    sync.listChanges.mockReset();
     sync.ingestItem.mockReset();
     tokenVerifier.verify.mockImplementation((token) => {
       if (token === "valid-token") {
