@@ -91,6 +91,14 @@ revisiones, y mantiene polling como respaldo. Evidencia en
 
 ### 3.6 Política de conflictos
 
+**Estado:** implementado localmente en `DevHenry` el 2026-09-20; pendiente de
+aplicar la migración central y ejecutar la pausa manual. PostgreSQL clasifica
+estación o línea revocada, versión de permisos obsoleta y reloj futuro sin
+crear efectos de negocio, pero conserva un recibo y auditoría de
+`FAILED_REVIEW`. El cliente preserva el código seguro devuelto por el API.
+Evidencia en
+[`../testing/sprint-03-6-politica-conflictos.md`](../testing/sprint-03-6-politica-conflictos.md).
+
 **Prompt:** Implementa la política documentada: eventos operativos append-only; configuración central prevalece; referencias históricas se conservan; conflicto no resoluble pasa a `FAILED_REVIEW` con causa. No uses “última escritura gana” indiscriminadamente. Añade casos de estación/línea revocada y reloj desviado.
 
 **Pausa:** provocar cada conflicto y confirmar que ninguno desaparece silenciosamente.

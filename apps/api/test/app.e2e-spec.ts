@@ -160,7 +160,7 @@ describe("API smoke (e2e)", () => {
       resetPinBlocks: jest.fn(),
     };
     sync = {
-      findActiveStationScope: jest.fn(),
+      findPushStationScope: jest.fn(),
       findActivePullScope: jest.fn(),
       listChanges: jest.fn(),
       ingestItem: jest.fn(),
@@ -202,7 +202,7 @@ describe("API smoke (e2e)", () => {
     accounts.find.mockResolvedValue(null);
     accounts.createAdministrator.mockClear();
     accounts.replaceAdministratorPermissions.mockClear();
-    sync.findActiveStationScope.mockReset();
+    sync.findPushStationScope.mockReset();
     sync.findActivePullScope.mockReset();
     sync.listChanges.mockReset();
     sync.ingestItem.mockReset();
@@ -610,7 +610,7 @@ describe("API smoke (e2e)", () => {
       role: { ...ACTIVE_PROFILE.role, code: "JEFE_PLANTA" },
       permissions: ["station.open"],
     });
-    sync.findActiveStationScope.mockResolvedValueOnce({ permissionVersion: 1 });
+    sync.findPushStationScope.mockResolvedValueOnce({ permissionVersion: 1 });
     sync.ingestItem.mockImplementationOnce((input) =>
       Promise.resolve({
         outboxMessageId: input.item.outboxMessageId,

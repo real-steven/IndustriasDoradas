@@ -2,8 +2,8 @@
 
 **Fecha:** 2026-09-08
 
-**Estado:** aprobado para implementación; push 3.2 y endurecimiento concurrente
-3.3 implementados, pendientes de pausa manual
+**Estado:** aprobado e implementado hasta 3.6 en `DevHenry`; 3.5 validado y 3.6
+pendiente de migración remota y pausa manual.
 
 **Alcance:** contrato push/pull, estados, idempotencia, tiempos, revalidación y
 propagación. No implementa endpoint, tablas PostgreSQL, migración SQLite,
@@ -406,6 +406,22 @@ un bootstrap controlado, nunca un borrado previo de SQLite.
 - Las reglas concretas para estación/línea revocada, solapamiento y reloj
   desviado se completan en 3.6–3.7 sin cambiar estas invariantes.
 
+### 11.1 Política aplicada en 3.6
+
+- Una estación inactiva produce `FAILED_REVIEW/STATION_REVOKED`; el evento
+  local permanece intacto y no se crea un efecto central.
+- Una línea o su alcance para la estación inactivos producen
+  `FAILED_REVIEW/LINE_REVOKED`.
+- Una versión de permisos capturada distinta de la versión central produce
+  `FAILED_REVIEW/PERMISSION_VERSION_MISMATCH`.
+- Una hora de creación, ocurrencia o registro más de cinco minutos futura
+  respecto de la recepción central produce `FAILED_REVIEW/CLOCK_SKEW_REVIEW`.
+  Los hechos antiguos de una cola offline no se consideran desviación por su
+  antigüedad.
+- Cada rechazo crea un recibo terminal y auditoría, salvo los conflictos de
+  secuencia que ya pertenecen a otro UUID. Ninguna regla actualiza o elimina
+  eventos de producción existentes.
+
 ## 12. Datos que nunca se sobrescriben
 
 - UUID del evento, Outbox, cargamento, ciclo, asignación y confirmación;
@@ -465,6 +481,8 @@ como puerta de negocio.
 - `DATABASE_CONSTRAINT_VIOLATION`
 - `SCOPE_MISMATCH`
 - `STATION_REVOKED`
+- `LINE_REVOKED`
+- `PERMISSION_VERSION_MISMATCH`
 - `AUTHORIZATION_EXPIRED_CONTINGENCY`
 - `LEGACY_AUTHORIZATION_UNAVAILABLE`
 - `INVALID_EVENT`

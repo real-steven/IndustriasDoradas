@@ -49,14 +49,18 @@ export class SyncService {
       );
     }
 
-    const scope = await this.repository.findActiveStationScope({
+    const scope = await this.repository.findPushStationScope({
       organizationId,
       plantId: body.scope.plantId,
       stationId,
       profileId: auth.profile.id,
     });
     if (scope === null) {
-      throw new ForbiddenException("Station authorization is not active");
+      throw new ApplicationError(
+        HttpStatus.FORBIDDEN,
+        "SCOPE_MISMATCH",
+        "Station scope does not match the authenticated profile",
+      );
     }
 
     const serverReceivedAtUtc = new Date().toISOString();

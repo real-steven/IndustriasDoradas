@@ -69,7 +69,7 @@ export interface SyncChange {
 }
 
 export interface SyncRepository {
-  findActiveStationScope(input: {
+  findPushStationScope(input: {
     organizationId: string;
     plantId: string;
     stationId: string;

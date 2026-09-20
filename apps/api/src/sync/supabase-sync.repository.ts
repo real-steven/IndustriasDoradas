@@ -27,7 +27,7 @@ export class SupabaseSyncRepository implements SyncRepository {
     this.secret = config.get("SUPABASE_SECRET_KEY", { infer: true });
   }
 
-  async findActiveStationScope(input: {
+  async findPushStationScope(input: {
     organizationId: string;
     plantId: string;
     stationId: string;
@@ -39,7 +39,6 @@ export class SupabaseSyncRepository implements SyncRepository {
         organization_id: `eq.${input.organizationId}`,
         plant_id: `eq.${input.plantId}`,
         id: `eq.${input.stationId}`,
-        is_active: "eq.true",
         limit: "1",
         select: "permission_version",
       }),
@@ -52,7 +51,6 @@ export class SupabaseSyncRepository implements SyncRepository {
         plant_id: `eq.${input.plantId}`,
         station_id: `eq.${input.stationId}`,
         user_profile_id: `eq.${input.profileId}`,
-        is_active: "eq.true",
         limit: "1",
         select: "id",
       }),

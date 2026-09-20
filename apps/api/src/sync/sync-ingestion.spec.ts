@@ -84,7 +84,7 @@ describe("sync ingestion with PostgreSQL", () => {
   beforeEach(async () => {
     await db.exec("begin; set local role service_role;");
     repository = {
-      findActiveStationScope: () => Promise.resolve({ permissionVersion: 1 }),
+      findPushStationScope: () => Promise.resolve({ permissionVersion: 1 }),
       findActivePullScope: () => Promise.resolve(null),
       listChanges: () => Promise.resolve([]),
       ingestItem: async (input) => {

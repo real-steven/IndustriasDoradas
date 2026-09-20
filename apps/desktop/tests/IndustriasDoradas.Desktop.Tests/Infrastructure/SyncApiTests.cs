@@ -78,6 +78,29 @@ public sealed class SyncApiTests
     }
 
     [TestMethod]
+    public async Task PushPreservesSafeConflictCodeFromApi()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.Forbidden)
+        {
+            Content = new StringContent(
+                "{\"code\":\"STATION_REVOKED\",\"message\":\"revoked\"}",
+                Encoding.UTF8,
+                "application/json"),
+        };
+        var api = new SyncApi(new HttpClient(new DelegateHandler(_ => Task.FromResult(response)))
+        {
+            BaseAddress = new Uri("https://api.example.invalid/"),
+        });
+
+        SyncTransportException exception = await Assert.ThrowsExactlyAsync<SyncTransportException>(
+            () => api.PushAsync(Batch(), "access-token"));
+
+        Assert.IsFalse(exception.IsTransient);
+        Assert.AreEqual("STATION_REVOKED", exception.Code);
+        Assert.AreEqual(403, exception.HttpStatus);
+    }
+
+    [TestMethod]
     public async Task PullSendsOpaqueCursorAndReadsIncrementalPage()
     {
         var handler = new DelegateHandler(request =>

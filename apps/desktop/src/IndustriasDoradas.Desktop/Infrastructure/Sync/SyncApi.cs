@@ -72,7 +72,7 @@ public sealed class SyncApi(HttpClient httpClient) : ISyncApi
         using (response)
         {
             if (!response.IsSuccessStatusCode)
-                throw Failure(response.StatusCode);
+                throw await FailureAsync(response, cancellationToken).ConfigureAwait(false);
             SyncPushResult? result;
             try
             {
@@ -90,16 +90,39 @@ public sealed class SyncApi(HttpClient httpClient) : ISyncApi
         }
     }
 
-    private static SyncTransportException Failure(HttpStatusCode statusCode)
+    private static async Task<SyncTransportException> FailureAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
     {
+        HttpStatusCode statusCode = response.StatusCode;
         int status = (int)statusCode;
+        string? serverCode = null;
+        try
+        {
+            using JsonDocument body = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+            if (body.RootElement.TryGetProperty("code", out JsonElement code) &&
+                code.ValueKind == JsonValueKind.String)
+            {
+                string? value = code.GetString();
+                if (!string.IsNullOrWhiteSpace(value) && value.Length <= 80 &&
+                    value.All(character => char.IsAsciiLetterUpper(character) ||
+                        char.IsAsciiDigit(character) || character == '_'))
+                    serverCode = value;
+            }
+        }
+        catch (JsonException)
+        {
+            // La clasificación HTTP sigue siendo segura si el servidor no devuelve JSON válido.
+        }
+
         return statusCode switch
         {
             HttpStatusCode.RequestTimeout => new("REQUEST_TIMEOUT", true, status),
             HttpStatusCode.TooManyRequests => new("RATE_LIMITED", true, status),
             HttpStatusCode.Unauthorized => new("AUTH_REFRESH_REQUIRED", true, status),
             _ when status >= 500 => new("SERVER_TEMPORARY_FAILURE", true, status),
-            _ => new("HTTP_CLIENT_REJECTION", false, status),
+            _ => new(serverCode ?? "HTTP_CLIENT_REJECTION", false, status),
         };
     }
 }

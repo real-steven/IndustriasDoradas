@@ -1,5 +1,3 @@
-import { ForbiddenException } from "@nestjs/common";
-
 import {
   SyncRepositoryError,
   type SyncItemResult,
@@ -17,8 +15,8 @@ describe("SyncService", () => {
   let service: SyncService;
 
   beforeEach(() => {
-    const findActiveStationScope: jest.MockedFunction<
-      SyncRepository["findActiveStationScope"]
+    const findPushStationScope: jest.MockedFunction<
+      SyncRepository["findPushStationScope"]
     > = jest.fn().mockResolvedValue({ permissionVersion: 1 });
     const ingestItem: jest.MockedFunction<SyncRepository["ingestItem"]> = jest
       .fn()
@@ -33,7 +31,7 @@ describe("SyncService", () => {
         } satisfies SyncItemResult),
       );
     repository = {
-      findActiveStationScope,
+      findPushStationScope,
       findActivePullScope: jest.fn().mockResolvedValue({
         plantId: "31000000-0000-4000-8000-000000000001",
         permissionVersion: 1,
@@ -96,7 +94,7 @@ describe("SyncService", () => {
   });
 
   it("rejects a station without current authorization", async () => {
-    repository.findActiveStationScope.mockResolvedValueOnce(null);
+    repository.findPushStationScope.mockResolvedValueOnce(null);
     const body = envelope();
 
     await expect(
@@ -107,7 +105,10 @@ describe("SyncService", () => {
         auth(),
         "4a000000-0000-4000-8000-000000000001",
       ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).rejects.toMatchObject({
+      status: 403,
+      response: { code: "SCOPE_MISMATCH" },
+    });
     expect(repository.ingestItem.mock.calls).toHaveLength(0);
   });
 
