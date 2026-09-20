@@ -7,9 +7,24 @@ using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 
-public sealed class SqliteSyncChangeRepository(ILocalSqliteConnectionFactory connectionFactory)
-    : ILocalSyncChangeRepository
+public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
 {
+    private readonly ILocalSqliteConnectionFactory connectionFactory;
+    private readonly TimeProvider timeProvider;
+
+    public SqliteSyncChangeRepository(
+        ILocalSqliteConnectionFactory connectionFactory,
+        TimeProvider timeProvider)
+    {
+        this.connectionFactory = connectionFactory;
+        this.timeProvider = timeProvider;
+    }
+
+    public SqliteSyncChangeRepository(ILocalSqliteConnectionFactory connectionFactory)
+        : this(connectionFactory, TimeProvider.System)
+    {
+    }
+
     public async Task<string?> GetCursorAsync(CancellationToken cancellationToken = default)
     {
         await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken)
@@ -32,14 +47,18 @@ public sealed class SqliteSyncChangeRepository(ILocalSqliteConnectionFactory con
         await using SqliteCommand cursor = connection.CreateCommand();
         cursor.Transaction = transaction;
         cursor.CommandText = """
-            INSERT INTO sync_pull_state(singleton_id, cursor, updated_at_utc)
-            VALUES (1, $cursor, $updatedAtUtc)
+            INSERT INTO sync_pull_state(singleton_id, cursor, updated_at_utc, local_received_at_utc)
+            VALUES (1, $cursor, $updatedAtUtc, $localReceivedAtUtc)
             ON CONFLICT(singleton_id) DO UPDATE SET
                 cursor = excluded.cursor,
-                updated_at_utc = excluded.updated_at_utc;
+                updated_at_utc = excluded.updated_at_utc,
+                local_received_at_utc = excluded.local_received_at_utc;
             """;
         cursor.Parameters.AddWithValue("$cursor", page.NextCursor);
         cursor.Parameters.AddWithValue("$updatedAtUtc", SqliteLocalStorageConverters.Timestamp(page.ServerTimeUtc));
+        cursor.Parameters.AddWithValue(
+            "$localReceivedAtUtc",
+            SqliteLocalStorageConverters.Timestamp(timeProvider.GetUtcNow()));
         await cursor.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         transaction.Commit();
     }

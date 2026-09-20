@@ -14,6 +14,7 @@
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource CanvasBrush}">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <DataTemplate DataType="{x:Type viewModels:HomeViewModel}">
             <views:HomeView />
         </DataTemplate>
@@ -64,6 +65,19 @@
                     </StackPanel>
                 </StackPanel>
 
+                <Button Grid.Row="2"
+                        Margin="0,12,0,12"
+                        Padding="12"
+                        VerticalAlignment="Bottom"
+                        HorizontalContentAlignment="Left"
+                        Background="#FFF1CB"
+                        BorderBrush="#D09518"
+                        Command="{Binding ShowDiagnosticsCommand}"
+                        Content="{Binding CorrectionNotification}"
+                        Foreground="{StaticResource Ink900Brush}"
+                        Visibility="{Binding HasCorrectionNotification, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        AutomationProperties.Name="Abrir auditoría de correcciones recibidas" />
+
                 <StackPanel Grid.Row="1" Margin="0,44,0,0">
                     <TextBlock Margin="4,0,0,10"
                                Foreground="#B7C0C7"
@@ -94,7 +108,7 @@
                 <TextBlock Grid.Row="3"
                            Foreground="#B7C0C7"
                            FontSize="12"
-                           Text="Operación local · Sprint 2" />
+                           Text="Operación local · Sprint 3" />
             </Grid>
         </Border>
 

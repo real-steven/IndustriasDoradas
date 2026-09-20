@@ -52,7 +52,18 @@ public sealed class DiagnosticsViewModelTests
             "Queda poco espacio.",
             "Libere espacio antes de continuar.",
             3,
-            11);
+            11,
+            new DateTimeOffset(2026, 8, 27, 12, 0, 30, TimeSpan.Zero),
+            9,
+            [new SyncFailureDiagnostic(
+                "PRODUCTION_EVENT_CREATED", "LINE_REVOKED", "La línea fue revocada.", 2,
+                new DateTimeOffset(2026, 8, 27, 11, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero))],
+            [new AdministrativeCorrectionDiagnostic(
+                "Administrador", "ADMINISTRADOR", "CAMBIO_AUTORIZADO", "business.mutation",
+                "supplier", new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero),
+                ["name: A → B"])],
+            1);
         DiagnosticsViewModel viewModel = new(
             new StubHealthService(SystemHealth.Unavailable("Sin red.")),
             new StubLocalDiagnostics(local));
@@ -66,6 +77,11 @@ public sealed class DiagnosticsViewModelTests
         Assert.AreEqual("90 MB libres", viewModel.AvailableSpace);
         StringAssert.Contains(viewModel.LocalRecoveryInstruction, "Libere espacio");
         Assert.AreEqual("API no disponible", viewModel.StatusTitle);
+        Assert.AreEqual("Sin conexión con la API", viewModel.NetworkStatus);
+        Assert.AreEqual(1, viewModel.Failures.Count);
+        Assert.IsTrue(viewModel.HasCorrections);
+        Assert.AreEqual(1, viewModel.PullReviewCount);
+        StringAssert.Contains(viewModel.ClockDeviation, "revisar reloj");
     }
 
     private static LocalDatabaseHealth Healthy() => new(

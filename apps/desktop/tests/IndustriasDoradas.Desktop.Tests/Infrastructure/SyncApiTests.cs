@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Infrastructure.Sync;
 
 namespace IndustriasDoradas.Desktop.Tests.Infrastructure;
@@ -25,6 +26,8 @@ public sealed class SyncApiTests
                 request.RequestUri!.AbsolutePath);
             using JsonDocument json = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
             Assert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32());
+            Assert.AreEqual(DesktopApplicationInfo.Version,
+                json.RootElement.GetProperty("client").GetProperty("applicationVersion").GetString());
             Assert.AreEqual(7, json.RootElement.GetProperty("items")[0]
                 .GetProperty("stationSequence").GetInt64());
             string response = JsonSerializer.Serialize(new

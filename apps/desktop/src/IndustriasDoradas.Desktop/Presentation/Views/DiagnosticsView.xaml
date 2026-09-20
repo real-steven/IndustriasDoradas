@@ -9,6 +9,7 @@
              d:DesignHeight="520"
              d:DesignWidth="760">
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <Style x:Key="HealthCardStyle" TargetType="Border">
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
@@ -50,6 +51,51 @@
                        Foreground="{StaticResource Ink700Brush}"
                        FontSize="16"
                        Text="Salud del guardado local y comunicación con la API." />
+
+            <Border Margin="0,0,0,20"
+                    Padding="28"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <StackPanel>
+                    <TextBlock Foreground="#8A5B0A" FontSize="12" FontWeight="Bold"
+                               Text="SINCRONIZACIÓN DE LA ESTACIÓN" />
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Estación" />
+                            <TextBlock Margin="0,4,12,0" FontWeight="Bold" Text="{Binding Station}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Versión" />
+                            <TextBlock Margin="0,4,0,0" FontWeight="Bold" Text="{Binding ApplicationVersion}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Red" />
+                            <TextBlock Margin="0,4,0,0" FontWeight="Bold" Text="{Binding NetworkStatus}" />
+                        </StackPanel>
+                    </Grid>
+                    <Grid Margin="0,20,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Última sincronización" />
+                            <TextBlock Margin="0,4,0,0" FontWeight="Bold" Text="{Binding LastSynchronization}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Foreground="{StaticResource Ink700Brush}" FontSize="12" Text="Desviación del reloj" />
+                            <TextBlock Margin="0,4,0,0" FontWeight="Bold" Text="{Binding ClockDeviation}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
 
             <Border Margin="0,0,0,20"
                     Padding="28"
@@ -129,7 +175,8 @@
                 </StackPanel>
             </Border>
 
-            <Border Padding="28"
+            <Border Margin="0,0,0,20"
+                    Padding="28"
                     BorderThickness="1"
                     CornerRadius="14"
                     Style="{StaticResource HealthCardStyle}">
@@ -195,6 +242,94 @@
                                 Foreground="White" />
                     </StackPanel>
                 </Grid>
+            </Border>
+
+            <Border Margin="0,0,0,20"
+                    Padding="28"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <StackPanel>
+                    <TextBlock Foreground="#8A5B0A" FontSize="12" FontWeight="Bold"
+                               Text="EVENTOS QUE REQUIEREN REVISIÓN" />
+                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource Ink700Brush}"
+                               Text="La causa se muestra con un código estable. La resolución corresponde al soporte o al administrador; desde aquí no se modifica el evento." TextWrapping="Wrap" />
+                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource Ink700Brush}"
+                               Text="{Binding PullReviewCount, StringFormat=Revisiones de cambios recibidos: {0}}" />
+                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Failures}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,8" Padding="14" Background="#FFF8E8" CornerRadius="8">
+                                    <StackPanel>
+                                        <TextBlock FontWeight="Bold" Text="{Binding ErrorCode}" />
+                                        <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}">
+                                            <Run Text="{Binding OperationType}" /><Run Text=" · intentos: " /><Run Text="{Binding AttemptCount}" />
+                                        </TextBlock>
+                                        <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"
+                                                   Text="{Binding Cause}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,3,0,0" Foreground="{StaticResource Ink700Brush}"
+                                                   Text="{Binding LastAttemptAt, StringFormat=Último intento: {0:g}}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Margin="0,0,0,20"
+                    Padding="28"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="#E1C16E"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <StackPanel>
+                    <TextBlock Foreground="#8A5B0A" FontSize="12" FontWeight="Bold"
+                               Text="AUDITORÍA DE CORRECCIONES RECIBIDAS" />
+                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource Ink700Brush}"
+                               Text="Las correcciones centrales conservan administrador, motivo y cambios; nunca reemplazan el registro original." TextWrapping="Wrap" />
+                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Corrections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="14" Background="#F5F7F8" CornerRadius="8">
+                                    <StackPanel>
+                                        <TextBlock FontWeight="Bold">
+                                            <Run Text="{Binding Administrator}" /><Run Text=" · " /><Run Text="{Binding RoleCode}" />
+                                        </TextBlock>
+                                        <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}">
+                                            <Run Text="Motivo: " /><Run Text="{Binding Reason}" /><Run Text=" · " /><Run Text="{Binding OccurredAt, StringFormat={}{0:g}}" />
+                                        </TextBlock>
+                                        <ItemsControl Margin="0,7,0,0" ItemsSource="{Binding Changes}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Margin="8,2,0,0" Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Padding="28"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <StackPanel>
+                    <TextBlock Foreground="#8A5B0A" FontSize="12" FontWeight="Bold"
+                               Text="REPORTE PARA SOPORTE" />
+                    <TextBlock Margin="0,8,0,16" Foreground="{StaticResource Ink700Brush}"
+                               Text="Exporta conteos, códigos y horarios. El archivo no incluye tokens, PIN ni payloads de operación." TextWrapping="Wrap" />
+                    <Button HorizontalAlignment="Left" Command="{Binding ExportDiagnosticReportCommand}"
+                            Content="Exportar diagnóstico seguro" />
+                    <TextBlock Margin="0,10,0,0" Foreground="{StaticResource Ink700Brush}"
+                               Text="{Binding DiagnosticReportStatus}" TextWrapping="Wrap" />
+                </StackPanel>
             </Border>
         </StackPanel>
     </ScrollViewer>

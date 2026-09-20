@@ -323,4 +323,26 @@ public sealed record LocalDatabaseHealth(
     string Summary,
     string RecoveryInstruction,
     int FailedReviewOutboxCount = 0,
-    int SyncedOutboxCount = 0);
+    int SyncedOutboxCount = 0,
+    DateTimeOffset? LastSynchronizationAt = null,
+    double? ClockDeviationSeconds = null,
+    IReadOnlyList<SyncFailureDiagnostic>? Failures = null,
+    IReadOnlyList<AdministrativeCorrectionDiagnostic>? Corrections = null,
+    int PullReviewCount = 0);
+
+public sealed record SyncFailureDiagnostic(
+    string OperationType,
+    string ErrorCode,
+    string Cause,
+    int AttemptCount,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset LastAttemptAt);
+
+public sealed record AdministrativeCorrectionDiagnostic(
+    string Administrator,
+    string RoleCode,
+    string Reason,
+    string Action,
+    string EntityType,
+    DateTimeOffset OccurredAt,
+    IReadOnlyList<string> Changes);

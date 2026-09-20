@@ -5,6 +5,7 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>IndustriasDoradas.Desktop</RootNamespace>
     <AssemblyName>IndustriasDoradas.Desktop</AssemblyName>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

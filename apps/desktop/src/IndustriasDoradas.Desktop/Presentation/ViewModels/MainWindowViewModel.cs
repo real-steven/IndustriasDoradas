@@ -46,6 +46,7 @@ public sealed class MainWindowViewModel : ObservableObject
             ShowOperationAsync,
             () => Operation is not null);
         if (Station is not null) Station.PropertyChanged += OnStationPropertyChanged;
+        Diagnostics.PropertyChanged += OnDiagnosticsPropertyChanged;
     }
 
     public HomeViewModel Home { get; }
@@ -65,6 +66,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public IRelayCommand ShowDiagnosticsCommand { get; }
     public IRelayCommand ShowStationCommand { get; }
     public IRelayCommand ShowOperationCommand { get; }
+    public bool HasCorrectionNotification => Diagnostics.HasCorrections && CanShowDiagnostics();
+    public string CorrectionNotification => Diagnostics.CorrectionNotification;
 
     public async Task InitializeAsync()
     {
@@ -104,9 +107,18 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (e.PropertyName != nameof(StationViewModel.Mode)) return;
         ShowDiagnosticsCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(HasCorrectionNotification));
         if (!CanShowDiagnostics() && ReferenceEquals(CurrentPage, Diagnostics))
         {
             CurrentPage = Operation ?? (object)Home;
         }
+    }
+
+    private void OnDiagnosticsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(DiagnosticsViewModel.HasCorrections) or
+            nameof(DiagnosticsViewModel.CorrectionNotification))) return;
+        OnPropertyChanged(nameof(HasCorrectionNotification));
+        OnPropertyChanged(nameof(CorrectionNotification));
     }
 }

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Configuration;
 
 namespace IndustriasDoradas.Desktop.Infrastructure.Sync;
 
@@ -21,7 +22,7 @@ public sealed class SyncApi(HttpClient httpClient) : ISyncApi
             contractVersion = 1,
             batchId = batch.BatchId,
             sentAtUtc = batch.SentAtUtc,
-            client = new { application = "desktop", applicationVersion = "0.1.0" },
+            client = new { application = "desktop", applicationVersion = DesktopApplicationInfo.Version },
             scope = new
             {
                 organizationId = batch.OrganizationId,
