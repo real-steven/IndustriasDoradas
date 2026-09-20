@@ -27,6 +27,9 @@ create table app.sync_clients (
 create index ix_sync_clients_plant_last_seen
   on app.sync_clients (organization_id, plant_id, last_seen_at_utc desc);
 
+create index ix_sync_clients_station_fk
+  on app.sync_clients (organization_id, plant_id, station_id);
+
 create index ix_shipments_active_line_coordination
   on app.shipments (organization_id, plant_id, production_line_id)
   where status = 'ACTIVE';
