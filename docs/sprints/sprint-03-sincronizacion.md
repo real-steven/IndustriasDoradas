@@ -127,15 +127,18 @@ una operación a otra línea sin decisión del usuario.
 
 ### 3.8 Estado y diagnóstico
 
-**Estado:** implementado localmente en `DevHenry` el 2026-09-20; pendiente de
-aplicar la migración central y ejecutar la pausa manual. La vista exclusiva de
-jefe de planta muestra estación, versión, red, última sincronización,
-desviación horaria, conteos y causas seguras de fallos. Las mutaciones
-administrativas centrales con cambios auditados se publican como
-`CORRECTION_APPENDED` y abren una
-auditoría local con administrador, motivo y cambios permitidos. El reporte JSON
-omite tokens, PIN y payloads operativos. El pie visible del escritorio y la
-versión enviada al API identifican Sprint 3 (`0.3.0`). Evidencia y guía en
+**Estado:** completado en `DevHenry` el 2026-09-20. Las pruebas automáticas y
+manuales fueron aprobadas y las catorce migraciones quedaron alineadas en
+Supabase, incluida `20260921013125_expand_sync_administrative_corrections.sql`.
+La vista exclusiva de jefe de planta muestra estación, versión, red, última
+sincronización, desviación horaria, conteos y causas seguras de fallos. Las
+mutaciones administrativas centrales con cambios auditados se publican como
+`CORRECTION_APPENDED` y abren una auditoría local con administrador, motivo y
+cambios permitidos. La prueba confirmó la corrección y restauración de un
+proveedor, la continuidad local durante un corte de Internet y la recuperación
+automática a `Nube disponible`. El reporte JSON omite tokens, PIN y payloads
+operativos. El pie visible del escritorio y la versión enviada al API
+identifican Sprint 3 (`0.3.0`). Evidencia y resultados en
 [`../testing/sprint-03-8-estado-diagnostico.md`](../testing/sprint-03-8-estado-diagnostico.md).
 
 **Prompt:** Crea vista de jefe de planta con última sincronización, pendientes, fallidos, versión, estación, red, desviación horaria y correcciones web recibidas. Una notificación breve abre auditoría con administrador, motivo y cambios. El Modo Operación solo muestra estados simples y nunca permite resolver fallos técnicos.
