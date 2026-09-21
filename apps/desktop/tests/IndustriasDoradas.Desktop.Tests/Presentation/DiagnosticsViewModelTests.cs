@@ -66,7 +66,9 @@ public sealed class DiagnosticsViewModelTests
                 "Administrador", "ADMINISTRADOR", "CAMBIO_AUTORIZADO", "business.mutation",
                 "supplier", new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero),
                 ["name: A → B"])],
-            1);
+            1,
+            "UNAVAILABLE",
+            "NETWORK_UNAVAILABLE");
         DiagnosticsViewModel viewModel = new(
             new StubHealthService(SystemHealth.Unavailable("Sin red.")),
             new StubLocalDiagnostics(local));
@@ -80,7 +82,7 @@ public sealed class DiagnosticsViewModelTests
         Assert.AreEqual("90 MB libres", viewModel.AvailableSpace);
         StringAssert.Contains(viewModel.LocalRecoveryInstruction, "Libere espacio");
         Assert.AreEqual("API no disponible", viewModel.StatusTitle);
-        Assert.AreEqual("Sin conexión con la API", viewModel.NetworkStatus);
+        Assert.AreEqual("Sin sincronización · NETWORK_UNAVAILABLE", viewModel.NetworkStatus);
         Assert.AreEqual(1, viewModel.Failures.Count);
         Assert.IsTrue(viewModel.HasCorrections);
         Assert.AreEqual(1, viewModel.PullReviewCount);

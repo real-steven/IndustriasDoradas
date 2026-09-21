@@ -60,7 +60,46 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             "$localReceivedAtUtc",
             SqliteLocalStorageConverters.Timestamp(timeProvider.GetUtcNow()));
         await cursor.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        await using SqliteCommand runtime = connection.CreateCommand();
+        runtime.Transaction = transaction;
+        runtime.CommandText = """
+            INSERT INTO sync_runtime_status(
+                singleton_id, network_state, last_attempt_at_utc, last_success_at_utc, last_error_code)
+            VALUES (1, 'AVAILABLE', $now, $now, NULL)
+            ON CONFLICT(singleton_id) DO UPDATE SET
+                network_state = 'AVAILABLE',
+                last_attempt_at_utc = excluded.last_attempt_at_utc,
+                last_success_at_utc = excluded.last_success_at_utc,
+                last_error_code = NULL;
+            """;
+        runtime.Parameters.AddWithValue(
+            "$now", SqliteLocalStorageConverters.Timestamp(timeProvider.GetUtcNow()));
+        await runtime.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         transaction.Commit();
+    }
+
+    public async Task RecordPullFailureAsync(
+        string errorCode,
+        DateTimeOffset attemptedAt,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
+        await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO sync_runtime_status(
+                singleton_id, network_state, last_attempt_at_utc, last_success_at_utc, last_error_code)
+            VALUES (1, 'UNAVAILABLE', $attemptedAt, NULL, $errorCode)
+            ON CONFLICT(singleton_id) DO UPDATE SET
+                network_state = 'UNAVAILABLE',
+                last_attempt_at_utc = excluded.last_attempt_at_utc,
+                last_error_code = excluded.last_error_code;
+            """;
+        command.Parameters.AddWithValue("$attemptedAt", SqliteLocalStorageConverters.Timestamp(attemptedAt));
+        command.Parameters.AddWithValue("$errorCode", errorCode);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task ApplyChangeAsync(

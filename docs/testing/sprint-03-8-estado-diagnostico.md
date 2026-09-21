@@ -2,9 +2,11 @@
 
 ## Alcance implementado
 
-- SQLite migra a la versión 9 y registra la hora local en que acepta cada
+- SQLite migra a la versión 10, registra la hora local en que acepta cada
   página pull. La pantalla compara esa hora con `serverTimeUtc` para mostrar la
   desviación del reloj.
+- El estado de red proviene del último intento real de pull contra la nube. Una
+  API local todavía activa no se confunde con conectividad a Supabase.
 - La última sincronización combina la última recepción pull y la última
   confirmación de Outbox.
 - Los elementos `FAILED_REVIEW` muestran operación, código, causa explicada,
@@ -72,7 +74,8 @@ La última lista debe mostrar el mismo identificador en Local y Remote.
    `Documentos\IndustriasDoradas\Diagnostico` y confirma que no aparecen
    `token`, `authorization`, `PIN`, contraseñas ni payloads operativos.
 8. Desconecta la red y actualiza Diagnóstico. Debe cambiar a “Sin conexión con
-   la API” mientras el guardado local y los datos ya recibidos siguen visibles.
+   sincronización” con un código de red, aunque la API local continúe activa;
+   el guardado local y los datos ya recibidos deben seguir visibles.
 
 La pausa queda aprobada cuando el jefe de planta puede localizar la causa de
 un evento fallido usando solo la pantalla y el archivo exportado, y Modo

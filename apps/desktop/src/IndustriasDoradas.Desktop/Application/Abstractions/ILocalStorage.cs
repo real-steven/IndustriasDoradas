@@ -242,6 +242,10 @@ public interface ILocalSyncChangeRepository
 {
     Task<string?> GetCursorAsync(CancellationToken cancellationToken = default);
     Task ApplyPageAsync(SyncPullPage page, CancellationToken cancellationToken = default);
+    Task RecordPullFailureAsync(
+        string errorCode,
+        DateTimeOffset attemptedAt,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ILocalOperationRepository
@@ -328,7 +332,9 @@ public sealed record LocalDatabaseHealth(
     double? ClockDeviationSeconds = null,
     IReadOnlyList<SyncFailureDiagnostic>? Failures = null,
     IReadOnlyList<AdministrativeCorrectionDiagnostic>? Corrections = null,
-    int PullReviewCount = 0);
+    int PullReviewCount = 0,
+    string SyncNetworkState = "UNKNOWN",
+    string? LastSyncErrorCode = null);
 
 public sealed record SyncFailureDiagnostic(
     string OperationType,

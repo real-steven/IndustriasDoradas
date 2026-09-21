@@ -10,6 +10,7 @@ public sealed class IncrementalPullProcessor(
     ISyncPullApi api,
     ISyncStationContext stationContext,
     ISyncStatusNotifier statusNotifier,
+    TimeProvider timeProvider,
     IOptions<SyncOptions> syncOptions) : IDisposable
 {
     private readonly SyncOptions options = syncOptions.Value;
@@ -23,19 +24,27 @@ public sealed class IncrementalPullProcessor(
             ProtectedStationState? state = await stationContext.GetActiveAsync(cancellationToken).ConfigureAwait(false);
             if (state is null || string.IsNullOrWhiteSpace(state.Tokens.AccessToken)) return false;
             string? cursor = await local.GetCursorAsync(cancellationToken).ConfigureAwait(false);
-            SyncPullPage page = await api.PullAsync(
-                state.Authorization.OrganizationId,
-                state.Authorization.StationId,
-                cursor,
-                options.PullPageSize,
-                state.Tokens.AccessToken,
-                cancellationToken).ConfigureAwait(false);
-            await local.ApplyPageAsync(page, cancellationToken).ConfigureAwait(false);
-            if (page.Changes.Count > 0)
+            SyncPullPage page;
+            try
             {
-                statusNotifier.Notify(new SyncStatusNotification(
-                    page.Changes.Any(change => change.Action == "CORRECTION_APPENDED")));
+                page = await api.PullAsync(
+                    state.Authorization.OrganizationId,
+                    state.Authorization.StationId,
+                    cursor,
+                    options.PullPageSize,
+                    state.Tokens.AccessToken,
+                    cancellationToken).ConfigureAwait(false);
             }
+            catch (SyncTransportException exception)
+            {
+                await local.RecordPullFailureAsync(
+                    exception.Code, timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+                statusNotifier.Notify(new SyncStatusNotification(false));
+                throw;
+            }
+            await local.ApplyPageAsync(page, cancellationToken).ConfigureAwait(false);
+            statusNotifier.Notify(new SyncStatusNotification(
+                page.Changes.Any(change => change.Action == "CORRECTION_APPENDED")));
             return page.HasMore;
         }
         finally

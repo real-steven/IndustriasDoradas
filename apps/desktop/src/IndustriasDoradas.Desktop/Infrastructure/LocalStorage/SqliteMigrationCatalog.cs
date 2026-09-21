@@ -22,6 +22,7 @@ public static class SqliteMigrationCatalog
         Read(7, "outbox_sync_worker", "007_outbox_sync_worker.sql"),
         Read(8, "incremental_pull", "008_incremental_pull.sql"),
         Read(9, "sync_diagnostics", "009_sync_diagnostics.sql"),
+        Read(10, "sync_runtime_status", "010_sync_runtime_status.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

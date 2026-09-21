@@ -95,7 +95,9 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                     sync.ClockDeviationSeconds,
                     failures,
                     corrections,
-                    pullReviews);
+                    pullReviews,
+                    sync.NetworkState,
+                    sync.LastErrorCode);
             }
 
             long minimumBytes = options.MinimumFreeMegabytes * 1024L * 1024L;
@@ -116,7 +118,9 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                     sync.ClockDeviationSeconds,
                     failures,
                     corrections,
-                    pullReviews);
+                    pullReviews,
+                    sync.NetworkState,
+                    sync.LastErrorCode);
             }
 
             return new LocalDatabaseHealth(
@@ -136,7 +140,9 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                 sync.ClockDeviationSeconds,
                 failures,
                 corrections,
-                pullReviews);
+                pullReviews,
+                sync.NetworkState,
+                sync.LastErrorCode);
         }
         catch (Exception exception) when (exception is SqliteException or IOException or InvalidOperationException)
         {
@@ -276,7 +282,20 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
         double? deviation = pullServerAt is not null && pullReceivedAt is not null
             ? (pullServerAt.Value - pullReceivedAt.Value).TotalSeconds
             : null;
-        return new SyncDiagnosticState(last, deviation);
+        string networkState = "UNKNOWN";
+        string? lastErrorCode = null;
+        await using (SqliteCommand runtime = connection.CreateCommand())
+        {
+            runtime.CommandText = "SELECT network_state, last_error_code FROM sync_runtime_status WHERE singleton_id = 1;";
+            await using SqliteDataReader reader = await runtime.ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                networkState = reader.GetString(0);
+                lastErrorCode = reader.IsDBNull(1) ? null : reader.GetString(1);
+            }
+        }
+        return new SyncDiagnosticState(last, deviation, networkState, lastErrorCode);
     }
 
     private static async Task<IReadOnlyList<SyncFailureDiagnostic>> ReadFailuresAsync(
@@ -436,5 +455,7 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
     private sealed record OutboxCounts(int Pending, int FailedReview, int Synced);
     private sealed record SyncDiagnosticState(
         DateTimeOffset? LastSynchronizationAt,
-        double? ClockDeviationSeconds);
+        double? ClockDeviationSeconds,
+        string NetworkState,
+        string? LastErrorCode);
 }

@@ -203,6 +203,13 @@ public sealed class DiagnosticsViewModel : ObservableObject
             ? "No disponible"
             : FormatBytes(local.AvailableFreeBytes);
         LocalLastChecked = local.CheckedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+        NetworkStatus = local.SyncNetworkState switch
+        {
+            "AVAILABLE" => "Nube disponible",
+            "UNAVAILABLE" => $"Sin sincronización · {local.LastSyncErrorCode ?? "ERROR_DE_RED"}",
+            _ when result.State == HealthState.Available => "API local disponible · nube aún no comprobada",
+            _ => "Sin conexión de sincronización",
+        };
         LastSynchronization = local.LastSynchronizationAt?.ToLocalTime().ToString(
             "g", CultureInfo.CurrentCulture) ?? "Aún no registrada";
         ClockDeviation = FormatClockDeviation(local.ClockDeviationSeconds);
@@ -279,7 +286,6 @@ public sealed class DiagnosticsViewModel : ObservableObject
 
     private void OnSyncStatusChanged(object? sender, SyncStatusNotification notification)
     {
-        if (!notification.HasAdministrativeCorrection) return;
         if (uiContext is null)
         {
             _ = RefreshAfterNotificationAsync();
