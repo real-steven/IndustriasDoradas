@@ -131,7 +131,8 @@ una operación a otra línea sin decisión del usuario.
 aplicar la migración central y ejecutar la pausa manual. La vista exclusiva de
 jefe de planta muestra estación, versión, red, última sincronización,
 desviación horaria, conteos y causas seguras de fallos. Las mutaciones
-administrativas centrales se publican como `CORRECTION_APPENDED` y abren una
+administrativas centrales con cambios auditados se publican como
+`CORRECTION_APPENDED` y abren una
 auditoría local con administrador, motivo y cambios permitidos. El reporte JSON
 omite tokens, PIN y payloads operativos. El pie visible del escritorio y la
 versión enviada al API identifican Sprint 3 (`0.3.0`). Evidencia y guía en

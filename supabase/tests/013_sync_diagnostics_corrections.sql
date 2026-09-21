@@ -90,5 +90,36 @@ begin
   ) <> before_count + 1 then
     raise exception 'rejected or empty audit must not become a correction';
   end if;
+
+  insert into app.audit_events (
+    id, organization_id, actor_kind, actor_profile_id, actor_auth_user_id,
+    actor_display_name, actor_role_code, origin, action, entity_type, entity_id,
+    occurred_at, correlation_id, result, changed_fields, changes
+  ) values (
+    'f3000000-0000-4000-8000-000000000003',
+    '30000000-0000-4000-8000-000000000001',
+    'AUTHENTICATED_USER',
+    'a1000000-0000-4000-8000-000000000002',
+    'a0000000-0000-4000-8000-000000000002',
+    'Jefe de planta ficticio',
+    'JEFE_PLANTA',
+    'API',
+    'permission.governance',
+    'user_profile_permissions',
+    'a1000000-0000-4000-8000-000000000003',
+    '2026-09-20T23:12:00Z',
+    'f3100000-0000-4000-8000-000000000003',
+    'SUCCEEDED',
+    array['permission_count'],
+    '{"permission_count":{"before":3,"after":4}}'::jsonb
+  );
+
+  if (
+    select count(*)
+    from app.sync_changes
+    where entity_type = 'ADMINISTRATIVE_CORRECTION'
+  ) <> before_count + 2 then
+    raise exception 'successful permission governance must append one correction';
+  end if;
 end;
 $$;
