@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Configuration;
@@ -15,6 +16,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private static readonly JsonSerializerOptions DiagnosticJsonOptions = new() { WriteIndented = true };
     private readonly IHealthService healthService;
     private readonly ILocalDatabaseDiagnostics localDiagnostics;
+    private readonly SynchronizationContext? uiContext;
     private HealthState state = HealthState.NotChecked;
     private string statusTitle = "Sin comprobar";
     private string statusMessage = "Ejecuta la comprobación para consultar la API.";
@@ -43,10 +45,12 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public DiagnosticsViewModel(
         IHealthService healthService,
         ILocalDatabaseDiagnostics localDiagnostics,
-        IOptions<StationOptions> stationOptions)
+        IOptions<StationOptions> stationOptions,
+        ISyncStatusNotifier statusNotifier)
     {
         this.healthService = healthService;
         this.localDiagnostics = localDiagnostics;
+        uiContext = SynchronizationContext.Current;
         station = stationOptions.Value.Id == Guid.Empty ? "No configurada" : stationOptions.Value.Id.ToString("D");
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         CreateRecoveryCopyCommand = new AsyncRelayCommand(
@@ -55,6 +59,15 @@ public sealed class DiagnosticsViewModel : ObservableObject
         ExportDiagnosticReportCommand = new AsyncRelayCommand(
             ExportDiagnosticReportAsync,
             () => !IsExportingReport);
+        statusNotifier.Changed += OnSyncStatusChanged;
+    }
+
+    public DiagnosticsViewModel(
+        IHealthService healthService,
+        ILocalDatabaseDiagnostics localDiagnostics,
+        IOptions<StationOptions> stationOptions)
+        : this(healthService, localDiagnostics, stationOptions, new SyncStatusNotifier())
+    {
     }
 
     public DiagnosticsViewModel(IHealthService healthService, ILocalDatabaseDiagnostics localDiagnostics)
@@ -262,6 +275,32 @@ public sealed class DiagnosticsViewModel : ObservableObject
         return Math.Abs(rounded) <= 5
             ? $"{rounded:+0;-0;0} s · dentro del margen"
             : $"{rounded:+0;-0;0} s · revisar reloj del equipo";
+    }
+
+    private void OnSyncStatusChanged(object? sender, SyncStatusNotification notification)
+    {
+        if (!notification.HasAdministrativeCorrection) return;
+        if (uiContext is null)
+        {
+            _ = RefreshAfterNotificationAsync();
+            return;
+        }
+        uiContext.Post(static state =>
+        {
+            _ = ((DiagnosticsViewModel)state!).RefreshAfterNotificationAsync();
+        }, this);
+    }
+
+    private async Task RefreshAfterNotificationAsync()
+    {
+        try
+        {
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            // El siguiente refresco manual vuelve a consultar el estado sin interrumpir la operación.
+        }
     }
 
     private async Task CreateRecoveryCopyAsync()

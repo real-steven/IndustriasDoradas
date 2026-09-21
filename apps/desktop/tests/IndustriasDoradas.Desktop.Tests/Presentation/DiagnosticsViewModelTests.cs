@@ -1,6 +1,9 @@
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Application;
+using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
+using Microsoft.Extensions.Options;
 
 namespace IndustriasDoradas.Desktop.Tests.Presentation;
 
@@ -82,6 +85,31 @@ public sealed class DiagnosticsViewModelTests
         Assert.IsTrue(viewModel.HasCorrections);
         Assert.AreEqual(1, viewModel.PullReviewCount);
         StringAssert.Contains(viewModel.ClockDeviation, "revisar reloj");
+    }
+
+    [TestMethod]
+    public async Task ReceivedAdministrativeCorrectionRefreshesNotificationWithoutRestart()
+    {
+        var correction = new AdministrativeCorrectionDiagnostic(
+            "Administrador", "ADMINISTRADOR", "CAMBIO_AUTORIZADO", "business.mutation",
+            "supplier", DateTimeOffset.UtcNow, ["name: A → B"]);
+        LocalDatabaseHealth local = Healthy() with { Corrections = [correction] };
+        var notifier = new SyncStatusNotifier();
+        DiagnosticsViewModel viewModel = new(
+            new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
+            new StubLocalDiagnostics(local),
+            Options.Create(new StationOptions()),
+            notifier);
+        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(DiagnosticsViewModel.HasCorrections)) changed.TrySetResult();
+        };
+
+        notifier.Notify(new SyncStatusNotification(true));
+        await changed.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.IsTrue(viewModel.HasCorrections);
     }
 
     private static LocalDatabaseHealth Healthy() => new(

@@ -63,8 +63,8 @@ La última lista debe mostrar el mismo identificador en Local y Remote.
 4. Vuelve a Modo Operación. Diagnóstico debe quedar bloqueado y solo debe verse
    el resumen simple de sincronización.
 5. Desde el portal web cambia un campo no sensible de proveedor, trabajador o
-   catálogo. Espera la sincronización, entra en modo jefe de planta y confirma
-   la notificación lateral.
+   catálogo. Sin cerrar ni reiniciar desktop, espera la sincronización, entra
+   en modo jefe de planta y confirma la notificación lateral.
 6. Abre la notificación. La auditoría debe mostrar administrador, rol, motivo,
    fecha y el valor anterior/nuevo. El registro original local no debe ser
    reemplazado por la corrección.

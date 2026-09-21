@@ -9,6 +9,7 @@ public sealed class IncrementalPullProcessor(
     ILocalSyncChangeRepository local,
     ISyncPullApi api,
     ISyncStationContext stationContext,
+    ISyncStatusNotifier statusNotifier,
     IOptions<SyncOptions> syncOptions) : IDisposable
 {
     private readonly SyncOptions options = syncOptions.Value;
@@ -30,6 +31,11 @@ public sealed class IncrementalPullProcessor(
                 state.Tokens.AccessToken,
                 cancellationToken).ConfigureAwait(false);
             await local.ApplyPageAsync(page, cancellationToken).ConfigureAwait(false);
+            if (page.Changes.Count > 0)
+            {
+                statusNotifier.Notify(new SyncStatusNotification(
+                    page.Changes.Any(change => change.Action == "CORRECTION_APPENDED")));
+            }
             return page.HasMore;
         }
         finally

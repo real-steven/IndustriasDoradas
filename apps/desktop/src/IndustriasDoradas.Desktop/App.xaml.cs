@@ -208,6 +208,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<StationCoordinator>();
         builder.Services.AddSingleton<ISyncStationContext, SyncStationContext>();
         builder.Services.AddSingleton<ISyncJitter, SystemSyncJitter>();
+        builder.Services.AddSingleton<ISyncStatusNotifier, SyncStatusNotifier>();
         builder.Services.AddSingleton<OutboxSyncProcessor>();
         builder.Services.AddHostedService<OutboxSyncWorker>();
         builder.Services.AddSingleton<IncrementalPullProcessor>();
