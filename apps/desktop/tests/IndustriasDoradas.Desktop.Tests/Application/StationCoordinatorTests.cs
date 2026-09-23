@@ -8,10 +8,11 @@ using Microsoft.Extensions.Options;
 namespace IndustriasDoradas.Desktop.Tests.Application;
 
 [TestClass]
+[TestCategory("SyncChaos")]
 public sealed class StationCoordinatorTests
 {
     [TestMethod]
-    public async Task OfflineResumeExpiresAtTwentyFourHoursWithoutDeletingEvents()
+    public async Task OfflineResumeAfterTwentyFourHoursKeepsRestrictedOperationWithoutDeletingEvents()
     {
         var time = new MutableTimeProvider();
         ProtectedStationState state = Fixture(time.GetUtcNow().AddHours(24));
@@ -21,8 +22,14 @@ public sealed class StationCoordinatorTests
         Assert.IsNotNull(await coordinator.ResumeAsync(networkAvailable: false));
         time.Advance(TimeSpan.FromHours(24).Add(TimeSpan.FromSeconds(1)));
 
-        Assert.IsNull(await coordinator.ResumeAsync(networkAvailable: false));
+        ProtectedStationState? contingency = await coordinator.ResumeAsync(networkAvailable: false);
+        Assert.IsNotNull(contingency);
         Assert.AreEqual(1, store.State?.PendingEvents.Count);
+        PinAttemptResponse elevation = await coordinator.ElevateAsync(
+            contingency,
+            "123456",
+            networkAvailable: false);
+        Assert.AreEqual("OFFLINE_EXPIRED", elevation.Result);
     }
 
     [TestMethod]

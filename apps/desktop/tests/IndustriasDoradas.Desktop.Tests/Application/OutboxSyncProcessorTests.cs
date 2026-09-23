@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 namespace IndustriasDoradas.Desktop.Tests.Application;
 
 [TestClass]
+[TestCategory("SyncChaos")]
 public sealed class OutboxSyncProcessorTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 19, 18, 0, 0, TimeSpan.Zero);
@@ -36,6 +37,7 @@ public sealed class OutboxSyncProcessorTests
         Assert.AreEqual(1, api.CallCount);
         Assert.AreEqual(2, api.LastBatch!.Items.Count);
         Assert.AreEqual(ProfileId, api.LastBatch.Items[0].Authorization.ActorProfileId);
+        Assert.AreEqual("LEGACY_UNAVAILABLE", outbox.LastClaimAuthorization!.StateAtCapture);
         Assert.AreEqual("APPLIED", outbox.Completed![0].Status);
         Assert.AreEqual("RETRY_LATER", outbox.Completed[1].Status);
         Assert.IsNull(outbox.Release);
@@ -85,6 +87,43 @@ public sealed class OutboxSyncProcessorTests
 
         Assert.IsFalse(await processor.ProcessOnceAsync());
         Assert.AreEqual(0, outbox.ClaimCount);
+    }
+
+    [TestMethod]
+    public async Task LostResponseAfterCentralCommitRetriesWithoutDuplicatingTheEffect()
+    {
+        var outbox = new StubOutbox([Claimed(1)]);
+        Guid receipt = Guid.NewGuid();
+        int centralEffects = 0;
+        bool responseWasLost = false;
+        var api = new StubSyncApi(batch =>
+        {
+            if (!responseWasLost)
+            {
+                responseWasLost = true;
+                centralEffects++;
+                throw new SyncTransportException("NETWORK_UNAVAILABLE", true);
+            }
+
+            return new SyncPushResult(
+                1,
+                batch.BatchId,
+                Now,
+                Now,
+                [new(batch.Items[0].OutboxMessageId, 1, "ALREADY_APPLIED", "ALREADY_APPLIED", receipt, Now)]);
+        });
+        OutboxSyncProcessor processor = Create(outbox, api);
+
+        Assert.IsTrue(await processor.ProcessOnceAsync());
+        Assert.IsFalse(outbox.Release!.Value.Permanent);
+        Assert.IsTrue(await processor.ProcessOnceAsync());
+
+        Assert.AreEqual(1, centralEffects);
+        Assert.AreEqual(2, api.CallCount);
+        IReadOnlyList<OutboxItemDisposition> completed = outbox.Completed
+            ?? throw new AssertFailedException("The retried claim was not completed.");
+        Assert.AreEqual("ALREADY_APPLIED", completed.Single().Status);
+        Assert.AreEqual(receipt, completed.Single().ReceiptId);
     }
 
     private static OutboxSyncProcessor Create(
@@ -158,6 +197,7 @@ public sealed class OutboxSyncProcessorTests
     private sealed class StubOutbox(IReadOnlyList<ClaimedOutboxMessage> claimed) : ILocalOutboxRepository
     {
         public int ClaimCount { get; private set; }
+        public OutboxAuthorizationEvidence? LastClaimAuthorization { get; private set; }
         public IReadOnlyList<OutboxItemDisposition>? Completed { get; private set; }
         public (string Code, int? HttpStatus, bool Permanent, TimeSpan Delay)? Release { get; private set; }
 
@@ -170,6 +210,7 @@ public sealed class OutboxSyncProcessorTests
             OutboxAuthorizationEvidence authorization, CancellationToken cancellationToken = default)
         {
             ClaimCount++;
+            LastClaimAuthorization = authorization;
             return Task.FromResult(claimed);
         }
 

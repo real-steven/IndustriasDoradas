@@ -8,6 +8,7 @@ using IndustriasDoradas.Desktop.Infrastructure.Sync;
 namespace IndustriasDoradas.Desktop.Tests.Infrastructure;
 
 [TestClass]
+[TestCategory("SyncChaos")]
 public sealed class SyncApiTests
 {
     private static readonly Guid OrganizationId = Guid.Parse("30000000-0000-4000-8000-000000000001");
@@ -61,7 +62,12 @@ public sealed class SyncApiTests
     }
 
     [TestMethod]
+    [DataRow(HttpStatusCode.RequestTimeout, true, "REQUEST_TIMEOUT")]
+    [DataRow(HttpStatusCode.Unauthorized, true, "AUTH_REFRESH_REQUIRED")]
+    [DataRow(HttpStatusCode.Forbidden, false, "HTTP_CLIENT_REJECTION")]
+    [DataRow(HttpStatusCode.Conflict, false, "HTTP_CLIENT_REJECTION")]
     [DataRow(HttpStatusCode.TooManyRequests, true, "RATE_LIMITED")]
+    [DataRow(HttpStatusCode.InternalServerError, true, "SERVER_TEMPORARY_FAILURE")]
     [DataRow(HttpStatusCode.ServiceUnavailable, true, "SERVER_TEMPORARY_FAILURE")]
     [DataRow(HttpStatusCode.BadRequest, false, "HTTP_CLIENT_REJECTION")]
     public async Task PushClassifiesHttpFailure(HttpStatusCode status, bool transient, string code)
@@ -78,6 +84,40 @@ public sealed class SyncApiTests
         Assert.AreEqual(transient, exception.IsTransient);
         Assert.AreEqual(code, exception.Code);
         Assert.AreEqual((int)status, exception.HttpStatus);
+    }
+
+    [TestMethod]
+    public async Task PushClassifiesClientTimeoutAsTransient()
+    {
+        var api = new SyncApi(new HttpClient(new DelegateHandler(
+            _ => Task.FromException<HttpResponseMessage>(new TaskCanceledException("timeout"))))
+        {
+            BaseAddress = new Uri("https://api.example.invalid/"),
+        });
+
+        SyncTransportException exception = await Assert.ThrowsExactlyAsync<SyncTransportException>(
+            () => api.PushAsync(Batch(), "access-token"));
+
+        Assert.IsTrue(exception.IsTransient);
+        Assert.AreEqual("REQUEST_TIMEOUT", exception.Code);
+        Assert.IsNull(exception.HttpStatus);
+    }
+
+    [TestMethod]
+    public async Task PushClassifiesDnsFailureAsTransientNetworkFailure()
+    {
+        var api = new SyncApi(new HttpClient(new DelegateHandler(
+            _ => Task.FromException<HttpResponseMessage>(new HttpRequestException("DNS unavailable"))))
+        {
+            BaseAddress = new Uri("https://api.example.invalid/"),
+        });
+
+        SyncTransportException exception = await Assert.ThrowsExactlyAsync<SyncTransportException>(
+            () => api.PushAsync(Batch(), "access-token"));
+
+        Assert.IsTrue(exception.IsTransient);
+        Assert.AreEqual("NETWORK_UNAVAILABLE", exception.Code);
+        Assert.IsNull(exception.HttpStatus);
     }
 
     [TestMethod]

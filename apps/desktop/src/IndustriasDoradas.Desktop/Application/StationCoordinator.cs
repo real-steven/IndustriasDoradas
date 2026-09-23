@@ -42,9 +42,8 @@ public sealed class StationCoordinator(
     {
         ProtectedStationState? saved = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
         if (saved is null || saved.IsClosed) return null;
-        DateTimeOffset now = timeProvider.GetUtcNow();
         if (!networkAvailable)
-            return saved.Authorization.OfflineValidUntil > now ? saved : null;
+            return saved;
 
         try
         {
@@ -68,11 +67,11 @@ public sealed class StationCoordinator(
         }
         catch (HttpRequestException)
         {
-            return saved.Authorization.OfflineValidUntil > now ? saved : null;
+            return saved;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return saved.Authorization.OfflineValidUntil > now ? saved : null;
+            return saved;
         }
     }
 

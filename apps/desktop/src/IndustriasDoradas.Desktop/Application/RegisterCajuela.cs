@@ -100,12 +100,7 @@ public sealed class RegisterCajuelaHandler(
         ProtectedStationState? state = await stationStore.LoadAsync(cancellationToken).ConfigureAwait(false);
         if (state is null || state.IsClosed || state.Authorization.StationId != stationId)
             throw new UnauthorizedAccessException("No existe una autorización activa para registrar producción.");
-        return new OutboxAuthorizationEvidence(
-            state.Session.ProfileId,
-            state.Authorization.PermissionVersion,
-            state.Authorization.ValidatedAt,
-            state.Authorization.OfflineValidUntil,
-            "VALID");
+        return OutboxAuthorizationCapture.From(state, timeProvider.GetUtcNow());
     }
 
     private static void EnsureRequired(Guid value, string parameterName)

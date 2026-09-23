@@ -28,7 +28,7 @@ public sealed class OutboxSyncProcessor(
             state.Authorization.PermissionVersion,
             state.Authorization.ValidatedAt,
             state.Authorization.OfflineValidUntil,
-            "VALID");
+            "LEGACY_UNAVAILABLE");
         IReadOnlyList<ClaimedOutboxMessage> claimed = await outbox.ClaimAsync(
             state.Authorization.StationId,
             claimId,

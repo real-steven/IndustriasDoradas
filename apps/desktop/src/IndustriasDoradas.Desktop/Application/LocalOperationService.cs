@@ -479,7 +479,7 @@ public sealed class LocalOperationService(
                     authority.AuthorizationOfflineUntil.Value,
                     authority.AuthorizationState));
 
-    private static void ValidateAuthority(OperationAuthority authority)
+    private void ValidateAuthority(OperationAuthority authority)
     {
         ArgumentNullException.ThrowIfNull(authority);
         EnsureRequired(authority.ActorProfileId, nameof(authority));
@@ -491,6 +491,13 @@ public sealed class LocalOperationService(
             throw new ArgumentOutOfRangeException(
                 nameof(authority),
                 "La versión de autorización debe ser positiva.");
+        }
+        if (authority.AuthorizationState != "VALID" ||
+            authority.AuthorizationOfflineUntil is DateTimeOffset offlineUntil &&
+            offlineUntil <= timeProvider.GetUtcNow())
+        {
+            throw new UnauthorizedAccessException(
+                "La autorización offline venció; las acciones de jefe de planta requieren reautenticación.");
         }
     }
 

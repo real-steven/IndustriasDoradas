@@ -26,6 +26,7 @@
     "build:dotnet": "dotnet build apps/desktop/IndustriasDoradas.Desktop.slnx --no-restore --configuration Release",
     "test": "pnpm run test:db && pnpm run test:api && pnpm run test:web && pnpm run test:desktop",
     "test:db": "node scripts/test-database.mjs",
+    "test:sync:chaos": "node scripts/test-sync-chaos.mjs",
     "test:sync:concurrency": "node --env-file=apps/api/.env.local scripts/test-sync-concurrency.mjs",
     "test:api": "pnpm --filter @industrias-doradas/api test && pnpm --filter @industrias-doradas/api test:e2e",
     "test:web": "pnpm --filter @industrias-doradas/web test",

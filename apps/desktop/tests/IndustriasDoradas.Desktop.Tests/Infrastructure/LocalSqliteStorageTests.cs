@@ -468,6 +468,7 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    [TestCategory("SyncChaos")]
     public async Task ExpiredOutboxLeaseIsRecoveredAfterRestart()
     {
         await using var database = new TestDatabase();
@@ -691,6 +692,7 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    [TestCategory("SyncChaos")]
     public async Task RepeatingSameCommandDoesNotDuplicateEventOutboxOrCounter()
     {
         await using var database = new TestDatabase();
@@ -1270,6 +1272,7 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    [TestCategory("SyncChaos")]
     public async Task OfflineShiftPreservesTwoShipmentsReliefs120CajuelasReversalsAndRestarts()
     {
         await using var database = new TestDatabase();

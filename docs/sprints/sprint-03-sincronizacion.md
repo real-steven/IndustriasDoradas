@@ -147,6 +147,17 @@ identifican Sprint 3 (`0.3.0`). Evidencia y resultados en
 
 ### 3.9 Pruebas de caos y volumen
 
+**Estado:** completado en `DevHenry` el 2026-09-22. La matriz
+automatiza transporte, respuestas HTTP, lotes parciales, respuesta perdida,
+reinicio, contingencia vencida, 10 000 pendientes y reclamos concurrentes. La
+suite local fue determinista en tres ejecuciones; detectó y corrigió la
+restauración después de 24 horas, la evidencia de autorización vencida y el
+bloqueo de mutaciones privilegiadas. `pnpm verify` pasó y la carrera real en
+Supabase produjo `APPLIED` + `ALREADY_APPLIED`, un único efecto y el mismo
+recibo. El cargamento de prueba se completó automáticamente para liberar la
+línea. No requiere migración. Evidencia y límites medidos en
+[`../testing/sprint-03-9-caos-volumen.md`](../testing/sprint-03-9-caos-volumen.md).
+
 **Prompt:** Automatiza una matriz de fallos: timeout, DNS, 401/403, 409, 429, 500, lote parcial, respuesta perdida, reinicio, 24 h offline, 10 000 pendientes y concurrencia. Verifica invariantes de eventos, outbox y totales. Documenta límites medidos.
 
 **Pausa:** ejecutar suite varias veces; resultados deterministas y memoria/tiempo aceptables.

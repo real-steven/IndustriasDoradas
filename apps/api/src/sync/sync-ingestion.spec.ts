@@ -196,6 +196,29 @@ describe("sync ingestion with PostgreSQL", () => {
     ]);
   });
 
+  it("preserves an expired contingency event as a durable review without a business effect", async () => {
+    const { start, added } = scenario();
+    await push([start]);
+    const expired = {
+      ...added,
+      authorization: {
+        ...authorization,
+        stateAtCapture: "EXPIRED_CONTINGENCY" as const,
+      },
+    };
+
+    const beforeEvents = await count("production_events");
+    const result = (await push([expired])).results[0];
+
+    expect(result).toMatchObject({
+      status: "FAILED_REVIEW",
+      code: "AUTHORIZATION_EXPIRED_CONTINGENCY",
+    });
+    expect(result?.receiptId).toBeDefined();
+    expect((await push([expired])).results[0]).toEqual(result);
+    expect(await count("production_events")).toBe(beforeEvents);
+  });
+
   it("retries a reversal after its original cajuela arrives", async () => {
     const { start, added, reversed } = scenario();
     await push([start]);

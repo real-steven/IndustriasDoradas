@@ -22,21 +22,35 @@ if (scope === undefined) {
   );
 }
 
-const [lineScopes, suppliers, workers, stations] = await Promise.all([
-  request(
-    `station_line_scopes?select=production_line_id&organization_id=eq.${scope.organization_id}&plant_id=eq.${scope.plant_id}&station_id=eq.${scope.station_id}&is_active=eq.true&limit=1`,
-  ),
-  request(
-    `suppliers?select=id&organization_id=eq.${scope.organization_id}&is_active=eq.true&limit=1`,
-  ),
-  request(
-    `workers?select=id&organization_id=eq.${scope.organization_id}&plant_id=eq.${scope.plant_id}&is_active=eq.true&limit=1`,
-  ),
-  request(
-    `stations?select=permission_version&id=eq.${scope.station_id}&is_active=eq.true&limit=1`,
-  ),
-]);
-const lineScope = requiredRow(lineScopes, "active station line scope");
+const [lineScopes, suppliers, workers, stations, activeShipments] =
+  await Promise.all([
+    request(
+      `station_line_scopes?select=production_line_id&organization_id=eq.${scope.organization_id}&plant_id=eq.${scope.plant_id}&station_id=eq.${scope.station_id}&is_active=eq.true&order=production_line_id.asc`,
+    ),
+    request(
+      `suppliers?select=id&organization_id=eq.${scope.organization_id}&is_active=eq.true&limit=1`,
+    ),
+    request(
+      `workers?select=id&organization_id=eq.${scope.organization_id}&plant_id=eq.${scope.plant_id}&is_active=eq.true&limit=1`,
+    ),
+    request(
+      `stations?select=permission_version&id=eq.${scope.station_id}&is_active=eq.true&limit=1`,
+    ),
+    request(
+      `shipments?select=production_line_id&organization_id=eq.${scope.organization_id}&plant_id=eq.${scope.plant_id}&status=eq.ACTIVE`,
+    ),
+  ]);
+const occupiedLineIds = new Set(
+  activeShipments.map((shipment) => shipment.production_line_id),
+);
+const lineScope = lineScopes.find(
+  (candidate) => !occupiedLineIds.has(candidate.production_line_id),
+);
+if (lineScope === undefined) {
+  throw new Error(
+    "No free authorized production line exists for the concurrency test; close a test shipment and retry",
+  );
+}
 const supplier = requiredRow(suppliers, "active supplier");
 const worker = requiredRow(workers, "active worker");
 const station = requiredRow(stations, "active station");
@@ -84,62 +98,82 @@ const common = {
 };
 const left = attempt(common);
 const right = attempt(common);
+let testSucceeded = false;
+let primaryError;
+try {
+  const [leftResult, rightResult] = await Promise.all([
+    rpc("ingest_sync_item_v1", left),
+    rpc("ingest_sync_item_v1", right),
+  ]);
+  if (
+    leftResult.receiptId !== rightResult.receiptId ||
+    [leftResult.status, rightResult.status].sort().join(",") !==
+      "ALREADY_APPLIED,APPLIED"
+  ) {
+    throw new Error(
+      `Concurrent responses were not stable: ${JSON.stringify([leftResult, rightResult])}`,
+    );
+  }
 
-const [leftResult, rightResult] = await Promise.all([
-  rpc("ingest_sync_item_v1", left),
-  rpc("ingest_sync_item_v1", right),
-]);
-if (
-  leftResult.receiptId !== rightResult.receiptId ||
-  [leftResult.status, rightResult.status].sort().join(",") !==
-    "ALREADY_APPLIED,APPLIED"
-) {
-  throw new Error(
-    `Concurrent responses were not stable: ${JSON.stringify([leftResult, rightResult])}`,
+  const receipts = await request(
+    `sync_receipts?select=id,correlation_id&outbox_message_id=eq.${outboxMessageId}`,
   );
-}
-
-const receipts = await request(
-  `sync_receipts?select=id,correlation_id&outbox_message_id=eq.${outboxMessageId}`,
-);
-const auditEvents = await request(
-  `audit_events?select=id,correlation_id&entity_id=eq.${shipmentId}&action=eq.sync.ingest`,
-);
-const shipments = await request(`shipments?select=id&id=eq.${shipmentId}`);
-const assignments = await request(
-  `responsibility_assignments?select=id&id=eq.${responsibilityAssignmentId}`,
-);
-if (
-  receipts.length !== 1 ||
-  auditEvents.length !== 1 ||
-  shipments.length !== 1 ||
-  assignments.length !== 1
-) {
-  throw new Error(
-    "Expected one shipment, assignment, receipt and audit event after the race",
+  const auditEvents = await request(
+    `audit_events?select=id,correlation_id&entity_id=eq.${shipmentId}&action=eq.sync.ingest`,
   );
-}
-if (receipts[0].correlation_id !== auditEvents[0].correlation_id) {
-  throw new Error("Receipt and audit event lost their shared correlation ID");
+  const shipments = await request(`shipments?select=id&id=eq.${shipmentId}`);
+  const assignments = await request(
+    `responsibility_assignments?select=id&id=eq.${responsibilityAssignmentId}`,
+  );
+  if (
+    receipts.length !== 1 ||
+    auditEvents.length !== 1 ||
+    shipments.length !== 1 ||
+    assignments.length !== 1
+  ) {
+    throw new Error(
+      "Expected one shipment, assignment, receipt and audit event after the race",
+    );
+  }
+  if (receipts[0].correlation_id !== auditEvents[0].correlation_id) {
+    throw new Error("Receipt and audit event lost their shared correlation ID");
+  }
+
+  testSucceeded = true;
+  console.log(
+    JSON.stringify(
+      {
+        outcome: "concurrency-safe",
+        productionLineId: lineScope.production_line_id,
+        outboxMessageId,
+        receiptId: leftResult.receiptId,
+        responseStatuses: [leftResult.status, rightResult.status],
+        shipments: shipments.length,
+        responsibilityAssignments: assignments.length,
+        receipts: receipts.length,
+        auditEvents: auditEvents.length,
+        correlationId: receipts[0].correlation_id,
+      },
+      null,
+      2,
+    ),
+  );
+} catch (error) {
+  primaryError = error;
+  throw error;
+} finally {
+  try {
+    await completeTestShipmentIfActive(common);
+  } catch (cleanupError) {
+    if (primaryError !== undefined) {
+      console.error("Concurrency test cleanup also failed:", cleanupError);
+    } else {
+      throw cleanupError;
+    }
+  }
 }
 
-console.log(
-  JSON.stringify(
-    {
-      outcome: "concurrency-safe",
-      outboxMessageId,
-      receiptId: leftResult.receiptId,
-      responseStatuses: [leftResult.status, rightResult.status],
-      shipments: shipments.length,
-      responsibilityAssignments: assignments.length,
-      receipts: receipts.length,
-      auditEvents: auditEvents.length,
-      correlationId: receipts[0].correlation_id,
-    },
-    null,
-    2,
-  ),
-);
+if (!testSucceeded) process.exitCode = 1;
 
 function attempt(base) {
   return {
@@ -156,6 +190,42 @@ async function rpc(name, inputItem) {
     method: "POST",
     body: JSON.stringify({ input_item: inputItem }),
   });
+}
+
+async function completeTestShipmentIfActive(startItem) {
+  const active = await request(
+    `shipments?select=id&id=eq.${shipmentId}&status=eq.ACTIVE`,
+  );
+  if (active.length === 0) return;
+
+  const completedAt = new Date(Math.max(Date.now(), now.getTime() + 1_000));
+  const completion = attempt({
+    ...startItem,
+    outboxMessageId: randomUUID(),
+    stationSequence: startItem.stationSequence + 1,
+    contentHash: "d".repeat(64),
+    operationType: "OPERATION_COMPLETED",
+    createdAtUtc: completedAt.toISOString(),
+    payload: {
+      schemaVersion: 1,
+      shipmentId,
+      feedCycleId,
+      organizationId: scope.organization_id,
+      plantId: scope.plant_id,
+      stationId: scope.station_id,
+      lineId: lineScope.production_line_id,
+      responsibleWorkerId: worker.id,
+      actorProfileId: scope.user_profile_id,
+      permissionVersion: station.permission_version,
+      occurredAtUtc: completedAt.toISOString(),
+    },
+  });
+  const result = await rpc("ingest_sync_item_v1", completion);
+  if (!["APPLIED", "ALREADY_APPLIED"].includes(result.status)) {
+    throw new Error(
+      `Could not complete concurrency test shipment: ${JSON.stringify(result)}`,
+    );
+  }
 }
 
 async function request(path, init = {}) {
