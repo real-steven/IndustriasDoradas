@@ -12,6 +12,7 @@ public sealed class StationCoordinator(
     ISupabaseAuthService auth,
     IStationApi api,
     ILocalCatalogRepository catalogs,
+    ILocalStationSequenceStore stationSequences,
     IProtectedStationStore store,
     IElevationEvidenceCapture evidence,
     IOptions<StationOptions> stationOptions,
@@ -27,6 +28,11 @@ public sealed class StationCoordinator(
         EnsurePlantManager(session);
         StationAuthorization authorization = await api.GetAuthorizationAsync(
             session.OrganizationId, options.Id, tokens.AccessToken, cancellationToken).ConfigureAwait(false);
+        await stationSequences.EnsureNextAsync(
+            authorization.StationId,
+            authorization.NextStationSequence,
+            authorization.ValidatedAt,
+            cancellationToken).ConfigureAwait(false);
         var state = new ProtectedStationState(
             tokens,
             session,
@@ -50,6 +56,11 @@ public sealed class StationCoordinator(
             saved = await RefreshTokensIfRequiredAsync(saved, cancellationToken).ConfigureAwait(false);
             StationAuthorization refreshed = await api.GetAuthorizationAsync(
                 saved.Session.OrganizationId, options.Id, saved.Tokens.AccessToken, cancellationToken).ConfigureAwait(false);
+            await stationSequences.EnsureNextAsync(
+                refreshed.StationId,
+                refreshed.NextStationSequence,
+                refreshed.ValidatedAt,
+                cancellationToken).ConfigureAwait(false);
             var state = saved with { Authorization = refreshed };
             await store.SaveAsync(state, cancellationToken).ConfigureAwait(false);
             await TryRefreshCatalogsAsync(state, cancellationToken).ConfigureAwait(false);

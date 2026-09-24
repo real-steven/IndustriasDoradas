@@ -64,7 +64,8 @@ public sealed class StationCoordinatorTests
         {
             RefreshResult = new AuthTokens("new-access", "new-refresh", time.GetUtcNow().AddHours(1)),
         };
-        StationCoordinator coordinator = Create(store, api, time, auth);
+        var sequences = new StubStationSequences();
+        StationCoordinator coordinator = Create(store, api, time, auth, sequences);
 
         ProtectedStationState? resumed = await coordinator.ResumeAsync(networkAvailable: true);
 
@@ -73,6 +74,8 @@ public sealed class StationCoordinatorTests
         Assert.AreEqual("new-access", resumed.Tokens.AccessToken);
         Assert.AreEqual("new-refresh", store.State?.Tokens.RefreshToken);
         Assert.AreEqual("new-access", api.LastAuthorizationAccessToken);
+        Assert.AreEqual(original.Authorization.StationId, sequences.StationId);
+        Assert.AreEqual(original.Authorization.NextStationSequence, sequences.NextSequence);
     }
 
     [TestMethod]
@@ -139,8 +142,10 @@ public sealed class StationCoordinatorTests
         MemoryStore store,
         StubApi api,
         TimeProvider time,
-        StubAuth? auth = null) =>
-        new(auth ?? new StubAuth(), api, new StubCatalogs(), store, new StubEvidence(),
+        StubAuth? auth = null,
+        StubStationSequences? stationSequences = null) =>
+        new(auth ?? new StubAuth(), api, new StubCatalogs(), stationSequences ?? new StubStationSequences(),
+            store, new StubEvidence(),
             Options.Create(new StationOptions { Id = Guid.Parse("34000000-0000-4000-8000-000000000001") }), time);
 
     private static ProtectedStationState Fixture(DateTimeOffset offlineUntil) => new(
@@ -200,6 +205,23 @@ public sealed class StationCoordinatorTests
         public Task<EvidenceCaptureResult> CaptureAsync(CancellationToken cancellationToken = default) => Task.FromResult(new EvidenceCaptureResult(false));
     }
 
+    private sealed class StubStationSequences : ILocalStationSequenceStore
+    {
+        public Guid? StationId { get; private set; }
+        public long? NextSequence { get; private set; }
+
+        public Task EnsureNextAsync(
+            Guid stationId,
+            long nextSequence,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default)
+        {
+            StationId = stationId;
+            NextSequence = nextSequence;
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class StubApi : IStationApi
     {
         public HttpRequestException? AuthorizationFailure { get; init; }
@@ -231,7 +253,7 @@ public sealed class StationCoordinatorTests
         public Task UpsertLineAsync(CachedProductionLine line, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<CachedSupplier>> ListActiveSuppliersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedSupplier>>([]);
         public Task<IReadOnlyList<CachedWorker>> ListActiveWorkersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedWorker>>([]);
-        public Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(Guid organizationId, Guid plantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedProductionLine>>([]);
+        public Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(Guid organizationId, Guid plantId, Guid stationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedProductionLine>>([]);
         public Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default) => Task.FromResult<CachedSupplier?>(null);
         public Task<CachedWorker?> FindWorkerAsync(Guid workerId, CancellationToken cancellationToken = default) => Task.FromResult<CachedWorker?>(null);
         public Task<CachedProductionLine?> FindLineAsync(Guid lineId, CancellationToken cancellationToken = default) => Task.FromResult<CachedProductionLine?>(null);

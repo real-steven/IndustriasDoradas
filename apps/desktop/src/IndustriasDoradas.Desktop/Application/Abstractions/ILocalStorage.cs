@@ -168,6 +168,7 @@ public interface ILocalCatalogRepository
     Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(
         Guid organizationId,
         Guid plantId,
+        Guid stationId,
         CancellationToken cancellationToken = default);
 
     Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default);
@@ -235,6 +236,15 @@ public interface ILocalOutboxRepository
         DateTimeOffset now,
         Func<int, TimeSpan> retryDelay,
         bool permanent,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalStationSequenceStore
+{
+    Task EnsureNextAsync(
+        Guid stationId,
+        long nextSequence,
+        DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default);
 }
 

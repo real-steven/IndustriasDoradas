@@ -357,7 +357,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         Guid? previousLineId = SelectedLine?.Id;
         Lines = await catalogs.ListActiveLinesAsync(
             state.Session.OrganizationId,
-            state.Authorization.PlantId).ConfigureAwait(true);
+            state.Authorization.PlantId,
+            state.Authorization.StationId).ConfigureAwait(true);
         CachedProductionLine? preservedLine = previousLineId.HasValue
             ? Lines.FirstOrDefault(line => line.Id == previousLineId.Value)
             : null;

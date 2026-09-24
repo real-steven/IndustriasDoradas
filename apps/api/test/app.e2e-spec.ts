@@ -563,6 +563,7 @@ describe("API smoke (e2e)", () => {
         "pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       validatedAt: "2026-08-19T00:00:00.000Z",
       offlineValidUntil: "2026-08-20T00:00:00.000Z",
+      nextStationSequence: 50,
     });
 
     const response = await request(httpServer)
@@ -576,6 +577,7 @@ describe("API smoke (e2e)", () => {
       organizationId: ACTIVE_PROFILE.organizationId,
       stationName: "Estación ficticia",
       permissionVersion: 1,
+      nextStationSequence: 50,
     });
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(stations.getSnapshot.mock.calls).toContainEqual([

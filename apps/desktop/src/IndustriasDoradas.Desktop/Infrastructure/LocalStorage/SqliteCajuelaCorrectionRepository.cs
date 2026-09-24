@@ -408,7 +408,10 @@ public sealed partial class SqliteCajuelaRepository
                 state, attempt_count, created_at_utc, updated_at_utc)
             VALUES (
                 $id, json_extract($payloadJson, '$.stationId'),
-                COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages), 1),
+                MAX(
+                    COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages), 1),
+                    COALESCE((SELECT next_sequence FROM station_sequence_state
+                        WHERE station_id = json_extract($payloadJson, '$.stationId')), 1)),
                 'PRODUCTION_EVENT_CREATED', 'production_event', $aggregateId, $payloadJson,
                 $actorProfileId, $permissionVersion, $authorizationValidatedAt,
                 $authorizationOfflineUntil, $authorizationState,

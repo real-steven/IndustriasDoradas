@@ -32,7 +32,8 @@ public sealed class StationPreparationViewModelTests
         var catalogs = new MemoryCatalogs();
         var api = new StubStationApi(state, Snapshot());
         var coordinator = new StationCoordinator(
-            new StubAuth(), api, catalogs, new MemoryStationStore(state), new NoopEvidenceCapture(),
+            new StubAuth(), api, catalogs, new MemoryStationSequences(), new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }), time);
         var sessions = new MemorySessions();
         var operationRepository = new RecordingOperationRepository(sessions);
@@ -88,6 +89,7 @@ public sealed class StationPreparationViewModelTests
             new StubAuth(),
             new StubStationApi(state, Snapshot()),
             catalogs,
+            new MemoryStationSequences(),
             new MemoryStationStore(state),
             new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }),
@@ -154,6 +156,7 @@ public sealed class StationPreparationViewModelTests
             new StubAuth(),
             new StubStationApi(state, Snapshot()),
             catalogs,
+            new MemoryStationSequences(),
             new MemoryStationStore(state),
             new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }),
@@ -203,6 +206,7 @@ public sealed class StationPreparationViewModelTests
             new StubAuth(),
             new StubStationApi(state, snapshot),
             catalogs,
+            new MemoryStationSequences(),
             new MemoryStationStore(state),
             new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }),
@@ -290,6 +294,15 @@ public sealed class StationPreparationViewModelTests
         }
     }
 
+    private sealed class MemoryStationSequences : ILocalStationSequenceStore
+    {
+        public Task EnsureNextAsync(
+            Guid stationId,
+            long nextSequence,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
     private sealed class MemoryCatalogs : ILocalCatalogRepository
     {
         private readonly List<CachedSupplier> suppliers = [];
@@ -300,7 +313,7 @@ public sealed class StationPreparationViewModelTests
         public Task UpsertLineAsync(CachedProductionLine line, CancellationToken cancellationToken = default) { lines.RemoveAll(item => item.Id == line.Id); lines.Add(line); return Task.CompletedTask; }
         public Task<IReadOnlyList<CachedSupplier>> ListActiveSuppliersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedSupplier>>(suppliers.Where(item => item.OrganizationId == organizationId && item.IsActive).ToArray());
         public Task<IReadOnlyList<CachedWorker>> ListActiveWorkersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedWorker>>(workers.Where(item => item.OrganizationId == organizationId && item.IsActive).ToArray());
-        public Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(Guid organizationId, Guid plantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedProductionLine>>(lines.Where(item => item.OrganizationId == organizationId && item.PlantId == plantId && item.IsActive).ToArray());
+        public Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(Guid organizationId, Guid plantId, Guid stationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedProductionLine>>(lines.Where(item => item.OrganizationId == organizationId && item.PlantId == plantId && item.IsActive).ToArray());
         public Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default) => Task.FromResult(suppliers.SingleOrDefault(item => item.Id == supplierId));
         public Task<CachedWorker?> FindWorkerAsync(Guid workerId, CancellationToken cancellationToken = default) => Task.FromResult(workers.SingleOrDefault(item => item.Id == workerId));
         public Task<CachedProductionLine?> FindLineAsync(Guid lineId, CancellationToken cancellationToken = default) => Task.FromResult(lines.SingleOrDefault(item => item.Id == lineId));

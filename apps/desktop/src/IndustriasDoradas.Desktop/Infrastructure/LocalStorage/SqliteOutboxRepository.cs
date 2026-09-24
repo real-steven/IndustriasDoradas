@@ -4,8 +4,33 @@ using Microsoft.Data.Sqlite;
 namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 
 public sealed class SqliteOutboxRepository(ILocalSqliteConnectionFactory connectionFactory)
-    : ILocalOutboxRepository
+    : ILocalOutboxRepository, ILocalStationSequenceStore
 {
+    public async Task EnsureNextAsync(
+        Guid stationId,
+        long nextSequence,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (stationId == Guid.Empty || nextSequence < 1)
+            throw new ArgumentException("La base de secuencia de estación es inválida.");
+
+        await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO station_sequence_state(station_id, next_sequence, updated_at_utc)
+            VALUES ($stationId, $nextSequence, $updatedAtUtc)
+            ON CONFLICT(station_id) DO UPDATE SET
+                next_sequence = MAX(station_sequence_state.next_sequence, excluded.next_sequence),
+                updated_at_utc = excluded.updated_at_utc;
+            """;
+        command.Parameters.AddWithValue("$stationId", stationId.ToString("D"));
+        command.Parameters.AddWithValue("$nextSequence", nextSequence);
+        command.Parameters.AddWithValue("$updatedAtUtc", Timestamp(updatedAt));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<StoredOutboxMessage>> ListPendingAsync(
         int limit,
         CancellationToken cancellationToken = default)

@@ -9,6 +9,7 @@ export interface StationSnapshot {
   pinVerifier: string;
   validatedAt: string;
   offlineValidUntil: string;
+  nextStationSequence: number;
 }
 
 export interface PinAttemptResult {

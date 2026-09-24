@@ -151,20 +151,33 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
     public async Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(
         Guid organizationId,
         Guid plantId,
+        Guid stationId,
         CancellationToken cancellationToken = default)
     {
         await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, organization_id, plant_id, name, is_active, updated_at_utc
-            FROM cached_production_lines
-            WHERE organization_id = $organizationId AND plant_id = $plantId AND is_active = 1
-            ORDER BY name COLLATE NOCASE, id;
+            SELECT line.id, line.organization_id, line.plant_id, line.name, line.is_active, line.updated_at_utc
+            FROM cached_production_lines AS line
+            WHERE line.organization_id = $organizationId
+              AND line.plant_id = $plantId
+              AND line.is_active = 1
+              AND EXISTS (
+                  SELECT 1
+                  FROM sync_entity_cache AS scope
+                  WHERE scope.entity_type = 'STATION_LINE_SCOPE'
+                    AND scope.action = 'UPSERT'
+                    AND json_extract(scope.payload_json, '$.station_id') = $stationId
+                    AND json_extract(scope.payload_json, '$.production_line_id') = line.id
+                    AND json_extract(scope.payload_json, '$.is_active') = 1
+              )
+            ORDER BY line.name COLLATE NOCASE, line.id;
             """;
         command.Parameters.AddWithValue(
             "$organizationId",
             SqliteLocalStorageConverters.Id(organizationId, nameof(organizationId)));
         command.Parameters.AddWithValue("$plantId", SqliteLocalStorageConverters.Id(plantId, nameof(plantId)));
+        command.Parameters.AddWithValue("$stationId", SqliteLocalStorageConverters.Id(stationId, nameof(stationId)));
         var result = new List<CachedProductionLine>();
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))

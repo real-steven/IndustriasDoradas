@@ -90,6 +90,10 @@ public partial class App : System.Windows.Application
                 EnvironmentName = environmentName,
             });
         builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+        // The local file supplies normal installation defaults. Explicit launch
+        // arguments must remain the final override so support can run isolated
+        // station profiles on one computer during recovery and validation.
+        builder.Configuration.AddCommandLine(args);
 
         builder.Services
             .AddOptions<ApiOptions>()
@@ -190,7 +194,11 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalShipmentRepository, SqliteShipmentRepository>();
         builder.Services.AddSingleton<ILocalOperationalSessionRepository, SqliteOperationalSessionRepository>();
         builder.Services.AddSingleton<ILocalProductionEventRepository, SqliteProductionEventRepository>();
-        builder.Services.AddSingleton<ILocalOutboxRepository, SqliteOutboxRepository>();
+        builder.Services.AddSingleton<SqliteOutboxRepository>();
+        builder.Services.AddSingleton<ILocalOutboxRepository>(services =>
+            services.GetRequiredService<SqliteOutboxRepository>());
+        builder.Services.AddSingleton<ILocalStationSequenceStore>(services =>
+            services.GetRequiredService<SqliteOutboxRepository>());
         builder.Services.AddSingleton<ILocalSyncChangeRepository, SqliteSyncChangeRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();

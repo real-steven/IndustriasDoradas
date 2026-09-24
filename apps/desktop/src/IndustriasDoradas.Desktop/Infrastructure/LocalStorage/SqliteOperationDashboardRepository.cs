@@ -44,6 +44,7 @@ public sealed class SqliteOperationDashboardRepository(
         IReadOnlyList<(Guid Id, string Name)> catalogLines = await ReadLinesAsync(
                 connection,
                 transaction,
+                station,
                 cancellationToken)
             .ConfigureAwait(false);
         var result = new List<LocalOperationDashboardSnapshot>(catalogLines.Count);
@@ -198,17 +199,28 @@ public sealed class SqliteOperationDashboardRepository(
     private static async Task<IReadOnlyList<(Guid Id, string Name)>> ReadLinesAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        string stationId,
         CancellationToken cancellationToken)
     {
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id, name
-            FROM cached_production_lines
-            WHERE is_active = 1
-            ORDER BY name COLLATE NOCASE, id
+            SELECT line.id, line.name
+            FROM cached_production_lines AS line
+            WHERE line.is_active = 1
+              AND EXISTS (
+                  SELECT 1
+                  FROM sync_entity_cache AS scope
+                  WHERE scope.entity_type = 'STATION_LINE_SCOPE'
+                    AND scope.action = 'UPSERT'
+                    AND json_extract(scope.payload_json, '$.station_id') = $stationId
+                    AND json_extract(scope.payload_json, '$.production_line_id') = line.id
+                    AND json_extract(scope.payload_json, '$.is_active') = 1
+              )
+            ORDER BY line.name COLLATE NOCASE, line.id
             LIMIT 4;
             """;
+        command.Parameters.AddWithValue("$stationId", stationId);
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
         var result = new List<(Guid Id, string Name)>();

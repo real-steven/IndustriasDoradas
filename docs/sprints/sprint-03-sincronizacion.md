@@ -164,6 +164,20 @@ línea. No requiere migración. Evidencia y límites medidos en
 
 ### 3.10 Ensayo multiestación y cierre
 
+**Estado:** completado en `DevHenry` el 2026-09-24. Dos perfiles
+temporales operaron Líneas 2 y 3 con bases SQLite y sesiones DPAPI aisladas. Con
+la API detenida acumularon 3 y 4 cajuelas; al recuperarla, PostgreSQL confirmó
+los mismos totales, siete eventos únicos y cero recibos en revisión. Ambas
+estaciones recibieron el cambio y la restauración del catálogo, cerraron sus
+cargamentos y el fixture recuperó los alcances originales sin eliminar
+historial. Se corrigieron además la prioridad de `Station:Id`, el filtro de
+líneas por estación y la continuidad de `station_sequence` al iniciar con una
+base local nueva. Las diez pruebas manuales y `pnpm verify` pasaron sobre el
+cambio completo. Evidencia y pasos en
+[`../testing/sprint-03-10-multiestacion.md`](../testing/sprint-03-10-multiestacion.md);
+operación y recuperación en
+[`../operations/runbook-sincronizacion.md`](../operations/runbook-sincronizacion.md).
+
 **Prompt:** Ejecuta prueba integrada con dos equipos o dos perfiles de estación, captura conteos antes/después y consulta PostgreSQL/API. Incluye actualización de catálogo durante desconexión y recuperación. Corrige defectos, completa ficha manual y runbook de sincronización.
 
 **Pausa:** igualdad matemática local/central, cero duplicados/pérdidas y compuerta Sprint 3 aprobada.

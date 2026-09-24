@@ -18,7 +18,9 @@ public sealed class LocalSqliteStorageTests
     private static readonly Guid OrganizationId = Guid.Parse("30000000-0000-4000-8000-000000000001");
     private static readonly Guid PlantId = Guid.Parse("31000000-0000-4000-8000-000000000001");
     private static readonly Guid StationId = Guid.Parse("34000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondStationId = Guid.Parse("34000000-0000-4000-8000-000000000002");
     private static readonly Guid LineId = Guid.Parse("43000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondLineId = Guid.Parse("43000000-0000-4000-8000-000000000002");
     private static readonly Guid SupplierId = Guid.Parse("42000000-0000-4000-8000-000000000001");
     private static readonly Guid ShipmentId = Guid.Parse("41000000-0000-4000-8000-000000000001");
     private static readonly Guid CycleId = Guid.Parse("44000000-0000-4000-8000-000000000001");
@@ -55,8 +57,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(10L, result.CurrentVersion);
-        Assert.AreEqual(10, result.AppliedCount);
+        Assert.AreEqual(11L, result.CurrentVersion);
+        Assert.AreEqual(11, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -65,7 +67,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(10L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(11L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -89,6 +91,22 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task OnlineStationSnapshotRaisesSequenceFloorForANewLocalDatabase()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        await database.Outbox().EnsureNextAsync(StationId, 50, StartedAt);
+
+        await StartOperationAsync(database.OperationService(new MutableTimeProvider(StartedAt)));
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(50L, await ScalarLongAsync(
+            connection,
+            "SELECT station_sequence FROM outbox_messages WHERE operation_type = 'OPERATION_STARTED';"));
+    }
+
+    [TestMethod]
     public async Task UpgradeFromFirstMigrationPreservesDataAndAddsImmutability()
     {
         await using var database = new TestDatabase();
@@ -97,7 +115,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(9, result.AppliedCount);
+        Assert.AreEqual(10, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -257,7 +275,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(10L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(11L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -402,12 +420,12 @@ public sealed class LocalSqliteStorageTests
     {
         await using var database = new TestDatabase();
         await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(2).ToArray());
-        await SeedContextAsync(database);
+        await SeedContextAsync(database, seedStationLineScope: false);
         await InsertLegacyEventWithOutboxAsync(database.Factory);
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(8, result.AppliedCount);
+        Assert.AreEqual(9, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -561,6 +579,38 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("Línea 1", snapshot.LineName);
         Assert.AreEqual(0, snapshot.Total);
         Assert.AreEqual(0, snapshot.PendingOutboxCount);
+    }
+
+    [TestMethod]
+    public async Task StationCatalogAndDashboardExcludeLinesAssignedToAnotherStation()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        SqliteCatalogRepository catalogs = database.Catalogs();
+        await catalogs.UpsertLineAsync(new CachedProductionLine(
+            LineId, OrganizationId, PlantId, "Línea 1", true, StartedAt));
+        await catalogs.UpsertLineAsync(new CachedProductionLine(
+            SecondLineId, OrganizationId, PlantId, "Línea 2", true, StartedAt));
+        await SeedStationLineScopeAsync(database, StationId, LineId);
+        await SeedStationLineScopeAsync(database, SecondStationId, SecondLineId);
+
+        IReadOnlyList<CachedProductionLine> firstStationLines = await catalogs.ListActiveLinesAsync(
+            OrganizationId,
+            PlantId,
+            StationId);
+        IReadOnlyList<CachedProductionLine> secondStationLines = await catalogs.ListActiveLinesAsync(
+            OrganizationId,
+            PlantId,
+            SecondStationId);
+        IReadOnlyList<LocalOperationDashboardSnapshot> firstDashboard = await database.Dashboard()
+            .ListAsync(StationId);
+
+        Assert.HasCount(1, firstStationLines);
+        Assert.AreEqual(LineId, firstStationLines[0].Id);
+        Assert.HasCount(1, secondStationLines);
+        Assert.AreEqual(SecondLineId, secondStationLines[0].Id);
+        Assert.HasCount(1, firstDashboard);
+        Assert.AreEqual(LineId, firstDashboard[0].LineId);
     }
 
     [TestMethod]
@@ -1429,13 +1479,17 @@ public sealed class LocalSqliteStorageTests
         Assert.ThrowsExactly<UnauthorizedAccessException>(() => OperationAuthority.From(state));
     }
 
-    private static async Task SeedContextAsync(TestDatabase database)
+    private static async Task SeedContextAsync(
+        TestDatabase database,
+        bool seedStationLineScope = true)
     {
-        await SeedSelectableCatalogsAsync(database);
+        await SeedSelectableCatalogsAsync(database, seedStationLineScope);
         await database.Shipments().UpsertAsync(Shipment());
     }
 
-    private static async Task SeedSelectableCatalogsAsync(TestDatabase database)
+    private static async Task SeedSelectableCatalogsAsync(
+        TestDatabase database,
+        bool seedStationLineScope = true)
     {
         SqliteCatalogRepository catalogs = database.Catalogs();
         await catalogs.UpsertSupplierAsync(Supplier());
@@ -1452,6 +1506,10 @@ public sealed class LocalSqliteStorageTests
             "Línea 1",
             true,
             StartedAt));
+        if (seedStationLineScope)
+        {
+            await SeedStationLineScopeAsync(database, StationId, LineId);
+        }
         await catalogs.UpsertWorkerAsync(new CachedWorker(
             SecondWorkerId,
             OrganizationId,
@@ -1464,6 +1522,36 @@ public sealed class LocalSqliteStorageTests
             "Carlos",
             true,
             StartedAt));
+    }
+
+    private static async Task SeedStationLineScopeAsync(
+        TestDatabase database,
+        Guid stationId,
+        Guid lineId)
+    {
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO sync_entity_cache(
+                entity_type, entity_id, entity_version, action,
+                payload_json, payload_hash, changed_at_utc)
+            VALUES (
+                'STATION_LINE_SCOPE', $lineId, 1, 'UPSERT',
+                json_object(
+                    'organization_id', $organizationId,
+                    'plant_id', $plantId,
+                    'station_id', $stationId,
+                    'production_line_id', $lineId,
+                    'is_active', json('true')),
+                $hash, $changedAtUtc);
+            """;
+        command.Parameters.AddWithValue("$organizationId", OrganizationId.ToString("D"));
+        command.Parameters.AddWithValue("$plantId", PlantId.ToString("D"));
+        command.Parameters.AddWithValue("$stationId", stationId.ToString("D"));
+        command.Parameters.AddWithValue("$lineId", lineId.ToString("D"));
+        command.Parameters.AddWithValue("$hash", $"scope-{stationId:D}-{lineId:D}");
+        command.Parameters.AddWithValue("$changedAtUtc", StartedAt.ToString("O", CultureInfo.InvariantCulture));
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task<LocalOperationContext> StartOperationAsync(LocalOperationService service)
