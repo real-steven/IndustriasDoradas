@@ -84,8 +84,13 @@ public sealed class DiagnosticsViewModelTests
         Assert.AreEqual("API no disponible", viewModel.StatusTitle);
         Assert.AreEqual("Sin sincronización · NETWORK_UNAVAILABLE", viewModel.NetworkStatus);
         Assert.AreEqual(1, viewModel.Failures.Count);
+        Assert.AreEqual(3, viewModel.FailedReviewCount);
+        Assert.AreEqual("Registro o corrección de cajuela", viewModel.Failures[0].OperationDescription);
         Assert.IsTrue(viewModel.HasCorrections);
         Assert.AreEqual(1, viewModel.PullReviewCount);
+        var audit = new AuditViewModel(viewModel);
+        StringAssert.Contains(audit.LocalReviewCountDescription, "3 evento(s)");
+        StringAssert.Contains(audit.LocalReviewCountDescription, "1 más recientes");
         StringAssert.Contains(viewModel.ClockDeviation, "revisar reloj");
     }
 

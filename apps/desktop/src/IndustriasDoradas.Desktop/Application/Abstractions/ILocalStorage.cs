@@ -352,7 +352,20 @@ public sealed record SyncFailureDiagnostic(
     string Cause,
     int AttemptCount,
     DateTimeOffset OccurredAt,
-    DateTimeOffset LastAttemptAt);
+    DateTimeOffset LastAttemptAt)
+{
+    public string OperationDescription => OperationType switch
+    {
+        "OPERATION_STARTED" => "Inicio de cargamento",
+        "OPERATION_COMPLETED" => "Finalización de cargamento",
+        "RESPONSIBLE_RELIEVED" => "Cambio de responsable",
+        "PRODUCTION_EVENT_CREATED" => "Registro o corrección de cajuela",
+        _ => "Evento operativo",
+    };
+
+    public DateTimeOffset LocalOccurredAt => OccurredAt.ToLocalTime();
+    public DateTimeOffset LocalLastAttemptAt => LastAttemptAt.ToLocalTime();
+}
 
 public sealed record AdministrativeCorrectionDiagnostic(
     string Administrator,

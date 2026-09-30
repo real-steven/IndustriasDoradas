@@ -13,6 +13,14 @@ using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
+public sealed record StationLineStatus(
+    Guid Id,
+    string Name,
+    bool IsPrepared,
+    bool IsSelected,
+    string AccentColor,
+    string Detail);
+
 public sealed class StationViewModel : ObservableObject, IDisposable
 {
     private readonly StationCoordinator coordinator;
@@ -20,9 +28,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly ILocalCatalogRepository catalogs;
     private readonly LocalOperationService operations;
     private readonly TimeProvider timeProvider;
+    private readonly ILocalOperationDashboardRepository? dashboard;
     private readonly DispatcherTimer idleTimer;
     private bool isClosingForIdle;
     private bool isMaintainingSession;
+    private bool wasSessionRestored;
     private DateTimeOffset nextSessionMaintenanceAt = DateTimeOffset.MinValue;
     private ProtectedStationState? state;
     private string status = "Inicia sesión como jefe de planta para abrir la estación.";
@@ -33,6 +43,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private IReadOnlyList<CachedSupplier> suppliers = [];
     private IReadOnlyList<CachedWorker> workers = [];
     private IReadOnlyList<CachedProductionLine> lines = [];
+    private IReadOnlyList<StationLineStatus> lineStatuses = [];
     private CachedSupplier? selectedSupplier;
     private CachedWorker? selectedWorker;
     private CachedProductionLine? pilotLine;
@@ -44,6 +55,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         "Seleccione línea, proveedor y responsable para preparar el cargamento.";
     private string activeOperationSummary = "No hay un cargamento activo.";
     private string managementSummary = "Seleccione una acción para el cargamento activo.";
+    private string activeSupplierName = "Proveedor registrado";
 
     public StationViewModel(
         StationCoordinator coordinator,
@@ -51,15 +63,28 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         LocalOperationService operations,
         IOptions<StationOptions> options,
         TimeProvider timeProvider)
+        : this(coordinator, catalogs, operations, options, timeProvider, null)
+    {
+    }
+
+    public StationViewModel(
+        StationCoordinator coordinator,
+        ILocalCatalogRepository catalogs,
+        LocalOperationService operations,
+        IOptions<StationOptions> options,
+        TimeProvider timeProvider,
+        ILocalOperationDashboardRepository? dashboard)
     {
         this.coordinator = coordinator;
         this.catalogs = catalogs;
         this.operations = operations;
         this.timeProvider = timeProvider;
+        this.dashboard = dashboard;
         modeController = new PrivilegeModeController(
             timeProvider,
             TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds),
             TimeSpan.FromSeconds(options.Value.SessionIdleSeconds));
+        CloseStationCommand = new AsyncRelayCommand(CloseStationAsync, () => IsStationOpen && !IsBusy);
         ExitManagerModeCommand = new RelayCommand(ExitManagerMode);
         PrepareLineCommand = new AsyncRelayCommand(PrepareLineAsync, CanPrepareLine);
         ConfirmLineCommand = new AsyncRelayCommand(
@@ -77,6 +102,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         CancelManagementChangeCommand = new RelayCommand(
             CancelManagementChange,
             () => IsPlantManager && !IsBusy && (preparedRelief is not null || preparedCompletion is not null));
+        ShowComingSoonCommand = new RelayCommand<string>(ShowComingSoon);
+        SelectLineCommand = new RelayCommand<Guid>(SelectLine);
         idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         idleTimer.Tick += OnIdleTick;
         idleTimer.Start();
@@ -98,6 +125,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(IsPlantManager));
                 OnPropertyChanged(nameof(CanPrepareNewShipment));
                 OnPropertyChanged(nameof(CanManageActiveOperation));
+                OnPropertyChanged(nameof(CanUseContextActions));
                 NotifyOperationCommands();
             }
         }
@@ -110,16 +138,39 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             if (SetProperty(ref isBusy, value))
             {
                 OnPropertyChanged(nameof(CanInteract));
+                OnPropertyChanged(nameof(CanUseContextActions));
+                CloseStationCommand.NotifyCanExecuteChanged();
                 NotifyOperationCommands();
             }
         }
     }
     public bool IsPlantManager => Mode == StationMode.PlantManager;
     public bool IsStationOpen => state is not null;
+    public bool WasSessionRestored
+    {
+        get => wasSessionRestored;
+        private set => SetProperty(ref wasSessionRestored, value);
+    }
     public bool CanInteract => !IsBusy;
     public bool HasActiveOperation => activeSession?.Status == LineFeedCycleStatus.Active;
     public bool CanPrepareNewShipment => IsPlantManager && !HasActiveOperation;
     public bool CanManageActiveOperation => IsPlantManager && HasActiveOperation;
+    public bool IsSelectedLineActive =>
+        SelectedLine is not null && activeSession?.Status == LineFeedCycleStatus.Active &&
+        activeSession.LineId == SelectedLine.Id;
+    public bool CanUseContextActions => IsPlantManager && !IsBusy;
+    public bool CanRequestStart => CanPrepareLine();
+    public bool CanRequestRelief => CanPrepareRelief();
+    public bool CanRequestCompletion => CanPrepareCompletion();
+    public string ContextPanelTitle => IsSelectedLineActive
+        ? $"Gestionar {PilotLineName}"
+        : "Preparar una línea";
+    public string ContextPanelDescription => IsSelectedLineActive
+        ? "Consulte el cargamento actual, cambie el responsable o finalice el trabajo de esta línea."
+        : HasActiveOperation
+            ? "Esta línea está disponible. Finalice el cargamento activo antes de preparar otro."
+        : "Seleccione línea, proveedor y responsable para iniciar un cargamento.";
+    public string ActiveSupplierName => activeSupplierName;
     public IReadOnlyList<CachedSupplier> Suppliers
     {
         get => suppliers;
@@ -135,6 +186,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         get => lines;
         private set => SetProperty(ref lines, value);
     }
+    public IReadOnlyList<StationLineStatus> LineStatuses
+    {
+        get => lineStatuses;
+        private set => SetProperty(ref lineStatuses, value);
+    }
     public CachedProductionLine? SelectedLine
     {
         get => pilotLine;
@@ -143,6 +199,10 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref pilotLine, value)) return;
             OnPropertyChanged(nameof(PilotLineName));
             OnPropertyChanged(nameof(PrepareLineHeader));
+            OnPropertyChanged(nameof(IsSelectedLineActive));
+            OnPropertyChanged(nameof(ContextPanelTitle));
+            OnPropertyChanged(nameof(ContextPanelDescription));
+            UpdateLineStatuses();
             SelectionChanged();
         }
     }
@@ -188,6 +248,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         set { if (SetProperty(ref draft, value)) modeController.Draft = value; }
     }
     public IRelayCommand ExitManagerModeCommand { get; }
+    public IAsyncRelayCommand CloseStationCommand { get; }
     public IAsyncRelayCommand PrepareLineCommand { get; }
     public IAsyncRelayCommand ConfirmLineCommand { get; }
     public IRelayCommand CancelPreparationCommand { get; }
@@ -196,11 +257,15 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand PrepareCompletionCommand { get; }
     public IAsyncRelayCommand ConfirmCompletionCommand { get; }
     public IRelayCommand CancelManagementChangeCommand { get; }
+    public IRelayCommand<string> ShowComingSoonCommand { get; }
+    public IRelayCommand<Guid> SelectLineCommand { get; }
 
     public async Task InitializeAsync()
     {
         state = await coordinator.ResumeAsync(networkAvailable: true).ConfigureAwait(true);
+        WasSessionRestored = state is not null;
         OnPropertyChanged(nameof(IsStationOpen));
+        CloseStationCommand.NotifyCanExecuteChanged();
         if (state is not null)
         {
             StationSessionStatus = "Estación abierta mediante sesión protegida restaurada.";
@@ -214,7 +279,9 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
         Status = "Abriendo y validando la estación…";
         state = await coordinator.SignInAsync(email, password).ConfigureAwait(true);
+        WasSessionRestored = false;
         OnPropertyChanged(nameof(IsStationOpen));
+        CloseStationCommand.NotifyCanExecuteChanged();
         StationSessionStatus = "Estación abierta mediante autenticación reciente.";
         await LoadPreparationCatalogsAsync().ConfigureAwait(true);
         OpenOperationMode("Estación abierta. Modo Operación activo.");
@@ -247,6 +314,19 @@ public sealed class StationViewModel : ObservableObject, IDisposable
 
     public void RecordActivity() => modeController.RecordActivity();
     public void Dispose() { idleTimer.Stop(); idleTimer.Tick -= OnIdleTick; GC.SuppressFinalize(this); }
+
+    private Task CloseStationAsync() => RunAsync(async () =>
+    {
+        await coordinator.CloseSessionAsync().ConfigureAwait(true);
+        state = null;
+        WasSessionRestored = false;
+        modeController.CloseStation();
+        Mode = modeController.Mode;
+        StationSessionStatus = "Estación cerrada manualmente.";
+        Status = "Inicie sesión como jefe de planta para abrir la estación.";
+        OnPropertyChanged(nameof(IsStationOpen));
+        CloseStationCommand.NotifyCanExecuteChanged();
+    }, "No se pudo cerrar la estación.");
 
     private async Task RunAsync(Func<Task> action, string failure)
     {
@@ -303,9 +383,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         finally
         {
             state = null;
+            WasSessionRestored = false;
             Mode = modeController.Mode;
             StationSessionStatus = "Estación cerrada por inactividad.";
             OnPropertyChanged(nameof(IsStationOpen));
+            CloseStationCommand.NotifyCanExecuteChanged();
             isClosingForIdle = false;
         }
     }
@@ -325,11 +407,13 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             if (maintained is null)
             {
                 state = null;
+                WasSessionRestored = false;
                 modeController.CloseStation();
                 Mode = modeController.Mode;
                 StationSessionStatus = "Estación cerrada; la sesión ya no es válida.";
                 Status = "La sesión fue revocada o venció. Inicie sesión para continuar.";
                 OnPropertyChanged(nameof(IsStationOpen));
+                CloseStationCommand.NotifyCanExecuteChanged();
                 return;
             }
 
@@ -359,6 +443,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             state.Session.OrganizationId,
             state.Authorization.PlantId,
             state.Authorization.StationId).ConfigureAwait(true);
+        UpdateLineStatuses();
         CachedProductionLine? preservedLine = previousLineId.HasValue
             ? Lines.FirstOrDefault(line => line.Id == previousLineId.Value)
             : null;
@@ -423,11 +508,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         await RunAsync(async () =>
         {
             LocalOperationContext confirmed = await operations.ConfirmStartAsync(prepared).ConfigureAwait(true);
+            activeSupplierName = SelectedSupplier?.Name ?? "Proveedor registrado";
+            OnPropertyChanged(nameof(ActiveSupplierName));
             SetActiveSession(confirmed.Session);
             preparedStart = null;
-            modeController.ExitPlantManagerMode();
-            Mode = modeController.Mode;
-            Status = "Línea lista. Abra Modo Operación para comenzar el registro.";
+            Status = "Línea lista. Modo Jefe de Planta continúa activo.";
             PreparationSummary = "Cargamento confirmado y guardado localmente.";
             NotifyOperationCommands();
         }, "No se pudo confirmar el cargamento; el contexto anterior se conservó.").ConfigureAwait(true);
@@ -462,7 +547,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             SetActiveSession(confirmed.Session);
             preparedRelief = null;
             ManagementSummary = "Relevo confirmado localmente; la línea continúa activa.";
-            ExitManagerAfterChange("Responsable actualizado. La línea continúa activa.");
+            CompleteManagerAction("Responsable actualizado. Modo Jefe de Planta continúa activo.");
         }, "No se pudo confirmar el relevo; el responsable anterior se conservó.").ConfigureAwait(true);
     }
 
@@ -491,9 +576,12 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             await operations.ConfirmCompletionAsync(prepared).ConfigureAwait(true);
             preparedCompletion = null;
+            activeSupplierName = "Proveedor registrado";
+            OnPropertyChanged(nameof(ActiveSupplierName));
             SetActiveSession(null);
             ManagementSummary = "Cargamento finalizado localmente con su historial conservado.";
-            ExitManagerAfterChange("Cargamento finalizado. Puede preparar el siguiente cargamento.");
+            CompleteManagerAction(
+                "Cargamento finalizado. Puede preparar el siguiente; Modo Jefe de Planta continúa activo.");
         }, "No se pudo finalizar; el cargamento continúa activo.").ConfigureAwait(true);
     }
 
@@ -517,10 +605,10 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         SelectedSupplier is not null && SelectedWorker is not null;
 
     private bool CanPrepareRelief() =>
-        IsPlantManager && HasActiveOperation && !IsBusy && SelectedWorker is not null &&
+        IsPlantManager && IsSelectedLineActive && !IsBusy && SelectedWorker is not null &&
         SelectedWorker.Id != activeSession!.ResponsibleWorkerId;
 
-    private bool CanPrepareCompletion() => IsPlantManager && HasActiveOperation && !IsBusy;
+    private bool CanPrepareCompletion() => IsPlantManager && IsSelectedLineActive && !IsBusy;
 
     private void SelectionChanged()
     {
@@ -537,21 +625,63 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         if (state is null) return;
         LocalOperationContext context = await operations.GetContextAsync(state.Authorization.StationId)
             .ConfigureAwait(true);
+        if (dashboard is not null && context.Session is not null)
+        {
+            IReadOnlyList<LocalOperationDashboardSnapshot> snapshots =
+                await dashboard.ListAsync(state.Authorization.StationId).ConfigureAwait(true);
+            activeSupplierName = snapshots.FirstOrDefault(snapshot =>
+                snapshot.LineId == context.Session.LineId)?.SupplierName ?? "Proveedor registrado";
+            OnPropertyChanged(nameof(ActiveSupplierName));
+        }
         SetActiveSession(context.Session?.Status == LineFeedCycleStatus.Active ? context.Session : null);
     }
 
     private void SetActiveSession(LocalOperationalSession? session)
     {
         activeSession = session;
+        UpdateLineStatuses();
         OnPropertyChanged(nameof(HasActiveOperation));
         OnPropertyChanged(nameof(CanPrepareNewShipment));
         OnPropertyChanged(nameof(CanManageActiveOperation));
+        OnPropertyChanged(nameof(IsSelectedLineActive));
+        OnPropertyChanged(nameof(ContextPanelTitle));
+        OnPropertyChanged(nameof(ContextPanelDescription));
+        OnPropertyChanged(nameof(CanUseContextActions));
         ActiveOperationSummary = session is null
             ? "No hay un cargamento activo."
             : $"{LineName(session.LineId)} · cargamento iniciado {FormatLocalTime(session.StartedAt)} · " +
               $"responsable {WorkerName(session.ResponsibleWorkerId)}.";
         NotifyOperationCommands();
     }
+
+    private void UpdateLineStatuses()
+    {
+        string[] accents = ["#8959DD", "#35ADDD", "#ED70A9", "#F19B2C"];
+        LineStatuses = Lines.Select((line, index) => new StationLineStatus(
+            line.Id,
+            line.Name,
+            activeSession?.Status == LineFeedCycleStatus.Active && activeSession.LineId == line.Id,
+            SelectedLine?.Id == line.Id,
+            accents[index % accents.Length],
+            activeSession?.Status == LineFeedCycleStatus.Active && activeSession.LineId == line.Id
+                ? $"Activa · {activeSupplierName} · {WorkerName(activeSession.ResponsibleWorkerId)}"
+                : "Disponible para preparar")).ToArray();
+    }
+
+    private void SelectLine(Guid lineId)
+    {
+        CachedProductionLine? selected = Lines.FirstOrDefault(line => line.Id == lineId);
+        if (selected is null) return;
+        SelectedLine = selected;
+        if (!IsSelectedLineActive || activeSession is null) return;
+        SelectedWorker = Workers.FirstOrDefault(worker => worker.Id == activeSession.ResponsibleWorkerId);
+        SelectedSupplier = Suppliers.FirstOrDefault(supplier =>
+            string.Equals(supplier.Name, activeSupplierName, StringComparison.OrdinalIgnoreCase));
+        PreparationSummary = ActiveOperationSummary;
+    }
+
+    private void ShowComingSoon(string? feature) =>
+        Status = $"{(string.IsNullOrWhiteSpace(feature) ? "Esta función" : feature)} estará disponible próximamente.";
 
     private string WorkerName(Guid workerId) =>
         Workers.FirstOrDefault(worker => worker.Id == workerId)?.Name ?? "responsable registrado";
@@ -564,16 +694,17 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             "dd/MM/yyyy HH:mm",
             System.Globalization.CultureInfo.InvariantCulture);
 
-    private void ExitManagerAfterChange(string message)
+    private void CompleteManagerAction(string message)
     {
-        modeController.ExitPlantManagerMode();
-        Mode = modeController.Mode;
         Status = message;
         NotifyOperationCommands();
     }
 
     private void NotifyOperationCommands()
     {
+        OnPropertyChanged(nameof(CanRequestStart));
+        OnPropertyChanged(nameof(CanRequestRelief));
+        OnPropertyChanged(nameof(CanRequestCompletion));
         PrepareLineCommand.NotifyCanExecuteChanged();
         ConfirmLineCommand.NotifyCanExecuteChanged();
         CancelPreparationCommand.NotifyCanExecuteChanged();

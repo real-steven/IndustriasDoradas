@@ -7,113 +7,355 @@
         xmlns:views="clr-namespace:IndustriasDoradas.Desktop.Presentation.Views"
         mc:Ignorable="d"
         Title="Industrias Doradas"
-        Width="1100"
-        Height="700"
-        MinWidth="800"
-        MinHeight="540"
+        Width="1280"
+        Height="800"
+        MinWidth="1050"
+        MinHeight="650"
+        Icon="pack://application:,,,/Assets/logo-industrias-doradas.png"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource CanvasBrush}">
+        FontFamily="Segoe UI Variable Text"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        Background="{StaticResource SoftCanvasBrush}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-        <DataTemplate DataType="{x:Type viewModels:HomeViewModel}">
-            <views:HomeView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type viewModels:DiagnosticsViewModel}">
-            <views:DiagnosticsView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type viewModels:StationViewModel}">
-            <views:StationView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type viewModels:OperationViewModel}">
-            <views:OperationView />
-        </DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:HomeViewModel}"><views:HomeView /></DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:DiagnosticsViewModel}"><views:DiagnosticsView /></DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:StationViewModel}"><views:StationView /></DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:OperationViewModel}"><views:OperationView FocusModeRequested="OnFocusOperation" /></DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:AuditViewModel}"><views:AuditView /></DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:SettingsViewModel}"><views:SettingsView /></DataTemplate>
+
+        <Style x:Key="NavButtonStyle" TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Margin" Value="3,0" />
+            <Setter Property="Padding" Value="11,8" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="#516A79" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="NavChrome" Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="11">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavChrome" Property="Background" Value="#E8F3F8" />
+                                <Setter TargetName="NavChrome" Property="BorderBrush" Value="#BFD8E4" />
+                                <Setter Property="Foreground" Value="{StaticResource NavyBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="NavChrome" Property="Opacity" Value="0.76" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="HeaderActionStyle" TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="Background" Value="#F5F8F9" />
+            <Setter Property="BorderBrush" Value="#D5E1E6" />
+            <Setter Property="Foreground" Value="{StaticResource NavyBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
     </Window.Resources>
 
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+        <views:LoginView DataContext="{Binding Station}">
+            <views:LoginView.Style>
+                <Style TargetType="views:LoginView">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStationOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </views:LoginView.Style>
+        </views:LoginView>
 
-        <Border Grid.Column="0" Background="{StaticResource Ink900Brush}">
-            <Grid Margin="24">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+        <Grid x:Name="ApplicationShell">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStationOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <Grid.RowDefinitions>
+                <RowDefinition x:Name="HeaderRow" Height="76" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal">
-                    <Border Width="44"
-                            Height="44"
-                            CornerRadius="10"
-                            Background="{StaticResource Gold500Brush}">
-                        <TextBlock HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="{StaticResource Ink900Brush}"
-                                   FontWeight="Bold"
-                                   Text="ID" />
-                    </Border>
-                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Foreground="White"
-                                   FontWeight="Bold"
-                                   Text="Industrias Doradas" />
-                        <TextBlock Foreground="#B7C0C7"
-                                   FontSize="12"
-                                   Text="Sistema de planta" />
+            <Border x:Name="HeaderPanel" Grid.Row="0" Panel.ZIndex="20"
+                    Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
+                    BorderThickness="0,0,0,1">
+                <Grid Margin="20,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="215" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="42" Height="42" CornerRadius="13" ClipToBounds="True">
+                            <Image Source="pack://application:,,,/Assets/logo-industrias-doradas.png"
+                                   Stretch="UniformToFill"
+                                   AutomationProperties.Name="Logo de Industrias Doradas" />
+                        </Border>
+                        <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Foreground="{StaticResource Ink900Brush}" FontWeight="Bold"
+                                       Text="INDUSTRIAS DORADAS" />
+                            <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11"
+                                       Text="{Binding CurrentPageTitle}" />
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
 
-                <Button Grid.Row="2"
-                        Margin="0,12,0,12"
-                        Padding="12"
-                        VerticalAlignment="Bottom"
-                        HorizontalContentAlignment="Left"
-                        Background="#FFF1CB"
-                        BorderBrush="#D09518"
-                        Command="{Binding ShowDiagnosticsCommand}"
+                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button AutomationProperties.Name="Ir al inicio" Command="{Binding ShowHomeCommand}"
+                                Content="⌂  INICIO">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsHomePage}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button AutomationProperties.Name="Ir a modo operación" Command="{Binding ShowOperationCommand}"
+                                Content="🪣  OPERACIÓN">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOperationPage}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button AutomationProperties.Name="Ir a estación" Command="{Binding ShowStationCommand}"
+                                Content="⚙  ESTACIÓN">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsStationPage}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button AutomationProperties.Name="Ir a auditoría" Command="{Binding ShowAuditCommand}"
+                                Content="▤  AUDITORÍA">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsAuditPage}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button AutomationProperties.Name="Ir a diagnóstico" Command="{Binding ShowDiagnosticsCommand}"
+                                Content="♥  ESTADO">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDiagnosticsPage}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button AutomationProperties.Name="Ir a configuración" Command="{Binding ShowSettingsCommand}"
+                                Content="⌨  CONFIG.">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSettingsPage}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <StackPanel Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="HeaderClock" HorizontalAlignment="Right"
+                                       Foreground="{StaticResource Ink900Brush}" FontSize="18"
+                                       FontWeight="Bold" Text="00:00" />
+                            <TextBlock x:Name="HeaderDate" HorizontalAlignment="Right"
+                                       Foreground="{StaticResource MutedBrush}" FontSize="9" Text="—" />
+                        </StackPanel>
+                        <Button Margin="0,0,7,0" Click="OnElevationClick">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource HeaderActionStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPlantManager}" Value="True">
+                                            <Setter Property="Background" Value="#FFF8E9" />
+                                            <Setter Property="BorderBrush" Value="#E7B91F" />
+                                            <Setter Property="Foreground" Value="#815D17" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPlantManager}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <Border Width="27" Height="27" Margin="0,0,8,0"
+                                            Background="{StaticResource LockYellowBrush}"
+                                            BorderBrush="#D9A900" BorderThickness="1" CornerRadius="7">
+                                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   FontFamily="Segoe UI Emoji" FontSize="14" Text="🔒" />
+                                    </Border>
+                                    <TextBlock VerticalAlignment="Center" Text="ELEVAR ACCESO" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPlantManager}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <Border Width="27" Height="27" Margin="0,0,8,0"
+                                            Background="{StaticResource LockYellowBrush}"
+                                            BorderBrush="#D9A900" BorderThickness="1" CornerRadius="7">
+                                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   FontFamily="Segoe UI Emoji" FontSize="14" Text="🔓" />
+                                    </Border>
+                                    <TextBlock VerticalAlignment="Center" Text="MODO JEFE ACTIVO" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                        <Border Width="38" Height="38" Margin="0,0,7,0" CornerRadius="19" Background="#517487">
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="White" FontWeight="Bold" Text="JP" />
+                        </Border>
+                        <Button Click="OnCloseStation" ToolTip="Cerrar la sesión de esta estación"
+                                Background="#F7F5F0" BorderBrush="#DED8CB" Foreground="#665B48"
+                                Content="↪  CERRAR ESTACIÓN" FontSize="11" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <ContentControl Content="{Binding CurrentPage}" Focusable="False" />
+                <Button x:Name="ShowHeaderButton" Panel.ZIndex="30" Visibility="Collapsed"
+                        HorizontalAlignment="Center" VerticalAlignment="Top"
+                        Margin="0,-1,0,0" Padding="15,5" MinHeight="31"
+                        Click="OnShowHeader" Content="⌄  MOSTRAR MENÚ"
+                        Background="White" BorderBrush="#D6E1E6" Foreground="{StaticResource NavyBrush}"
+                        FontSize="11" FontWeight="Bold" />
+                <Button Panel.ZIndex="25" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="0,16,22,0" Padding="12,8"
+                        Background="#FFF5D7" BorderBrush="#E4D39D"
+                        Foreground="#76500A" Command="{Binding ShowAuditCorrectionsCommand}"
                         Content="{Binding CorrectionNotification}"
-                        Foreground="{StaticResource Ink900Brush}"
-                        Visibility="{Binding HasCorrectionNotification, Converter={StaticResource BooleanToVisibilityConverter}}"
-                        AutomationProperties.Name="Abrir auditoría de correcciones recibidas" />
-
-                <StackPanel Grid.Row="1" Margin="0,44,0,0">
-                    <TextBlock Margin="4,0,0,10"
-                               Foreground="#B7C0C7"
-                               FontSize="11"
-                               FontWeight="Bold"
-                               Text="NAVEGACIÓN" />
-                    <Button Margin="0,0,0,8"
-                            HorizontalContentAlignment="Left"
-                            AutomationProperties.Name="Ir a modo operación"
-                            Command="{Binding ShowOperationCommand}"
-                            Content="Modo Operación" />
-                    <Button Margin="0,0,0,8"
-                            HorizontalContentAlignment="Left"
-                            AutomationProperties.Name="Ir a estación"
-                            Command="{Binding ShowStationCommand}"
-                            Content="Estación" />
-                    <Button Margin="0,0,0,8"
-                            HorizontalContentAlignment="Left"
-                            AutomationProperties.Name="Ir al inicio"
-                            Command="{Binding ShowHomeCommand}"
-                            Content="Inicio" />
-                    <Button HorizontalContentAlignment="Left"
-                            AutomationProperties.Name="Ir a diagnóstico"
-                            Command="{Binding ShowDiagnosticsCommand}"
-                            Content="Diagnóstico" />
-                </StackPanel>
-
-                <TextBlock Grid.Row="3"
-                           Foreground="#B7C0C7"
-                           FontSize="12"
-                           Text="Operación local · Sprint 3" />
+                        Visibility="{Binding HasCorrectionNotification, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </Grid>
+        </Grid>
+
+        <Grid x:Name="ElevationOverlay" Panel.ZIndex="100" Visibility="Collapsed"
+              Background="#A6162F40">
+            <Border Width="450" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="White" CornerRadius="22">
+                <StackPanel>
+                    <Border Width="76" Height="76" HorizontalAlignment="Center"
+                            Background="#EAF3F7" CornerRadius="38">
+                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   FontFamily="Segoe UI Emoji" FontSize="35" Text="🔐" />
+                    </Border>
+                    <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center"
+                               FontSize="24" FontWeight="Bold" Text="Elevación temporal" />
+                    <TextBlock Margin="0,8,0,18" Foreground="{StaticResource MutedBrush}"
+                               TextAlignment="Center" TextWrapping="Wrap"
+                               Text="Ingrese el PIN individual del jefe de planta. El acceso vuelve al modo normal después de cinco minutos de inactividad." />
+                    <PasswordBox x:Name="HeaderPinBox" Height="54" MaxLength="12"
+                                 Padding="13" FontSize="22" AutomationProperties.Name="PIN individual" />
+                    <Button Margin="0,10,0,0" Height="50" Click="OnComingSoon"
+                            Tag="La validación biométrica"
+                            Content="☝  BIOMETRÍA · PRÓXIMAMENTE" />
+                    <StackPanel Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Click="OnCancelElevation" Content="CANCELAR" />
+                        <Button Margin="10,0,0,0" Click="OnElevate"
+                                Background="{StaticResource NavyBrush}" BorderBrush="{StaticResource NavyBrush}"
+                                Foreground="White" Content="AUTORIZAR" />
+                    </StackPanel>
+                    <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center"
+                               Foreground="{StaticResource MutedBrush}" Text="{Binding Station.Status}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Border x:Name="SessionRestoreNotice" Panel.ZIndex="120" Visibility="Collapsed"
+                Style="{StaticResource SuccessAlertStyle}"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,92,0,0"
+                Padding="18,12">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Foreground="#176B3B" FontWeight="Bold"
+                           Text="✓  Se encontró una sesión activa y se restauró automáticamente." />
+                <Button Margin="14,-7,-9,-7" MinHeight="0" Padding="8,3"
+                        Background="Transparent" BorderThickness="0" Foreground="#176B3B"
+                        Click="OnDismissRestoreNotice" Content="×" />
+            </StackPanel>
         </Border>
 
-        <ContentControl Grid.Column="1"
-                        Content="{Binding CurrentPage}"
-                        Focusable="False" />
+        <Border x:Name="ComingSoonNotice" Panel.ZIndex="130" Visibility="Collapsed"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,24"
+                Padding="18,13" Background="#173B50" CornerRadius="12">
+            <TextBlock x:Name="ComingSoonText" Foreground="White" FontWeight="SemiBold"
+                       Text="Función disponible próximamente." />
+        </Border>
     </Grid>
 </Window>

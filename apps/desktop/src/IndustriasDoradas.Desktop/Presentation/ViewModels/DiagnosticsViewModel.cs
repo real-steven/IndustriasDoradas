@@ -5,6 +5,7 @@ using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Configuration;
 using System.Globalization;
+using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -36,10 +37,12 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private string diagnosticReportStatus = "No se ha exportado un diagnóstico.";
     private IReadOnlyList<SyncFailureDiagnostic> failures = [];
     private IReadOnlyList<AdministrativeCorrectionDiagnostic> corrections = [];
+    private int failedReviewCount;
     private int pullReviewCount;
     private bool isCreatingCopy;
     private bool isExportingReport;
     private readonly string station;
+    private readonly StationViewModel? stationViewModel;
     private readonly string applicationVersion = DesktopApplicationInfo.Version;
 
     public DiagnosticsViewModel(
@@ -47,19 +50,35 @@ public sealed class DiagnosticsViewModel : ObservableObject
         ILocalDatabaseDiagnostics localDiagnostics,
         IOptions<StationOptions> stationOptions,
         ISyncStatusNotifier statusNotifier)
+        : this(healthService, localDiagnostics, stationOptions, statusNotifier, null)
+    {
+    }
+
+    public DiagnosticsViewModel(
+        IHealthService healthService,
+        ILocalDatabaseDiagnostics localDiagnostics,
+        IOptions<StationOptions> stationOptions,
+        ISyncStatusNotifier statusNotifier,
+        StationViewModel? stationViewModel)
     {
         this.healthService = healthService;
         this.localDiagnostics = localDiagnostics;
         uiContext = SynchronizationContext.Current;
+        this.stationViewModel = stationViewModel;
         station = stationOptions.Value.Id == Guid.Empty ? "No configurada" : stationOptions.Value.Id.ToString("D");
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         CreateRecoveryCopyCommand = new AsyncRelayCommand(
             CreateRecoveryCopyAsync,
-            () => !IsCreatingCopy && LocalState != LocalDatabaseHealthState.Unavailable);
+            () => CanUseProtectedActions && !IsCreatingCopy &&
+                LocalState != LocalDatabaseHealthState.Unavailable);
         ExportDiagnosticReportCommand = new AsyncRelayCommand(
             ExportDiagnosticReportAsync,
-            () => !IsExportingReport);
+            () => CanUseProtectedActions && !IsExportingReport);
         statusNotifier.Changed += OnSyncStatusChanged;
+        if (stationViewModel is not null)
+        {
+            stationViewModel.PropertyChanged += OnStationPropertyChanged;
+        }
     }
 
     public DiagnosticsViewModel(
@@ -115,6 +134,11 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public string ClockDeviation { get => clockDeviation; private set => SetProperty(ref clockDeviation, value); }
     public string DiagnosticReportStatus { get => diagnosticReportStatus; private set => SetProperty(ref diagnosticReportStatus, value); }
     public IReadOnlyList<SyncFailureDiagnostic> Failures { get => failures; private set => SetProperty(ref failures, value); }
+    public int FailedReviewCount
+    {
+        get => failedReviewCount;
+        private set => SetProperty(ref failedReviewCount, value);
+    }
     public IReadOnlyList<AdministrativeCorrectionDiagnostic> Corrections
     {
         get => corrections;
@@ -129,6 +153,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     }
     public int PullReviewCount { get => pullReviewCount; private set => SetProperty(ref pullReviewCount, value); }
     public bool HasCorrections => Corrections.Count > 0;
+    public bool CanUseProtectedActions => stationViewModel?.IsPlantManager ?? true;
     public string CorrectionNotification => HasCorrections
         ? $"{Corrections.Count} corrección(es) administrativa(s) recibida(s). Abrir auditoría."
         : string.Empty;
@@ -214,6 +239,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
             "g", CultureInfo.CurrentCulture) ?? "Aún no registrada";
         ClockDeviation = FormatClockDeviation(local.ClockDeviationSeconds);
         Failures = local.Failures ?? [];
+        FailedReviewCount = local.FailedReviewOutboxCount;
         Corrections = local.Corrections ?? [];
         PullReviewCount = local.PullReviewCount;
     }
@@ -336,5 +362,13 @@ public sealed class DiagnosticsViewModel : ObservableObject
         return bytes >= gigabyte
             ? $"{bytes / gigabyte:0.0} GB libres"
             : $"{bytes / megabyte:0} MB libres";
+    }
+
+    private void OnStationPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(StationViewModel.Mode)) return;
+        OnPropertyChanged(nameof(CanUseProtectedActions));
+        CreateRecoveryCopyCommand.NotifyCanExecuteChanged();
+        ExportDiagnosticReportCommand.NotifyCanExecuteChanged();
     }
 }

@@ -4,6 +4,11 @@ Fecha de implementación y cierre: 2026-09-20. Rama: `DevHenry`.
 
 ## Alcance implementado
 
+> Ajuste de interfaz aprobado el 2026-09-28: el resumen de salud de Diagnóstico
+> puede consultarse desde Modo Operación. Crear copias, exportar archivos y ver
+> detalles protegidos continúa exigiendo Modo Jefe de Planta. Los eventos en
+> revisión y las correcciones se muestran en Auditoría, no en Diagnóstico.
+
 - SQLite migra a la versión 10, registra la hora local en que acepta cada
   página pull. La pantalla compara esa hora con `serverTimeUtc` para mostrar la
   desviación del reloj.
@@ -12,14 +17,18 @@ Fecha de implementación y cierre: 2026-09-20. Rama: `DevHenry`.
 - La última sincronización combina la última recepción pull y la última
   confirmación de Outbox.
 - Los elementos `FAILED_REVIEW` muestran operación, código, causa explicada,
-  intentos y último intento. No se pueden resolver desde la pantalla.
+  fecha local e intentos. La pantalla separa el total de eventos Outbox locales
+  del conteo de cambios centrales recibidos y muestra como máximo los veinte
+  fallos locales más recientes. No se pueden resolver ni eliminar desde la
+  pantalla: permanecen como evidencia hasta aplicar un procedimiento de soporte
+  explícito y respaldado.
 - PostgreSQL convierte cada mutación exitosa, autenticada y con cambios
   auditados seguros en una entidad `ADMINISTRATIVE_CORRECTION` del feed. No
   publica rechazos ni auditorías vacías. Esto incluye catálogos, permisos y
   las demás acciones administrativas registradas por el API.
-- La notificación de corrección solo aparece cuando el modo jefe de planta
-  permite abrir Diagnóstico. Modo Operación conserva únicamente el resumen de
-  pendientes/revisión/sincronizados.
+- La notificación de corrección solo aparece en Modo Jefe de Planta y abre
+  Auditoría. Modo Operación puede abrir Diagnóstico para consultar salud local,
+  red y sincronización, pero no puede crear copias ni exportar diagnósticos.
 - El reporte exportado contiene conteos, códigos, horarios y cambios de
   auditoría ya filtrados. No contiene tokens, PIN, cabeceras ni payloads de
   operación.
@@ -64,22 +73,22 @@ acción concreta y que todavía descarta auditorías sin cambios.
 
 ## Pausa manual
 
-1. Inicia API y desktop con conexión. Entra como jefe de planta y abre
-   **Diagnóstico**.
+1. Inicia API y desktop con conexión. Desde Modo Operación abre **Diagnóstico**
+   y comprueba que el resumen de salud sea visible.
 2. Confirma estación, versión `0.3.0`, red disponible, hora de última
    sincronización y una desviación horaria razonable. El pie debe decir
    `Operación local · Sprint 3`.
-3. Usa un `FAILED_REVIEW` ya existente. Confirma que la pantalla muestra su
-   código y causa sin abrir SQLite ni Supabase y que no ofrece botones para
-   alterarlo.
-4. Vuelve a Modo Operación. Diagnóstico debe quedar bloqueado y solo debe verse
-   el resumen simple de sincronización.
+3. Eleva a Modo Jefe de Planta, abre **Auditoría → Correcciones y revisiones**
+   y usa un `FAILED_REVIEW` ya existente. Confirma que muestra código y causa
+   sin abrir SQLite ni Supabase y que no ofrece botones para alterarlo.
+4. Vuelve a Modo Operación. Diagnóstico debe seguir visible, pero **Crear copia
+   de recuperación** y **Exportar diagnóstico seguro** deben quedar bloqueados.
 5. Desde **Usuarios administradores**, abre **Editar permisos** sobre una cuenta
    administrativa de prueba distinta de la sesión actual. Anota la selección,
    cambia un permiso y guarda. Sin cerrar ni reiniciar desktop, espera la
    sincronización, entra en modo jefe de planta y confirma la notificación
    lateral. Después de validar, restaura exactamente la selección original.
-6. Abre la notificación. La auditoría debe mostrar administrador, rol, motivo,
+6. Abre la notificación en Auditoría. Debe mostrar administrador, rol, motivo,
    fecha y el valor anterior/nuevo. El registro original local no debe ser
    reemplazado por la corrección.
 7. Pulsa **Exportar diagnóstico seguro**. Abre el JSON creado en
@@ -101,7 +110,9 @@ La validación automática y la pausa manual quedaron aprobadas el 2026-09-20:
 2. Diagnóstico mostró la estación `34000000-0000-4000-8000-000000000001`,
    versión `0.3.0`, desviación de `0 s`, el pie `Sprint 3` y la causa segura de
    los 31 elementos que requieren revisión.
-3. Modo Operación bloqueó Diagnóstico y conservó únicamente los conteos simples.
+3. La validación original bloqueó Diagnóstico en Modo Operación. La decisión
+   posterior del 2026-09-28 reemplazó ese comportamiento por consulta de salud
+   en solo lectura y acciones de recuperación protegidas por elevación.
 4. El JSON de soporte se exportó sin credenciales, PIN ni payloads operativos.
 5. Una corrección controlada cambió `Proveedor ficticio 3` a
    `Proveedor ficticio 3 prueba 3.8`. Sin reiniciar desktop apareció una

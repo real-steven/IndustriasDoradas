@@ -208,7 +208,9 @@ en
 - **Elevación:** cada jefe usa un PIN individual para entrar temporalmente al
   Modo Jefe de Planta. Existe salida explícita y bloqueo tras cinco minutos de
   inactividad total con aviso previo; un formulario incompleto se conserva
-  detrás del bloqueo.
+  detrás del bloqueo. Confirmar una preparación, un relevo o el cierre de un
+  cargamento no cancela la elevación: permanece activa hasta la salida explícita
+  o el vencimiento por inactividad.
 - **Auditoría:** cada elevación registra jefe, estación, hora y resultado. Cuando
   exista captura aprobada, intenta adjuntar foto; una cámara dañada no bloquea,
   marca `sin_foto` y genera alerta administrativa.

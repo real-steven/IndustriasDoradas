@@ -107,6 +107,26 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task OnlineStationSnapshotAlsoRaisesProductionEventSequenceForANewLocalDatabase()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        await database.Outbox().EnsureNextAsync(StationId, 50, StartedAt);
+        await StartOperationAsync(database.OperationService(new MutableTimeProvider(StartedAt)));
+        var time = new MutableTimeProvider(StartedAt.AddSeconds(1));
+        RegisterCajuelaHandler handler = database.RegisterHandler(time);
+
+        RegisterCajuelaResult result = await handler.ExecuteAsync(handler.CreateCommand(StationId));
+
+        Assert.AreEqual(50L, result.Event.ClientSequence);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(51L, await ScalarLongAsync(
+            connection,
+            "SELECT station_sequence FROM outbox_messages WHERE operation_type = 'PRODUCTION_EVENT_CREATED';"));
+    }
+
+    [TestMethod]
     public async Task UpgradeFromFirstMigrationPreservesDataAndAddsImmutability()
     {
         await using var database = new TestDatabase();

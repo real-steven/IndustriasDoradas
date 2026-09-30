@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Infrastructure\LocalStorage\Migrations\*.sql" />
+    <Resource Include="Assets\logo-industrias-doradas.png" />
   </ItemGroup>
 
   <ItemGroup>

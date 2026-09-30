@@ -170,9 +170,15 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT COALESCE(MAX(client_sequence), 0) + 1
-            FROM production_events
-            WHERE station_id = $stationId;
+            SELECT MAX(
+                COALESCE((
+                    SELECT MAX(client_sequence) + 1
+                    FROM production_events
+                    WHERE station_id = $stationId), 1),
+                COALESCE((
+                    SELECT next_sequence
+                    FROM station_sequence_state
+                    WHERE station_id = $stationId), 1));
             """;
         command.Parameters.AddWithValue(
             "$stationId",

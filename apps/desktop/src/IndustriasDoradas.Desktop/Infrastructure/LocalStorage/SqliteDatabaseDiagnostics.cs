@@ -330,6 +330,12 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
         "PERMISSION_VERSION_MISMATCH" => "La autorización cambió después de registrar el evento.",
         "CLOCK_SKEW_REVIEW" => "El reloj del equipo estaba adelantado fuera del margen permitido.",
         "LINE_OPERATION_CONFLICT" => "Otra estación ya tenía un cargamento activo en la misma línea.",
+        "DEPENDENCY_REJECTED" =>
+            "Este evento dependía de una operación anterior que fue rechazada; se conservó para revisión.",
+        "STATION_SEQUENCE_CONFLICT" =>
+            "La secuencia local ya no coincidía con la aceptada por el servidor.",
+        "LEGACY_AUTHORIZATION_UNAVAILABLE" =>
+            "El evento pertenece a una versión anterior que no guardaba toda la autorización requerida.",
         "DATABASE_CONSTRAINT_VIOLATION" => "El evento contradice una regla de integridad central.",
         "INVALID_EVENT" or "INVALID_LOCAL_PAYLOAD" => "El contenido del evento no cumple el contrato de sincronización.",
         "AUTH_REFRESH_REQUIRED" => "La sesión debe renovarse con conexión.",

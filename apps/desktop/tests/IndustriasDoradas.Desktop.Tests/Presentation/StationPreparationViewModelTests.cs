@@ -25,6 +25,41 @@ public sealed class StationPreparationViewModelTests
     private static readonly DateTimeOffset Now = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
 
     [TestMethod]
+    public async Task CloseStationCommandReturnsToSignedOutLoginState()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, Snapshot()),
+            catalogs,
+            new MemoryStationSequences(),
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(catalogs, sessions, new RecordingOperationRepository(sessions), time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+
+        await viewModel.InitializeAsync();
+        Assert.IsTrue(viewModel.IsStationOpen);
+        Assert.IsTrue(viewModel.WasSessionRestored);
+
+        await viewModel.CloseStationCommand.ExecuteAsync(null);
+
+        Assert.IsFalse(viewModel.IsStationOpen);
+        Assert.IsFalse(viewModel.WasSessionRestored);
+        Assert.AreEqual(StationMode.SignedOut, viewModel.Mode);
+        StringAssert.Contains(viewModel.StationSessionStatus, "cerrada manualmente");
+    }
+
+    [TestMethod]
     public async Task PlantManagerPreparesSummaryThenConfirmsPilotLineAtomically()
     {
         var time = new FixedTimeProvider();
@@ -45,13 +80,24 @@ public sealed class StationPreparationViewModelTests
             Options.Create(new StationOptions { Id = StationId }),
             time);
         DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
-        MainWindowViewModel shell = new(new HomeViewModel(), diagnostics, viewModel);
+        AuditViewModel audit = new(diagnostics, viewModel);
+        SettingsViewModel settings = new();
+        MainWindowViewModel shell = new(
+            new HomeViewModel(), diagnostics, viewModel, null, audit, settings);
 
         await viewModel.InitializeAsync();
-        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowSettingsCommand.CanExecute(null));
+        audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
+        Assert.IsTrue(audit.IsOperationCategory);
 
         await viewModel.ElevateAsync("123456");
         Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowSettingsCommand.CanExecute(null));
+        audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
+        Assert.IsTrue(audit.IsCorrectionsCategory);
 
         Assert.IsNull(viewModel.SelectedLine);
         viewModel.SelectedLine = viewModel.Lines.Single(line => line.Id == LineId);
@@ -74,8 +120,17 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(1, operationRepository.StartCalls);
         Assert.AreEqual(SupplierId, operationRepository.LastStart!.SupplierId);
         Assert.AreEqual(WorkerId, operationRepository.LastStart.Session.ResponsibleWorkerId);
-        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
-        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
+        Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowSettingsCommand.CanExecute(null));
+        Assert.IsTrue(audit.IsCorrectionsCategory);
+        StationLineStatus activeLine = viewModel.LineStatuses.Single(line => line.Id == LineId);
+        Assert.IsTrue(activeLine.IsPrepared);
+        Assert.IsTrue(activeLine.IsSelected);
+        viewModel.SelectLineCommand.Execute(SecondLineId);
+        Assert.AreEqual(SecondLineId, viewModel.SelectedLine?.Id);
+        Assert.IsFalse(viewModel.CanRequestStart);
         StringAssert.Contains(viewModel.Status, "Línea lista");
     }
 
@@ -113,9 +168,8 @@ public sealed class StationPreparationViewModelTests
         await viewModel.ConfirmLineCommand.ExecuteAsync(null);
 
         Assert.IsTrue(viewModel.HasActiveOperation);
-        Assert.IsFalse(viewModel.CanManageActiveOperation);
+        Assert.IsTrue(viewModel.CanManageActiveOperation);
 
-        await viewModel.ElevateAsync("123456");
         viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == SecondWorkerId);
         Assert.IsTrue(viewModel.CanManageActiveOperation);
         Assert.IsTrue(viewModel.PrepareReliefCommand.CanExecute(null));
@@ -129,9 +183,8 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(1, repository.ReliefCalls);
         Assert.AreEqual(SecondWorkerId, sessions.Current?.ResponsibleWorkerId);
         Assert.IsTrue(viewModel.HasActiveOperation);
-        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+        Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
 
-        await viewModel.ElevateAsync("123456");
         Assert.IsTrue(viewModel.PrepareCompletionCommand.CanExecute(null));
         await viewModel.PrepareCompletionCommand.ExecuteAsync(null);
 
@@ -143,7 +196,8 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(1, repository.CompletionCalls);
         Assert.AreEqual(LineFeedCycleStatus.Completed, sessions.Current?.Status);
         Assert.IsFalse(viewModel.HasActiveOperation);
-        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+        Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
+        Assert.IsTrue(viewModel.CanPrepareNewShipment);
     }
 
     [TestMethod]
@@ -173,6 +227,11 @@ public sealed class StationPreparationViewModelTests
         await viewModel.ElevateAsync("123456");
 
         Assert.AreEqual(4, viewModel.Lines.Count);
+        Assert.AreEqual(4, viewModel.LineStatuses.Count);
+        Assert.AreEqual("#8959DD", viewModel.LineStatuses[0].AccentColor);
+        Assert.AreEqual("#35ADDD", viewModel.LineStatuses[1].AccentColor);
+        Assert.AreEqual("#ED70A9", viewModel.LineStatuses[2].AccentColor);
+        Assert.AreEqual("#F19B2C", viewModel.LineStatuses[3].AccentColor);
         Assert.IsNull(viewModel.SelectedLine);
         StringAssert.Contains(viewModel.Status, "Seleccione explícitamente");
 

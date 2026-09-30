@@ -15,12 +15,17 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = new(home, diagnostics);
 
         Assert.AreSame(home, viewModel.CurrentPage);
+        Assert.IsTrue(viewModel.IsHomePage);
+        Assert.IsFalse(viewModel.IsDiagnosticsPage);
 
         viewModel.ShowDiagnosticsCommand.Execute(null);
         Assert.AreSame(diagnostics, viewModel.CurrentPage);
+        Assert.IsFalse(viewModel.IsHomePage);
+        Assert.IsTrue(viewModel.IsDiagnosticsPage);
 
         viewModel.ShowHomeCommand.Execute(null);
         Assert.AreSame(home, viewModel.CurrentPage);
+        Assert.IsTrue(viewModel.IsHomePage);
     }
 
     [TestMethod]
