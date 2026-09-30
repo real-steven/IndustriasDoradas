@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Application;
@@ -8,7 +9,8 @@ public sealed record RegisterCajuelaCommand(
     Guid CommandId,
     Guid StationId,
     DateTimeOffset OccurredAt,
-    OperationInputOrigin InputOrigin);
+    OperationInputOrigin InputOrigin,
+    Guid? LineId = null);
 
 public sealed record RegisterCajuelaResult(
     ProductionEvent Event,
@@ -18,7 +20,8 @@ public sealed record RegisterCajuelaResult(
 
 public sealed class RegisterCajuelaHandler(
     ILocalCajuelaRepository repository,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IProtectedStationStore? stationStore = null)
 {
     public RegisterCajuelaCommand CreateCommand(Guid stationId)
     {
@@ -48,6 +51,15 @@ public sealed class RegisterCajuelaHandler(
             inputCommand.Origin);
     }
 
+    public static RegisterCajuelaCommand CreateCommand(
+        Guid stationId,
+        Guid lineId,
+        OperationInputCommand inputCommand)
+    {
+        EnsureRequired(lineId, nameof(lineId));
+        return CreateCommand(stationId, inputCommand) with { LineId = lineId };
+    }
+
     public async Task<RegisterCajuelaResult> ExecuteAsync(
         RegisterCajuelaCommand command,
         CancellationToken cancellationToken = default)
@@ -58,13 +70,17 @@ public sealed class RegisterCajuelaHandler(
         command.InputOrigin.Validate();
 
         long startedAt = Stopwatch.GetTimestamp();
+        OutboxAuthorizationEvidence? authorization = await CaptureAuthorizationAsync(
+            command.StationId, cancellationToken).ConfigureAwait(false);
         LocalCajuelaRegistration registration = await repository.RegisterAsync(
                 new RegisterCajuelaMutation(
                     command.CommandId,
                     command.StationId,
                     command.OccurredAt,
                     timeProvider.GetUtcNow(),
-                    command.InputOrigin),
+                    command.InputOrigin,
+                    command.LineId,
+                    authorization),
                 cancellationToken)
             .ConfigureAwait(false);
         TimeSpan elapsed = Stopwatch.GetElapsedTime(startedAt);
@@ -74,6 +90,17 @@ public sealed class RegisterCajuelaHandler(
             registration.Total,
             registration.WasDuplicate,
             elapsed);
+    }
+
+    private async Task<OutboxAuthorizationEvidence?> CaptureAuthorizationAsync(
+        Guid stationId,
+        CancellationToken cancellationToken)
+    {
+        if (stationStore is null) return null;
+        ProtectedStationState? state = await stationStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (state is null || state.IsClosed || state.Authorization.StationId != stationId)
+            throw new UnauthorizedAccessException("No existe una autorización activa para registrar producción.");
+        return OutboxAuthorizationCapture.From(state, timeProvider.GetUtcNow());
     }
 
     private static void EnsureRequired(Guid value, string parameterName)

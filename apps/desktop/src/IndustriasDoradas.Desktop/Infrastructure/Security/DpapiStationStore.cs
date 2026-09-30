@@ -3,7 +3,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
+using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
+using Microsoft.Extensions.Options;
 
 namespace IndustriasDoradas.Desktop.Infrastructure.Security;
 
@@ -11,11 +14,27 @@ public sealed class DpapiStationStore : IProtectedStationStore
 {
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("IndustriasDoradas.Station.v1");
     private readonly string path;
+    private readonly string legacyPath;
+    private readonly Guid stationId;
 
-    public DpapiStationStore()
+    public DpapiStationStore(
+        ILocalDatabasePathProvider databasePathProvider,
+        IOptions<StationOptions> stationOptions)
     {
-        path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "IndustriasDoradas", "station-state.bin");
+        ArgumentNullException.ThrowIfNull(databasePathProvider);
+        ArgumentNullException.ThrowIfNull(stationOptions);
+        stationId = stationOptions.Value.Id;
+        if (stationId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Secure store requires a valid station.");
+        }
+        string stationDirectory = Path.GetDirectoryName(databasePathProvider.DatabasePath)
+            ?? throw new InvalidOperationException("Secure store path is invalid.");
+        path = Path.Combine(stationDirectory, "station-state.bin");
+        legacyPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "IndustriasDoradas",
+            "station-state.bin");
     }
 
     public async Task SaveAsync(ProtectedStationState state, CancellationToken cancellationToken = default)
@@ -32,10 +51,26 @@ public sealed class DpapiStationStore : IProtectedStationStore
 
     public async Task<ProtectedStationState?> LoadAsync(CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(path)) return null;
-        byte[] protectedBytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        string sourcePath = File.Exists(path)
+            ? path
+            : legacyPath;
+        if (!File.Exists(sourcePath)) return null;
+
+        byte[] protectedBytes = await File.ReadAllBytesAsync(sourcePath, cancellationToken).ConfigureAwait(false);
         byte[] plain = ProtectedData.Unprotect(protectedBytes, Entropy, DataProtectionScope.CurrentUser);
-        try { return JsonSerializer.Deserialize<ProtectedStationState>(plain); }
+        try
+        {
+            ProtectedStationState? state = JsonSerializer.Deserialize<ProtectedStationState>(plain);
+            if (state is not null && state.Authorization.StationId != stationId)
+            {
+                return null;
+            }
+            if (state is not null && sourcePath == legacyPath)
+            {
+                await SaveAsync(state, cancellationToken).ConfigureAwait(false);
+            }
+            return state;
+        }
         finally { CryptographicOperations.ZeroMemory(plain); }
     }
 

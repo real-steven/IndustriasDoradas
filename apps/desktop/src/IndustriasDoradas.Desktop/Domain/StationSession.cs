@@ -19,7 +19,8 @@ public sealed record StationAuthorization(
     int PermissionVersion,
     string PinVerifier,
     DateTimeOffset ValidatedAt,
-    DateTimeOffset OfflineValidUntil);
+    DateTimeOffset OfflineValidUntil,
+    long NextStationSequence = 1);
 
 public sealed record PendingStationEvent(
     Guid Id,

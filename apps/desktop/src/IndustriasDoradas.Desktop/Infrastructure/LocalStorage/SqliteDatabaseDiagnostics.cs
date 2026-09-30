@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
@@ -10,6 +12,9 @@ namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 
 public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
 {
+    private static readonly Regex SensitiveFieldPattern = new(
+        "password|contrasena|contraseña|pin|token|secret|authorization|cookie|photo|foto|image|imagen|biometric|biometr",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private readonly ILocalSqliteConnectionFactory connectionFactory;
     private readonly TimeProvider timeProvider;
     private readonly LocalRecoveryOptions options;
@@ -60,10 +65,16 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                     "Detenga la operación y solicite diagnóstico; no edite las tablas manualmente.");
             }
 
-            int pending = checked((int)await ScalarLongAsync(
-                connection,
-                "SELECT COUNT(*) FROM outbox_messages WHERE state IN ('PENDING', 'FAILED');",
-                cancellationToken).ConfigureAwait(false));
+            OutboxCounts outbox = await ReadOutboxCountsAsync(connection, cancellationToken)
+                .ConfigureAwait(false);
+            SyncDiagnosticState sync = await ReadSyncStateAsync(connection, cancellationToken)
+                .ConfigureAwait(false);
+            IReadOnlyList<SyncFailureDiagnostic> failures = await ReadFailuresAsync(connection, cancellationToken)
+                .ConfigureAwait(false);
+            IReadOnlyList<AdministrativeCorrectionDiagnostic> corrections =
+                await ReadCorrectionsAsync(connection, cancellationToken).ConfigureAwait(false);
+            int pullReviews = checked((int)await ScalarLongAsync(
+                connection, "SELECT COUNT(*) FROM sync_pull_reviews;", cancellationToken).ConfigureAwait(false));
             DateTimeOffset? latest = await ReadLatestRecordedAtAsync(connection, cancellationToken)
                 .ConfigureAwait(false);
             long freeBytes = ReadAvailableFreeBytes(connectionFactory.DatabasePath);
@@ -72,12 +83,21 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                 return new LocalDatabaseHealth(
                     LocalDatabaseHealthState.Unavailable,
                     LocalDatabaseHealthIssue.ClockRollback,
-                    pending,
+                    outbox.Pending,
                     freeBytes,
                     latest,
                     checkedAt,
                     "El reloj del equipo está atrasado respecto de la última operación local.",
-                    "Corrija fecha, hora y zona horaria antes de registrar nuevos eventos.");
+                    "Corrija fecha, hora y zona horaria antes de registrar nuevos eventos.",
+                    outbox.FailedReview,
+                    outbox.Synced,
+                    sync.LastSynchronizationAt,
+                    sync.ClockDeviationSeconds,
+                    failures,
+                    corrections,
+                    pullReviews,
+                    sync.NetworkState,
+                    sync.LastErrorCode);
             }
 
             long minimumBytes = options.MinimumFreeMegabytes * 1024L * 1024L;
@@ -86,25 +106,43 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
                 return new LocalDatabaseHealth(
                     LocalDatabaseHealthState.Attention,
                     LocalDatabaseHealthIssue.LowDiskSpace,
-                    pending,
+                    outbox.Pending,
                     freeBytes,
                     latest,
                     checkedAt,
                     "Queda poco espacio en el disco de operación.",
-                    "Libere espacio antes de continuar una jornada prolongada.");
+                    "Libere espacio antes de continuar una jornada prolongada.",
+                    outbox.FailedReview,
+                    outbox.Synced,
+                    sync.LastSynchronizationAt,
+                    sync.ClockDeviationSeconds,
+                    failures,
+                    corrections,
+                    pullReviews,
+                    sync.NetworkState,
+                    sync.LastErrorCode);
             }
 
             return new LocalDatabaseHealth(
                 LocalDatabaseHealthState.Healthy,
                 LocalDatabaseHealthIssue.None,
-                pending,
+                outbox.Pending,
                 freeBytes,
                 latest,
                 checkedAt,
                 "Guardado local disponible e íntegro.",
-                pending == 0
-                    ? "No hay acciones locales pendientes."
-                    : "Los pendientes están conservados localmente; no se enviarán en este sprint.");
+                outbox.Pending == 0
+                    ? "No hay acciones locales pendientes de envío."
+                    : "Las acciones pendientes están conservadas y el worker seguirá intentando enviarlas.",
+                outbox.FailedReview,
+                outbox.Synced,
+                sync.LastSynchronizationAt,
+                sync.ClockDeviationSeconds,
+                failures,
+                corrections,
+                pullReviews,
+                sync.NetworkState,
+                sync.LastErrorCode);
         }
         catch (Exception exception) when (exception is SqliteException or IOException or InvalidOperationException)
         {
@@ -180,6 +218,24 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
             CultureInfo.InvariantCulture);
     }
 
+    private static async Task<OutboxCounts> ReadOutboxCountsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                COALESCE(SUM(CASE WHEN state IN ('PENDING', 'SYNCING') THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'FAILED_REVIEW' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'SYNCED' THEN 1 ELSE 0 END), 0)
+            FROM outbox_messages;
+            """;
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        return new OutboxCounts(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
+    }
+
     private static async Task<DateTimeOffset?> ReadLatestRecordedAtAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)
@@ -198,6 +254,185 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
             ? null
             : SqliteLocalStorageConverters.ReadTimestamp(Convert.ToString(value, CultureInfo.InvariantCulture)!);
     }
+
+    private static async Task<SyncDiagnosticState> ReadSyncStateAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset? pullServerAt = null;
+        DateTimeOffset? pullReceivedAt = null;
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT updated_at_utc, local_received_at_utc FROM sync_pull_state WHERE singleton_id = 1;";
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                pullServerAt = reader.IsDBNull(0) ? null : ReadTimestamp(reader.GetString(0));
+                pullReceivedAt = reader.IsDBNull(1) ? null : ReadTimestamp(reader.GetString(1));
+            }
+        }
+
+        DateTimeOffset? pushAt = await ScalarTimestampAsync(
+            connection,
+            "SELECT MAX(synced_at_utc) FROM outbox_messages WHERE state = 'SYNCED';",
+            cancellationToken).ConfigureAwait(false);
+        DateTimeOffset? last = new[] { pushAt, pullReceivedAt }.Where(value => value is not null)
+            .MaxBy(value => value);
+        double? deviation = pullServerAt is not null && pullReceivedAt is not null
+            ? (pullServerAt.Value - pullReceivedAt.Value).TotalSeconds
+            : null;
+        string networkState = "UNKNOWN";
+        string? lastErrorCode = null;
+        await using (SqliteCommand runtime = connection.CreateCommand())
+        {
+            runtime.CommandText = "SELECT network_state, last_error_code FROM sync_runtime_status WHERE singleton_id = 1;";
+            await using SqliteDataReader reader = await runtime.ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                networkState = reader.GetString(0);
+                lastErrorCode = reader.IsDBNull(1) ? null : reader.GetString(1);
+            }
+        }
+        return new SyncDiagnosticState(last, deviation, networkState, lastErrorCode);
+    }
+
+    private static async Task<IReadOnlyList<SyncFailureDiagnostic>> ReadFailuresAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT operation_type, COALESCE(last_error_code, 'UNKNOWN_FAILURE'), attempt_count,
+                   created_at_utc, updated_at_utc
+            FROM outbox_messages
+            WHERE state = 'FAILED_REVIEW'
+            ORDER BY updated_at_utc DESC
+            LIMIT 20;
+            """;
+        var result = new List<SyncFailureDiagnostic>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            result.Add(new SyncFailureDiagnostic(
+                reader.GetString(0), reader.GetString(1), DescribeFailure(reader.GetString(1)), reader.GetInt32(2),
+                ReadTimestamp(reader.GetString(3)), ReadTimestamp(reader.GetString(4))));
+        }
+        return result;
+    }
+
+    private static string DescribeFailure(string code) => code switch
+    {
+        "STATION_REVOKED" => "La estación fue desactivada en la configuración central.",
+        "LINE_REVOKED" => "La línea ya no está autorizada para esta estación.",
+        "PERMISSION_VERSION_MISMATCH" => "La autorización cambió después de registrar el evento.",
+        "CLOCK_SKEW_REVIEW" => "El reloj del equipo estaba adelantado fuera del margen permitido.",
+        "LINE_OPERATION_CONFLICT" => "Otra estación ya tenía un cargamento activo en la misma línea.",
+        "DEPENDENCY_REJECTED" =>
+            "Este evento dependía de una operación anterior que fue rechazada; se conservó para revisión.",
+        "STATION_SEQUENCE_CONFLICT" =>
+            "La secuencia local ya no coincidía con la aceptada por el servidor.",
+        "LEGACY_AUTHORIZATION_UNAVAILABLE" =>
+            "El evento pertenece a una versión anterior que no guardaba toda la autorización requerida.",
+        "DATABASE_CONSTRAINT_VIOLATION" => "El evento contradice una regla de integridad central.",
+        "INVALID_EVENT" or "INVALID_LOCAL_PAYLOAD" => "El contenido del evento no cumple el contrato de sincronización.",
+        "AUTH_REFRESH_REQUIRED" => "La sesión debe renovarse con conexión.",
+        _ => "Revisión técnica requerida; entregue este código al soporte.",
+    };
+
+    private static async Task<IReadOnlyList<AdministrativeCorrectionDiagnostic>> ReadCorrectionsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT payload_json, changed_at_utc
+            FROM sync_entity_cache
+            WHERE action = 'CORRECTION_APPENDED'
+            ORDER BY changed_at_utc DESC
+            LIMIT 20;
+            """;
+        var result = new List<AdministrativeCorrectionDiagnostic>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(reader.GetString(0));
+                JsonElement payload = document.RootElement;
+                DateTimeOffset fallback = ReadTimestamp(reader.GetString(1));
+                result.Add(new AdministrativeCorrectionDiagnostic(
+                    SafeText(payload, "administrator", "Administrador"),
+                    SafeText(payload, "role_code", "ROL_NO_INDICADO"),
+                    SafeText(payload, "reason_code", "CAMBIO_ADMINISTRATIVO"),
+                    SafeText(payload, "event_action", "business.mutation"),
+                    SafeText(payload, "target_entity_type", "registro"),
+                    SafeTimestamp(payload, "occurred_at_utc", fallback),
+                    ReadSafeChanges(payload)));
+            }
+            catch (JsonException)
+            {
+                // Un payload dañado permanece en la caché para revisión, pero no se expone en pantalla.
+            }
+        }
+        return result;
+    }
+
+    private static List<string> ReadSafeChanges(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("changes", out JsonElement changes) ||
+            changes.ValueKind != JsonValueKind.Object)
+            return ["Cambio registrado sin detalle visible."];
+        var result = new List<string>();
+        foreach (JsonProperty field in changes.EnumerateObject())
+        {
+            if (SensitiveFieldPattern.IsMatch(field.Name) || field.Value.ValueKind != JsonValueKind.Object)
+                continue;
+            string before = ScalarDisplay(field.Value, "before");
+            string after = ScalarDisplay(field.Value, "after");
+            result.Add($"{field.Name}: {before} → {after}");
+        }
+        return result.Count == 0 ? ["Cambio registrado sin detalle visible."] : result;
+    }
+
+    private static string ScalarDisplay(JsonElement value, string property)
+    {
+        if (!value.TryGetProperty(property, out JsonElement scalar)) return "—";
+        return scalar.ValueKind switch
+        {
+            JsonValueKind.String => scalar.GetString() ?? "—",
+            JsonValueKind.Number => scalar.GetRawText(),
+            JsonValueKind.True => "sí",
+            JsonValueKind.False => "no",
+            _ => "—",
+        };
+    }
+
+    private static string SafeText(JsonElement payload, string property, string fallback) =>
+        payload.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(value.GetString()) ? value.GetString()! : fallback;
+
+    private static DateTimeOffset SafeTimestamp(JsonElement payload, string property, DateTimeOffset fallback) =>
+        payload.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String &&
+        DateTimeOffset.TryParse(value.GetString(), CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal, out DateTimeOffset parsed) ? parsed : fallback;
+
+    private static async Task<DateTimeOffset?> ScalarTimestampAsync(
+        SqliteConnection connection,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value is null or DBNull ? null : ReadTimestamp(Convert.ToString(value, CultureInfo.InvariantCulture)!);
+    }
+
+    private static DateTimeOffset ReadTimestamp(string value) =>
+        SqliteLocalStorageConverters.ReadTimestamp(value);
 
     private static long ReadAvailableFreeBytes(string databasePath)
     {
@@ -222,4 +457,11 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
         LocalStorageFailureKind.Unavailable => LocalDatabaseHealthIssue.Unavailable,
         _ => LocalDatabaseHealthIssue.Unknown,
     };
+
+    private sealed record OutboxCounts(int Pending, int FailedReview, int Synced);
+    private sealed record SyncDiagnosticState(
+        DateTimeOffset? LastSynchronizationAt,
+        double? ClockDeviationSeconds,
+        string NetworkState,
+        string? LastErrorCode);
 }

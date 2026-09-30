@@ -114,10 +114,19 @@ public sealed class SqliteProductionEventRepository(ILocalSqliteConnectionFactor
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO outbox_messages(
-                id, operation_type, aggregate_type, aggregate_id, payload_json,
+                id, station_id, station_sequence, operation_type, aggregate_type, aggregate_id, payload_json,
+                actor_profile_id, permission_version, authorization_validated_at_utc,
+                authorization_offline_until_utc, authorization_state,
                 state, attempt_count, created_at_utc, updated_at_utc)
             VALUES (
-                $id, $operationType, $aggregateType, $aggregateId, $payloadJson,
+                $id, json_extract($payloadJson, '$.stationId'),
+                MAX(
+                    COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages), 1),
+                    COALESCE((SELECT next_sequence FROM station_sequence_state
+                        WHERE station_id = json_extract($payloadJson, '$.stationId')), 1)),
+                $operationType, $aggregateType, $aggregateId, $payloadJson,
+                $actorProfileId, $permissionVersion, $authorizationValidatedAt,
+                $authorizationOfflineUntil, $authorizationState,
                 'PENDING', 0, $createdAtUtc, $createdAtUtc);
             """;
         command.Parameters.AddWithValue("$id", SqliteLocalStorageConverters.Id(outboxMessage.Id, nameof(outboxMessage)));
@@ -134,6 +143,7 @@ public sealed class SqliteProductionEventRepository(ILocalSqliteConnectionFactor
             "$payloadJson",
             SqliteLocalStorageConverters.Text(outboxMessage.PayloadJson, nameof(outboxMessage)));
         command.Parameters.AddWithValue("$createdAtUtc", SqliteLocalStorageConverters.Timestamp(outboxMessage.CreatedAt));
+        SqliteLocalStorageConverters.AddAuthorizationParameters(command, outboxMessage.Authorization);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

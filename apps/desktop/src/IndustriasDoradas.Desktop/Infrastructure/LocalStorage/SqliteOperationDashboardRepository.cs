@@ -10,45 +10,84 @@ public sealed class SqliteOperationDashboardRepository(
         Guid stationId,
         CancellationToken cancellationToken = default)
     {
+        IReadOnlyList<LocalOperationDashboardSnapshot> lines = await ListAsync(
+                stationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return lines.FirstOrDefault(line => line.IsReady) ??
+            (lines.Count == 0 ? null : lines[0]) ??
+            new LocalOperationDashboardSnapshot(
+                null,
+                Guid.Empty,
+                "Línea piloto",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                0);
+    }
+
+    public async Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default)
+    {
         string station = SqliteLocalStorageConverters.Id(stationId, nameof(stationId));
         await using SqliteConnection connection = await connectionFactory
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
         using SqliteTransaction transaction = connection.BeginTransaction();
-        LocalOperationDashboardSnapshot? active = await ReadActiveAsync(
+        OutboxCounts outbox = await ReadOutboxCountsAsync(connection, transaction, cancellationToken)
+            .ConfigureAwait(false);
+        IReadOnlyList<(Guid Id, string Name)> catalogLines = await ReadLinesAsync(
                 connection,
                 transaction,
                 station,
                 cancellationToken)
             .ConfigureAwait(false);
-        int pending = await ReadPendingCountAsync(connection, transaction, cancellationToken)
-            .ConfigureAwait(false);
-        transaction.Commit();
-
-        if (active is not null)
+        var result = new List<LocalOperationDashboardSnapshot>(catalogLines.Count);
+        foreach ((Guid lineId, string lineName) in catalogLines)
         {
-            return active with { PendingOutboxCount = pending };
+            LocalOperationDashboardSnapshot? active = await ReadActiveAsync(
+                    connection,
+                    transaction,
+                    station,
+                    lineId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            result.Add(active is null
+                ? new LocalOperationDashboardSnapshot(
+                    null,
+                    lineId,
+                    lineName,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    outbox.Pending,
+                    outbox.FailedReview,
+                    outbox.Synced)
+                : active with
+                {
+                    PendingOutboxCount = outbox.Pending,
+                    FailedReviewOutboxCount = outbox.FailedReview,
+                    SyncedOutboxCount = outbox.Synced,
+                });
         }
-
-        string lineName = await ReadPilotLineNameAsync(connection, cancellationToken)
-            .ConfigureAwait(false);
-        return new LocalOperationDashboardSnapshot(
-            null,
-            lineName,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            0,
-            pending);
+        transaction.Commit();
+        return result;
     }
 
     private static async Task<LocalOperationDashboardSnapshot?> ReadActiveAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         string stationId,
+        Guid lineId,
         CancellationToken cancellationToken)
     {
         await using SqliteCommand command = connection.CreateCommand();
@@ -94,11 +133,15 @@ public sealed class SqliteOperationDashboardRepository(
                 ON counter.line_id = session.line_id
                AND counter.shipment_id = session.shipment_id
             WHERE session.station_id = $stationId
+              AND session.line_id = $lineId
               AND session.status = 'ACTIVE'
               AND shipment.status = 'ACTIVE'
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$stationId", stationId);
+        command.Parameters.AddWithValue(
+            "$lineId",
+            SqliteLocalStorageConverters.Id(lineId, nameof(lineId)));
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -119,6 +162,7 @@ public sealed class SqliteOperationDashboardRepository(
             SqliteLocalStorageConverters.ReadStatus(reader.GetString(9)));
         return new LocalOperationDashboardSnapshot(
             session,
+            lineId,
             reader.GetString(10),
             reader.GetString(11),
             SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(12)),
@@ -132,7 +176,7 @@ public sealed class SqliteOperationDashboardRepository(
             0);
     }
 
-    private static async Task<int> ReadPendingCountAsync(
+    private static async Task<OutboxCounts> ReadOutboxCountsAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         CancellationToken cancellationToken)
@@ -140,27 +184,53 @@ public sealed class SqliteOperationDashboardRepository(
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT COUNT(*)
-            FROM outbox_messages
-            WHERE state IN ('PENDING', 'FAILED');
+            SELECT
+                COALESCE(SUM(CASE WHEN state IN ('PENDING', 'SYNCING') THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'FAILED_REVIEW' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'SYNCED' THEN 1 ELSE 0 END), 0)
+            FROM outbox_messages;
             """;
-        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        return new OutboxCounts(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
     }
 
-    private static async Task<string> ReadPilotLineNameAsync(
+    private static async Task<IReadOnlyList<(Guid Id, string Name)>> ReadLinesAsync(
         SqliteConnection connection,
+        SqliteTransaction transaction,
+        string stationId,
         CancellationToken cancellationToken)
     {
         await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
-            SELECT name
-            FROM cached_production_lines
-            WHERE is_active = 1
-            ORDER BY name COLLATE NOCASE, id
-            LIMIT 1;
+            SELECT line.id, line.name
+            FROM cached_production_lines AS line
+            WHERE line.is_active = 1
+              AND EXISTS (
+                  SELECT 1
+                  FROM sync_entity_cache AS scope
+                  WHERE scope.entity_type = 'STATION_LINE_SCOPE'
+                    AND scope.action = 'UPSERT'
+                    AND json_extract(scope.payload_json, '$.station_id') = $stationId
+                    AND json_extract(scope.payload_json, '$.production_line_id') = line.id
+                    AND json_extract(scope.payload_json, '$.is_active') = 1
+              )
+            ORDER BY line.name COLLATE NOCASE, line.id
+            LIMIT 4;
             """;
-        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return value as string ?? "Línea piloto";
+        command.Parameters.AddWithValue("$stationId", stationId);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var result = new List<(Guid Id, string Name)>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            result.Add((Guid.Parse(reader.GetString(0)), reader.GetString(1)));
+        }
+
+        return result;
     }
+
+    private sealed record OutboxCounts(int Pending, int FailedReview, int Synced);
 }

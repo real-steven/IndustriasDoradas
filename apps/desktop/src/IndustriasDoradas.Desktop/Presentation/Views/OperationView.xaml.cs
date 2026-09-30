@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using IndustriasDoradas.Desktop.Application;
@@ -9,6 +10,8 @@ namespace IndustriasDoradas.Desktop.Presentation.Views;
 public partial class OperationView : UserControl
 {
     private WpfKeyboardInputAdapter? keyboardAdapter;
+
+    public event RoutedEventHandler? FocusModeRequested;
 
     public OperationView()
     {
@@ -54,13 +57,11 @@ public partial class OperationView : UserControl
         FocusCurrentTarget();
     }
 
+    private void OnFocusModeRequested(object sender, RoutedEventArgs e) =>
+        FocusModeRequested?.Invoke(this, e);
+
     private void FocusCurrentTarget()
     {
-        if (ViewModel is not null && LinePanel.FocusTarget(ViewModel.FocusedTarget))
-        {
-            return;
-        }
-
         Focus();
         Keyboard.Focus(this);
     }

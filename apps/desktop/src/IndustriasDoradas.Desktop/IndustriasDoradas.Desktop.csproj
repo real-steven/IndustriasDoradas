@@ -5,6 +5,7 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>IndustriasDoradas.Desktop</RootNamespace>
     <AssemblyName>IndustriasDoradas.Desktop</AssemblyName>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,6 +19,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Infrastructure\LocalStorage\Migrations\*.sql" />
+    <Resource Include="Assets\logo-industrias-doradas.png" />
   </ItemGroup>
 
   <ItemGroup>

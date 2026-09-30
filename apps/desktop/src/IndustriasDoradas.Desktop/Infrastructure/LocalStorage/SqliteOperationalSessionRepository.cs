@@ -21,7 +21,7 @@ public sealed class SqliteOperationalSessionRepository(ILocalSqliteConnectionFac
             VALUES (
                 $stationId, $organizationId, $plantId, $lineId, $shipmentId,
                 $feedCycleId, $responsibleWorkerId, $startedAtUtc, $updatedAtUtc, $status)
-            ON CONFLICT(station_id) DO UPDATE SET
+            ON CONFLICT(station_id, line_id) DO UPDATE SET
                 organization_id = excluded.organization_id,
                 plant_id = excluded.plant_id,
                 line_id = excluded.line_id,
@@ -40,6 +40,23 @@ public sealed class SqliteOperationalSessionRepository(ILocalSqliteConnectionFac
         Guid stationId,
         CancellationToken cancellationToken = default)
     {
+        IReadOnlyList<LocalOperationalSession> sessions = await ListActiveAsync(
+                stationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return sessions.Count == 0 ? null : sessions[0];
+    }
+
+    public Task<LocalOperationalSession?> LoadAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default) =>
+        LoadSingleAsync(stationId, lineId, cancellationToken);
+
+    public async Task<IReadOnlyList<LocalOperationalSession>> ListActiveAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default)
+    {
         await using SqliteConnection connection = await connectionFactory
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -48,19 +65,53 @@ public sealed class SqliteOperationalSessionRepository(ILocalSqliteConnectionFac
             SELECT station_id, organization_id, plant_id, line_id, shipment_id,
                    feed_cycle_id, responsible_worker_id, started_at_utc, updated_at_utc, status
             FROM operational_sessions
-            WHERE station_id = $stationId;
+            WHERE station_id = $stationId AND status = 'ACTIVE'
+            ORDER BY line_id;
             """;
         command.Parameters.AddWithValue(
             "$stationId",
             SqliteLocalStorageConverters.Id(stationId, nameof(stationId)));
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        var result = new List<LocalOperationalSession>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            return null;
+            result.Add(ReadSession(reader));
         }
 
-        return new LocalOperationalSession(
+        return result;
+    }
+
+    private async Task<LocalOperationalSession?> LoadSingleAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteConnection connection = await connectionFactory
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT station_id, organization_id, plant_id, line_id, shipment_id,
+                   feed_cycle_id, responsible_worker_id, started_at_utc, updated_at_utc, status
+            FROM operational_sessions
+            WHERE station_id = $stationId AND line_id = $lineId;
+            """;
+        command.Parameters.AddWithValue(
+            "$stationId",
+            SqliteLocalStorageConverters.Id(stationId, nameof(stationId)));
+        command.Parameters.AddWithValue(
+            "$lineId",
+            SqliteLocalStorageConverters.Id(lineId, nameof(lineId)));
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? ReadSession(reader)
+            : null;
+    }
+
+    private static LocalOperationalSession ReadSession(SqliteDataReader reader) =>
+        new(
             Guid.Parse(reader.GetString(0)),
             Guid.Parse(reader.GetString(1)),
             Guid.Parse(reader.GetString(2)),
@@ -71,7 +122,6 @@ public sealed class SqliteOperationalSessionRepository(ILocalSqliteConnectionFac
             SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(7)),
             SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(8)),
             SqliteLocalStorageConverters.ReadStatus(reader.GetString(9)));
-    }
 
     private static void AddSessionParameters(SqliteCommand command, LocalOperationalSession session)
     {

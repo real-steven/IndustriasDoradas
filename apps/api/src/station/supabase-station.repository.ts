@@ -64,6 +64,16 @@ export class SupabaseStationRepository implements StationRepository {
       }),
     );
     if (station === null || credential === null) return null;
+    const latestReceipt = await this.one(
+      "sync_receipts",
+      new URLSearchParams({
+        organization_id: `eq.${input.organizationId}`,
+        station_id: `eq.${input.stationId}`,
+        order: "station_sequence.desc",
+        limit: "1",
+        select: "station_sequence",
+      }),
+    );
     const observed = new Date(input.observedAt);
     return {
       stationId: this.string(station, "id"),
@@ -76,6 +86,10 @@ export class SupabaseStationRepository implements StationRepository {
       offlineValidUntil: new Date(
         observed.getTime() + 24 * 60 * 60 * 1000,
       ).toISOString(),
+      nextStationSequence:
+        latestReceipt === null
+          ? 1
+          : this.number(latestReceipt, "station_sequence") + 1,
     };
   }
 

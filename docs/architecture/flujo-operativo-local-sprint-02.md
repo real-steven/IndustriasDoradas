@@ -255,9 +255,51 @@ jornada se muestran como contexto calculado, no como selectores redundantes.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-No se diseña todavía una vista de cuatro líneas. El código futuro debe evitar
-acoplar el dominio a `Línea 1`, pero la interfaz y las pruebas de aceptación del
-MVP se concentran en este único panel.
+La aprobación original se concentró en una línea. El ajuste visual aprobado el
+2026-09-28 permite mostrar hasta cuatro tarjetas activas sin cambiar la regla de
+que cada cargamento pertenece a una sola línea. En Estación, las líneas se
+seleccionan desde una lista y un único panel contextual permite preparar una
+línea disponible, relevar al responsable o finalizar el cargamento activo. Las
+confirmaciones visibles se presentan en una ventana; internamente se conserva
+la preparación y confirmación atómica para no alterar datos al cancelar.
+
+### 10.1 Configuración de teclado futura
+
+`Enfocar` continúa siendo una ayuda visual existente. El futuro `Modo teclado`
+restringido y la reasignación de teclas se muestran únicamente como
+`Próximamente`; no forman parte funcional del MVP actual.
+
+La propuesta aprobada reserva una configuración local protegida para:
+
+- seleccionar una de hasta cuatro líneas;
+- agregar una cajuela o solicitar la corrección de la última;
+- registrar una barrida cuando ese caso de uso exista;
+- confirmar o cancelar advertencias;
+- salir siempre con `Esc`, tecla fija y no reasignable.
+
+La futura configuración deberá impedir duplicados y atajos del sistema, ofrecer
+restauración de valores predeterminados, una zona de prueba que no genere
+eventos y auditoría del jefe que cambie el mapa. Hasta implementar ese contrato,
+ningún botón visual de Configuración cambia entradas ni persistencia.
+
+### 10.2 Lenguaje visual compartido
+
+La referencia HTML orienta la apariencia, pero no se replica literalmente. La
+aplicación desktop conserva sus flujos WPF y usa un sistema visual común:
+
+- navegación activa en azul oscuro y realce celeste con sombra suave al pasar
+  el puntero;
+- tarjetas blancas, esquinas redondeadas, bordes discretos y una sola familia
+  tipográfica en todos los módulos;
+- acentos estables por posición de línea: morado, celeste, rosado y naranja;
+- candado amarillo vivo para identificar la elevación temporal;
+- alertas normalizadas como informativa, correcta, advertencia o error;
+- texto e indicadores de estado además del color, para no depender únicamente
+  de la percepción cromática.
+
+Los colores de línea ayudan a reconocer tarjetas entre Inicio, Estación y Modo
+Operación. No representan estados de negocio, no sustituyen el nombre de la
+línea y pueden repetirse si en el futuro existen más de cuatro líneas.
 
 ## 11. Datos faltantes y autoridad
 

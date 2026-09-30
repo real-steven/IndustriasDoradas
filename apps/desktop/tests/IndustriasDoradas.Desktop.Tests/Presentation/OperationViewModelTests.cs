@@ -14,6 +14,7 @@ public sealed class OperationViewModelTests
     private static readonly Guid PlantId = Guid.Parse("31000000-0000-4000-8000-000000000001");
     private static readonly Guid StationId = Guid.Parse("34000000-0000-4000-8000-000000000001");
     private static readonly Guid LineId = Guid.Parse("43000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondLineId = Guid.Parse("43000000-0000-4000-8000-000000000002");
     private static readonly Guid ShipmentId = Guid.Parse("41000000-0000-4000-8000-000000000001");
     private static readonly Guid CycleId = Guid.Parse("44000000-0000-4000-8000-000000000001");
     private static readonly Guid WorkerId = Guid.Parse("45000000-0000-4000-8000-000000000001");
@@ -53,8 +54,62 @@ public sealed class OperationViewModelTests
         Assert.AreEqual(1, cajuelas.RegisterCalls);
         Assert.AreEqual(8, viewModel.Line.Total);
         StringAssert.Contains(viewModel.LastResult, "guardada localmente");
-        Assert.AreEqual("2 pendientes por enviar", viewModel.PendingStatus);
+        Assert.AreEqual("2 pendientes · 0 requieren revisión · 0 sincronizados", viewModel.PendingStatus);
         Assert.AreEqual(OperationFeedbackKind.Success, feedback.LastKind);
+    }
+
+    [TestMethod]
+    public async Task InitializationDisplaysEveryPreparedLineAsAnIndependentCard()
+    {
+        var dashboard = new ListDashboardRepository(
+        [
+            ReadySnapshot(total: 7),
+            ReadySnapshotForLine(SecondLineId, "Línea 2", total: 12),
+        ]);
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 7));
+
+        await viewModel.InitializeAsync();
+
+        Assert.IsTrue(viewModel.HasActiveLines);
+        Assert.AreEqual(2, viewModel.Lines.Count);
+        Assert.AreEqual(LineId, viewModel.Lines[0].LineId);
+        Assert.AreEqual(SecondLineId, viewModel.Lines[1].LineId);
+        Assert.AreEqual(1, viewModel.Lines[0].LineSlot);
+        Assert.AreEqual(2, viewModel.Lines[1].LineSlot);
+        Assert.AreEqual(12, viewModel.Lines[1].Total);
+    }
+
+    [TestMethod]
+    public async Task RegistrationAtFiftyShowsNonBlockingMercuryAlert()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 49),
+            ReadySnapshot(total: 50));
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 49));
+        await viewModel.InitializeAsync();
+
+        await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
+
+        Assert.IsTrue(viewModel.IsMilestoneAlertVisible);
+        Assert.AreEqual("Revisar mercurio", viewModel.MilestoneAlertTitle);
+        StringAssert.Contains(viewModel.MilestoneAlertMessage, "50");
+        Assert.AreEqual(50, viewModel.Line.Total);
+    }
+
+    [TestMethod]
+    public async Task RegistrationAtTwoHundredFiftyShowsSweepAlert()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 249),
+            ReadySnapshot(total: 250));
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 249));
+        await viewModel.InitializeAsync();
+
+        await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
+
+        Assert.IsTrue(viewModel.IsMilestoneAlertVisible);
+        Assert.AreEqual("Realizar barrida", viewModel.MilestoneAlertTitle);
+        StringAssert.Contains(viewModel.MilestoneAlertMessage, "250");
     }
 
     [TestMethod]
@@ -86,6 +141,7 @@ public sealed class OperationViewModelTests
     {
         var dashboard = new QueueDashboardRepository(new LocalOperationDashboardSnapshot(
             null,
+            LineId,
             "Línea 1",
             null,
             null,
@@ -304,6 +360,7 @@ public sealed class OperationViewModelTests
     private static LocalOperationDashboardSnapshot ReadySnapshot(int total, int pending = 1) =>
         new(
             Session(),
+            LineId,
             "Línea 1",
             "La Esperanza",
             Now.AddHours(-1),
@@ -313,6 +370,17 @@ public sealed class OperationViewModelTests
             Now.AddMinutes(-15),
             total,
             pending);
+
+    private static LocalOperationDashboardSnapshot ReadySnapshotForLine(
+        Guid lineId,
+        string lineName,
+        int total) =>
+        ReadySnapshot(total) with
+        {
+            Session = Session() with { LineId = lineId },
+            LineId = lineId,
+            LineName = lineName,
+        };
 
     private static LocalOperationalSession Session() =>
         new(
@@ -351,6 +419,24 @@ public sealed class OperationViewModelTests
             index++;
             return Task.FromResult(result);
         }
+
+        public async Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) =>
+            [await GetAsync(stationId, cancellationToken)];
+    }
+
+    private sealed class ListDashboardRepository(
+        IReadOnlyList<LocalOperationDashboardSnapshot> snapshots) : ILocalOperationDashboardRepository
+    {
+        public Task<LocalOperationDashboardSnapshot> GetAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(snapshots[0]);
+
+        public Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) => Task.FromResult(snapshots);
     }
 
     private sealed class StubCajuelaRepository(int total, bool rejectReversal = false) : ILocalCajuelaRepository
@@ -384,6 +470,15 @@ public sealed class OperationViewModelTests
             Guid stationId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new LocalCajuelaCorrectionTarget(Session(), target, total));
+
+        public Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
+            Guid stationId,
+            Guid lineId,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.AreEqual(LineId, lineId);
+            return Task.FromResult(new LocalCajuelaCorrectionTarget(Session(), target, total));
+        }
 
         public Task<LocalCajuelaReversal> ReverseAsync(
             ReverseCajuelaMutation mutation,
@@ -429,6 +524,11 @@ public sealed class OperationViewModelTests
     private sealed class ThrowingDashboardRepository : ILocalOperationDashboardRepository
     {
         public Task<LocalOperationDashboardSnapshot> GetAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) =>
+            throw new IOException("Base local no disponible.");
+
+        public Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
             Guid stationId,
             CancellationToken cancellationToken = default) =>
             throw new IOException("Base local no disponible.");

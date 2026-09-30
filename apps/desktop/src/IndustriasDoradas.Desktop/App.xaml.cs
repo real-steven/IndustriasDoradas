@@ -9,6 +9,7 @@ using IndustriasDoradas.Desktop.Infrastructure.Input;
 using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 using IndustriasDoradas.Desktop.Infrastructure.Security;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
+using IndustriasDoradas.Desktop.Infrastructure.Sync;
 using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using IndustriasDoradas.Desktop.Presentation.Feedback;
@@ -89,6 +90,10 @@ public partial class App : System.Windows.Application
                 EnvironmentName = environmentName,
             });
         builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+        // The local file supplies normal installation defaults. Explicit launch
+        // arguments must remain the final override so support can run isolated
+        // station profiles on one computer during recovery and validation.
+        builder.Configuration.AddCommandLine(args);
 
         builder.Services
             .AddOptions<ApiOptions>()
@@ -137,6 +142,10 @@ public partial class App : System.Windows.Application
             .Bind(builder.Configuration.GetSection(LocalRecoveryOptions.SectionName))
             .Validate(options => options.IsValid(), "LocalRecovery contiene límites inválidos.")
             .ValidateOnStart();
+        builder.Services.AddOptions<SyncOptions>()
+            .Bind(builder.Configuration.GetSection(SyncOptions.SectionName))
+            .Validate(options => options.IsValid(), "Sync contiene límites inválidos.")
+            .ValidateOnStart();
 
         builder.Services.AddHttpClient<IHealthService, ApiHealthService>(
             static (services, client) =>
@@ -158,6 +167,20 @@ public partial class App : System.Windows.Application
             client.DefaultRequestHeaders.Add("apikey", options.PublishableKey);
             client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         });
+        builder.Services.AddHttpClient<ISyncApi, SyncApi>(static (services, client) =>
+        {
+            ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            SyncOptions syncOptions = services.GetRequiredService<IOptions<SyncOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(syncOptions.RequestTimeoutSeconds);
+        });
+        builder.Services.AddHttpClient<ISyncPullApi, SyncPullApi>(static (services, client) =>
+        {
+            ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            SyncOptions syncOptions = services.GetRequiredService<IOptions<SyncOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(syncOptions.RequestTimeoutSeconds);
+        });
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<IInputCommandSource, ConfigurableInputCommandSource>();
@@ -171,7 +194,12 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalShipmentRepository, SqliteShipmentRepository>();
         builder.Services.AddSingleton<ILocalOperationalSessionRepository, SqliteOperationalSessionRepository>();
         builder.Services.AddSingleton<ILocalProductionEventRepository, SqliteProductionEventRepository>();
-        builder.Services.AddSingleton<ILocalOutboxRepository, SqliteOutboxRepository>();
+        builder.Services.AddSingleton<SqliteOutboxRepository>();
+        builder.Services.AddSingleton<ILocalOutboxRepository>(services =>
+            services.GetRequiredService<SqliteOutboxRepository>());
+        builder.Services.AddSingleton<ILocalStationSequenceStore>(services =>
+            services.GetRequiredService<SqliteOutboxRepository>());
+        builder.Services.AddSingleton<ILocalSyncChangeRepository, SqliteSyncChangeRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
@@ -186,9 +214,19 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
         builder.Services.AddSingleton<StationCoordinator>();
+        builder.Services.AddSingleton<ISyncStationContext, SyncStationContext>();
+        builder.Services.AddSingleton<ISyncJitter, SystemSyncJitter>();
+        builder.Services.AddSingleton<ISyncStatusNotifier, SyncStatusNotifier>();
+        builder.Services.AddSingleton<OutboxSyncProcessor>();
+        builder.Services.AddHostedService<OutboxSyncWorker>();
+        builder.Services.AddSingleton<IncrementalPullProcessor>();
+        builder.Services.AddHostedService<IncrementalPullWorker>();
+        builder.Services.AddHostedService<IncrementalPullSignalWorker>();
 
         builder.Services.AddSingleton<HomeViewModel>();
         builder.Services.AddSingleton<DiagnosticsViewModel>();
+        builder.Services.AddSingleton<AuditViewModel>();
+        builder.Services.AddSingleton<SettingsViewModel>();
         builder.Services.AddSingleton<StationViewModel>();
         builder.Services.AddSingleton<OperationViewModel>();
         builder.Services.AddSingleton<MainWindowViewModel>();

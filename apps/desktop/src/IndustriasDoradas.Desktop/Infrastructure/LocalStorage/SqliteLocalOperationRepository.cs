@@ -48,7 +48,7 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
                     VALUES (
                         $stationId, $organizationId, $plantId, $lineId, $shipmentId,
                         $feedCycleId, $responsibleWorkerId, $startedAtUtc, $updatedAtUtc, 'ACTIVE')
-                    ON CONFLICT(station_id) DO UPDATE SET
+                    ON CONFLICT(station_id, line_id) DO UPDATE SET
                         organization_id = excluded.organization_id,
                         plant_id = excluded.plant_id,
                         line_id = excluded.line_id,
@@ -427,10 +427,19 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO outbox_messages(
-                id, operation_type, aggregate_type, aggregate_id, payload_json,
+                id, station_id, station_sequence, operation_type, aggregate_type, aggregate_id, payload_json,
+                actor_profile_id, permission_version, authorization_validated_at_utc,
+                authorization_offline_until_utc, authorization_state,
                 state, attempt_count, created_at_utc, updated_at_utc)
             VALUES (
-                $id, $operationType, $aggregateType, $aggregateId, $payloadJson,
+                $id, json_extract($payloadJson, '$.stationId'),
+                MAX(
+                    COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages), 1),
+                    COALESCE((SELECT next_sequence FROM station_sequence_state
+                        WHERE station_id = json_extract($payloadJson, '$.stationId')), 1)),
+                $operationType, $aggregateType, $aggregateId, $payloadJson,
+                $actorProfileId, $permissionVersion, $authorizationValidatedAt,
+                $authorizationOfflineUntil, $authorizationState,
                 'PENDING', 0, $createdAtUtc, $createdAtUtc);
             """;
         command.Parameters.AddWithValue("$id", SqliteLocalStorageConverters.Id(outbox.Id, nameof(outbox)));
@@ -447,6 +456,7 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
             "$payloadJson",
             SqliteLocalStorageConverters.Text(outbox.PayloadJson, nameof(outbox)));
         command.Parameters.AddWithValue("$createdAtUtc", SqliteLocalStorageConverters.Timestamp(outbox.CreatedAt));
+        SqliteLocalStorageConverters.AddAuthorizationParameters(command, outbox.Authorization);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

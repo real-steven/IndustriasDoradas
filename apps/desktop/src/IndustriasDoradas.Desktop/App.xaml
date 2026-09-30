@@ -10,12 +10,68 @@
         <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="CanvasBrush" Color="#F6F3ED" />
         <SolidColorBrush x:Key="BorderBrush" Color="#D8D3CA" />
+        <SolidColorBrush x:Key="NavyBrush" Color="#173B50" />
+        <SolidColorBrush x:Key="NavyHoverBrush" Color="#24556F" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#6F828F" />
+        <SolidColorBrush x:Key="SoftCanvasBrush" Color="#F3F6F7" />
+        <SolidColorBrush x:Key="SoftBorderBrush" Color="#DFE8EC" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#1F9D55" />
+        <SolidColorBrush x:Key="SuccessSoftBrush" Color="#F3FAF6" />
+        <SolidColorBrush x:Key="DangerBrush" Color="#AA3037" />
+        <SolidColorBrush x:Key="DangerSoftBrush" Color="#FFF7F7" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#D57C17" />
+        <SolidColorBrush x:Key="WarningSoftBrush" Color="#FFFAF0" />
+        <SolidColorBrush x:Key="LineOneBrush" Color="#8959DD" />
+        <SolidColorBrush x:Key="LineTwoBrush" Color="#35ADDD" />
+        <SolidColorBrush x:Key="LineThreeBrush" Color="#ED70A9" />
+        <SolidColorBrush x:Key="LineFourBrush" Color="#F19B2C" />
+        <SolidColorBrush x:Key="LockYellowBrush" Color="#FFD23F" />
+
+        <DropShadowEffect x:Key="CardShadow" BlurRadius="20" ShadowDepth="5"
+                          Direction="270" Color="#173B50" Opacity="0.10" />
+        <DropShadowEffect x:Key="HoverShadow" BlurRadius="14" ShadowDepth="3"
+                          Direction="270" Color="#2F7EA4" Opacity="0.20" />
+
+        <Style x:Key="SurfaceCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="{StaticResource SoftBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+
+        <Style x:Key="InfoAlertStyle" TargetType="Border">
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="Background" Value="#EEF6FA" />
+            <Setter Property="BorderBrush" Value="#C8DEE8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+        </Style>
+        <Style x:Key="SuccessAlertStyle" TargetType="Border" BasedOn="{StaticResource InfoAlertStyle}">
+            <Setter Property="Background" Value="{StaticResource SuccessSoftBrush}" />
+            <Setter Property="BorderBrush" Value="#BCDCC9" />
+        </Style>
+        <Style x:Key="WarningAlertStyle" TargetType="Border" BasedOn="{StaticResource InfoAlertStyle}">
+            <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+            <Setter Property="BorderBrush" Value="#E5C476" />
+        </Style>
+        <Style x:Key="ErrorAlertStyle" TargetType="Border" BasedOn="{StaticResource InfoAlertStyle}">
+            <Setter Property="Background" Value="{StaticResource DangerSoftBrush}" />
+            <Setter Property="BorderBrush" Value="#EBC3C7" />
+        </Style>
 
         <Style TargetType="Button">
             <Setter Property="MinHeight" Value="44" />
             <Setter Property="Padding" Value="16,10" />
+            <Setter Property="Background" Value="#F5F8F9" />
+            <Setter Property="BorderBrush" Value="#D3E0E6" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource NavyBrush}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FocusVisualStyle">
                 <Setter.Value>
                     <Style TargetType="Control">
@@ -29,6 +85,36 @@
                             </Setter.Value>
                         </Setter>
                     </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonChrome" Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="#EDF4F7" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="#AFC8D4" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Opacity" Value="0.76" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="#F1F4F5" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="#D7E1E5" />
+                                <Setter Property="Foreground" Value="#748792" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>

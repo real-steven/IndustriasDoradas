@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using IndustriasDoradas.Desktop.Application;
@@ -25,6 +26,7 @@ public sealed class OperationViewModel : ObservableObject
     private readonly IOperationFeedbackPlayer feedbackPlayer;
     private readonly OperationSafetyOptions safetyOptions;
     private readonly Guid stationId;
+    private OperationLinePanelViewModel line = new();
     private PreparedCajuelaReversal? preparedReversal;
     private string localStorageStatus = "Preparando almacenamiento local…";
     private string pendingStatus = "Pendientes por enviar: —";
@@ -35,6 +37,11 @@ public sealed class OperationViewModel : ObservableObject
     private bool isLocalStorageAvailable;
     private OperationFocusTarget focusedTarget = OperationFocusTarget.RegisterCajuela;
     private OperationFeedbackKind feedbackKind;
+    private bool isMilestoneAlertVisible;
+    private string milestoneAlertTitle = string.Empty;
+    private string milestoneAlertMessage = string.Empty;
+    private string milestoneAlertIcon = "🔎";
+    private int milestoneAlertVersion;
 
     public OperationViewModel(
         ILocalOperationDashboardRepository dashboard,
@@ -66,9 +73,25 @@ public sealed class OperationViewModel : ObservableObject
         DispatchInputCommand = new AsyncRelayCommand<OperationInputAction>(
             DispatchClickAsync,
             CanDispatchInput);
+        RegisterLineCajuelaCommand = new AsyncRelayCommand<Guid>(
+            RegisterLineCajuelaAsync,
+            CanRegisterLineCajuela);
+        PrepareLineCorrectionCommand = new AsyncRelayCommand<Guid>(
+            PrepareLineCorrectionAsync,
+            CanPrepareLineCorrection);
+        ShowSweepReminderCommand = new RelayCommand<Guid>(ShowSweepReminder);
+        ShowComingSoonCommand = new RelayCommand(ShowComingSoon);
+        DismissMilestoneAlertCommand = new RelayCommand(DismissMilestoneAlert);
     }
 
-    public OperationLinePanelViewModel Line { get; } = new();
+    public OperationLinePanelViewModel Line
+    {
+        get => line;
+        private set => SetProperty(ref line, value);
+    }
+
+    public ObservableCollection<OperationLinePanelViewModel> Lines { get; } = [];
+    public bool HasActiveLines => Lines.Count > 0;
     public IInputCommandSource InputSource => inputSource;
     public string LocalStorageStatus
     {
@@ -87,6 +110,30 @@ public sealed class OperationViewModel : ObservableObject
     {
         get => correctionSummary;
         private set => SetProperty(ref correctionSummary, value);
+    }
+
+    public bool IsMilestoneAlertVisible
+    {
+        get => isMilestoneAlertVisible;
+        private set => SetProperty(ref isMilestoneAlertVisible, value);
+    }
+
+    public string MilestoneAlertTitle
+    {
+        get => milestoneAlertTitle;
+        private set => SetProperty(ref milestoneAlertTitle, value);
+    }
+
+    public string MilestoneAlertMessage
+    {
+        get => milestoneAlertMessage;
+        private set => SetProperty(ref milestoneAlertMessage, value);
+    }
+
+    public string MilestoneAlertIcon
+    {
+        get => milestoneAlertIcon;
+        private set => SetProperty(ref milestoneAlertIcon, value);
     }
 
     public bool IsBusy
@@ -128,6 +175,11 @@ public sealed class OperationViewModel : ObservableObject
     public IRelayCommand CancelCorrectionCommand { get; }
     public IAsyncRelayCommand RefreshCommand { get; }
     public IAsyncRelayCommand<OperationInputAction> DispatchInputCommand { get; }
+    public IAsyncRelayCommand<Guid> RegisterLineCajuelaCommand { get; }
+    public IAsyncRelayCommand<Guid> PrepareLineCorrectionCommand { get; }
+    public IRelayCommand<Guid> ShowSweepReminderCommand { get; }
+    public IRelayCommand ShowComingSoonCommand { get; }
+    public IRelayCommand DismissMilestoneAlertCommand { get; }
 
     public Task InitializeAsync() => RefreshAsync();
 
@@ -140,11 +192,18 @@ public sealed class OperationViewModel : ObservableObject
             throw new ArgumentException("El UUID del comando de entrada es obligatorio.", nameof(command));
         }
 
-        if (command.Origin.LineSlot != 1)
+        OperationLinePanelViewModel? requestedLine = Lines.FirstOrDefault(
+            item => item.LineSlot == command.Origin.LineSlot);
+        if (requestedLine is null && command.Origin.LineSlot == 1 && Line.IsReady)
         {
-            LastResult = $"La Línea {command.Origin.LineSlot} aún no está disponible en el piloto.";
+            requestedLine = Line;
+        }
+        if (requestedLine is null)
+        {
+            LastResult = $"La Línea {command.Origin.LineSlot} no está preparada para operar.";
             return;
         }
+        Line = requestedLine;
 
         switch (command.Action)
         {
@@ -193,14 +252,12 @@ public sealed class OperationViewModel : ObservableObject
     {
         await RunAsync(async () =>
         {
-            LocalOperationDashboardSnapshot snapshot = await dashboard.GetAsync(stationId)
+            IReadOnlyList<LocalOperationDashboardSnapshot> snapshots = await dashboard.ListAsync(stationId)
                 .ConfigureAwait(true);
-            Apply(snapshot);
+            Apply(snapshots);
             IsLocalStorageAvailable = true;
             LocalStorageStatus = "Guardado local disponible";
-            PendingStatus = snapshot.PendingOutboxCount == 1
-                ? "1 pendiente por enviar"
-                : $"{snapshot.PendingOutboxCount} pendientes por enviar";
+            PendingStatus = FormatOutboxStatus(snapshots.Count == 0 ? null : snapshots[0]);
         }, "No se pudo leer el estado local. Avise al jefe de planta.").ConfigureAwait(true);
     }
 
@@ -209,6 +266,31 @@ public sealed class OperationViewModel : ObservableObject
         OperationInputAction.RegisterCajuela,
         OperationInputOrigin.Click(OperationInputAction.RegisterCajuela),
         timeProvider.GetUtcNow()));
+
+    private async Task RegisterLineCajuelaAsync(Guid lineId)
+    {
+        if (!TrySelectLine(lineId)) return;
+        await RegisterCajuelaAsync().ConfigureAwait(true);
+    }
+
+    private async Task PrepareLineCorrectionAsync(Guid lineId)
+    {
+        if (!TrySelectLine(lineId)) return;
+        await PrepareCorrectionAsync().ConfigureAwait(true);
+    }
+
+    private bool TrySelectLine(Guid lineId)
+    {
+        OperationLinePanelViewModel? selected = Lines.FirstOrDefault(item => item.LineId == lineId);
+        if (selected is null)
+        {
+            ShowFeedback(OperationFeedbackKind.Warning, "La línea seleccionada ya no está activa.");
+            return false;
+        }
+
+        Line = selected;
+        return true;
+    }
 
     private async Task TryRegisterCajuelaAsync(OperationInputCommand inputCommand)
     {
@@ -243,9 +325,16 @@ public sealed class OperationViewModel : ObservableObject
 
         bool succeeded = await RunAsync(async () =>
         {
-            RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(stationId, inputCommand);
+            RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(
+                stationId,
+                Line.LineId,
+                inputCommand);
             RegisterCajuelaResult result = await registerHandler.ExecuteAsync(command).ConfigureAwait(true);
             Line.Total = result.Total;
+            if (!result.WasDuplicate && result.Total > 0 && result.Total % 50 == 0)
+            {
+                ShowMilestoneAlert(Line.LineName, result.Total);
+            }
             ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Cajuela ya registrada. Total: {result.Total}."
                 : $"Cajuela guardada localmente. Total: {result.Total}.");
@@ -268,7 +357,8 @@ public sealed class OperationViewModel : ObservableObject
     {
         await RunAsync(async () =>
         {
-            preparedReversal = await reversalHandler.PrepareAsync(stationId).ConfigureAwait(true);
+            preparedReversal = await reversalHandler.PrepareAsync(stationId, Line.LineId)
+                .ConfigureAwait(true);
             CorrectionSummary =
                 $"Se corregirá la última cajuela. El total cambiará de " +
                 $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}.";
@@ -366,48 +456,104 @@ public sealed class OperationViewModel : ObservableObject
 
     private async Task RefreshSnapshotAsync()
     {
-        LocalOperationDashboardSnapshot snapshot = await dashboard.GetAsync(stationId)
+        IReadOnlyList<LocalOperationDashboardSnapshot> snapshots = await dashboard.ListAsync(stationId)
             .ConfigureAwait(true);
-        Apply(snapshot);
-        PendingStatus = snapshot.PendingOutboxCount == 1
-            ? "1 pendiente por enviar"
-            : $"{snapshot.PendingOutboxCount} pendientes por enviar";
+        Apply(snapshots);
+        PendingStatus = FormatOutboxStatus(snapshots.Count == 0 ? null : snapshots[0]);
     }
 
-    private void Apply(LocalOperationDashboardSnapshot snapshot)
+    private void Apply(IReadOnlyList<LocalOperationDashboardSnapshot> snapshots)
     {
-        Line.LineName = snapshot.LineName;
-        Line.IsReady = snapshot.IsReady;
-        Line.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
-        Line.Total = snapshot.Total;
+        Guid selectedLineId = Line.LineId;
+        Dictionary<Guid, OperationLinePanelViewModel> existing = Lines
+            .Where(item => item.LineId != Guid.Empty)
+            .GroupBy(item => item.LineId)
+            .ToDictionary(group => group.Key, group => group.First());
+        var active = snapshots
+            .Select((snapshot, index) => new { Snapshot = snapshot, LineSlot = index + 1 })
+            .Where(item => item.Snapshot.IsReady)
+            .Take(4)
+            .ToArray();
+        Lines.Clear();
+        for (int index = 0; index < active.Length; index++)
+        {
+            LocalOperationDashboardSnapshot snapshot = active[index].Snapshot;
+            if (!existing.TryGetValue(snapshot.LineId, out OperationLinePanelViewModel? panel))
+            {
+                panel = new OperationLinePanelViewModel();
+            }
+            ApplyLine(panel, snapshot, active[index].LineSlot);
+            Lines.Add(panel);
+        }
+
+        OperationLinePanelViewModel? selected = Lines.FirstOrDefault(item => item.LineId == selectedLineId) ??
+            Lines.FirstOrDefault();
+        if (selected is not null)
+        {
+            Line = selected;
+        }
+        else
+        {
+            LocalOperationDashboardSnapshot? fallback = snapshots.Count == 0 ? null : snapshots[0];
+            var fallbackLine = new OperationLinePanelViewModel();
+            if (fallback is not null)
+            {
+                ApplyLine(fallbackLine, fallback, 1);
+            }
+            Line = fallbackLine;
+        }
+
+        OnPropertyChanged(nameof(HasActiveLines));
+        NotifyCommandStates();
+    }
+
+    private void ApplyLine(
+        OperationLinePanelViewModel panel,
+        LocalOperationDashboardSnapshot snapshot,
+        int lineSlot)
+    {
+        string[] accents = ["#8959DD", "#35ADDD", "#ED70A9", "#F19B2C"];
+        panel.LineId = snapshot.LineId;
+        panel.LineSlot = lineSlot;
+        panel.LineName = snapshot.LineName;
+        panel.AccentColor = accents[(lineSlot - 1) % accents.Length];
+        panel.IsReady = snapshot.IsReady;
+        panel.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
+        panel.Total = snapshot.Total;
+        panel.SupplierName = snapshot.SupplierName ?? "Sin proveedor";
+        panel.ResponsibleName = snapshot.ResponsibleName ?? "Sin responsable";
         WorkPeriod workPeriod = WorkPeriodSchedule.At(timeProvider.GetUtcNow());
-        Line.WorkPeriodDescription = workPeriod == WorkPeriod.Day
+        panel.WorkPeriodDescription = workPeriod == WorkPeriod.Day
             ? "Jornada: Diurna · automática desde las 06:00"
             : "Jornada: Nocturna · automática desde las 18:00";
 
         if (!snapshot.IsReady)
         {
-            Line.FeedDescription = "El jefe de planta debe preparar un cargamento.";
-            Line.ResponsibleDescription = "Sin responsable asignado";
-            Line.PreviousResponsibleDescription = string.Empty;
-            Line.HasPreviousResponsible = false;
-            NotifyCommandStates();
+            panel.FeedDescription = "El jefe de planta debe preparar un cargamento.";
+            panel.ResponsibleDescription = "Sin responsable asignado";
+            panel.PreviousResponsibleDescription = string.Empty;
+            panel.HasPreviousResponsible = false;
             return;
         }
 
-        Line.FeedDescription =
+        panel.FeedDescription =
             $"Alimentación actual: {snapshot.SupplierName} · inicio " +
             FormatTime(snapshot.ShipmentStartedAt!.Value);
-        Line.ResponsibleDescription =
+        panel.ResponsibleDescription =
             $"Responsable actual: {snapshot.ResponsibleName} · desde " +
             FormatTime(snapshot.ResponsibleSince!.Value);
-        Line.HasPreviousResponsible = snapshot.PreviousResponsibleName is not null;
-        Line.PreviousResponsibleDescription = Line.HasPreviousResponsible
+        panel.HasPreviousResponsible = snapshot.PreviousResponsibleName is not null;
+        panel.PreviousResponsibleDescription = panel.HasPreviousResponsible
             ? $"Responsable anterior: {snapshot.PreviousResponsibleName} · hasta " +
               FormatTime(snapshot.PreviousResponsibleUntil!.Value)
             : string.Empty;
-        NotifyCommandStates();
     }
+
+    private static string FormatOutboxStatus(LocalOperationDashboardSnapshot? snapshot) => snapshot is null
+        ? "Sin líneas disponibles"
+        : $"{snapshot.PendingOutboxCount} pendientes · " +
+          $"{snapshot.FailedReviewOutboxCount} requieren revisión · " +
+          $"{snapshot.SyncedOutboxCount} sincronizados";
 
     private async Task<bool> RunAsync(Func<Task> action, string failureMessage)
     {
@@ -450,11 +596,75 @@ public sealed class OperationViewModel : ObservableObject
     }
 
     private bool CanRegisterCajuela() =>
-        Line.IsReady && IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending;
+        Line.LineId != Guid.Empty && Line.IsReady && IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending;
+
+    private bool CanRegisterLineCajuela(Guid lineId) =>
+        Lines.Any(item => item.LineId == lineId && item.IsReady) &&
+        IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending;
 
     private bool CanPrepareCorrection() =>
-        Line.IsReady && IsLocalStorageAvailable && Line.Total > 0 && !IsBusy && !IsCorrectionPending;
+        Line.LineId != Guid.Empty && Line.IsReady && IsLocalStorageAvailable &&
+        Line.Total > 0 && !IsBusy && !IsCorrectionPending;
+    private bool CanPrepareLineCorrection(Guid lineId) =>
+        Lines.Any(item => item.LineId == lineId && item.IsReady && item.Total > 0) &&
+        IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending;
     private bool CanConfirmCorrection() => IsCorrectionPending && !IsBusy;
+
+    private void ShowSweepReminder(Guid lineId)
+    {
+        OperationLinePanelViewModel? selected = Lines.FirstOrDefault(item => item.LineId == lineId);
+        if (selected is null) return;
+        MilestoneAlertIcon = "🧹";
+        MilestoneAlertTitle = "Realizar barrida";
+        MilestoneAlertMessage = selected.Total >= 250
+            ? $"{selected.LineName} alcanzó 250 cajuelas. Corresponde realizar la barrida."
+            : $"{selected.LineName} tiene {selected.Total} cajuelas. Confirme el procedimiento antes de realizar una barrida.";
+        LastResult = "Próximamente: el registro persistente de barridas. Por ahora se muestra el recordatorio visual.";
+        ShowMilestoneAlertForEightSeconds();
+    }
+
+    private void ShowComingSoon() =>
+        ShowFeedback(OperationFeedbackKind.Neutral,
+            "Próximamente: confirmación persistente de revisiones y barridas.");
+
+    private void ShowMilestoneAlert(string lineName, int total)
+    {
+        bool sweep = total % 250 == 0;
+        MilestoneAlertIcon = sweep ? "🧹" : "🔎";
+        MilestoneAlertTitle = sweep ? "Realizar barrida" : "Revisar mercurio";
+        MilestoneAlertMessage = sweep
+            ? $"{lineName} alcanzó 250 cajuelas."
+            : $"{lineName} alcanzó {total} cajuelas.";
+        ShowMilestoneAlertForEightSeconds();
+    }
+
+    private void ShowMilestoneAlertForEightSeconds()
+    {
+        int version = ++milestoneAlertVersion;
+        IsMilestoneAlertVisible = true;
+        _ = HideMilestoneAlertAsync(version);
+    }
+
+    private async Task HideMilestoneAlertAsync(int version)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        if (version != milestoneAlertVersion) return;
+
+        System.Windows.Threading.Dispatcher? dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            IsMilestoneAlertVisible = false;
+            return;
+        }
+
+        await dispatcher.InvokeAsync(() => IsMilestoneAlertVisible = false);
+    }
+
+    private void DismissMilestoneAlert()
+    {
+        milestoneAlertVersion++;
+        IsMilestoneAlertVisible = false;
+    }
 
     private bool CanDispatchInput(OperationInputAction action) => action switch
     {
@@ -473,6 +683,8 @@ public sealed class OperationViewModel : ObservableObject
         CancelCorrectionCommand.NotifyCanExecuteChanged();
         RefreshCommand.NotifyCanExecuteChanged();
         DispatchInputCommand.NotifyCanExecuteChanged();
+        RegisterLineCajuelaCommand.NotifyCanExecuteChanged();
+        PrepareLineCorrectionCommand.NotifyCanExecuteChanged();
     }
 
     private static string FormatTime(DateTimeOffset instant) =>

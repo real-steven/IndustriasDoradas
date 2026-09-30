@@ -1,42 +1,121 @@
 <UserControl x:Class="IndustriasDoradas.Desktop.Presentation.Views.HomeView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d"
-             d:DesignHeight="520"
-             d:DesignWidth="760">
-    <Grid Margin="56">
-        <StackPanel MaxWidth="700"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center">
-            <TextBlock Foreground="#8A5B0A"
-                       FontSize="12"
-                       FontWeight="Bold"
-                       Text="ESCRITORIO" />
-            <TextBlock Margin="0,12,0,0"
-                       Foreground="{StaticResource Ink900Brush}"
-                       FontSize="48"
-                       FontWeight="Bold"
-                       Text="{Binding Title}"
-                       TextWrapping="Wrap" />
-            <TextBlock Margin="0,18,0,0"
-                       Foreground="{StaticResource Ink700Brush}"
-                       FontSize="17"
-                       LineHeight="27"
-                       MaxWidth="620"
-                       Text="{Binding Message}"
-                       TextWrapping="Wrap" />
-            <Border Margin="0,34,0,0"
-                    Padding="20"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="12"
-                    Background="{StaticResource SurfaceBrush}">
-                <TextBlock Foreground="{StaticResource Ink700Brush}"
-                           Text="Usa la navegación lateral para revisar la comunicación con la API."
-                           TextWrapping="Wrap" />
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource SoftCanvasBrush}">
+        <StackPanel Margin="34,26,34,42" MaxWidth="1380" HorizontalAlignment="Center">
+            <Border Padding="32" Background="{StaticResource NavyBrush}" CornerRadius="20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="270" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Foreground="#9FD1E5" FontSize="11" FontWeight="Bold"
+                                   Text="ESTACIÓN ABIERTA" />
+                        <TextBlock Margin="0,9,0,0" Foreground="White" FontSize="30"
+                                   FontWeight="Bold" Text="Bienvenido, jefe de planta." />
+                        <TextBlock Margin="0,8,0,0" MaxWidth="700" Foreground="#D5E2E8"
+                                   FontSize="15" LineHeight="23" TextWrapping="Wrap"
+                                   Text="Prepare la línea que trabajará hoy y deje el sistema en Modo Operación para el registro continuo de cajuelas." />
+                    </StackPanel>
+                    <Border Grid.Column="1" Margin="28,0,0,0" Padding="20"
+                            BorderBrush="#406276" BorderThickness="1,0,0,0">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock HorizontalAlignment="Center" FontFamily="Segoe UI Emoji"
+                                       Foreground="White" FontSize="36" Text="✓" />
+                            <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center"
+                                       Foreground="White" FontWeight="Bold" Text="SISTEMA DISPONIBLE" />
+                            <TextBlock Margin="0,4,0,0" HorizontalAlignment="Center"
+                                       Foreground="#BFD0D9" FontSize="11" Text="Guardado local activo" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <UniformGrid Margin="0,18,0,0" Columns="3">
+                <Border Margin="0,0,7,0" Padding="21" Style="{StaticResource SurfaceCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontFamily="Segoe UI Emoji" FontSize="29" Text="🪣" />
+                        <TextBlock Margin="0,13,0,0" FontSize="18" FontWeight="Bold" Text="Modo Operación" />
+                        <TextBlock Margin="0,6,0,14" Foreground="{StaticResource MutedBrush}"
+                                   LineHeight="19" TextWrapping="Wrap"
+                                   Text="Registro simple para las líneas actualmente preparadas." />
+                        <Button HorizontalAlignment="Left" Background="Transparent" BorderThickness="0"
+                                Foreground="#2F7EA4"
+                                Command="{Binding DataContext.ShowOperationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Content="ABRIR OPERACIÓN  →" />
+                    </StackPanel>
+                </Border>
+                <Border Margin="7,0" Padding="21" Style="{StaticResource SurfaceCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontFamily="Segoe UI Emoji" FontSize="29" Text="⚙" />
+                        <TextBlock Margin="0,13,0,0" FontSize="18" FontWeight="Bold" Text="Preparar estación" />
+                        <TextBlock Margin="0,6,0,14" Foreground="{StaticResource MutedBrush}"
+                                   LineHeight="19" TextWrapping="Wrap"
+                                   Text="Seleccione línea, proveedor, cargamento y responsable." />
+                        <Button HorizontalAlignment="Left" Background="Transparent" BorderThickness="0"
+                                Foreground="#2F7EA4"
+                                Command="{Binding DataContext.ShowStationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Content="GESTIONAR LÍNEAS  →" />
+                    </StackPanel>
+                </Border>
+                <Border Margin="7,0,0,0" Padding="21" Style="{StaticResource SurfaceCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontFamily="Segoe UI Emoji" FontSize="29" Text="♥" />
+                        <TextBlock Margin="0,13,0,0" FontSize="18" FontWeight="Bold" Text="Estado del sistema" />
+                        <TextBlock Margin="0,6,0,14" Foreground="{StaticResource MutedBrush}"
+                                   LineHeight="19" TextWrapping="Wrap"
+                                   Text="Conexión, sincronización y almacenamiento local." />
+                        <Button HorizontalAlignment="Left" Background="Transparent" BorderThickness="0"
+                                Foreground="#2F7EA4"
+                                Command="{Binding DataContext.ShowDiagnosticsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Content="VER DIAGNÓSTICO  →" />
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <Border Margin="0,18,0,0" Padding="23" Style="{StaticResource SurfaceCardStyle}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock FontSize="19" FontWeight="Bold" Text="Líneas de esta estación" />
+                        <TextBlock Grid.Column="1" Foreground="{StaticResource MutedBrush}"
+                                   Text="{Binding DataContext.Operation.Lines.Count, RelativeSource={RelativeSource AncestorType=Window}, StringFormat={}{0} activa(s)}" />
+                    </Grid>
+                    <ItemsControl Margin="0,15,0,0"
+                                  ItemsSource="{Binding DataContext.Operation.Lines, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,8" Padding="12" Background="#F8FAFB"
+                                        BorderBrush="#E5ECEF" BorderThickness="1" CornerRadius="11">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="6" Height="44" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                Background="{Binding AccentColor}" CornerRadius="3" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock FontWeight="Bold" Text="{Binding LineName}" />
+                                            <TextBlock Margin="0,3,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11">
+                                                <Run Text="{Binding SupplierName}" /><Run Text=" · " /><Run Text="{Binding ResponsibleName}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" VerticalAlignment="Center" FontWeight="Bold"
+                                                   Text="{Binding Total, StringFormat={}{0} cajuelas}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}"
+                               Text="Si no aparece ninguna línea, elévese a Modo Jefe de Planta y prepárela desde Estación." />
+                </StackPanel>
             </Border>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </UserControl>

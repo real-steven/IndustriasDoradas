@@ -25,6 +25,41 @@ public sealed class StationPreparationViewModelTests
     private static readonly DateTimeOffset Now = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
 
     [TestMethod]
+    public async Task CloseStationCommandReturnsToSignedOutLoginState()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, Snapshot()),
+            catalogs,
+            new MemoryStationSequences(),
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(catalogs, sessions, new RecordingOperationRepository(sessions), time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+
+        await viewModel.InitializeAsync();
+        Assert.IsTrue(viewModel.IsStationOpen);
+        Assert.IsTrue(viewModel.WasSessionRestored);
+
+        await viewModel.CloseStationCommand.ExecuteAsync(null);
+
+        Assert.IsFalse(viewModel.IsStationOpen);
+        Assert.IsFalse(viewModel.WasSessionRestored);
+        Assert.AreEqual(StationMode.SignedOut, viewModel.Mode);
+        StringAssert.Contains(viewModel.StationSessionStatus, "cerrada manualmente");
+    }
+
+    [TestMethod]
     public async Task PlantManagerPreparesSummaryThenConfirmsPilotLineAtomically()
     {
         var time = new FixedTimeProvider();
@@ -32,7 +67,8 @@ public sealed class StationPreparationViewModelTests
         var catalogs = new MemoryCatalogs();
         var api = new StubStationApi(state, Snapshot());
         var coordinator = new StationCoordinator(
-            new StubAuth(), api, catalogs, new MemoryStationStore(state), new NoopEvidenceCapture(),
+            new StubAuth(), api, catalogs, new MemoryStationSequences(), new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }), time);
         var sessions = new MemorySessions();
         var operationRepository = new RecordingOperationRepository(sessions);
@@ -44,14 +80,27 @@ public sealed class StationPreparationViewModelTests
             Options.Create(new StationOptions { Id = StationId }),
             time);
         DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
-        MainWindowViewModel shell = new(new HomeViewModel(), diagnostics, viewModel);
+        AuditViewModel audit = new(diagnostics, viewModel);
+        SettingsViewModel settings = new();
+        MainWindowViewModel shell = new(
+            new HomeViewModel(), diagnostics, viewModel, null, audit, settings);
 
         await viewModel.InitializeAsync();
-        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowSettingsCommand.CanExecute(null));
+        audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
+        Assert.IsTrue(audit.IsOperationCategory);
 
         await viewModel.ElevateAsync("123456");
         Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowSettingsCommand.CanExecute(null));
+        audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
+        Assert.IsTrue(audit.IsCorrectionsCategory);
 
+        Assert.IsNull(viewModel.SelectedLine);
+        viewModel.SelectedLine = viewModel.Lines.Single(line => line.Id == LineId);
         viewModel.SelectedSupplier = viewModel.Suppliers.Single();
         viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
 
@@ -71,8 +120,17 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(1, operationRepository.StartCalls);
         Assert.AreEqual(SupplierId, operationRepository.LastStart!.SupplierId);
         Assert.AreEqual(WorkerId, operationRepository.LastStart.Session.ResponsibleWorkerId);
-        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
-        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
+        Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowSettingsCommand.CanExecute(null));
+        Assert.IsTrue(audit.IsCorrectionsCategory);
+        StationLineStatus activeLine = viewModel.LineStatuses.Single(line => line.Id == LineId);
+        Assert.IsTrue(activeLine.IsPrepared);
+        Assert.IsTrue(activeLine.IsSelected);
+        viewModel.SelectLineCommand.Execute(SecondLineId);
+        Assert.AreEqual(SecondLineId, viewModel.SelectedLine?.Id);
+        Assert.IsFalse(viewModel.CanRequestStart);
         StringAssert.Contains(viewModel.Status, "Línea lista");
     }
 
@@ -86,6 +144,7 @@ public sealed class StationPreparationViewModelTests
             new StubAuth(),
             new StubStationApi(state, Snapshot()),
             catalogs,
+            new MemoryStationSequences(),
             new MemoryStationStore(state),
             new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }),
@@ -102,15 +161,15 @@ public sealed class StationPreparationViewModelTests
 
         await viewModel.InitializeAsync();
         await viewModel.ElevateAsync("123456");
+        viewModel.SelectedLine = viewModel.Lines.Single(line => line.Id == LineId);
         viewModel.SelectedSupplier = viewModel.Suppliers.Single();
         viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
         await viewModel.PrepareLineCommand.ExecuteAsync(null);
         await viewModel.ConfirmLineCommand.ExecuteAsync(null);
 
         Assert.IsTrue(viewModel.HasActiveOperation);
-        Assert.IsFalse(viewModel.CanManageActiveOperation);
+        Assert.IsTrue(viewModel.CanManageActiveOperation);
 
-        await viewModel.ElevateAsync("123456");
         viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == SecondWorkerId);
         Assert.IsTrue(viewModel.CanManageActiveOperation);
         Assert.IsTrue(viewModel.PrepareReliefCommand.CanExecute(null));
@@ -124,9 +183,8 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(1, repository.ReliefCalls);
         Assert.AreEqual(SecondWorkerId, sessions.Current?.ResponsibleWorkerId);
         Assert.IsTrue(viewModel.HasActiveOperation);
-        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+        Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
 
-        await viewModel.ElevateAsync("123456");
         Assert.IsTrue(viewModel.PrepareCompletionCommand.CanExecute(null));
         await viewModel.PrepareCompletionCommand.ExecuteAsync(null);
 
@@ -138,7 +196,59 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(1, repository.CompletionCalls);
         Assert.AreEqual(LineFeedCycleStatus.Completed, sessions.Current?.Status);
         Assert.IsFalse(viewModel.HasActiveOperation);
-        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
+        Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
+        Assert.IsTrue(viewModel.CanPrepareNewShipment);
+    }
+
+    [TestMethod]
+    public async Task CatalogRefreshNeverReplacesUnavailableSelectedLineImplicitly()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, Snapshot()),
+            catalogs,
+            new MemoryStationSequences(),
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(catalogs, sessions, new RecordingOperationRepository(sessions), time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+
+        await viewModel.InitializeAsync();
+        await viewModel.ElevateAsync("123456");
+
+        Assert.AreEqual(4, viewModel.Lines.Count);
+        Assert.AreEqual(4, viewModel.LineStatuses.Count);
+        Assert.AreEqual("#8959DD", viewModel.LineStatuses[0].AccentColor);
+        Assert.AreEqual("#35ADDD", viewModel.LineStatuses[1].AccentColor);
+        Assert.AreEqual("#ED70A9", viewModel.LineStatuses[2].AccentColor);
+        Assert.AreEqual("#F19B2C", viewModel.LineStatuses[3].AccentColor);
+        Assert.IsNull(viewModel.SelectedLine);
+        StringAssert.Contains(viewModel.Status, "Seleccione explícitamente");
+
+        CachedProductionLine firstLine = viewModel.Lines.Single(line => line.Id == LineId);
+        viewModel.SelectedLine = firstLine;
+        await catalogs.UpsertLineAsync(firstLine with { IsActive = false, UpdatedAt = Now.AddMinutes(1) });
+        await viewModel.ElevateAsync("123456");
+
+        Assert.IsNull(viewModel.SelectedLine);
+        Assert.IsTrue(viewModel.Lines.Any(line => line.Id == SecondLineId));
+        StringAssert.Contains(viewModel.Status, "ya no está disponible");
+
+        await catalogs.UpsertLineAsync(firstLine with { IsActive = true, UpdatedAt = Now.AddMinutes(2) });
+        await viewModel.ElevateAsync("123456");
+
+        Assert.IsNull(viewModel.SelectedLine);
+        StringAssert.Contains(viewModel.Status, "Seleccione explícitamente");
     }
 
     [TestMethod]
@@ -155,6 +265,7 @@ public sealed class StationPreparationViewModelTests
             new StubAuth(),
             new StubStationApi(state, snapshot),
             catalogs,
+            new MemoryStationSequences(),
             new MemoryStationStore(state),
             new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }),
@@ -242,6 +353,15 @@ public sealed class StationPreparationViewModelTests
         }
     }
 
+    private sealed class MemoryStationSequences : ILocalStationSequenceStore
+    {
+        public Task EnsureNextAsync(
+            Guid stationId,
+            long nextSequence,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
     private sealed class MemoryCatalogs : ILocalCatalogRepository
     {
         private readonly List<CachedSupplier> suppliers = [];
@@ -252,7 +372,7 @@ public sealed class StationPreparationViewModelTests
         public Task UpsertLineAsync(CachedProductionLine line, CancellationToken cancellationToken = default) { lines.RemoveAll(item => item.Id == line.Id); lines.Add(line); return Task.CompletedTask; }
         public Task<IReadOnlyList<CachedSupplier>> ListActiveSuppliersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedSupplier>>(suppliers.Where(item => item.OrganizationId == organizationId && item.IsActive).ToArray());
         public Task<IReadOnlyList<CachedWorker>> ListActiveWorkersAsync(Guid organizationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedWorker>>(workers.Where(item => item.OrganizationId == organizationId && item.IsActive).ToArray());
-        public Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(Guid organizationId, Guid plantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedProductionLine>>(lines.Where(item => item.OrganizationId == organizationId && item.PlantId == plantId && item.IsActive).ToArray());
+        public Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(Guid organizationId, Guid plantId, Guid stationId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CachedProductionLine>>(lines.Where(item => item.OrganizationId == organizationId && item.PlantId == plantId && item.IsActive).ToArray());
         public Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default) => Task.FromResult(suppliers.SingleOrDefault(item => item.Id == supplierId));
         public Task<CachedWorker?> FindWorkerAsync(Guid workerId, CancellationToken cancellationToken = default) => Task.FromResult(workers.SingleOrDefault(item => item.Id == workerId));
         public Task<CachedProductionLine?> FindLineAsync(Guid lineId, CancellationToken cancellationToken = default) => Task.FromResult(lines.SingleOrDefault(item => item.Id == lineId));
@@ -263,6 +383,11 @@ public sealed class StationPreparationViewModelTests
         public LocalOperationalSession? Current { get; set; }
         public Task SaveAsync(LocalOperationalSession session, CancellationToken cancellationToken = default) { Current = session; return Task.CompletedTask; }
         public Task<LocalOperationalSession?> LoadAsync(Guid stationId, CancellationToken cancellationToken = default) => Task.FromResult(Current);
+        public Task<LocalOperationalSession?> LoadAsync(Guid stationId, Guid lineId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Current?.LineId == lineId ? Current : null);
+        public Task<IReadOnlyList<LocalOperationalSession>> ListActiveAsync(Guid stationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<LocalOperationalSession>>(
+                Current?.Status == LineFeedCycleStatus.Active ? [Current] : []);
     }
 
     private sealed class RecordingOperationRepository(MemorySessions sessions) : ILocalOperationRepository

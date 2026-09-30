@@ -53,12 +53,33 @@ public sealed record PendingOutboxMessage(
     string AggregateType,
     Guid AggregateId,
     string PayloadJson,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record StoredOutboxMessage(
     PendingOutboxMessage Message,
     int AttemptCount,
     DateTimeOffset? NextAttemptAt);
+
+public sealed record OutboxAuthorizationEvidence(
+    Guid ActorProfileId,
+    int PermissionVersion,
+    DateTimeOffset ValidatedAt,
+    DateTimeOffset OfflineValidUntil,
+    string StateAtCapture);
+
+public sealed record ClaimedOutboxMessage(
+    PendingOutboxMessage Message,
+    long StationSequence,
+    int AttemptCount,
+    OutboxAuthorizationEvidence Authorization);
+
+public sealed record OutboxItemDisposition(
+    Guid OutboxMessageId,
+    string Status,
+    string Code,
+    Guid? ReceiptId,
+    int? HttpStatus = null);
 
 public sealed record StartLocalOperationMutation(
     LocalOperationalSession Session,
@@ -83,7 +104,9 @@ public sealed record RegisterCajuelaMutation(
     Guid StationId,
     DateTimeOffset OccurredAt,
     DateTimeOffset RecordedAt,
-    OperationInputOrigin InputOrigin);
+    OperationInputOrigin InputOrigin,
+    Guid? LineId = null,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record LocalCajuelaRegistration(
     ProductionEvent Event,
@@ -103,7 +126,8 @@ public sealed record ReverseCajuelaMutation(
     string ReasonCode,
     DateTimeOffset PreparedAt,
     DateTimeOffset ConfirmedAt,
-    OperationInputOrigin InputOrigin);
+    OperationInputOrigin InputOrigin,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record LocalCajuelaReversal(
     ProductionEvent Event,
@@ -114,6 +138,7 @@ public sealed record LocalCajuelaReversal(
 
 public sealed record LocalOperationDashboardSnapshot(
     LocalOperationalSession? Session,
+    Guid LineId,
     string LineName,
     string? SupplierName,
     DateTimeOffset? ShipmentStartedAt,
@@ -122,7 +147,9 @@ public sealed record LocalOperationDashboardSnapshot(
     string? PreviousResponsibleName,
     DateTimeOffset? PreviousResponsibleUntil,
     int Total,
-    int PendingOutboxCount)
+    int PendingOutboxCount,
+    int FailedReviewOutboxCount = 0,
+    int SyncedOutboxCount = 0)
 {
     public bool IsReady => Session?.Status == LineFeedCycleStatus.Active;
 }
@@ -141,6 +168,7 @@ public interface ILocalCatalogRepository
     Task<IReadOnlyList<CachedProductionLine>> ListActiveLinesAsync(
         Guid organizationId,
         Guid plantId,
+        Guid stationId,
         CancellationToken cancellationToken = default);
 
     Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default);
@@ -157,6 +185,13 @@ public interface ILocalOperationalSessionRepository
 {
     Task SaveAsync(LocalOperationalSession session, CancellationToken cancellationToken = default);
     Task<LocalOperationalSession?> LoadAsync(Guid stationId, CancellationToken cancellationToken = default);
+    Task<LocalOperationalSession?> LoadAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LocalOperationalSession>> ListActiveAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ILocalProductionEventRepository
@@ -176,6 +211,50 @@ public interface ILocalOutboxRepository
 {
     Task<IReadOnlyList<StoredOutboxMessage>> ListPendingAsync(
         int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ClaimedOutboxMessage>> ClaimAsync(
+        Guid stationId,
+        Guid claimId,
+        int limit,
+        DateTimeOffset now,
+        DateTimeOffset leaseUntil,
+        OutboxAuthorizationEvidence authorization,
+        CancellationToken cancellationToken = default);
+
+    Task CompleteClaimAsync(
+        Guid claimId,
+        IReadOnlyList<OutboxItemDisposition> dispositions,
+        DateTimeOffset now,
+        Func<int, TimeSpan> retryDelay,
+        CancellationToken cancellationToken = default);
+
+    Task ReleaseClaimAsync(
+        Guid claimId,
+        string errorCode,
+        int? httpStatus,
+        DateTimeOffset now,
+        Func<int, TimeSpan> retryDelay,
+        bool permanent,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalStationSequenceStore
+{
+    Task EnsureNextAsync(
+        Guid stationId,
+        long nextSequence,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalSyncChangeRepository
+{
+    Task<string?> GetCursorAsync(CancellationToken cancellationToken = default);
+    Task ApplyPageAsync(SyncPullPage page, CancellationToken cancellationToken = default);
+    Task RecordPullFailureAsync(
+        string errorCode,
+        DateTimeOffset attemptedAt,
         CancellationToken cancellationToken = default);
 }
 
@@ -200,6 +279,10 @@ public interface ILocalCajuelaRepository
     Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
         Guid stationId,
         CancellationToken cancellationToken = default);
+    Task<LocalCajuelaCorrectionTarget> FindCorrectionTargetAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default);
 
     Task<LocalCajuelaReversal> ReverseAsync(
         ReverseCajuelaMutation mutation,
@@ -209,6 +292,9 @@ public interface ILocalCajuelaRepository
 public interface ILocalOperationDashboardRepository
 {
     Task<LocalOperationDashboardSnapshot> GetAsync(
+        Guid stationId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
         Guid stationId,
         CancellationToken cancellationToken = default);
 }
@@ -249,4 +335,43 @@ public sealed record LocalDatabaseHealth(
     DateTimeOffset? LatestRecordedAt,
     DateTimeOffset CheckedAt,
     string Summary,
-    string RecoveryInstruction);
+    string RecoveryInstruction,
+    int FailedReviewOutboxCount = 0,
+    int SyncedOutboxCount = 0,
+    DateTimeOffset? LastSynchronizationAt = null,
+    double? ClockDeviationSeconds = null,
+    IReadOnlyList<SyncFailureDiagnostic>? Failures = null,
+    IReadOnlyList<AdministrativeCorrectionDiagnostic>? Corrections = null,
+    int PullReviewCount = 0,
+    string SyncNetworkState = "UNKNOWN",
+    string? LastSyncErrorCode = null);
+
+public sealed record SyncFailureDiagnostic(
+    string OperationType,
+    string ErrorCode,
+    string Cause,
+    int AttemptCount,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset LastAttemptAt)
+{
+    public string OperationDescription => OperationType switch
+    {
+        "OPERATION_STARTED" => "Inicio de cargamento",
+        "OPERATION_COMPLETED" => "Finalización de cargamento",
+        "RESPONSIBLE_RELIEVED" => "Cambio de responsable",
+        "PRODUCTION_EVENT_CREATED" => "Registro o corrección de cajuela",
+        _ => "Evento operativo",
+    };
+
+    public DateTimeOffset LocalOccurredAt => OccurredAt.ToLocalTime();
+    public DateTimeOffset LocalLastAttemptAt => LastAttemptAt.ToLocalTime();
+}
+
+public sealed record AdministrativeCorrectionDiagnostic(
+    string Administrator,
+    string RoleCode,
+    string Reason,
+    string Action,
+    string EntityType,
+    DateTimeOffset OccurredAt,
+    IReadOnlyList<string> Changes);

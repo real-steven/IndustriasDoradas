@@ -208,7 +208,9 @@ en
 - **Elevación:** cada jefe usa un PIN individual para entrar temporalmente al
   Modo Jefe de Planta. Existe salida explícita y bloqueo tras cinco minutos de
   inactividad total con aviso previo; un formulario incompleto se conserva
-  detrás del bloqueo.
+  detrás del bloqueo. Confirmar una preparación, un relevo o el cierre de un
+  cargamento no cancela la elevación: permanece activa hasta la salida explícita
+  o el vencimiento por inactividad.
 - **Auditoría:** cada elevación registra jefe, estación, hora y resultado. Cuando
   exista captura aprobada, intenta adjuntar foto; una cámara dañada no bloquea,
   marca `sin_foto` y genera alerta administrativa.
@@ -265,3 +267,25 @@ en
 - **Posterior:** un sensor sencillo puede añadirse al mismo puerto después de
   validar el flujo manual; no forma parte de la aceptación inicial ni habilita
   PLC, IoT o automatización industrial.
+
+## Decisiones complementarias del 2026-09-08
+
+### 13. Contrato de sincronización por elemento
+
+- **Decisión:** el push usa lotes con envelope versionado, pero confirma cada
+  elemento en una transacción central independiente. La identidad idempotente
+  es organización + estación + UUID de Outbox y una huella del contenido.
+- **Respuesta perdida:** reenviar el mismo elemento devuelve el recibo durable
+  anterior y no repite el efecto. La misma identidad con otro contenido queda
+  para revisión.
+- **Estados locales:** `PENDING`, `SYNCING`, `SYNCED` y `FAILED_REVIEW`. Los
+  estados legados se convierten mediante una migración nueva; no se reescriben
+  migraciones SQLite compartidas.
+- **Pull:** usa cursor opaco y aplica cada página junto con el nuevo cursor en
+  una transacción SQLite. SSE solo avisa que puede haber cambios y siempre se
+  respalda con polling incremental a NestJS.
+- **Seguridad:** los clientes no acceden directamente a tablas de producción,
+  recibos, feed ni Supabase Realtime. NestJS valida JWT, cuenta, organización,
+  estación, versión y permisos en cada solicitud.
+- **Detalle:**
+  [`contrato-sincronizacion-sprint-03.md`](contrato-sincronizacion-sprint-03.md).

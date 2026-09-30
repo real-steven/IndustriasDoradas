@@ -204,6 +204,8 @@ Supabase o guardar el verificador en SQLite.
   minutos sin interacción real del jefe.
 - Registros de cajuelas, check-in, sincronización y actividad de fondo no
   renuevan el temporizador privilegiado.
+- Confirmar una preparación, un relevo o el cierre de un cargamento no cierra
+  el modo privilegiado; la interacción del jefe renueva su temporizador.
 - Salir manualmente devuelve de inmediato a Modo Operación.
 - Si hay un formulario no enviado, el bloqueo lo cubre sin descartarlo; tras
   reautenticación se reanuda en el mismo estado.

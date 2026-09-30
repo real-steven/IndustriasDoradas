@@ -18,7 +18,9 @@ public sealed class LocalSqliteStorageTests
     private static readonly Guid OrganizationId = Guid.Parse("30000000-0000-4000-8000-000000000001");
     private static readonly Guid PlantId = Guid.Parse("31000000-0000-4000-8000-000000000001");
     private static readonly Guid StationId = Guid.Parse("34000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondStationId = Guid.Parse("34000000-0000-4000-8000-000000000002");
     private static readonly Guid LineId = Guid.Parse("43000000-0000-4000-8000-000000000001");
+    private static readonly Guid SecondLineId = Guid.Parse("43000000-0000-4000-8000-000000000002");
     private static readonly Guid SupplierId = Guid.Parse("42000000-0000-4000-8000-000000000001");
     private static readonly Guid ShipmentId = Guid.Parse("41000000-0000-4000-8000-000000000001");
     private static readonly Guid CycleId = Guid.Parse("44000000-0000-4000-8000-000000000001");
@@ -55,8 +57,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(5L, result.CurrentVersion);
-        Assert.AreEqual(5, result.AppliedCount);
+        Assert.AreEqual(11L, result.CurrentVersion);
+        Assert.AreEqual(11, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -65,7 +67,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(5L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(11L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -89,6 +91,42 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task OnlineStationSnapshotRaisesSequenceFloorForANewLocalDatabase()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        await database.Outbox().EnsureNextAsync(StationId, 50, StartedAt);
+
+        await StartOperationAsync(database.OperationService(new MutableTimeProvider(StartedAt)));
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(50L, await ScalarLongAsync(
+            connection,
+            "SELECT station_sequence FROM outbox_messages WHERE operation_type = 'OPERATION_STARTED';"));
+    }
+
+    [TestMethod]
+    public async Task OnlineStationSnapshotAlsoRaisesProductionEventSequenceForANewLocalDatabase()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        await database.Outbox().EnsureNextAsync(StationId, 50, StartedAt);
+        await StartOperationAsync(database.OperationService(new MutableTimeProvider(StartedAt)));
+        var time = new MutableTimeProvider(StartedAt.AddSeconds(1));
+        RegisterCajuelaHandler handler = database.RegisterHandler(time);
+
+        RegisterCajuelaResult result = await handler.ExecuteAsync(handler.CreateCommand(StationId));
+
+        Assert.AreEqual(50L, result.Event.ClientSequence);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(51L, await ScalarLongAsync(
+            connection,
+            "SELECT station_sequence FROM outbox_messages WHERE operation_type = 'PRODUCTION_EVENT_CREATED';"));
+    }
+
+    [TestMethod]
     public async Task UpgradeFromFirstMigrationPreservesDataAndAddsImmutability()
     {
         await using var database = new TestDatabase();
@@ -97,7 +135,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(4, result.AppliedCount);
+        Assert.AreEqual(10, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -257,7 +295,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(5L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(11L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -380,9 +418,11 @@ public sealed class LocalSqliteStorageTests
         await using var database = new TestDatabase();
         await database.Migrator.MigrateAsync();
         await using SqliteConnection connection = await database.Factory.OpenAsync();
-        long pages = await ScalarLongAsync(connection, "PRAGMA page_count;");
         await using SqliteCommand limit = connection.CreateCommand();
-        limit.CommandText = $"PRAGMA max_page_count = {pages + 1}; CREATE TABLE simulated_fill(data BLOB);";
+        limit.CommandText = "CREATE TABLE simulated_fill(data BLOB);";
+        await limit.ExecuteNonQueryAsync();
+        long pages = await ScalarLongAsync(connection, "PRAGMA page_count;");
+        limit.CommandText = $"PRAGMA max_page_count = {pages};";
         await limit.ExecuteNonQueryAsync();
         await using SqliteCommand fill = connection.CreateCommand();
         fill.CommandText = "INSERT INTO simulated_fill(data) VALUES (zeroblob(10485760));";
@@ -400,19 +440,89 @@ public sealed class LocalSqliteStorageTests
     {
         await using var database = new TestDatabase();
         await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(2).ToArray());
-        await SeedContextAsync(database);
-        await database.Events().AppendWithOutboxAsync(
-            Added(EventId(1), 1),
-            Outbox(EventId(10), EventId(1)));
+        await SeedContextAsync(database, seedStationLineScope: false);
+        await InsertLegacyEventWithOutboxAsync(database.Factory);
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(3, result.AppliedCount);
+        Assert.AreEqual(9, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_event_corrections';"));
+    }
+
+    [TestMethod]
+    public async Task OutboxClaimRetriesWithLeaseAndStoresCentralReceipt()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedContextAsync(database);
+        var capturedAuthorization = new OutboxAuthorizationEvidence(
+            ActorProfileId, 4, StartedAt.AddHours(-1), StartedAt.AddHours(24), "VALID");
+        PendingOutboxMessage message = Outbox(EventId(10), EventId(1)) with
+        {
+            Authorization = capturedAuthorization,
+        };
+        await database.Events().AppendWithOutboxAsync(Added(EventId(1), 1), message);
+        var currentAuthorization = new OutboxAuthorizationEvidence(
+            Guid.NewGuid(), 9, StartedAt, StartedAt.AddHours(48), "VALID");
+        Guid firstClaim = Guid.NewGuid();
+
+        IReadOnlyList<ClaimedOutboxMessage> first = await database.Outbox().ClaimAsync(
+            StationId, firstClaim, 10, StartedAt.AddMinutes(2), StartedAt.AddMinutes(3), currentAuthorization);
+
+        Assert.AreEqual(1, first.Count);
+        Assert.AreEqual(1L, first[0].StationSequence);
+        Assert.AreEqual(1, first[0].AttemptCount);
+        Assert.AreEqual(ActorProfileId, first[0].Authorization.ActorProfileId);
+        await database.Outbox().CompleteClaimAsync(
+            firstClaim,
+            [new(message.Id, "RETRY_LATER", "NETWORK_UNAVAILABLE", null)],
+            StartedAt.AddMinutes(2),
+            _ => TimeSpan.FromSeconds(10));
+        Assert.AreEqual(0, (await database.Outbox().ClaimAsync(
+            StationId, Guid.NewGuid(), 10, StartedAt.AddMinutes(2).AddSeconds(9),
+            StartedAt.AddMinutes(4), currentAuthorization)).Count);
+
+        Guid secondClaim = Guid.NewGuid();
+        IReadOnlyList<ClaimedOutboxMessage> second = await database.Outbox().ClaimAsync(
+            StationId, secondClaim, 10, StartedAt.AddMinutes(2).AddSeconds(10),
+            StartedAt.AddMinutes(4), currentAuthorization);
+        Guid receiptId = Guid.NewGuid();
+        Assert.AreEqual(2, second[0].AttemptCount);
+        await database.Outbox().CompleteClaimAsync(
+            secondClaim,
+            [new(message.Id, "APPLIED", "APPLIED", receiptId)],
+            StartedAt.AddMinutes(2).AddSeconds(11),
+            _ => TimeSpan.Zero);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual("SYNCED", await ScalarTextAsync(
+            connection, "SELECT state FROM outbox_messages WHERE id = '50000000-0000-4000-8000-000000000010';"));
+        Assert.AreEqual(receiptId.ToString("D"), await ScalarTextAsync(
+            connection, "SELECT central_receipt_id FROM outbox_messages WHERE id = '50000000-0000-4000-8000-000000000010';"));
+    }
+
+    [TestMethod]
+    [TestCategory("SyncChaos")]
+    public async Task ExpiredOutboxLeaseIsRecoveredAfterRestart()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedContextAsync(database);
+        await database.Events().AppendWithOutboxAsync(Added(EventId(1), 1), Outbox(EventId(10), EventId(1)));
+        var authorization = new OutboxAuthorizationEvidence(
+            ActorProfileId, 1, StartedAt.AddHours(-1), StartedAt.AddHours(24), "VALID");
+        await database.Outbox().ClaimAsync(
+            StationId, Guid.NewGuid(), 10, StartedAt, StartedAt.AddMinutes(1), authorization);
+
+        IReadOnlyList<ClaimedOutboxMessage> recovered = await database.Outbox().ClaimAsync(
+            StationId, Guid.NewGuid(), 10, StartedAt.AddMinutes(1), StartedAt.AddMinutes(2), authorization);
+
+        Assert.AreEqual(1, recovered.Count);
+        Assert.AreEqual(2, recovered[0].AttemptCount);
     }
 
     [TestMethod]
@@ -443,6 +553,36 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("Juan", snapshot.PreviousResponsibleName);
         Assert.AreEqual(1, snapshot.Total);
         Assert.AreEqual(3, snapshot.PendingOutboxCount);
+
+        var authorization = new OutboxAuthorizationEvidence(
+            ActorProfileId,
+            1,
+            StartedAt.AddHours(-1),
+            StartedAt.AddHours(24),
+            "VALID");
+        Guid claimId = Guid.NewGuid();
+        IReadOnlyList<ClaimedOutboxMessage> claimed = await database.Outbox().ClaimAsync(
+            StationId,
+            claimId,
+            10,
+            StartedAt.AddHours(1).AddMinutes(2),
+            StartedAt.AddHours(1).AddMinutes(3),
+            authorization);
+        Assert.AreEqual(3, claimed.Count);
+        await database.Outbox().CompleteClaimAsync(
+            claimId,
+            [
+                new(claimed[0].Message.Id, "APPLIED", "APPLIED", Guid.NewGuid()),
+                new(claimed[1].Message.Id, "FAILED_REVIEW", "INVALID_EVENT", Guid.NewGuid()),
+                new(claimed[2].Message.Id, "RETRY_LATER", "REQUEST_TIMEOUT", null),
+            ],
+            StartedAt.AddHours(1).AddMinutes(2),
+            _ => TimeSpan.FromSeconds(10));
+
+        LocalOperationDashboardSnapshot afterSync = await database.Dashboard().GetAsync(StationId);
+        Assert.AreEqual(1, afterSync.PendingOutboxCount);
+        Assert.AreEqual(1, afterSync.FailedReviewOutboxCount);
+        Assert.AreEqual(1, afterSync.SyncedOutboxCount);
     }
 
     [TestMethod]
@@ -459,6 +599,113 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("Línea 1", snapshot.LineName);
         Assert.AreEqual(0, snapshot.Total);
         Assert.AreEqual(0, snapshot.PendingOutboxCount);
+    }
+
+    [TestMethod]
+    public async Task StationCatalogAndDashboardExcludeLinesAssignedToAnotherStation()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        SqliteCatalogRepository catalogs = database.Catalogs();
+        await catalogs.UpsertLineAsync(new CachedProductionLine(
+            LineId, OrganizationId, PlantId, "Línea 1", true, StartedAt));
+        await catalogs.UpsertLineAsync(new CachedProductionLine(
+            SecondLineId, OrganizationId, PlantId, "Línea 2", true, StartedAt));
+        await SeedStationLineScopeAsync(database, StationId, LineId);
+        await SeedStationLineScopeAsync(database, SecondStationId, SecondLineId);
+
+        IReadOnlyList<CachedProductionLine> firstStationLines = await catalogs.ListActiveLinesAsync(
+            OrganizationId,
+            PlantId,
+            StationId);
+        IReadOnlyList<CachedProductionLine> secondStationLines = await catalogs.ListActiveLinesAsync(
+            OrganizationId,
+            PlantId,
+            SecondStationId);
+        IReadOnlyList<LocalOperationDashboardSnapshot> firstDashboard = await database.Dashboard()
+            .ListAsync(StationId);
+
+        Assert.HasCount(1, firstStationLines);
+        Assert.AreEqual(LineId, firstStationLines[0].Id);
+        Assert.HasCount(1, secondStationLines);
+        Assert.AreEqual(SecondLineId, secondStationLines[0].Id);
+        Assert.HasCount(1, firstDashboard);
+        Assert.AreEqual(LineId, firstDashboard[0].LineId);
+    }
+
+    [TestMethod]
+    public async Task IncrementalPullAppliesPageAndCursorAtomically()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        var repository = new SqliteSyncChangeRepository(database.Factory);
+        Guid supplierId = Guid.NewGuid();
+        using JsonDocument supplier = JsonDocument.Parse($$"""
+            {"id":"{{supplierId:D}}","organization_id":"{{OrganizationId:D}}",
+             "name":"Proveedor incremental","is_active":true,"updated_at":"{{StartedAt:O}}"}
+            """);
+        var first = new SyncPullPage(
+            1, null, "cursor-1", false, StartedAt,
+            [new SyncChange(Guid.NewGuid(), 1, "SUPPLIER", supplierId, 1, "UPSERT",
+                StartedAt, 1, supplier.RootElement.Clone())]);
+
+        await repository.ApplyPageAsync(first);
+
+        Assert.AreEqual("cursor-1", await repository.GetCursorAsync());
+        CachedSupplier cached = (await database.Catalogs().FindSupplierAsync(supplierId))!;
+        Assert.AreEqual("Proveedor incremental", cached.Name);
+
+        using JsonDocument invalid = JsonDocument.Parse($$"""
+            {"id":"{{Guid.NewGuid():D}}","organization_id":"{{OrganizationId:D}}","is_active":true}
+            """);
+        var second = new SyncPullPage(
+            1, "cursor-1", "cursor-2", false, StartedAt.AddMinutes(1),
+            [new SyncChange(Guid.NewGuid(), 2, "SUPPLIER", Guid.NewGuid(), 2, "UPSERT",
+                StartedAt.AddMinutes(1), 1, invalid.RootElement.Clone())]);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => repository.ApplyPageAsync(second));
+        Assert.AreEqual("cursor-1", await repository.GetCursorAsync());
+    }
+
+    [TestMethod]
+    public async Task DiagnosticsExposeClockAndSafeAdministrativeCorrection()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        var time = new MutableTimeProvider(StartedAt.AddSeconds(7));
+        var repository = new SqliteSyncChangeRepository(database.Factory, time);
+        using JsonDocument correction = JsonDocument.Parse("""
+            {
+              "administrator":"Administrador de prueba",
+              "role_code":"ADMINISTRADOR",
+              "reason_code":"CAMBIO_AUTORIZADO",
+              "event_action":"business.mutation",
+              "target_entity_type":"supplier",
+              "occurred_at_utc":"2026-08-26T12:00:00Z",
+              "changes":{"name":{"before":"Anterior","after":"Corregido"}}
+            }
+            """);
+        var page = new SyncPullPage(
+            1, null, "cursor-diagnostic", false, StartedAt,
+            [new SyncChange(Guid.NewGuid(), 1, "ADMINISTRATIVE_CORRECTION", Guid.NewGuid(), 1,
+                "CORRECTION_APPENDED", StartedAt, 1, correction.RootElement.Clone())]);
+
+        await repository.ApplyPageAsync(page);
+        LocalDatabaseHealth health = await new SqliteDatabaseDiagnostics(
+            database.Factory, time, Options.Create(new LocalRecoveryOptions())).InspectAsync();
+
+        Assert.AreEqual(-7d, health.ClockDeviationSeconds);
+        Assert.AreEqual(time.GetUtcNow(), health.LastSynchronizationAt);
+        Assert.AreEqual("AVAILABLE", health.SyncNetworkState);
+        Assert.HasCount(1, health.Corrections!);
+        Assert.AreEqual("Administrador de prueba", health.Corrections![0].Administrator);
+        Assert.AreEqual("name: Anterior → Corregido", health.Corrections[0].Changes.Single());
+
+        await repository.RecordPullFailureAsync("NETWORK_UNAVAILABLE", StartedAt.AddMinutes(1));
+        LocalDatabaseHealth offline = await new SqliteDatabaseDiagnostics(
+            database.Factory, time, Options.Create(new LocalRecoveryOptions())).InspectAsync();
+        Assert.AreEqual("UNAVAILABLE", offline.SyncNetworkState);
+        Assert.AreEqual("NETWORK_UNAVAILABLE", offline.LastSyncErrorCode);
     }
 
     [TestMethod]
@@ -515,6 +762,7 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    [TestCategory("SyncChaos")]
     public async Task RepeatingSameCommandDoesNotDuplicateEventOutboxOrCounter()
     {
         await using var database = new TestDatabase();
@@ -1094,6 +1342,7 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    [TestCategory("SyncChaos")]
     public async Task OfflineShiftPreservesTwoShipmentsReliefs120CajuelasReversalsAndRestarts()
     {
         await using var database = new TestDatabase();
@@ -1250,13 +1499,17 @@ public sealed class LocalSqliteStorageTests
         Assert.ThrowsExactly<UnauthorizedAccessException>(() => OperationAuthority.From(state));
     }
 
-    private static async Task SeedContextAsync(TestDatabase database)
+    private static async Task SeedContextAsync(
+        TestDatabase database,
+        bool seedStationLineScope = true)
     {
-        await SeedSelectableCatalogsAsync(database);
+        await SeedSelectableCatalogsAsync(database, seedStationLineScope);
         await database.Shipments().UpsertAsync(Shipment());
     }
 
-    private static async Task SeedSelectableCatalogsAsync(TestDatabase database)
+    private static async Task SeedSelectableCatalogsAsync(
+        TestDatabase database,
+        bool seedStationLineScope = true)
     {
         SqliteCatalogRepository catalogs = database.Catalogs();
         await catalogs.UpsertSupplierAsync(Supplier());
@@ -1273,6 +1526,10 @@ public sealed class LocalSqliteStorageTests
             "Línea 1",
             true,
             StartedAt));
+        if (seedStationLineScope)
+        {
+            await SeedStationLineScopeAsync(database, StationId, LineId);
+        }
         await catalogs.UpsertWorkerAsync(new CachedWorker(
             SecondWorkerId,
             OrganizationId,
@@ -1285,6 +1542,36 @@ public sealed class LocalSqliteStorageTests
             "Carlos",
             true,
             StartedAt));
+    }
+
+    private static async Task SeedStationLineScopeAsync(
+        TestDatabase database,
+        Guid stationId,
+        Guid lineId)
+    {
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO sync_entity_cache(
+                entity_type, entity_id, entity_version, action,
+                payload_json, payload_hash, changed_at_utc)
+            VALUES (
+                'STATION_LINE_SCOPE', $lineId, 1, 'UPSERT',
+                json_object(
+                    'organization_id', $organizationId,
+                    'plant_id', $plantId,
+                    'station_id', $stationId,
+                    'production_line_id', $lineId,
+                    'is_active', json('true')),
+                $hash, $changedAtUtc);
+            """;
+        command.Parameters.AddWithValue("$organizationId", OrganizationId.ToString("D"));
+        command.Parameters.AddWithValue("$plantId", PlantId.ToString("D"));
+        command.Parameters.AddWithValue("$stationId", stationId.ToString("D"));
+        command.Parameters.AddWithValue("$lineId", lineId.ToString("D"));
+        command.Parameters.AddWithValue("$hash", $"scope-{stationId:D}-{lineId:D}");
+        command.Parameters.AddWithValue("$changedAtUtc", StartedAt.ToString("O", CultureInfo.InvariantCulture));
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task<LocalOperationContext> StartOperationAsync(LocalOperationService service)
@@ -1346,7 +1633,13 @@ public sealed class LocalSqliteStorageTests
             StartedAt.AddMinutes(sequence).AddMilliseconds(25));
 
     private static PendingOutboxMessage Outbox(Guid id, Guid aggregateId) =>
-        new(id, "PRODUCTION_EVENT_CREATED", "production_event", aggregateId, "{}", StartedAt);
+        new(
+            id,
+            "PRODUCTION_EVENT_CREATED",
+            "production_event",
+            aggregateId,
+            $"{{\"schemaVersion\":2,\"stationId\":\"{StationId:D}\"}}",
+            StartedAt);
 
     private static Guid EventId(int suffix) =>
         Guid.Parse($"50000000-0000-4000-8000-{suffix:D12}");
@@ -1392,6 +1685,44 @@ public sealed class LocalSqliteStorageTests
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         return await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task InsertLegacyEventWithOutboxAsync(SqliteConnectionFactory factory)
+    {
+        ProductionEvent productionEvent = Added(EventId(1), 1);
+        await using SqliteConnection connection = await factory.OpenAsync();
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO production_events(
+                client_event_id, organization_id, plant_id, station_id, line_id,
+                feed_cycle_id, shipment_id, responsible_worker_id, event_type,
+                work_period, occurred_at_utc, recorded_at_utc, client_sequence,
+                reverses_client_event_id)
+            VALUES ($eventId, $organizationId, $plantId, $stationId, $lineId,
+                $cycleId, $shipmentId, $workerId, 'CAJUELA_ADDED', 'DAY',
+                $occurredAt, $recordedAt, 1, NULL);
+            INSERT INTO outbox_messages(
+                id, operation_type, aggregate_type, aggregate_id, payload_json,
+                state, attempt_count, created_at_utc, updated_at_utc)
+            VALUES ($outboxId, 'PRODUCTION_EVENT_CREATED', 'production_event', $eventId,
+                $payload, 'PENDING', 0, $recordedAt, $recordedAt);
+            """;
+        command.Parameters.AddWithValue("$eventId", productionEvent.ClientEventId.ToString("D"));
+        command.Parameters.AddWithValue("$organizationId", OrganizationId.ToString("D"));
+        command.Parameters.AddWithValue("$plantId", PlantId.ToString("D"));
+        command.Parameters.AddWithValue("$stationId", StationId.ToString("D"));
+        command.Parameters.AddWithValue("$lineId", LineId.ToString("D"));
+        command.Parameters.AddWithValue("$cycleId", CycleId.ToString("D"));
+        command.Parameters.AddWithValue("$shipmentId", ShipmentId.ToString("D"));
+        command.Parameters.AddWithValue("$workerId", WorkerId.ToString("D"));
+        command.Parameters.AddWithValue("$occurredAt", productionEvent.OccurredAt.ToString("O"));
+        command.Parameters.AddWithValue("$recordedAt", productionEvent.RecordedAt.ToString("O"));
+        command.Parameters.AddWithValue("$outboxId", EventId(10).ToString("D"));
+        command.Parameters.AddWithValue("$payload", Outbox(EventId(10), EventId(1)).PayloadJson);
+        await command.ExecuteNonQueryAsync();
+        transaction.Commit();
     }
 
     private static void DeleteRoot(string root)

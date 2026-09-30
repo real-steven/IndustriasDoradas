@@ -12,7 +12,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private object currentPage;
 
     public MainWindowViewModel(HomeViewModel home, DiagnosticsViewModel diagnostics)
-        : this(home, diagnostics, null, null)
+        : this(home, diagnostics, null, null, null, null)
     {
     }
 
@@ -20,7 +20,7 @@ public sealed class MainWindowViewModel : ObservableObject
         HomeViewModel home,
         DiagnosticsViewModel diagnostics,
         StationViewModel? station)
-        : this(home, diagnostics, station, null)
+        : this(home, diagnostics, station, null, null, null)
     {
     }
 
@@ -29,16 +29,48 @@ public sealed class MainWindowViewModel : ObservableObject
         DiagnosticsViewModel diagnostics,
         StationViewModel? station,
         OperationViewModel? operation)
+        : this(home, diagnostics, station, operation, null, null)
+    {
+    }
+
+    public MainWindowViewModel(
+        HomeViewModel home,
+        DiagnosticsViewModel diagnostics,
+        StationViewModel? station,
+        OperationViewModel? operation,
+        AuditViewModel? audit)
+        : this(home, diagnostics, station, operation, audit, null)
+    {
+    }
+
+    public MainWindowViewModel(
+        HomeViewModel home,
+        DiagnosticsViewModel diagnostics,
+        StationViewModel? station,
+        OperationViewModel? operation,
+        AuditViewModel? audit,
+        SettingsViewModel? settings)
     {
         Home = home;
         Diagnostics = diagnostics;
         Station = station;
         Operation = operation;
+        Audit = audit;
+        Settings = settings;
         currentPage = operation ?? (object?)station ?? home;
         ShowHomeCommand = new RelayCommand(() => CurrentPage = Home);
         ShowDiagnosticsCommand = new RelayCommand(
             () => CurrentPage = Diagnostics,
             CanShowDiagnostics);
+        ShowAuditCommand = new RelayCommand(
+            () => CurrentPage = Audit!,
+            CanShowAudit);
+        ShowAuditCorrectionsCommand = new RelayCommand(
+            ShowAuditCorrections,
+            CanShowAuditCorrections);
+        ShowSettingsCommand = new RelayCommand(
+            () => CurrentPage = Settings!,
+            CanShowSettings);
         ShowStationCommand = new RelayCommand(
             () => CurrentPage = Station!,
             () => Station is not null);
@@ -46,6 +78,7 @@ public sealed class MainWindowViewModel : ObservableObject
             ShowOperationAsync,
             () => Operation is not null);
         if (Station is not null) Station.PropertyChanged += OnStationPropertyChanged;
+        Diagnostics.PropertyChanged += OnDiagnosticsPropertyChanged;
     }
 
     public HomeViewModel Home { get; }
@@ -53,18 +86,54 @@ public sealed class MainWindowViewModel : ObservableObject
     public DiagnosticsViewModel Diagnostics { get; }
     public StationViewModel? Station { get; }
     public OperationViewModel? Operation { get; }
+    public AuditViewModel? Audit { get; }
+    public SettingsViewModel? Settings { get; }
 
     public object CurrentPage
     {
         get => currentPage;
-        private set => SetProperty(ref currentPage, value);
+        private set
+        {
+            if (!SetProperty(ref currentPage, value)) return;
+            OnPropertyChanged(nameof(IsHomePage));
+            OnPropertyChanged(nameof(IsOperationPage));
+            OnPropertyChanged(nameof(IsStationPage));
+            OnPropertyChanged(nameof(IsAuditPage));
+            OnPropertyChanged(nameof(IsDiagnosticsPage));
+            OnPropertyChanged(nameof(IsSettingsPage));
+            OnPropertyChanged(nameof(CurrentPageTitle));
+        }
     }
+
+    public bool IsStationOpen => Station?.IsStationOpen ?? true;
+    public bool IsPlantManager => Station?.IsPlantManager ?? false;
+    public bool IsHomePage => ReferenceEquals(CurrentPage, Home);
+    public bool IsOperationPage => ReferenceEquals(CurrentPage, Operation);
+    public bool IsStationPage => ReferenceEquals(CurrentPage, Station);
+    public bool IsAuditPage => ReferenceEquals(CurrentPage, Audit);
+    public bool IsDiagnosticsPage => ReferenceEquals(CurrentPage, Diagnostics);
+    public bool IsSettingsPage => ReferenceEquals(CurrentPage, Settings);
+    public string CurrentPageTitle => CurrentPage switch
+    {
+        OperationViewModel => "Modo Operación",
+        StationViewModel => "Estación",
+        AuditViewModel => "Auditoría",
+        SettingsViewModel => "Configuración",
+        DiagnosticsViewModel => "Diagnóstico",
+        _ => "Inicio",
+    };
 
     public IRelayCommand ShowHomeCommand { get; }
 
     public IRelayCommand ShowDiagnosticsCommand { get; }
+    public IRelayCommand ShowAuditCommand { get; }
+    public IRelayCommand ShowAuditCorrectionsCommand { get; }
+    public IRelayCommand ShowSettingsCommand { get; }
     public IRelayCommand ShowStationCommand { get; }
     public IRelayCommand ShowOperationCommand { get; }
+    public bool HasCorrectionNotification => Diagnostics.HasCorrections &&
+        (Station is null || Station.IsPlantManager);
+    public string CorrectionNotification => Diagnostics.CorrectionNotification;
 
     public async Task InitializeAsync()
     {
@@ -91,7 +160,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void RecordActivity() => Station?.RecordActivity();
 
-    private bool CanShowDiagnostics() => Station is null || Station.Mode == StationMode.PlantManager;
+    private static bool CanShowDiagnostics() => true;
+    private bool CanShowAudit() => Audit is not null;
+    private bool CanShowAuditCorrections() => Audit is not null &&
+        (Station is null || Station.IsPlantManager);
+    private bool CanShowSettings() => Settings is not null &&
+        (Station is null || Station.IsPlantManager);
 
     private async Task ShowOperationAsync()
     {
@@ -100,13 +174,45 @@ public sealed class MainWindowViewModel : ObservableObject
         CurrentPage = Operation;
     }
 
+    private void ShowAuditCorrections()
+    {
+        if (Audit is null) return;
+        Audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
+        CurrentPage = Audit;
+    }
+
     private void OnStationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(StationViewModel.Mode)) return;
-        ShowDiagnosticsCommand.NotifyCanExecuteChanged();
-        if (!CanShowDiagnostics() && ReferenceEquals(CurrentPage, Diagnostics))
+        if (e.PropertyName == nameof(StationViewModel.IsStationOpen))
         {
-            CurrentPage = Operation ?? (object)Home;
+            OnPropertyChanged(nameof(IsStationOpen));
+            if (Station?.IsStationOpen == true)
+            {
+                CurrentPage = Home;
+            }
+            return;
         }
+
+        if (e.PropertyName == nameof(StationViewModel.Mode))
+        {
+            OnPropertyChanged(nameof(IsPlantManager));
+            ShowDiagnosticsCommand.NotifyCanExecuteChanged();
+            ShowAuditCommand.NotifyCanExecuteChanged();
+            ShowAuditCorrectionsCommand.NotifyCanExecuteChanged();
+            ShowSettingsCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(HasCorrectionNotification));
+            if (!CanShowSettings() && ReferenceEquals(CurrentPage, Settings))
+            {
+                CurrentPage = Operation ?? (object)Home;
+            }
+        }
+    }
+
+    private void OnDiagnosticsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(DiagnosticsViewModel.HasCorrections) or
+            nameof(DiagnosticsViewModel.CorrectionNotification))) return;
+        OnPropertyChanged(nameof(HasCorrectionNotification));
+        OnPropertyChanged(nameof(CorrectionNotification));
     }
 }
