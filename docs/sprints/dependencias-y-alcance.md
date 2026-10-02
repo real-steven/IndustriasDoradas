@@ -12,7 +12,7 @@ Línea base/arquitectura/CI
  → indicadores/Excel/entrega
 ```
 
-La web necesita datos centrales sincronizados; una barrida necesita cajuelas válidas; el rendimiento necesita cargamento + producción + oro certificado. Por ello no se empieza por dashboards o Excel.
+La web necesita datos centrales sincronizados; una barrida necesita cajuelas válidas; el rendimiento necesita cargamento + producción + oro registrado por gerencia. Por ello no se empieza por dashboards o Excel.
 
 ## Contexto físico confirmado
 

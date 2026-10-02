@@ -136,9 +136,9 @@ const PERMISSION_GROUPS: readonly PermissionGroupDefinition[] = [
   },
   {
     id: "control",
-    title: "Asistencia e inventario",
-    description: "Asistencia, inventario y entregas de oro.",
-    prefixes: ["attendance.", "inventory.", "gold_deliveries."],
+    title: "Asistencia, inventario y oro",
+    description: "Asistencia, inventario y gestión delegada de oro.",
+    prefixes: ["attendance.", "inventory.", "gold.", "gold_"],
   },
   {
     id: "oversight",

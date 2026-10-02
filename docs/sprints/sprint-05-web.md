@@ -9,7 +9,7 @@
 1. Read models solo después de estabilizar eventos.
 2. API paginada con fecha, planta, línea, jornada, proveedor, responsable y cargamento.
 3. Dashboard: línea activa, cajuelas, cercanía de barrida, última sync y alertas.
-4. Oro bajo custodia y entrega: notificación, confirmación/rechazo y discrepancia.
+4. Oro bajo custodia y entrega: registro, corrección, confirmación/rechazo y discrepancia para `JEFE_EMPRESA` o administradores expresamente autorizados.
 5. Historial/detalle/auditoría, diferenciando hora de dispositivo/servidor.
 6. React mobile-first bilingüe; vacío/carga/error/offline en Safari iOS y Chrome.
 7. Una cuenta jefe de empresa; navegación orientada a datos y módulo Administración separado, con edición auditada y permisos granulares de administradores.
@@ -44,7 +44,7 @@
 
 ### 5.4 Resumen operativo web
 
-**Prompt:** Implementa dashboard React con líneas operando/detenidas, cajuelas totales/progreso, cargamento/proveedor, jornada, responsable, novedades, barridas, oro y última sincronización. Usa TanStack Query, i18n y componentes accesibles; no agregues gráficos sin decisión asociada.
+**Prompt:** Implementa dashboard React con líneas operando/detenidas, cajuelas totales/progreso, cargamento/proveedor, jornada, responsable, novedades, barridas, oro y última sincronización. Las cantidades de oro solo se solicitan y muestran a `JEFE_EMPRESA` o administradores con permiso de lectura de oro. Usa TanStack Query, i18n y componentes accesibles; no agregues gráficos sin decisión asociada.
 
 **Pausa:** comparar cada tarjeta con API/desktop y distinguir claramente estación desactualizada.
 
@@ -80,6 +80,6 @@
 
 ### 5.10 E2E y aceptación gerencial
 
-**Prompt:** Automatiza E2E es/en: login gerencial único→dashboard→línea→cargamento→barrida→entrega de oro→auditoría→Administración→permisos. Verifica revocación inmediata y distintas cuentas administrativas por área en iPhone/Android/PC; impide autoasignación, delegación fuera del subconjunto y fuga de permisos/caché, compara totales y corrige críticos/altos.
+**Prompt:** Automatiza E2E es/en: login gerencial único→dashboard→línea→cargamento→barrida→registro/entrega de oro→auditoría→Administración→permisos. Verifica un administrador sin acceso, otro con lectura y otro con edición de oro; comprueba revocación inmediata y distintas cuentas administrativas por área en iPhone/Android/PC. Impide autoasignación, delegación fuera del subconjunto y fuga de permisos/caché, compara totales y corrige críticos/altos.
 
 **Pausa:** gerente completa tareas sin ayuda; compuerta aprobada.

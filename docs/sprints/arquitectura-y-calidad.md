@@ -25,7 +25,7 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
   distintos.
 - La alerta de barrida es configurable, inicialmente cada 50 cajuelas, visible/sonora en los intervalos 50–55, 100–105, etc.; no bloquea producción.
 - Una barrida real puede incluir menos, exactamente o más de 50 cajuelas y siempre existe una barrida final al terminar el cargamento.
-- Mercurio y oro se registran por barrida; el oro definitivo del cargamento es la suma de resultados certificados.
+- Desktop registra cargas, recargas y recuperación de mercurio por rastra; `JEFE_EMPRESA` o un administrador expresamente autorizado registra oro por barrida desde web y el definitivo del cargamento es la suma de esos resultados.
 - Interfaz y reportes web soportan español/inglés con preferencia por cuenta.
 - Jefe de empresa consulta/exporta y actúa como superadministrador; cada administrador modifica o consulta solo según concesiones; jefe de planta abre la estación y eleva permisos; Modo Operación compartido registra cajuelas y asistencia sin cuenta de operario.
 - La cuenta `JEFE_EMPRESA` es única y presenta Administración como módulo separado dentro de la misma sesión.
@@ -37,7 +37,7 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
 
 1. Organizar por negocio (`production`, `sweeps`, `attendance`, `inventory`), no por carpetas globales gigantes.
 2. Presentación → caso de uso → dominio → infraestructura. Un controlador o ViewModel no contiene SQL ni fórmulas.
-3. Reglas como intervalos de alerta, barridas reales, consolidación de oro y conversiones viven en servicios de dominio probados.
+3. Reglas como intervalos de alerta, barridas reales, mercurio por rastra, consolidación gerencial de oro y conversiones viven en servicios de dominio probados.
 4. No crear abstracciones “por si acaso”, excepto puertos necesarios de almacenamiento, reloj, cámara, entrada y sincronización.
 5. No duplicar reglas entre clientes; la API es autoridad central.
 6. Producción, barridas, oro, asistencia, inventario y entregas son eventos/movimientos trazables; errores se compensan y auditan, no se borran.

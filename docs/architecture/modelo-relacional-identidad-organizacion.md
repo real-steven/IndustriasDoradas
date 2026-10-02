@@ -180,7 +180,9 @@ Catálogo inicial propuesto (`—` significa no concedido):
 | `profile.locale_update` | Siempre | Base fija | Sí |
 
 Los permisos de asistencia, inventario y oro reservan la autoridad ya aprobada,
-pero no implementan esas funciones antes de sus sprints. Registrar cajuelas,
+pero no implementan esas funciones antes de sus sprints. Oro y entregas solo
+existen en web: `JEFE_EMPRESA` siempre accede y puede delegar capacidades
+específicas a administradores. Registrar cajuelas,
 reverso inmediato y check-in/out desde `Modo Operación` se autoriza mediante la
 política firmada de estación, no mediante un perfil o fila en
 `role_permissions`.

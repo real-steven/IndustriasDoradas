@@ -230,6 +230,14 @@ en
   todos los permisos activos desde una sola cuenta. La experiencia web presenta
   primero datos/reportes y mantiene las ediciones en un módulo separado dentro
   de la misma sesión.
+- **Oro restringido al canal web:** `JEFE_EMPRESA` siempre controla cantidades,
+  correcciones, custodia y entregas de oro, y puede delegar capacidades
+  específicas a `ADMINISTRADOR`. La autorización se evalúa por acción y puede
+  revocarse; ninguna cantidad de oro se replica en vistas o SQLite de desktop.
+- **Mercurio operativo por rastra:** desktop registra cargas, recargas y
+  recuperaciones en gramos por rastra, línea y cargamento. Rastra es equipo físico
+  y no equivale a barrida; una recuperación puede relacionarse con la barrida que
+  cerró ese tramo. Las correcciones son aditivas y auditadas.
 - **Administración granular:** `ADMINISTRADOR` combina permisos base mínimos con
   concesiones individuales vigentes. Jefe de empresa crea la cuenta y selecciona
   sus permisos; una revocación se consulta en cada solicitud y surte efecto sin

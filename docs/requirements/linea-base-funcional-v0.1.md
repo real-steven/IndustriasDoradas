@@ -58,14 +58,15 @@ Existen tres roles autenticados y un modo operativo compartido. `JEFE_EMPRESA` e
 
 | Rol | Canal | Facultades confirmadas |
 |---|---|---|
-| Jefe de empresa | Web | Superadministrador permanente: consulta toda la operación, estadísticas, notificaciones, auditoría y reportes; puede ejecutar los casos de uso administrativos y operativos de todos los módulos, crear administradores, seleccionar/editar sus permisos y suspenderlos. La interfaz prioriza datos y separa las ediciones en un módulo de Administración dentro de la misma sesión. |
+| Jefe de empresa | Web | Superadministrador permanente: consulta toda la operación, estadísticas, notificaciones, auditoría y reportes; puede ejecutar los casos de uso administrativos y operativos de todos los módulos, crear administradores, seleccionar/editar sus permisos y suspenderlos. Siempre posee el control completo del oro y puede delegar capacidades específicas a administradores de confianza. La interfaz prioriza datos y separa las ediciones en un módulo de Administración dentro de la misma sesión. |
 | Administrador | Web | Cuenta de privilegio mínimo. Solo consulta o modifica los módulos concedidos individualmente. Puede llegar a tener acceso amplio si un jefe de empresa lo decide. Solo crea administradores, gobierna sus estados o asigna permisos cuando recibe cada capacidad específica. |
-| Jefe de planta | Desktop | Inicia y habilita la estación; solicita trabajadores; gestiona proveedores e inventario; asigna responsables; registra/certifica mercurio y oro; revisa asistencia pendiente reciente y corrige durante el ciclo abierto. Eleva temporalmente permisos mediante su PIN individual. |
+| Jefe de planta | Desktop | Inicia y habilita la estación; solicita trabajadores; gestiona proveedores e inventario; asigna responsables; registra cargas, recargas y recuperación de mercurio por rastra; revisa asistencia pendiente reciente y corrige durante el ciclo abierto. No consulta ni registra cantidades de oro. Eleva temporalmente permisos mediante su PIN individual. |
 | Modo Operación | Desktop compartido | No es una cuenta ni un rol de Supabase. Mantiene el flujo continuo, registra/revierte cajuelas y permite check-in/out; no accede a administración, inventario, certificaciones ni correcciones profundas. |
 
 Reglas de acceso:
 
 - El gerente usa una única cuenta `JEFE_EMPRESA`; no necesita cerrar sesión ni mantener una cuenta administrativa paralela.
+- Las cantidades de oro se gestionan únicamente en web. `JEFE_EMPRESA` siempre tiene acceso y puede conceder o revocar capacidades específicas de consulta, registro, corrección, custodia o entrega a administradores de confianza. Desktop no muestra esos valores al jefe de planta ni al Modo Operación.
 - Un administrador que también es jefe de planta puede acceder a ambos sistemas con sus credenciales correspondientes.
 - Jefe de empresa crea la cuenta administrativa y elige sus permisos iniciales. Puede añadirlos, retirarlos, suspenderla o reactivarla después.
 - Un administrador solo crea otra cuenta administrativa con `administrators.create`; solo cambia permisos con `administrators.permissions.manage`, y nunca puede conceder o retirar una capacidad que él mismo no posea. No puede modificar sus propios permisos.
@@ -109,7 +110,7 @@ Reglas de acceso:
   puede acumular varios responsables secuenciales mediante relevos auditados.
   Un operario puede responder simultáneamente por otros cargamentos/líneas sin
   privilegios adicionales. Ayudantes y demás operarios no se asignan a la línea.
-- La línea asignada lleva el conteo, barridas, mercurio y oro del cargamento.
+- La línea asignada lleva el conteo, las barridas y los movimientos de mercurio del cargamento. Gerencia vincula posteriormente el resultado de oro con esa línea y cargamento desde web.
 - La barrida no cierra el cargamento.
 - Al agotarse el material termina la alimentación de ese ciclo; el material ya introducido sigue su curso hasta obtener amalgama y oro.
 - Un nuevo cargamento puede comenzar sin crear una nueva jornada.
@@ -146,31 +147,37 @@ Reglas de acceso:
 - Como referencia visual adicional, la primera meta de barrida es 250 cajuelas. Al alcanzar una meta sin barrer, queda visible `Barrida pendiente`, la barra inicia un nuevo tramo de 250 y el denominador avanza: por ejemplo, `250/500`.
 - La referencia de 250 no bloquea la alimentación ni obliga a barrer exactamente en el umbral. Si la barrida real ocurre en 260, la próxima meta es 510 y la vista parte de `260/510`.
 - Registrar una barrida conserva el total acumulado, cierra únicamente el tramo físico barrido y calcula la siguiente referencia como cantidad acumulada de la barrida más 250.
-- Al intentar cerrar un cargamento sin barrida final registrada, el sistema advierte que existe una barrida pendiente y ofrece confirmar la barrida física. Mercurio y oro pueden completarse en ese momento o quedar pendientes.
+- Al intentar cerrar un cargamento sin barrida final registrada, el sistema advierte que existe una barrida pendiente y ofrece confirmar la barrida física. Los movimientos de mercurio pueden completarse en ese momento o quedar pendientes; el oro se registra posteriormente y solo desde la web gerencial.
 - El cargamento se cierra después de registrar la barrida final; de esta forma, la línea no mezcla cajuelas ni resultados de cargamentos distintos.
 
 ## 7. Mercurio y oro
 
-- El mercurio se registra después de cada barrida.
-- La unidad definitiva del mercurio recuperado es gramos. Acepta enteros o hasta dos decimales, no permite negativos y no aplica por ahora un máximo rígido.
-- El operario puede medir o comunicar el resultado; el jefe de planta lo verifica, registra y certifica.
-- Cada barrida produce un resultado parcial de oro en gramos.
-- El resultado definitivo del cargamento es la suma automática de sus barridas
-  en la única línea asignada.
-- Los totales se consultan por barrida, línea, jornada, día, cargamento y proveedor.
-- El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
-- Mercurio y oro pueden quedar vacíos al registrar la barrida para no detener la producción. Vacío significa pendiente de medir o certificar; `0,00` significa medido con resultado cero.
-- Las mediciones pendientes se completan después mediante una acción de dominio auditada disponible en Modo Jefe de Planta, incluso si el cargamento ya se cerró. El evento original y cada modificación se conservan; la auditoría no se edita.
+### Mercurio operativo
+
+- Cada línea posee actualmente tres rastras. Rastra y barrida son conceptos distintos: la rastra es equipo físico; la barrida es una limpieza real que agrupa eventos de cajuelas.
+- El jefe de planta registra en desktop, con elevación temporal, cuánto mercurio se cargó realmente en cada rastra. Puede hacerlo al preparar la línea o completarlo después para no bloquear producción.
+- Una recarga se conserva como un movimiento adicional; no se suma dentro del texto de una medición ni reemplaza la carga anterior.
+- Al efectuar la barrida o terminar el proceso, el jefe de planta registra por rastra cuánto mercurio quedó o fue recuperado. El dato puede quedar pendiente y completarse después, incluso si el cargamento ya se cerró.
+- Carga, recarga y recuperación se expresan en gramos, aceptan enteros o hasta dos decimales, rechazan negativos y no tienen por ahora un máximo rígido. Vacío significa pendiente y `0,00` significa medido con resultado cero.
+- Cada movimiento conserva línea, rastra, cargamento, barrida cuando corresponda, responsable autenticado y momentos. Las correcciones agregan registros compensatorios o nuevas versiones auditadas; nunca borran el original.
+- El sistema puede mostrar totales cargados, recuperados y su diferencia, pero no denomina automáticamente esa diferencia como pérdida o consumo hasta validar la interpretación con planta.
+
+### Oro gestionado en web
+
+- La cantidad de oro solo se consulta, registra y corrige desde la web. `JEFE_EMPRESA` siempre tiene acceso; un `ADMINISTRADOR` accede únicamente a las acciones de oro que gerencia le haya concedido explícitamente. No se muestra en desktop al jefe de planta ni al Modo Operación.
+- El resultado de oro se registra en gramos y se vincula con la barrida, línea y cargamento correspondientes. Puede quedar pendiente sin detener ni cerrar la operación.
+- El resultado definitivo del cargamento es la suma automática de los resultados registrados por gerencia para sus barridas en la única línea asignada.
+- Los totales gerenciales se consultan por barrida, línea, jornada, día, cargamento y proveedor. El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
+- Vacío significa pendiente; `0,00` significa medido con resultado cero. Cada corrección conserva autora, momento, valor anterior y nuevo valor; la auditoría no se edita.
 - El oro acepta enteros o hasta dos decimales y usa gramos como unidad canónica. La conversión visual aprobada es `1 palo = 0,10 g`; no se sustituye ni redondea el valor canónico almacenado.
 
 ### Custodia y entrega de oro
 
-1. El sistema deriva el oro producido y el oro aún bajo custodia en planta.
-2. El jefe de planta crea una solicitud de entrega en gramos desde el escritorio.
-3. La gerente autorizada recibe una notificación en la web.
-4. Tras la verificación física, confirma o rechaza la cantidad.
-5. Una discrepancia conserva cantidad solicitada, cantidad recibida, motivo, participantes y fechas.
-6. No se modelan transporte, venta, contabilidad ni destino posterior del oro.
+1. El sistema deriva en web el oro producido y el oro aún bajo custodia en planta para `JEFE_EMPRESA` y administradores expresamente autorizados.
+2. La gerente o un administrador con la capacidad correspondiente registra y gestiona solicitudes o entregas en gramos desde la web; desktop no revela cantidades ni permite iniciar este flujo.
+3. Tras la verificación física, una cuenta web autorizada confirma o rechaza la cantidad.
+4. Una discrepancia conserva cantidad solicitada, cantidad recibida, motivo, participantes y fechas.
+5. No se modelan transporte, venta, contabilidad ni destino posterior del oro.
 
 El umbral para avisar que ya conviene recoger oro queda pendiente y será configurable.
 
@@ -268,8 +275,8 @@ Reportes iniciales:
 | RF-04 | Registrar y revertir cajuelas localmente mediante eventos inmutables. |
 | RF-05 | Operar hasta 24 horas offline desde la última validación y sincronizar sin pérdida o duplicación. |
 | RF-06 | Alertar en cada múltiplo configurable de 50 sin bloquear producción. |
-| RF-07 | Registrar barridas reales, mercurio y oro parcial/definitivo con trazabilidad al cargamento. |
-| RF-08 | Registrar entrega y confirmación/rechazo de oro bajo custodia. |
+| RF-07 | Registrar barridas reales y movimientos de mercurio por rastra desde desktop; registrar oro parcial/definitivo únicamente desde web con autoridad gerencial o permiso administrativo explícito, todo con trazabilidad al cargamento. |
+| RF-08 | Permitir a `JEFE_EMPRESA` y administradores expresamente autorizados registrar y resolver entregas de oro bajo custodia desde web. |
 | RF-09 | Consultar operación central desde web responsive en español e inglés. |
 | RF-10 | Registrar check-in/out con fotografía pendiente, trabajadores provisionales y vencidos, aprobación/reasignación auditable y horas revisables sin bloqueo. |
 | RF-11 | Gestionar inventario básico sin existencias negativas y registrar revisiones. |
@@ -451,3 +458,18 @@ aplica al responsable vigente en cada instante.
 Esta autorización no equivale a validación del proceso por usuarios de planta.
 La estructura exacta del Excel y cualquier ajuste visual permanecen como deuda
 explícita de levantamiento.
+
+### 19.4 Custodia funcional de mercurio y oro del 2026-10-02
+
+La empresa confirmó que las cantidades de oro se gestionan únicamente en web.
+Esta decisión sustituye el diseño anterior que permitía al jefe de planta
+registrar o certificar oro y solicitar entregas desde desktop. `JEFE_EMPRESA`
+siempre conserva control completo y puede delegar capacidades específicas de
+oro, custodia o entregas a administradores de confianza para cubrir ausencias,
+viajes o distribución de responsabilidades.
+
+El jefe de planta conserva la responsabilidad operativa sobre el mercurio:
+registra con elevación temporal las cargas, recargas y cantidades recuperadas
+de cada rastra. Los movimientos pueden quedar pendientes para no detener el
+flujo, se expresan en gramos y toda corrección conserva el historial. Rastra y
+barrida permanecen como entidades distintas.

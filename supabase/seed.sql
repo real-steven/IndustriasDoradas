@@ -36,7 +36,7 @@ values
   ('10000000-0000-4000-8000-000000000017', 'attendance.review_recent', 'Revisar asistencia pendiente reciente.'),
   ('10000000-0000-4000-8000-000000000018', 'attendance.correct', 'Corregir asistencia mediante ajuste auditado.'),
   ('10000000-0000-4000-8000-000000000019', 'inventory.manage', 'Gestionar inventario operativo.'),
-  ('10000000-0000-4000-8000-000000000020', 'gold_deliveries.confirm', 'Confirmar o rechazar una entrega de oro.'),
+  ('10000000-0000-4000-8000-000000000020', 'gold_deliveries.confirm', 'Confirmar o rechazar una entrega de oro cuando gerencia delega esta capacidad.'),
   ('10000000-0000-4000-8000-000000000021', 'profile.locale_update', 'Cambiar la preferencia de idioma propia.'),
   ('10000000-0000-4000-8000-000000000022', 'administrators.create', 'Crear e invitar cuentas administrativas con permisos limitados.'),
   ('10000000-0000-4000-8000-000000000023', 'administrators.permissions.manage', 'Asignar o retirar permisos a cuentas administrativas.'),

@@ -131,7 +131,7 @@ Leyenda: `Sí`, `No`, `Solicita`, `Aprueba`, `Limitado` y `Posterior`.
 | Corregir ciclo abierto | Sí | Según concesión | Limitado | Reverso inmediato |
 | Corregir ciclo cerrado | Sí, con ajuste | Según concesión | No | No |
 | Consultar reportes/estadísticas | Sí | Según concesión | Resumen operativo local | No |
-| Confirmar/rechazar entrega de oro | Sí | Según concesión | Posterior, solicita | No |
+| Consultar/registrar/corregir oro y entregas | Sí, solo web | Según concesión, solo web | No | No |
 | Aprobar/suspender administrador | Sí | Con `administrators.govern` | No | No |
 | Crear administrador | Sí | Con `administrators.create`; delegación acotada | No | No |
 | Asignar permisos administrativos | Sí | Con `administrators.permissions.manage`; solo propios | No | No |
