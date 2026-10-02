@@ -6,18 +6,18 @@
 
 ## Orden de trabajo
 
-1. Validar unidad/precisión del mercurio y conversión/redondeo real de palos.
+1. Validar unidad/precisión del mercurio, conversión visual de palos y semántica del progreso de barrida.
 2. Modelar barrida por eventos incluidos, cantidad real, línea, cargamento y responsable.
-3. Alertas visuales/sonoras 50–55, 100–105, etc., sin bloquear alimentación.
-4. Permitir barrida menor, igual o mayor a 50; barrida final obligatoria al terminar cargamento.
-5. Registrar mercurio posterior a barrida en decimal y unidad aprobada.
+3. Separar las alertas de revisión cada 50 de la referencia visual de barrida cada 250, sin bloquear alimentación.
+4. Permitir barrida menor, igual o mayor a las referencias; al cerrar, guiar el registro de la barrida final sin exigir mediciones inmediatas.
+5. Registrar mercurio recuperado después de la barrida o dejar su medición pendiente.
 6. Registrar oro parcial por barrida y certificarlo por jefe de planta.
 7. Consolidar oro por línea, jornada, día, cargamento y proveedor.
 8. Registrar custodia y solicitudes de entrega en gramos.
 9. Integrar novedades simples de paro/mantenimiento/feriado.
 10. Sincronizar y auditar todo idempotentemente.
 
-**Pruebas:** 49/50/55/56, 99/100/105/106, reverso 50→49→50, barrida final de 30, barrida única de 60, rechazo de segunda línea para el mismo cargamento, decimales, doble certificación y llegada fuera de orden.
+**Pruebas:** 49/50/55/56, 99/100/105/106, reverso 50→49→50, progreso 249/250/251/500, barrida real en 260 con siguiente meta 510, barrida final de 30, barrida única de 60, rechazo de mezcla entre cargamentos, enteros/decimales, medición pendiente, doble certificación y llegada fuera de orden.
 
 **Prueba manual:** cargamentos separados en líneas distintas sin repartir ninguno, alertas, barridas reales, mercurio, oro parcial/definitivo, desconexión y solicitud de entrega.
 
@@ -29,11 +29,21 @@
 
 **Prompt:** Contrasta con planta la unidad definitiva y precisión del mercurio, rangos razonables, variación de `1 palo = 0,1 g` y cualquier redondeo. Mantén gramos como unidad canónica de oro. Documenta decisiones y no programes fórmulas no aprobadas.
 
-**Pausa:** responsable confirma unidad/decimales de mercurio y conversión/redondeo de oro.
+**Decisiones confirmadas el 2026-09-30:**
+
+- Mercurio recuperado y oro se registran en gramos; aceptan enteros o hasta dos decimales y rechazan negativos.
+- Un campo vacío significa medición pendiente y `0,00` significa resultado medido igual a cero.
+- Gramos es la unidad canónica de oro; `1 palo = 0,10 g` se usa únicamente como conversión visual y no redondea el valor almacenado.
+- El conteo de cajuelas permanece acumulado. La referencia visual inicial de barrida es 250; si se supera sin barrer, el estado pendiente permanece y la barra avanza por tramos de 250.
+- Una barrida en una cantidad acumulada arbitraria `N` fija la próxima referencia en `N + 250`; por ejemplo, una barrida en 260 produce `260/510`.
+- La referencia no bloquea producción. Al cerrar un cargamento se debe registrar o confirmar la barrida física final, pero mercurio y oro pueden completarse después en Modo Jefe de Planta mediante acciones auditadas.
+- Una barrida nunca mezcla cajuelas ni resultados de cargamentos distintos.
+
+**Pausa cumplida:** responsable confirmó unidad/decimales, conversión de oro, mediciones pendientes y comportamiento del conteo/barrida. No iniciar 4.2 sin la siguiente autorización.
 
 ### 4.2 Modelo de barrida real
 
-**Prompt:** Modela barrida como registro explícito de línea+cargamento y conjunto/rango verificable de eventos. La cantidad puede ser menor, igual o mayor a 50; nunca mezcla cargamentos y existe barrida final. Incluye responsable, momentos, estado, mercurio y resultado certificado. Define correcciones sin borrar.
+**Prompt:** Modela barrida como registro explícito de línea+cargamento y conjunto/rango verificable de eventos. La cantidad puede ser menor, igual o mayor a las referencias; nunca mezcla cargamentos y existe barrida final. Incluye responsable, momentos y estados separados para barrida física y mediciones/certificaciones pendientes. Mercurio y oro son opcionales al crearla y se completan mediante acciones auditadas sin borrar.
 
 **Pausa:** ejemplos ficticios de cargamentos 30, 60 y 130 quedan representados sin ambigüedad.
 
@@ -45,7 +55,7 @@
 
 ### 4.4 Servicio de alertas
 
-**Prompt:** Implementa servicio puro con umbral configurable inicialmente 50. Activa alerta en 50–55 y repite 100–105, 150–155, etc.; reverso 50→49 la retira y volver a 50 la reactiva. La señal grande dura aproximadamente 10 segundos, no bloquea y no presupone que la barrida ocurrió.
+**Prompt:** Implementa un servicio puro que separe: a) alertas configurables de revisión inicialmente cada 50, con los intervalos 50–55, 100–105, etc.; y b) progreso/referencia de barrida inicialmente cada 250. El total acumulado nunca se reinicia. Si se supera una referencia sin barrer, conserva `Barrida pendiente` y avanza visualmente por tramos de 250. Una barrida real en `N` fija la próxima referencia en `N + 250`. Ninguna señal bloquea ni presupone que la barrida ocurrió.
 
 **Pausa:** tabla automatizada cubre límites, múltiplos, reversos y conteo continuo.
 
@@ -57,19 +67,19 @@
 
 ### 4.6 Registro de barrida
 
-**Prompt:** Implementa registro simple de la barrida efectivamente realizada: línea, cargamento, eventos/cajuelas incluidos, cantidad real, responsable y tiempos. El operario principal decide cuándo barrer; el jefe de planta registra/certifica datos resultantes. Evita solapamiento y doble registro.
+**Prompt:** Implementa registro simple de la barrida efectivamente realizada: línea, cargamento, eventos/cajuelas incluidos, cantidad real, responsable y tiempos. El operario principal decide cuándo barrer; el jefe de planta confirma el registro físico y puede dejar mercurio/oro pendientes. Al cerrar un cargamento sin barrida final, presenta un flujo de confirmación que registra la barrida antes del cierre. Evita solapamiento, mezcla de cargamentos y doble registro.
 
 **Pausa:** registrar barrida de 50, final de 30 y única de 60; reconstruir eventos exactos.
 
 ### 4.7 Mercurio
 
-**Prompt:** Registra mercurio después de la barrida con cantidad decimal, unidad aprobada, responsable y observación. Prepara referencia a inventario posterior sin descontar dos veces. Correcciones posteriores al cierre son administrativas y auditadas.
+**Prompt:** Registra mercurio recuperado después de la barrida en gramos, aceptando enteros o hasta dos decimales, vacío pendiente y cero medido. Rechaza negativos y no impongas un máximo no validado. Permite completar la medición más tarde en Modo Jefe de Planta y conserva cada cambio auditado. Prepara referencia a inventario posterior sin descontar dos veces.
 
 **Pausa:** validar decimales, unidad, cero/negativo/extremo y reversión idempotente.
 
 ### 4.8 Oro parcial y definitivo
 
-**Prompt:** Registra oro parcial por barrida en gramos decimales, certificado por jefe de planta. Deriva automáticamente totales por línea, jornada, día (medianoche Costa Rica), cargamento y proveedor. El definitivo del cargamento es la suma de sus barridas en la única línea asignada. Muestra palos solo con conversión aprobada.
+**Prompt:** Registra oro parcial por barrida en gramos, aceptando enteros o hasta dos decimales, vacío pendiente y cero medido; su certificación corresponde al jefe de planta. Deriva automáticamente totales por línea, jornada, día (medianoche Costa Rica), cargamento y proveedor sin tratar pendientes como cero. El definitivo del cargamento es la suma de sus barridas en la única línea asignada. Muestra palos solo como conversión visual `1 palo = 0,10 g` sin alterar el valor canónico.
 
 **Pausa:** dataset manual coincide por todos los cortes y no cuenta dos veces un parcial.
 

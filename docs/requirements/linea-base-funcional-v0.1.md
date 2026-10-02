@@ -142,18 +142,26 @@ Reglas de acceso:
 - Si queda poco material, puede continuarse más allá de 50 para evitar una barrida adicional pequeña.
 - Todo cargamento termina con una barrida final, aunque el último grupo tenga menos de 50.
 - Cada barrida registra la cantidad real de cajuelas incluidas y sus eventos; no se presume que sean exactamente 50.
+- El conteo total de cajuelas del cargamento es acumulado y nunca se reinicia al barrer.
+- Como referencia visual adicional, la primera meta de barrida es 250 cajuelas. Al alcanzar una meta sin barrer, queda visible `Barrida pendiente`, la barra inicia un nuevo tramo de 250 y el denominador avanza: por ejemplo, `250/500`.
+- La referencia de 250 no bloquea la alimentación ni obliga a barrer exactamente en el umbral. Si la barrida real ocurre en 260, la próxima meta es 510 y la vista parte de `260/510`.
+- Registrar una barrida conserva el total acumulado, cierra únicamente el tramo físico barrido y calcula la siguiente referencia como cantidad acumulada de la barrida más 250.
+- Al intentar cerrar un cargamento sin barrida final registrada, el sistema advierte que existe una barrida pendiente y ofrece confirmar la barrida física. Mercurio y oro pueden completarse en ese momento o quedar pendientes.
+- El cargamento se cierra después de registrar la barrida final; de esta forma, la línea no mezcla cajuelas ni resultados de cargamentos distintos.
 
 ## 7. Mercurio y oro
 
 - El mercurio se registra después de cada barrida.
-- La unidad provisional es gramos decimales; unidad definitiva, precisión y rangos se validan en el Sprint 4.
+- La unidad definitiva del mercurio recuperado es gramos. Acepta enteros o hasta dos decimales, no permite negativos y no aplica por ahora un máximo rígido.
 - El operario puede medir o comunicar el resultado; el jefe de planta lo verifica, registra y certifica.
 - Cada barrida produce un resultado parcial de oro en gramos.
 - El resultado definitivo del cargamento es la suma automática de sus barridas
   en la única línea asignada.
 - Los totales se consultan por barrida, línea, jornada, día, cargamento y proveedor.
 - El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
-- La conversión inicial es `1 palo = 0,1 g`; no se implementa redondeo hasta validarlo.
+- Mercurio y oro pueden quedar vacíos al registrar la barrida para no detener la producción. Vacío significa pendiente de medir o certificar; `0,00` significa medido con resultado cero.
+- Las mediciones pendientes se completan después mediante una acción de dominio auditada disponible en Modo Jefe de Planta, incluso si el cargamento ya se cerró. El evento original y cada modificación se conservan; la auditoría no se edita.
+- El oro acepta enteros o hasta dos decimales y usa gramos como unidad canónica. La conversión visual aprobada es `1 palo = 0,10 g`; no se sustituye ni redondea el valor canónico almacenado.
 
 ### Custodia y entrega de oro
 
@@ -328,9 +336,8 @@ Reportes iniciales:
 
 | Pendiente | Debe resolverse en |
 |---|---|
-| Precisión/unidad definitiva de mercurio y rangos válidos | Sprint 4 |
-| Variación real y redondeo de palos ↔ gramos | Sprint 4 |
 | Umbral de oro para notificar recogida | Sprint 4/5 |
+| Política de retención y escalamiento de mediciones pendientes de barridas | Validar durante Sprint 4 sin bloquear el registro físico |
 | Política exacta de corrección administrativa y eliminación | Sprint 1 |
 | Matriz detallada de permisos, gobierno de cuentas, PIN y acceso offline de 24 horas | Aprobada al iniciar el prompt 1.2 el 2026-08-17 |
 | Cardinalidades y modelo relacional de identidad, organización y catálogos iniciales | Aprobados al iniciar el prompt 1.3 el 2026-08-17 |
@@ -431,10 +438,9 @@ modelo antes de cerrar el Sprint 2:
   completo al confirmar;
 - no se exige código visible del cargamento: se presenta nombre de
   proveedor/empresa y hora automática de inicio;
-- durante el MVP la estación mantiene una sola línea operativa enfocada a la
-  vez. El jefe de planta la selecciona entre las líneas administrativamente
-  activas al preparar cada cargamento; la operación simultánea de hasta cuatro
-  líneas permanece como evolución futura;
+- durante el MVP la estación puede mantener hasta cuatro líneas preparadas y
+  operando simultáneamente. El foco selecciona la tarjeta que recibe una acción
+  de teclado, pero no desactiva las demás líneas;
 - `Alimentación actual`, `Línea lista` y `Registrar cajuela` se aceptan como
   etiquetas provisionales hasta la siguiente reunión con la empresa.
 
