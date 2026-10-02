@@ -130,7 +130,15 @@ public sealed class StationPreparationViewModelTests
         Assert.IsTrue(activeLine.IsSelected);
         viewModel.SelectLineCommand.Execute(SecondLineId);
         Assert.AreEqual(SecondLineId, viewModel.SelectedLine?.Id);
-        Assert.IsFalse(viewModel.CanRequestStart);
+        viewModel.SelectedSupplier = viewModel.Suppliers.Single();
+        viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == SecondWorkerId);
+        Assert.IsTrue(viewModel.CanRequestStart);
+        await viewModel.PrepareLineCommand.ExecuteAsync(null);
+        await viewModel.ConfirmLineCommand.ExecuteAsync(null);
+        Assert.AreEqual(2, operationRepository.StartCalls);
+        Assert.HasCount(2, viewModel.LineStatuses.Where(line => line.IsPrepared).ToArray());
+        Assert.IsTrue(viewModel.LineStatuses.Single(line => line.Id == LineId).IsPrepared);
+        Assert.IsTrue(viewModel.LineStatuses.Single(line => line.Id == SecondLineId).IsPrepared);
         StringAssert.Contains(viewModel.Status, "Línea lista");
     }
 
@@ -380,14 +388,36 @@ public sealed class StationPreparationViewModelTests
 
     private sealed class MemorySessions : ILocalOperationalSessionRepository
     {
-        public LocalOperationalSession? Current { get; set; }
-        public Task SaveAsync(LocalOperationalSession session, CancellationToken cancellationToken = default) { Current = session; return Task.CompletedTask; }
-        public Task<LocalOperationalSession?> LoadAsync(Guid stationId, CancellationToken cancellationToken = default) => Task.FromResult(Current);
+        private readonly Dictionary<(Guid StationId, Guid LineId), LocalOperationalSession> items = [];
+        private LocalOperationalSession? current;
+
+        public LocalOperationalSession? Current
+        {
+            get => current;
+            set
+            {
+                current = value;
+                if (value is not null) items[(value.StationId, value.LineId)] = value;
+            }
+        }
+
+        public Task SaveAsync(LocalOperationalSession session, CancellationToken cancellationToken = default)
+        {
+            Current = session;
+            return Task.CompletedTask;
+        }
+
+        public Task<LocalOperationalSession?> LoadAsync(Guid stationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(items.Values.FirstOrDefault(item =>
+                item.StationId == stationId && item.Status == LineFeedCycleStatus.Active));
+
         public Task<LocalOperationalSession?> LoadAsync(Guid stationId, Guid lineId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Current?.LineId == lineId ? Current : null);
+            Task.FromResult(items.GetValueOrDefault((stationId, lineId)));
+
         public Task<IReadOnlyList<LocalOperationalSession>> ListActiveAsync(Guid stationId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<LocalOperationalSession>>(
-                Current?.Status == LineFeedCycleStatus.Active ? [Current] : []);
+                items.Values.Where(item =>
+                    item.StationId == stationId && item.Status == LineFeedCycleStatus.Active).ToArray());
     }
 
     private sealed class RecordingOperationRepository(MemorySessions sessions) : ILocalOperationRepository

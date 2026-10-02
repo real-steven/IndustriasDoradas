@@ -72,7 +72,7 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
                     SqliteLocalStorageConverters.Timestamp(session.UpdatedAt));
                 await RequireSingleChangeAsync(
                         sessionCommand,
-                        "La estación ya tiene un cargamento activo.",
+                        "La línea ya tiene un cargamento activo.",
                         cancellationToken)
                     .ConfigureAwait(false);
                 await InsertOutboxAsync(connection, transaction, mutation.OutboxMessage, cancellationToken)

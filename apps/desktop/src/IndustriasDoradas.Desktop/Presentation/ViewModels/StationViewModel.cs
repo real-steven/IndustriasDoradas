@@ -47,6 +47,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private CachedSupplier? selectedSupplier;
     private CachedWorker? selectedWorker;
     private CachedProductionLine? pilotLine;
+    private readonly Dictionary<Guid, LocalOperationalSession> activeSessions = [];
+    private readonly Dictionary<Guid, string> activeSupplierNames = [];
     private LocalOperationalSession? activeSession;
     private PreparedOperationStart? preparedStart;
     private PreparedResponsibleRelief? preparedRelief;
@@ -152,8 +154,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref wasSessionRestored, value);
     }
     public bool CanInteract => !IsBusy;
-    public bool HasActiveOperation => activeSession?.Status == LineFeedCycleStatus.Active;
-    public bool CanPrepareNewShipment => IsPlantManager && !HasActiveOperation;
+    public bool HasActiveOperation => IsSelectedLineActive;
+    public bool CanPrepareNewShipment => IsPlantManager && SelectedLine is not null && !IsSelectedLineActive;
     public bool CanManageActiveOperation => IsPlantManager && HasActiveOperation;
     public bool IsSelectedLineActive =>
         SelectedLine is not null && activeSession?.Status == LineFeedCycleStatus.Active &&
@@ -167,8 +169,6 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         : "Preparar una línea";
     public string ContextPanelDescription => IsSelectedLineActive
         ? "Consulte el cargamento actual, cambie el responsable o finalice el trabajo de esta línea."
-        : HasActiveOperation
-            ? "Esta línea está disponible. Finalice el cargamento activo antes de preparar otro."
         : "Seleccione línea, proveedor y responsable para iniciar un cargamento.";
     public string ActiveSupplierName => activeSupplierName;
     public IReadOnlyList<CachedSupplier> Suppliers
@@ -202,6 +202,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsSelectedLineActive));
             OnPropertyChanged(nameof(ContextPanelTitle));
             OnPropertyChanged(nameof(ContextPanelDescription));
+            RefreshSelectedActiveSession();
             UpdateLineStatuses();
             SelectionChanged();
         }
@@ -508,8 +509,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         await RunAsync(async () =>
         {
             LocalOperationContext confirmed = await operations.ConfirmStartAsync(prepared).ConfigureAwait(true);
-            activeSupplierName = SelectedSupplier?.Name ?? "Proveedor registrado";
-            OnPropertyChanged(nameof(ActiveSupplierName));
+            if (confirmed.Session is not null)
+            {
+                activeSupplierNames[confirmed.Session.LineId] =
+                    SelectedSupplier?.Name ?? "Proveedor registrado";
+            }
             SetActiveSession(confirmed.Session);
             preparedStart = null;
             Status = "Línea lista. Modo Jefe de Planta continúa activo.";
@@ -576,9 +580,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             await operations.ConfirmCompletionAsync(prepared).ConfigureAwait(true);
             preparedCompletion = null;
-            activeSupplierName = "Proveedor registrado";
-            OnPropertyChanged(nameof(ActiveSupplierName));
-            SetActiveSession(null);
+            RemoveActiveSession(prepared.ExpectedSession.LineId);
             ManagementSummary = "Cargamento finalizado localmente con su historial conservado.";
             CompleteManagerAction(
                 "Cargamento finalizado. Puede preparar el siguiente; Modo Jefe de Planta continúa activo.");
@@ -623,22 +625,63 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private async Task RefreshActiveOperationAsync()
     {
         if (state is null) return;
-        LocalOperationContext context = await operations.GetContextAsync(state.Authorization.StationId)
+        IReadOnlyList<LocalOperationContext> contexts = await operations
+            .GetContextsAsync(state.Authorization.StationId)
             .ConfigureAwait(true);
-        if (dashboard is not null && context.Session is not null)
+        activeSessions.Clear();
+        foreach (LocalOperationContext context in contexts)
+        {
+            if (context.Session?.Status == LineFeedCycleStatus.Active)
+            {
+                activeSessions[context.Session.LineId] = context.Session;
+            }
+        }
+
+        activeSupplierNames.Clear();
+        if (dashboard is not null && activeSessions.Count > 0)
         {
             IReadOnlyList<LocalOperationDashboardSnapshot> snapshots =
                 await dashboard.ListAsync(state.Authorization.StationId).ConfigureAwait(true);
-            activeSupplierName = snapshots.FirstOrDefault(snapshot =>
-                snapshot.LineId == context.Session.LineId)?.SupplierName ?? "Proveedor registrado";
-            OnPropertyChanged(nameof(ActiveSupplierName));
+            foreach (LocalOperationDashboardSnapshot snapshot in snapshots)
+            {
+                if (activeSessions.ContainsKey(snapshot.LineId))
+                {
+                    activeSupplierNames[snapshot.LineId] =
+                        snapshot.SupplierName ?? "Proveedor registrado";
+                }
+            }
         }
-        SetActiveSession(context.Session?.Status == LineFeedCycleStatus.Active ? context.Session : null);
+
+        RefreshSelectedActiveSession();
     }
 
     private void SetActiveSession(LocalOperationalSession? session)
     {
-        activeSession = session;
+        if (session is not null)
+        {
+            activeSessions[session.LineId] = session;
+        }
+        RefreshSelectedActiveSession();
+    }
+
+    private void RemoveActiveSession(Guid lineId)
+    {
+        activeSessions.Remove(lineId);
+        activeSupplierNames.Remove(lineId);
+        RefreshSelectedActiveSession();
+    }
+
+    private void RefreshSelectedActiveSession()
+    {
+        activeSession = SelectedLine is not null &&
+            activeSessions.TryGetValue(SelectedLine.Id, out LocalOperationalSession? selectedSession)
+                ? selectedSession
+                : null;
+        activeSupplierName = SelectedLine is not null &&
+            activeSupplierNames.TryGetValue(SelectedLine.Id, out string? supplierName)
+                ? supplierName
+                : "Proveedor registrado";
+        OnPropertyChanged(nameof(ActiveSupplierName));
         UpdateLineStatuses();
         OnPropertyChanged(nameof(HasActiveOperation));
         OnPropertyChanged(nameof(CanPrepareNewShipment));
@@ -647,10 +690,10 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ContextPanelTitle));
         OnPropertyChanged(nameof(ContextPanelDescription));
         OnPropertyChanged(nameof(CanUseContextActions));
-        ActiveOperationSummary = session is null
+        ActiveOperationSummary = activeSession is null
             ? "No hay un cargamento activo."
-            : $"{LineName(session.LineId)} · cargamento iniciado {FormatLocalTime(session.StartedAt)} · " +
-              $"responsable {WorkerName(session.ResponsibleWorkerId)}.";
+            : $"{LineName(activeSession.LineId)} · cargamento iniciado {FormatLocalTime(activeSession.StartedAt)} · " +
+              $"responsable {WorkerName(activeSession.ResponsibleWorkerId)}.";
         NotifyOperationCommands();
     }
 
@@ -660,11 +703,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         LineStatuses = Lines.Select((line, index) => new StationLineStatus(
             line.Id,
             line.Name,
-            activeSession?.Status == LineFeedCycleStatus.Active && activeSession.LineId == line.Id,
+            activeSessions.ContainsKey(line.Id),
             SelectedLine?.Id == line.Id,
             accents[index % accents.Length],
-            activeSession?.Status == LineFeedCycleStatus.Active && activeSession.LineId == line.Id
-                ? $"Activa · {activeSupplierName} · {WorkerName(activeSession.ResponsibleWorkerId)}"
+            activeSessions.TryGetValue(line.Id, out LocalOperationalSession? session)
+                ? $"Activa · {SupplierName(line.Id)} · {WorkerName(session.ResponsibleWorkerId)}"
                 : "Disponible para preparar")).ToArray();
     }
 
@@ -688,6 +731,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
 
     private string LineName(Guid lineId) =>
         Lines.FirstOrDefault(line => line.Id == lineId)?.Name ?? "Línea registrada";
+
+    private string SupplierName(Guid lineId) =>
+        activeSupplierNames.TryGetValue(lineId, out string? supplierName)
+            ? supplierName
+            : "Proveedor registrado";
 
     private static string FormatLocalTime(DateTimeOffset instant) =>
         instant.ToOffset(TimeSpan.FromHours(-6)).ToString(

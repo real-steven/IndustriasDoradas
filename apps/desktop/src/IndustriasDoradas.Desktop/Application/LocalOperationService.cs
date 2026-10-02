@@ -93,11 +93,14 @@ public sealed class LocalOperationService(
                 authority.OrganizationId,
                 cancellationToken)
             .ConfigureAwait(false);
-        LocalOperationalSession? current = await sessions.LoadAsync(authority.StationId, cancellationToken)
+        LocalOperationalSession? current = await sessions.LoadAsync(
+                authority.StationId,
+                line.Id,
+                cancellationToken)
             .ConfigureAwait(false);
         if (current?.Status == LineFeedCycleStatus.Active)
         {
-            throw new InvalidOperationException("La estación ya tiene un cargamento activo.");
+            throw new InvalidOperationException("La línea ya tiene un cargamento activo.");
         }
 
         return new PreparedOperationStart(

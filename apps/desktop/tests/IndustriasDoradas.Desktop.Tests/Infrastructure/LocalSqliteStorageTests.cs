@@ -21,6 +21,8 @@ public sealed class LocalSqliteStorageTests
     private static readonly Guid SecondStationId = Guid.Parse("34000000-0000-4000-8000-000000000002");
     private static readonly Guid LineId = Guid.Parse("43000000-0000-4000-8000-000000000001");
     private static readonly Guid SecondLineId = Guid.Parse("43000000-0000-4000-8000-000000000002");
+    private static readonly Guid ThirdLineId = Guid.Parse("43000000-0000-4000-8000-000000000003");
+    private static readonly Guid FourthLineId = Guid.Parse("43000000-0000-4000-8000-000000000004");
     private static readonly Guid SupplierId = Guid.Parse("42000000-0000-4000-8000-000000000001");
     private static readonly Guid ShipmentId = Guid.Parse("41000000-0000-4000-8000-000000000001");
     private static readonly Guid CycleId = Guid.Parse("44000000-0000-4000-8000-000000000001");
@@ -1193,6 +1195,52 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(
             ActorProfileId.ToString("D"),
             payload.RootElement.GetProperty("actorProfileId").GetString());
+    }
+
+    [TestMethod]
+    public async Task SameStationCanKeepFourDifferentLinesActiveWithoutMixingTheirContexts()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        CachedProductionLine[] additionalLines =
+        [
+            new(SecondLineId, OrganizationId, PlantId, "Línea 2", true, StartedAt),
+            new(ThirdLineId, OrganizationId, PlantId, "Línea 3", true, StartedAt),
+            new(FourthLineId, OrganizationId, PlantId, "Línea 4", true, StartedAt),
+        ];
+        foreach (CachedProductionLine line in additionalLines)
+        {
+            await database.Catalogs().UpsertLineAsync(line);
+            await SeedStationLineScopeAsync(database, StationId, line.Id);
+        }
+
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        Guid[] lineIds = [LineId, SecondLineId, ThirdLineId, FourthLineId];
+        foreach (Guid lineId in lineIds)
+        {
+            PreparedOperationStart prepared = await service.PrepareStartAsync(
+                lineId,
+                SupplierId,
+                WorkerId,
+                Authority());
+            await service.ConfirmStartAsync(prepared);
+            time.SetUtcNow(time.GetUtcNow().AddSeconds(1));
+        }
+
+        IReadOnlyList<LocalOperationContext> contexts = await service.GetContextsAsync(StationId);
+
+        Assert.HasCount(4, contexts);
+        CollectionAssert.AreEquivalent(
+            lineIds,
+            contexts.Select(context => context.Session!.LineId).ToArray());
+        Assert.AreEqual(4, contexts.Select(context => context.Session!.ShipmentId).Distinct().Count());
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => service.PrepareStartAsync(
+            LineId,
+            SupplierId,
+            SecondWorkerId,
+            Authority()));
     }
 
     [TestMethod]
