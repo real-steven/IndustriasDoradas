@@ -64,6 +64,18 @@
 
 **Pausa:** migración nueva/actualizada conserva producción y no permite mezclar cargamentos.
 
+**Resultado 2026-10-02:**
+
+- PostgreSQL incorpora barridas inmutables con sus eventos exactos, conteo neto validado al confirmar la transacción, una sola barrida final por cargamento y claves compuestas que impiden mezclar organización, línea, ciclo o cargamento. Un evento de producción solo puede pertenecer a una barrida.
+- Carga inicial, recarga y recuperación de mercurio se conservan como movimientos inmutables por rastra. El valor canónico es gramos con hasta dos decimales; `NULL` permanece pendiente y cero es una medición válida. Las correcciones agregan una nueva versión enlazada y no reemplazan el historial.
+- PostgreSQL separa resultados de oro y decisiones de entrega del dominio operativo. Se añadieron `gold.read`, `gold.results.manage` y `gold.deliveries.manage`; `JEFE_EMPRESA` obtiene toda capacidad activa, un administrador requiere concesión individual y `JEFE_PLANTA` no obtiene acceso.
+- Las tablas centrales nuevas mantienen RLS y acceso directo revocado para `anon` y `authenticated`; el API sigue siendo la única puerta de negocio mediante `service_role` y `app.profile_has_permission`.
+- SQLite avanza de versión 11 a 12 con rastras locales, barridas, eventos incluidos y movimientos de mercurio en centigramos exactos. No contiene tablas ni columnas de oro.
+- La actualización automatizada desde una base Sprint 3 conserva cargamentos y eventos existentes. PostgreSQL local rechazó solapamiento y mezcla; SQLite rechazó reutilizar eventos y registrar mercurio contra un componente que no sea rastra.
+- La migración `20261002083007_sprint_4_3_sweeps_mercury_gold` quedó aplicada únicamente en Supabase de desarrollo. Antes y después permanecieron `19` cargamentos, `67` eventos de producción y `175` recibos de sincronización; las nuevas tablas iniciaron vacías.
+
+**Pausa cumplida:** persistencia central/local verificada y datos del Sprint 3 conservados. No iniciar 4.4 sin una nueva `R`.
+
 ### 4.4 Servicio de alertas
 
 **Prompt:** Implementa un servicio puro que separe: a) alertas configurables de revisión inicialmente cada 50, con los intervalos 50–55, 100–105, etc.; y b) progreso/referencia de barrida inicialmente cada 250. El total acumulado nunca se reinicia. Si se supera una referencia sin barrer, conserva `Barrida pendiente` y avanza visualmente por tramos de 250. Una barrida real en `N` fija la próxima referencia en `N + 250`. Ninguna señal bloquea ni presupone que la barrida ocurrió.

@@ -59,8 +59,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(11L, result.CurrentVersion);
-        Assert.AreEqual(11, result.AppliedCount);
+        Assert.AreEqual(12L, result.CurrentVersion);
+        Assert.AreEqual(12, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -69,7 +69,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(11L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(12L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -137,12 +137,141 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(10, result.AppliedCount);
+        Assert.AreEqual(11, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'production_events_reject_update';"));
+    }
+
+    [TestMethod]
+    public async Task UpgradeFromSprint3PreservesProductionAndKeepsGoldOutOfDesktop()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(11).ToArray());
+        await SeedContextAsync(database);
+        await database.Events().AppendWithOutboxAsync(
+            Added(EventId(1), 1),
+            Outbox(EventId(10), EventId(1)));
+
+        LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
+
+        Assert.AreEqual(12L, result.CurrentVersion);
+        Assert.AreEqual(1, result.AppliedCount);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type = 'table' AND name = 'production_sweeps';
+            """));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type = 'table' AND name = 'mercury_movements';
+            """));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type = 'table' AND lower(name) LIKE '%gold%';
+            """));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*)
+            FROM pragma_table_list() AS tables
+            JOIN pragma_table_info(tables.name) AS columns
+            WHERE lower(columns.name) LIKE '%gold%';
+            """));
+    }
+
+    [TestMethod]
+    public async Task SweepEventsCannotOverlapAndMercuryBelongsToARastra()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedContextAsync(database);
+        await database.Events().AppendWithOutboxAsync(
+            Added(EventId(1), 1),
+            Outbox(EventId(10), EventId(1)));
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+
+        const string rastraId = "46000000-0000-4000-8000-000000000001";
+        const string molinoId = "46000000-0000-4000-8000-000000000002";
+        const string sweepId = "47000000-0000-4000-8000-000000000001";
+        const string secondSweepId = "47000000-0000-4000-8000-000000000002";
+        await ExecuteWithoutParametersAsync(connection, $"""
+            INSERT INTO cached_line_components(
+                id, organization_id, line_id, component_type_code, code, name,
+                display_order, is_active, updated_at_utc)
+            VALUES
+                ('{rastraId}', '{OrganizationId:D}', '{LineId:D}', 'RASTRA',
+                 'RASTRA_1', 'Rastra 1', 1, 1, '{StartedAt:O}'),
+                ('{molinoId}', '{OrganizationId:D}', '{LineId:D}', 'MOLINO',
+                 'MOLINO_1', 'Molino 1', 2, 1, '{StartedAt:O}');
+
+            INSERT INTO production_sweeps(
+                id, organization_id, plant_id, station_id, line_id, feed_cycle_id,
+                shipment_id, client_sequence, cajuela_count, swept_at_utc,
+                recorded_at_utc, recorded_by_profile_id, is_final)
+            VALUES ('{sweepId}', '{OrganizationId:D}', '{PlantId:D}', '{StationId:D}',
+                '{LineId:D}', '{CycleId:D}', '{ShipmentId:D}', 200, 1,
+                '{StartedAt.AddMinutes(1):O}', '{StartedAt.AddMinutes(1):O}',
+                '{ActorProfileId:D}', 0);
+
+            INSERT INTO sweep_production_events(
+                organization_id, sweep_id, production_event_id, shipment_id,
+                line_id, feed_cycle_id)
+            VALUES ('{OrganizationId:D}', '{sweepId}', '{EventId(1):D}',
+                '{ShipmentId:D}', '{LineId:D}', '{CycleId:D}');
+
+            INSERT INTO mercury_movements(
+                id, organization_id, plant_id, station_id, line_id, feed_cycle_id,
+                shipment_id, line_component_id, sweep_id, client_sequence,
+                movement_kind, amount_centigrams, occurred_at_utc, recorded_at_utc,
+                recorded_by_profile_id)
+            VALUES ('48000000-0000-4000-8000-000000000001', '{OrganizationId:D}',
+                '{PlantId:D}', '{StationId:D}', '{LineId:D}', '{CycleId:D}',
+                '{ShipmentId:D}', '{rastraId}', '{sweepId}', 201, 'RECOVERY', NULL,
+                '{StartedAt.AddMinutes(1):O}', '{StartedAt.AddMinutes(1):O}',
+                '{ActorProfileId:D}');
+            """);
+
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM sweep_production_events;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM mercury_movements WHERE amount_centigrams IS NULL;"));
+
+        await ExecuteWithoutParametersAsync(connection, $"""
+            INSERT INTO production_sweeps(
+                id, organization_id, plant_id, station_id, line_id, feed_cycle_id,
+                shipment_id, client_sequence, cajuela_count, swept_at_utc,
+                recorded_at_utc, recorded_by_profile_id, is_final)
+            VALUES ('{secondSweepId}', '{OrganizationId:D}', '{PlantId:D}', '{StationId:D}',
+                '{LineId:D}', '{CycleId:D}', '{ShipmentId:D}', 202, 1,
+                '{StartedAt.AddMinutes(2):O}', '{StartedAt.AddMinutes(2):O}',
+                '{ActorProfileId:D}', 0);
+            """);
+
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => ExecuteWithoutParametersAsync(
+            connection,
+            $"""
+                INSERT INTO sweep_production_events(
+                    organization_id, sweep_id, production_event_id, shipment_id,
+                    line_id, feed_cycle_id)
+                VALUES ('{OrganizationId:D}', '{secondSweepId}', '{EventId(1):D}',
+                    '{ShipmentId:D}', '{LineId:D}', '{CycleId:D}');
+                """));
+
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => ExecuteWithoutParametersAsync(
+            connection,
+            $"""
+                INSERT INTO mercury_movements(
+                    id, organization_id, plant_id, station_id, line_id, feed_cycle_id,
+                    shipment_id, line_component_id, client_sequence, movement_kind,
+                    amount_centigrams, occurred_at_utc, recorded_at_utc,
+                    recorded_by_profile_id)
+                VALUES ('48000000-0000-4000-8000-000000000002', '{OrganizationId:D}',
+                    '{PlantId:D}', '{StationId:D}', '{LineId:D}', '{CycleId:D}',
+                    '{ShipmentId:D}', '{molinoId}', 203, 'INITIAL_LOAD', 100,
+                    '{StartedAt.AddMinutes(2):O}', '{StartedAt.AddMinutes(2):O}',
+                    '{ActorProfileId:D}');
+                """));
     }
 
     [TestMethod]
@@ -297,7 +426,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(11L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(12L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -447,7 +576,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(9, result.AppliedCount);
+        Assert.AreEqual(10, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(

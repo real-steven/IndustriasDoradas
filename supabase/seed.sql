@@ -40,7 +40,10 @@ values
   ('10000000-0000-4000-8000-000000000021', 'profile.locale_update', 'Cambiar la preferencia de idioma propia.'),
   ('10000000-0000-4000-8000-000000000022', 'administrators.create', 'Crear e invitar cuentas administrativas con permisos limitados.'),
   ('10000000-0000-4000-8000-000000000023', 'administrators.permissions.manage', 'Asignar o retirar permisos a cuentas administrativas.'),
-  ('10000000-0000-4000-8000-000000000024', 'workers.read', 'Consultar trabajadores y solicitudes de trabajadores.')
+  ('10000000-0000-4000-8000-000000000024', 'workers.read', 'Consultar trabajadores y solicitudes de trabajadores.'),
+  ('10000000-0000-4000-8000-000000000025', 'gold.read', 'Consultar resultados de oro, custodia y entregas.'),
+  ('10000000-0000-4000-8000-000000000026', 'gold.results.manage', 'Registrar o corregir resultados de oro por barrida.'),
+  ('10000000-0000-4000-8000-000000000027', 'gold.deliveries.manage', 'Registrar solicitudes de entrega de oro.')
 on conflict (id) do update
 set
   code = excluded.code,
