@@ -82,6 +82,16 @@
 
 **Pausa:** tabla automatizada cubre límites, múltiplos, reversos y conteo continuo.
 
+**Resultado 2026-10-03:**
+
+- `ProductionMilestoneService` calcula señales informativas sin estado ni efectos laterales. La alerta de revisión y el progreso de barrida usan configuraciones independientes; sus valores iniciales son 50, una extensión inclusiva de 5 cajuelas y 250 respectivamente.
+- Las alertas quedan activas en `50–55`, `100–105` y ventanas equivalentes. Salir por reverso y volver a entrar —por ejemplo `50→49→50`— vuelve a producir el estado activo; la futura interfaz decidirá cómo presentar cada transición sin bloquear la alimentación.
+- El total de cajuelas siempre permanece acumulado. Al alcanzar una referencia sin barrer, `IsSweepPending` conserva la primera referencia física pendiente, mientras la referencia visual pasa al siguiente tramo: `249/250`, `250/500`, `251/500` y `500/750`.
+- Una barrida real establece un nuevo origen sin alterar el total. Una barrida en `260` produce referencia física y visual `510`; al llegar a `510`, la barrida queda pendiente y la vista avanza hacia `760`.
+- El servicio admite barridas tempranas y totales superiores a 500, no confirma barridas implícitamente y no contiene ninguna regla de bloqueo, persistencia, sonido o interfaz.
+
+**Pausa cumplida:** pruebas automatizadas cubren límites, múltiplos, reverso, configuración independiente, barrida real arbitraria y conteo continuo. No iniciar 4.5 sin una nueva `R`.
+
 ### 4.5 Alerta operacional
 
 **Prompt:** Integra alerta WPF visual muy llamativa y sonora perceptible/no molesta, identificando claramente la línea. Tras el aviso grande conserva la señal acordada dentro del intervalo y retírala al superar 55. Permite continuar sin confirmación ni máximo rígido.
