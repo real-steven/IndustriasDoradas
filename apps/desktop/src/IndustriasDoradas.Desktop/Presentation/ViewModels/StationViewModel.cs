@@ -298,6 +298,30 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             PinAttemptResponse result = await coordinator.ElevateAsync(state, pin, networkAvailable: true).ConfigureAwait(true);
             if (result.Result == "ACCEPTED")
             {
+                ProtectedStationState? refreshed = await coordinator
+                    .RefreshAuthorizationAsync(state, refreshCatalogs: false)
+                    .ConfigureAwait(true);
+                if (refreshed is null)
+                {
+                    state = null;
+                    modeController.CloseStation();
+                    Mode = modeController.Mode;
+                    StationSessionStatus = "Estación cerrada; la autorización ya no es válida.";
+                    Status = "La autorización fue revocada. Inicie sesión nuevamente.";
+                    OnPropertyChanged(nameof(IsStationOpen));
+                    CloseStationCommand.NotifyCanExecuteChanged();
+                    return;
+                }
+
+                if (refreshed.Authorization.OfflineValidUntil <= timeProvider.GetUtcNow())
+                {
+                    Status =
+                        "El PIN fue aceptado, pero no se pudo renovar la autorización de la estación. " +
+                        "Revise la conexión e inténtelo nuevamente.";
+                    return;
+                }
+
+                state = refreshed;
                 modeController.EnterPlantManagerMode();
                 Mode = modeController.Mode;
                 Status = "Modo Jefe de Planta activo. Se cerrará tras cinco minutos de inactividad total.";

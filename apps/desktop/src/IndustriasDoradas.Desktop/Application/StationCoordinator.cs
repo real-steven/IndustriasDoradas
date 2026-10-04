@@ -51,20 +51,38 @@ public sealed class StationCoordinator(
         if (!networkAvailable)
             return saved;
 
+        return await RefreshAuthorizationAsync(
+                saved,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<ProtectedStationState?> RefreshAuthorizationAsync(
+        ProtectedStationState state,
+        bool refreshCatalogs = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        state = await store.LoadAsync(cancellationToken).ConfigureAwait(false) ?? state;
+        if (state.IsClosed) return null;
+
         try
         {
-            saved = await RefreshTokensIfRequiredAsync(saved, cancellationToken).ConfigureAwait(false);
+            state = await RefreshTokensIfRequiredAsync(state, cancellationToken).ConfigureAwait(false);
             StationAuthorization refreshed = await api.GetAuthorizationAsync(
-                saved.Session.OrganizationId, options.Id, saved.Tokens.AccessToken, cancellationToken).ConfigureAwait(false);
+                state.Session.OrganizationId, options.Id, state.Tokens.AccessToken, cancellationToken).ConfigureAwait(false);
             await stationSequences.EnsureNextAsync(
                 refreshed.StationId,
                 refreshed.NextStationSequence,
                 refreshed.ValidatedAt,
                 cancellationToken).ConfigureAwait(false);
-            var state = saved with { Authorization = refreshed };
-            await store.SaveAsync(state, cancellationToken).ConfigureAwait(false);
-            await TryRefreshCatalogsAsync(state, cancellationToken).ConfigureAwait(false);
-            return state;
+            var updated = state with { Authorization = refreshed };
+            await store.SaveAsync(updated, cancellationToken).ConfigureAwait(false);
+            if (refreshCatalogs)
+            {
+                await TryRefreshCatalogsAsync(updated, cancellationToken).ConfigureAwait(false);
+            }
+            return updated;
         }
         catch (HttpRequestException exception) when (IsAuthenticationRejection(exception))
         {
@@ -78,11 +96,11 @@ public sealed class StationCoordinator(
         }
         catch (HttpRequestException)
         {
-            return saved;
+            return state;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return saved;
+            return state;
         }
     }
 

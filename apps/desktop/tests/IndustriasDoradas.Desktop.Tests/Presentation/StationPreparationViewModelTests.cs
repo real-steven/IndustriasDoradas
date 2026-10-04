@@ -209,6 +209,60 @@ public sealed class StationPreparationViewModelTests
     }
 
     [TestMethod]
+    public async Task OnlineElevationRenewsExpiredAuthorizationBeforeCompletingShipment()
+    {
+        var time = new MutableTimeProvider(Now);
+        ProtectedStationState state = State() with
+        {
+            Tokens = new AuthTokens("access", "refresh", Now.AddHours(48)),
+            Session = State().Session with { ExpiresAt = Now.AddHours(48) },
+        };
+        var catalogs = new MemoryCatalogs();
+        var api = new StubStationApi(
+            state,
+            Snapshot(),
+            () => state.Authorization with
+            {
+                ValidatedAt = time.GetUtcNow(),
+                OfflineValidUntil = time.GetUtcNow().AddHours(24),
+            });
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            api,
+            catalogs,
+            new MemoryStationSequences(),
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        var repository = new RecordingOperationRepository(sessions);
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(catalogs, sessions, repository, time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+
+        await viewModel.InitializeAsync();
+        await viewModel.ElevateAsync("123456");
+        viewModel.SelectedLine = viewModel.Lines.Single(line => line.Id == LineId);
+        viewModel.SelectedSupplier = viewModel.Suppliers.Single();
+        viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
+        await viewModel.PrepareLineCommand.ExecuteAsync(null);
+        await viewModel.ConfirmLineCommand.ExecuteAsync(null);
+        time.Advance(TimeSpan.FromHours(25));
+
+        await viewModel.ElevateAsync("123456");
+        await viewModel.PrepareCompletionCommand.ExecuteAsync(null);
+        await viewModel.ConfirmCompletionCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(1, repository.CompletionCalls);
+        Assert.AreEqual(LineFeedCycleStatus.Completed, sessions.Current?.Status);
+        Assert.IsFalse(viewModel.HasActiveOperation);
+    }
+
+    [TestMethod]
     public async Task CatalogRefreshNeverReplacesUnavailableSelectedLineImplicitly()
     {
         var time = new FixedTimeProvider();
@@ -326,6 +380,15 @@ public sealed class StationPreparationViewModelTests
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
+    private sealed class MutableTimeProvider(DateTimeOffset initial) : TimeProvider
+    {
+        private DateTimeOffset now = initial;
+
+        public override DateTimeOffset GetUtcNow() => now;
+
+        public void Advance(TimeSpan duration) => now += duration;
+    }
+
     private sealed class StubAuth : ISupabaseAuthService
     {
         public Task<AuthTokens> SignInAsync(string email, string password, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -333,10 +396,14 @@ public sealed class StationPreparationViewModelTests
         public Task RequestPasswordRecoveryAsync(string email, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class StubStationApi(ProtectedStationState state, LocalOperationCatalogSnapshot snapshot) : IStationApi
+    private sealed class StubStationApi(
+        ProtectedStationState state,
+        LocalOperationCatalogSnapshot snapshot,
+        Func<StationAuthorization>? authorization = null) : IStationApi
     {
         public Task<ApiSession> GetSessionAsync(string accessToken, CancellationToken cancellationToken = default) => Task.FromResult(state.Session);
-        public Task<StationAuthorization> GetAuthorizationAsync(Guid organizationId, Guid stationId, string accessToken, CancellationToken cancellationToken = default) => Task.FromResult(state.Authorization);
+        public Task<StationAuthorization> GetAuthorizationAsync(Guid organizationId, Guid stationId, string accessToken, CancellationToken cancellationToken = default) =>
+            Task.FromResult(authorization?.Invoke() ?? state.Authorization);
         public Task<PinAttemptResponse> ElevateAsync(Guid organizationId, Guid stationId, string pin, string accessToken, CancellationToken cancellationToken = default) => Task.FromResult(new PinAttemptResponse("ACCEPTED", null, null));
         public Task<LocalOperationCatalogSnapshot> GetOperationCatalogAsync(Guid organizationId, Guid plantId, string accessToken, CancellationToken cancellationToken = default) => Task.FromResult(snapshot);
     }
