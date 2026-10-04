@@ -3,6 +3,7 @@ using System.Windows;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Configuration;
+using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Infrastructure.Health;
 using IndustriasDoradas.Desktop.Infrastructure.Auth;
 using IndustriasDoradas.Desktop.Infrastructure.Input;
@@ -211,6 +212,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<LocalOperationService>();
         builder.Services.AddSingleton<RegisterCajuelaHandler>();
         builder.Services.AddSingleton<RevertLastCajuelaHandler>();
+        builder.Services.AddSingleton<ProductionMilestoneService>();
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
         builder.Services.AddSingleton<StationCoordinator>();

@@ -11,4 +11,6 @@ public enum OperationFeedbackKind
 public interface IOperationFeedbackPlayer
 {
     void Play(OperationFeedbackKind kind);
+
+    void PlayReviewAlert();
 }

@@ -13,6 +13,14 @@ using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
+public sealed record OperationMilestoneAlertViewModel(
+    Guid Id,
+    Guid LineId,
+    string AccentColor,
+    string Icon,
+    string Title,
+    string Message);
+
 public sealed class OperationViewModel : ObservableObject
 {
     private static readonly TimeSpan CostaRicaOffset = TimeSpan.FromHours(-6);
@@ -24,6 +32,7 @@ public sealed class OperationViewModel : ObservableObject
     private readonly OperationInputGuard inputGuard;
     private readonly IOperationInputMetrics inputMetrics;
     private readonly IOperationFeedbackPlayer feedbackPlayer;
+    private readonly ProductionMilestoneService milestones;
     private readonly OperationSafetyOptions safetyOptions;
     private readonly Guid stationId;
     private OperationLinePanelViewModel line = new();
@@ -37,11 +46,6 @@ public sealed class OperationViewModel : ObservableObject
     private bool isLocalStorageAvailable;
     private OperationFocusTarget focusedTarget = OperationFocusTarget.RegisterCajuela;
     private OperationFeedbackKind feedbackKind;
-    private bool isMilestoneAlertVisible;
-    private string milestoneAlertTitle = string.Empty;
-    private string milestoneAlertMessage = string.Empty;
-    private string milestoneAlertIcon = "🔎";
-    private int milestoneAlertVersion;
 
     public OperationViewModel(
         ILocalOperationDashboardRepository dashboard,
@@ -51,6 +55,7 @@ public sealed class OperationViewModel : ObservableObject
         OperationInputGuard inputGuard,
         IOperationInputMetrics inputMetrics,
         IOperationFeedbackPlayer feedbackPlayer,
+        ProductionMilestoneService milestones,
         IOptions<OperationSafetyOptions> safetyOptions,
         IOptions<StationOptions> stationOptions,
         TimeProvider timeProvider)
@@ -62,6 +67,7 @@ public sealed class OperationViewModel : ObservableObject
         this.inputGuard = inputGuard;
         this.inputMetrics = inputMetrics;
         this.feedbackPlayer = feedbackPlayer;
+        this.milestones = milestones;
         this.safetyOptions = safetyOptions.Value;
         this.timeProvider = timeProvider;
         stationId = stationOptions.Value.Id;
@@ -81,7 +87,14 @@ public sealed class OperationViewModel : ObservableObject
             CanPrepareLineCorrection);
         ShowSweepReminderCommand = new RelayCommand<Guid>(ShowSweepReminder);
         ShowComingSoonCommand = new RelayCommand(ShowComingSoon);
-        DismissMilestoneAlertCommand = new RelayCommand(DismissMilestoneAlert);
+        DismissMilestoneAlertCommand = new RelayCommand<Guid>(DismissMilestoneAlert);
+        MilestoneAlerts.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(IsMilestoneAlertVisible));
+            OnPropertyChanged(nameof(MilestoneAlertTitle));
+            OnPropertyChanged(nameof(MilestoneAlertMessage));
+            OnPropertyChanged(nameof(MilestoneAlertIcon));
+        };
     }
 
     public OperationLinePanelViewModel Line
@@ -91,6 +104,7 @@ public sealed class OperationViewModel : ObservableObject
     }
 
     public ObservableCollection<OperationLinePanelViewModel> Lines { get; } = [];
+    public ObservableCollection<OperationMilestoneAlertViewModel> MilestoneAlerts { get; } = [];
     public bool HasActiveLines => Lines.Count > 0;
     public IInputCommandSource InputSource => inputSource;
     public string LocalStorageStatus
@@ -112,29 +126,10 @@ public sealed class OperationViewModel : ObservableObject
         private set => SetProperty(ref correctionSummary, value);
     }
 
-    public bool IsMilestoneAlertVisible
-    {
-        get => isMilestoneAlertVisible;
-        private set => SetProperty(ref isMilestoneAlertVisible, value);
-    }
-
-    public string MilestoneAlertTitle
-    {
-        get => milestoneAlertTitle;
-        private set => SetProperty(ref milestoneAlertTitle, value);
-    }
-
-    public string MilestoneAlertMessage
-    {
-        get => milestoneAlertMessage;
-        private set => SetProperty(ref milestoneAlertMessage, value);
-    }
-
-    public string MilestoneAlertIcon
-    {
-        get => milestoneAlertIcon;
-        private set => SetProperty(ref milestoneAlertIcon, value);
-    }
+    public bool IsMilestoneAlertVisible => MilestoneAlerts.Count > 0;
+    public string MilestoneAlertTitle => MilestoneAlerts.LastOrDefault()?.Title ?? string.Empty;
+    public string MilestoneAlertMessage => MilestoneAlerts.LastOrDefault()?.Message ?? string.Empty;
+    public string MilestoneAlertIcon => MilestoneAlerts.LastOrDefault()?.Icon ?? "🔎";
 
     public bool IsBusy
     {
@@ -179,7 +174,7 @@ public sealed class OperationViewModel : ObservableObject
     public IAsyncRelayCommand<Guid> PrepareLineCorrectionCommand { get; }
     public IRelayCommand<Guid> ShowSweepReminderCommand { get; }
     public IRelayCommand ShowComingSoonCommand { get; }
-    public IRelayCommand DismissMilestoneAlertCommand { get; }
+    public IRelayCommand<Guid> DismissMilestoneAlertCommand { get; }
 
     public Task InitializeAsync() => RefreshAsync();
 
@@ -325,15 +320,19 @@ public sealed class OperationViewModel : ObservableObject
 
         bool succeeded = await RunAsync(async () =>
         {
+            int previousTotal = Line.Total;
             RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(
                 stationId,
                 Line.LineId,
                 inputCommand);
             RegisterCajuelaResult result = await registerHandler.ExecuteAsync(command).ConfigureAwait(true);
             Line.Total = result.Total;
-            if (!result.WasDuplicate && result.Total > 0 && result.Total % 50 == 0)
+            ProductionReviewAlertState review = ApplyMilestones(Line, result.Total);
+            ProductionReviewAlertState previousReview = milestones.CalculateReviewAlert(previousTotal);
+            if (!result.WasDuplicate && review.IsActive &&
+                (!previousReview.IsActive || previousReview.ActiveReference != review.ActiveReference))
             {
-                ShowMilestoneAlert(Line.LineName, result.Total);
+                ShowReviewAlert(Line, review.ActiveReference!.Value);
             }
             ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Cajuela ya registrada. Total: {result.Total}."
@@ -386,6 +385,7 @@ public sealed class OperationViewModel : ObservableObject
             IsCorrectionPending = false;
             CorrectionSummary = string.Empty;
             Line.Total = result.Total;
+            ApplyMilestones(Line, result.Total);
             ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Corrección ya aplicada. Total: {result.Total}."
                 : $"Última cajuela corregida con trazabilidad. Total: {result.Total}.");
@@ -520,6 +520,7 @@ public sealed class OperationViewModel : ObservableObject
         panel.IsReady = snapshot.IsReady;
         panel.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
         panel.Total = snapshot.Total;
+        ApplyMilestones(panel, snapshot.Total);
         panel.SupplierName = snapshot.SupplierName ?? "Sin proveedor";
         panel.ResponsibleName = snapshot.ResponsibleName ?? "Sin responsable";
         WorkPeriod workPeriod = WorkPeriodSchedule.At(timeProvider.GetUtcNow());
@@ -614,56 +615,81 @@ public sealed class OperationViewModel : ObservableObject
     {
         OperationLinePanelViewModel? selected = Lines.FirstOrDefault(item => item.LineId == lineId);
         if (selected is null) return;
-        MilestoneAlertIcon = "🧹";
-        MilestoneAlertTitle = "Realizar barrida";
-        MilestoneAlertMessage = selected.Total >= 250
-            ? $"{selected.LineName} alcanzó 250 cajuelas. Corresponde realizar la barrida."
-            : $"{selected.LineName} tiene {selected.Total} cajuelas. Confirme el procedimiento antes de realizar una barrida.";
+        string message = selected.IsSweepPending
+            ? $"{selected.LineName} superó la referencia de {selected.NextSweepReference} cajuelas. Puede continuar operando."
+            : $"{selected.LineName} tiene {selected.Total} cajuelas. La próxima referencia es {selected.NextSweepReference}.";
+        ShowTransientAlert(new OperationMilestoneAlertViewModel(
+            Guid.NewGuid(),
+            selected.LineId,
+            selected.AccentColor,
+            "🧹",
+            selected.IsSweepPending ? "Barrida pendiente" : "Próxima barrida",
+            message));
         LastResult = "Próximamente: el registro persistente de barridas. Por ahora se muestra el recordatorio visual.";
-        ShowMilestoneAlertForEightSeconds();
     }
 
     private void ShowComingSoon() =>
         ShowFeedback(OperationFeedbackKind.Neutral,
             "Próximamente: confirmación persistente de revisiones y barridas.");
 
-    private void ShowMilestoneAlert(string lineName, int total)
+    private ProductionReviewAlertState ApplyMilestones(OperationLinePanelViewModel panel, int total)
     {
-        bool sweep = total % 250 == 0;
-        MilestoneAlertIcon = sweep ? "🧹" : "🔎";
-        MilestoneAlertTitle = sweep ? "Realizar barrida" : "Revisar mercurio";
-        MilestoneAlertMessage = sweep
-            ? $"{lineName} alcanzó 250 cajuelas."
-            : $"{lineName} alcanzó {total} cajuelas.";
-        ShowMilestoneAlertForEightSeconds();
+        ProductionReviewAlertState review = milestones.CalculateReviewAlert(total);
+        panel.ApplyMilestones(review, milestones.CalculateSweepProgress(total));
+        return review;
     }
 
-    private void ShowMilestoneAlertForEightSeconds()
+    private void ShowReviewAlert(OperationLinePanelViewModel linePanel, long reference)
     {
-        int version = ++milestoneAlertVersion;
-        IsMilestoneAlertVisible = true;
-        _ = HideMilestoneAlertAsync(version);
+        ShowTransientAlert(new OperationMilestoneAlertViewModel(
+            Guid.NewGuid(),
+            linePanel.LineId,
+            linePanel.AccentColor,
+            "🔎",
+            "Revisar mercurio",
+            $"{linePanel.LineName} alcanzó {reference} cajuelas. Revise el mercurio."));
+        feedbackPlayer.PlayReviewAlert();
     }
 
-    private async Task HideMilestoneAlertAsync(int version)
+    private void ShowTransientAlert(OperationMilestoneAlertViewModel alert)
+    {
+        OperationMilestoneAlertViewModel? previous = MilestoneAlerts.FirstOrDefault(
+            item => item.LineId == alert.LineId);
+        if (previous is not null)
+        {
+            MilestoneAlerts.Remove(previous);
+        }
+
+        MilestoneAlerts.Add(alert);
+        _ = HideMilestoneAlertAsync(alert.Id);
+    }
+
+    private async Task HideMilestoneAlertAsync(Guid alertId)
     {
         await Task.Delay(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
-        if (version != milestoneAlertVersion) return;
 
         System.Windows.Threading.Dispatcher? dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        if (dispatcher is null)
         {
-            IsMilestoneAlertVisible = false;
             return;
         }
 
-        await dispatcher.InvokeAsync(() => IsMilestoneAlertVisible = false);
+        if (dispatcher.CheckAccess())
+        {
+            DismissMilestoneAlert(alertId);
+            return;
+        }
+
+        await dispatcher.InvokeAsync(() => DismissMilestoneAlert(alertId));
     }
 
-    private void DismissMilestoneAlert()
+    private void DismissMilestoneAlert(Guid alertId)
     {
-        milestoneAlertVersion++;
-        IsMilestoneAlertVisible = false;
+        OperationMilestoneAlertViewModel? alert = MilestoneAlerts.FirstOrDefault(item => item.Id == alertId);
+        if (alert is not null)
+        {
+            MilestoneAlerts.Remove(alert);
+        }
     }
 
     private bool CanDispatchInput(OperationInputAction action) => action switch

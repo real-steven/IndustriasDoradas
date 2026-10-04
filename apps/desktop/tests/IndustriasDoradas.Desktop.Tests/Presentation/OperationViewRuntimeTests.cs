@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using IndustriasDoradas.Desktop.Presentation.Views;
 
@@ -24,9 +25,21 @@ public sealed class OperationViewRuntimeTests
             IsReady = true,
             Total = 50,
         };
+        var milestoneService = new ProductionMilestoneService();
+        line.ApplyMilestones(
+            milestoneService.CalculateReviewAlert(line.Total),
+            milestoneService.CalculateSweepProgress(line.Total));
         var view = new OperationView
         {
-            DataContext = new OperationViewSmokeContext([line]),
+            DataContext = new OperationViewSmokeContext(
+                [line],
+                [new OperationMilestoneAlertViewModel(
+                    Guid.NewGuid(),
+                    line.LineId,
+                    line.AccentColor,
+                    "🔎",
+                    "Revisar mercurio",
+                    "Línea 1 alcanzó 50 cajuelas. Revise el mercurio.")]),
         };
 
         view.Measure(new Size(1280, 720));
@@ -111,7 +124,9 @@ public sealed class OperationViewRuntimeTests
         }
     }
 
-    private sealed record OperationViewSmokeContext(IReadOnlyList<OperationLinePanelViewModel> Lines)
+    private sealed record OperationViewSmokeContext(
+        IReadOnlyList<OperationLinePanelViewModel> Lines,
+        IReadOnlyList<OperationMilestoneAlertViewModel> MilestoneAlerts)
     {
         public bool HasActiveLines => Lines.Count > 0;
         public string LocalStorageStatus => $"Guardado local disponible · {Lines.Count}";

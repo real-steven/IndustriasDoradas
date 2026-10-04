@@ -87,6 +87,29 @@
                                             </Border>
                                         </Grid>
 
+                                        <Border Margin="0,13,0,0" Padding="12,9"
+                                                Background="#FFF7DD" BorderBrush="#E9A713"
+                                                BorderThickness="1" CornerRadius="10"
+                                                AutomationProperties.LiveSetting="Assertive">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsReviewAlertActive}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Margin="0,0,8,0" FontFamily="Segoe UI Emoji"
+                                                           FontSize="18" Text="🔎" />
+                                                <TextBlock VerticalAlignment="Center" Foreground="#76500A"
+                                                           FontSize="12" FontWeight="Bold"
+                                                           Text="{Binding ReviewAlertLabel}" />
+                                            </StackPanel>
+                                        </Border>
+
                                         <Grid Margin="0,15,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
@@ -122,7 +145,7 @@
                                                     <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="52"
                                                                FontWeight="Bold" Text="{Binding Total}" />
                                                     <TextBlock Margin="7,23,0,0" Foreground="#90A0AA" FontSize="16"
-                                                               Text="/ 250" />
+                                                               Text="{Binding TotalReferenceDescription}" />
                                                 </StackPanel>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
@@ -133,16 +156,17 @@
                                             </StackPanel>
                                         </Grid>
 
-                                        <ProgressBar Height="13" Minimum="0" Maximum="250"
+                                        <ProgressBar Height="13" Minimum="0" Maximum="{Binding ProgressMaximum}"
                                                      Value="{Binding ProgressValue, Mode=OneWay}"
                                                      Foreground="{Binding ProgressColor, Mode=OneWay}"
                                                      Background="#E7EDEF" />
                                         <Grid Margin="0,5,0,0">
-                                            <TextBlock HorizontalAlignment="Left" Foreground="#92A2AC" FontSize="8" Text="0" />
+                                            <TextBlock HorizontalAlignment="Left" Foreground="#92A2AC" FontSize="8"
+                                                       Text="{Binding ProgressStartDescription}" />
                                             <TextBlock HorizontalAlignment="Center" Foreground="#92A2AC" FontSize="8"
                                                        Text="CADA 50 · MERCURIO" />
                                             <TextBlock HorizontalAlignment="Right" Foreground="#92A2AC" FontSize="8"
-                                                       Text="250 · BARRIDA" />
+                                                       Text="{Binding ProgressEndDescription}" />
                                         </Grid>
 
                                         <StackPanel Margin="0,19,0,0" Orientation="Horizontal" HorizontalAlignment="Left">
@@ -258,35 +282,40 @@
             </StackPanel>
         </ScrollViewer>
 
-        <Border Width="380" Margin="0,22,22,0" Padding="16"
-                HorizontalAlignment="Right" VerticalAlignment="Top"
-                Background="White" BorderBrush="#E4D8B4" BorderThickness="6,1,1,1"
-                CornerRadius="16" Panel.ZIndex="40"
-                Visibility="{Binding IsMilestoneAlertVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="56" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Border Width="52" Height="52" Background="#FFF5D7" CornerRadius="14">
-                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                               FontFamily="Segoe UI Emoji" FontSize="27" Text="{Binding MilestoneAlertIcon}" />
-                </Border>
-                <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
-                    <TextBlock FontSize="16" FontWeight="Bold" Text="{Binding MilestoneAlertTitle}" />
-                    <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
-                               Text="{Binding MilestoneAlertMessage}" TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="2" Margin="5,0,8,0" MinHeight="36" Padding="10,5"
-                        VerticalAlignment="Center" Background="#FFF8E8" BorderBrush="#E4D39D"
-                        Foreground="#76500A" Command="{Binding ShowComingSoonCommand}"
-                        Content="REVISIÓN LISTA" />
-                <Button Grid.Column="3" Width="30" Height="30" MinHeight="0" Padding="0"
-                        VerticalAlignment="Top" BorderThickness="0" Background="Transparent"
-                        Command="{Binding DismissMilestoneAlertCommand}" Content="×" />
-            </Grid>
-        </Border>
+        <ItemsControl Width="430" Margin="0,22,22,0"
+                      HorizontalAlignment="Right" VerticalAlignment="Top"
+                      Panel.ZIndex="40" ItemsSource="{Binding MilestoneAlerts}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Margin="0,0,0,10" Padding="16"
+                            AutomationProperties.LiveSetting="Assertive"
+                            Background="White" BorderBrush="{Binding AccentColor}"
+                            BorderThickness="7,1,1,1" CornerRadius="16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="52" Height="52" Background="#FFF5D7" CornerRadius="14">
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           FontFamily="Segoe UI Emoji" FontSize="27" Text="{Binding Icon}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                <TextBlock FontSize="17" FontWeight="Bold" Text="{Binding Title}" />
+                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           Text="{Binding Message}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Width="30" Height="30" MinHeight="0" Padding="0"
+                                    VerticalAlignment="Top" BorderThickness="0" Background="Transparent"
+                                    Command="{Binding DataContext.DismissMilestoneAlertCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding Id}" Content="×"
+                                    AutomationProperties.Name="Cerrar aviso" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
     </Grid>
 </UserControl>

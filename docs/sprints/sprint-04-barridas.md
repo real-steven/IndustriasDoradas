@@ -98,6 +98,16 @@
 
 **Pausa:** prueba con ruido, a distancia, pulsaciones rápidas y dos líneas alertando.
 
+**Resultado 2026-10-04:**
+
+- Desktop integra el servicio puro de 4.4 en cada tarjeta de línea. Al entrar en un múltiplo de 50 muestra un aviso grande durante ocho segundos, identifica explícitamente la línea y reproduce una secuencia breve de tres notas distinta del sonido normal de registro.
+- Después del aviso grande, cada tarjeta conserva una franja visible `REVISAR MERCURIO` dentro de la ventana inclusiva acordada: `50–55`, `100–105` y equivalentes. La señal desaparece al salir de la ventana y puede activarse nuevamente después de un reverso como `50→49→50`.
+- Los avisos transitorios de líneas distintas se apilan y pueden coexistir; un aviso nuevo de la misma línea sustituye únicamente al anterior de esa línea. La operación continúa sin confirmación, sin diálogo modal y sin alterar la disponibilidad de agregar o corregir cajuelas.
+- La revisión de mercurio y la barrida permanecen separadas. En `250` se conserva la alerta de mercurio, la tarjeta indica `Barrida pendiente` y el progreso avanza hacia `500`; no se presume ni se registra una barrida.
+- La barra usa referencias dinámicas y no impone un máximo al contador. Las pruebas WPF y de vista cubren el intervalo `50–55`, retiro en `56`, reverso, dos líneas simultáneas, acumulado `250/500` y continuidad de los comandos.
+
+**Pausa parcial:** compilación, render, pulsaciones rápidas y dos líneas quedaron cubiertos automáticamente. La percepción del sonido con ruido real de planta y a distancia requiere validación manual en el equipo físico. No iniciar 4.6 sin esa comprobación o una autorización expresa para continuar.
+
 ### 4.6 Registro de barrida
 
 **Prompt:** Implementa registro simple de la barrida efectivamente realizada: línea, cargamento, eventos/cajuelas incluidos, cantidad real, responsable y tiempos. El operario principal decide cuándo barrer; el jefe de planta confirma el registro físico y puede dejar la recuperación de mercurio pendiente. No solicites ni muestres oro en desktop. Al cerrar un cargamento sin barrida final, presenta un flujo de confirmación que registra la barrida antes del cierre. Evita solapamiento, mezcla de cargamentos y doble registro.

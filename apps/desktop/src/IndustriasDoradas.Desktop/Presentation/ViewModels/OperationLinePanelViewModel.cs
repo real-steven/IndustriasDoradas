@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
@@ -18,6 +19,17 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     private int total;
     private bool isReady;
     private bool hasPreviousResponsible;
+    private bool isReviewAlertActive;
+    private string reviewAlertLabel = string.Empty;
+    private bool isSweepPending;
+    private long nextSweepReference = 250;
+    private double progressValue;
+    private double progressMaximum = 250;
+    private string progressStartDescription = "0";
+    private string progressEndDescription = "250 · BARRIDA";
+    private string totalReferenceDescription = "/ 250";
+    private string progressColor = "#1F9D55";
+    private string nextAlertDescription = "Mercurio en 50";
 
     public Guid LineId { get => lineId; set => SetProperty(ref lineId, value); }
     public int LineSlot { get => lineSlot; set => SetProperty(ref lineSlot, value); }
@@ -63,33 +75,111 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     public int Total
     {
         get => total;
-        set
-        {
-            if (!SetProperty(ref total, value)) return;
-            OnPropertyChanged(nameof(ProgressValue));
-            OnPropertyChanged(nameof(ProgressColor));
-            OnPropertyChanged(nameof(NextAlertDescription));
-        }
+        set => SetProperty(ref total, value);
     }
 
-    public double ProgressValue => CycleTotal;
-    private int CycleTotal => Total == 0 ? 0 : ((Total - 1) % 250) + 1;
-    public string ProgressColor => CycleTotal switch
+    public bool IsReviewAlertActive
     {
-        >= 200 => "#CF3941",
-        >= 125 => "#E9A713",
-        _ => "#1F9D55",
-    };
+        get => isReviewAlertActive;
+        private set => SetProperty(ref isReviewAlertActive, value);
+    }
+
+    public string ReviewAlertLabel
+    {
+        get => reviewAlertLabel;
+        private set => SetProperty(ref reviewAlertLabel, value);
+    }
+
+    public bool IsSweepPending
+    {
+        get => isSweepPending;
+        private set => SetProperty(ref isSweepPending, value);
+    }
+
+    public long NextSweepReference
+    {
+        get => nextSweepReference;
+        private set => SetProperty(ref nextSweepReference, value);
+    }
+
+    public double ProgressValue
+    {
+        get => progressValue;
+        private set => SetProperty(ref progressValue, value);
+    }
+
+    public double ProgressMaximum
+    {
+        get => progressMaximum;
+        private set => SetProperty(ref progressMaximum, value);
+    }
+
+    public string ProgressStartDescription
+    {
+        get => progressStartDescription;
+        private set => SetProperty(ref progressStartDescription, value);
+    }
+
+    public string ProgressEndDescription
+    {
+        get => progressEndDescription;
+        private set => SetProperty(ref progressEndDescription, value);
+    }
+
+    public string TotalReferenceDescription
+    {
+        get => totalReferenceDescription;
+        private set => SetProperty(ref totalReferenceDescription, value);
+    }
+
+    public string ProgressColor
+    {
+        get => progressColor;
+        private set => SetProperty(ref progressColor, value);
+    }
+
     public string NextAlertDescription
     {
-        get
-        {
-            if (CycleTotal >= 250) return "Barrida pendiente";
-            int milestone = Math.Min(250, ((CycleTotal / 50) + 1) * 50);
-            string action = milestone == 250 ? "Barrida" : "Mercurio";
-            return $"{action} en {milestone - CycleTotal}";
-        }
+        get => nextAlertDescription;
+        private set => SetProperty(ref nextAlertDescription, value);
     }
+
+    public void ApplyMilestones(
+        ProductionReviewAlertState review,
+        ProductionSweepProgressState sweep)
+    {
+        ArgumentNullException.ThrowIfNull(review);
+        ArgumentNullException.ThrowIfNull(sweep);
+
+        IsReviewAlertActive = review.IsActive;
+        ReviewAlertLabel = review.ActiveReference is long reference
+            ? $"REVISAR MERCURIO · {reference} CAJUELAS"
+            : string.Empty;
+        IsSweepPending = sweep.IsSweepPending;
+        NextSweepReference = sweep.NextSweepReference;
+        ProgressValue = sweep.CajuelasInDisplaySegment;
+        ProgressMaximum = sweep.DisplayReference - sweep.DisplaySegmentStart;
+        ProgressStartDescription = sweep.DisplaySegmentStart.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        ProgressEndDescription = $"{sweep.DisplayReference} · BARRIDA";
+        TotalReferenceDescription = $"/ {sweep.DisplayReference}";
+        double ratio = ProgressMaximum <= 0 ? 0 : ProgressValue / ProgressMaximum;
+        ProgressColor = ratio switch
+        {
+            >= 0.8 => "#CF3941",
+            >= 0.5 => "#E9A713",
+            _ => "#1F9D55",
+        };
+
+        long reviewDistance = review.NextReference - review.TotalCajuelas;
+        long sweepDistance = sweep.NextSweepReference - sweep.TotalCajuelas;
+        NextAlertDescription = sweep.IsSweepPending
+            ? "Barrida pendiente"
+            : sweepDistance <= reviewDistance
+                ? $"Barrida en {sweepDistance}"
+                : $"Mercurio en {reviewDistance}";
+    }
+
     public bool IsReady { get => isReady; set => SetProperty(ref isReady, value); }
     public bool HasPreviousResponsible
     {

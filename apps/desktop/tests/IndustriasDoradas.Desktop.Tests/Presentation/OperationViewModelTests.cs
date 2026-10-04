@@ -85,7 +85,11 @@ public sealed class OperationViewModelTests
         var dashboard = new QueueDashboardRepository(
             ReadySnapshot(total: 49),
             ReadySnapshot(total: 50));
-        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 49));
+        var feedback = new RecordingFeedback();
+        OperationViewModel viewModel = Create(
+            dashboard,
+            new StubCajuelaRepository(total: 49),
+            feedback: feedback);
         await viewModel.InitializeAsync();
 
         await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
@@ -93,11 +97,16 @@ public sealed class OperationViewModelTests
         Assert.IsTrue(viewModel.IsMilestoneAlertVisible);
         Assert.AreEqual("Revisar mercurio", viewModel.MilestoneAlertTitle);
         StringAssert.Contains(viewModel.MilestoneAlertMessage, "50");
+        StringAssert.Contains(viewModel.MilestoneAlertMessage, "Línea 1");
         Assert.AreEqual(50, viewModel.Line.Total);
+        Assert.IsTrue(viewModel.Line.IsReviewAlertActive);
+        Assert.AreEqual(1, feedback.ReviewAlertCalls);
+        Assert.AreEqual(1, viewModel.MilestoneAlerts.Count);
+        Assert.IsTrue(viewModel.RegisterLineCajuelaCommand.CanExecute(LineId));
     }
 
     [TestMethod]
-    public async Task RegistrationAtTwoHundredFiftyShowsSweepAlert()
+    public async Task RegistrationAtTwoHundredFiftyKeepsReviewAndSweepSignalsIndependent()
     {
         var dashboard = new QueueDashboardRepository(
             ReadySnapshot(total: 249),
@@ -108,8 +117,112 @@ public sealed class OperationViewModelTests
         await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
 
         Assert.IsTrue(viewModel.IsMilestoneAlertVisible);
-        Assert.AreEqual("Realizar barrida", viewModel.MilestoneAlertTitle);
+        Assert.AreEqual("Revisar mercurio", viewModel.MilestoneAlertTitle);
         StringAssert.Contains(viewModel.MilestoneAlertMessage, "250");
+        Assert.IsTrue(viewModel.Line.IsReviewAlertActive);
+        Assert.IsTrue(viewModel.Line.IsSweepPending);
+        Assert.AreEqual("/ 500", viewModel.Line.TotalReferenceDescription);
+        Assert.AreEqual(0d, viewModel.Line.ProgressValue);
+        Assert.AreEqual("Barrida pendiente", viewModel.Line.NextAlertDescription);
+    }
+
+    [TestMethod]
+    public async Task ReviewSignalRemainsFromFiftyThroughFiftyFiveAndClearsAtFiftySix()
+    {
+        var time = new ManualTimeProvider(Now);
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 49),
+            ReadySnapshot(total: 50),
+            ReadySnapshot(total: 51),
+            ReadySnapshot(total: 52),
+            ReadySnapshot(total: 53),
+            ReadySnapshot(total: 54),
+            ReadySnapshot(total: 55),
+            ReadySnapshot(total: 56));
+        var feedback = new RecordingFeedback();
+        OperationViewModel viewModel = Create(
+            dashboard,
+            new StubCajuelaRepository(total: 49),
+            time,
+            feedback: feedback);
+        await viewModel.InitializeAsync();
+
+        for (int total = 50; total <= 56; total++)
+        {
+            await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
+            Assert.AreEqual(total is >= 50 and <= 55, viewModel.Line.IsReviewAlertActive);
+            time.Advance(TimeSpan.FromSeconds(3));
+        }
+
+        Assert.AreEqual(1, feedback.ReviewAlertCalls);
+        Assert.IsTrue(viewModel.RegisterLineCajuelaCommand.CanExecute(LineId));
+    }
+
+    [TestMethod]
+    public async Task ReversingBelowThresholdAllowsTheReviewAlertToTriggerAgain()
+    {
+        var time = new ManualTimeProvider(Now);
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 49),
+            ReadySnapshot(total: 50),
+            ReadySnapshot(total: 49),
+            ReadySnapshot(total: 50));
+        var feedback = new RecordingFeedback();
+        var cajuelas = new StubCajuelaRepository(total: 49);
+        OperationViewModel viewModel = Create(dashboard, cajuelas, time, feedback: feedback);
+        await viewModel.InitializeAsync();
+
+        await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
+        await viewModel.PrepareCorrectionCommand.ExecuteAsync(null);
+        await viewModel.ConfirmCorrectionCommand.ExecuteAsync(null);
+        time.Advance(TimeSpan.FromSeconds(3));
+        await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
+
+        Assert.AreEqual(2, feedback.ReviewAlertCalls);
+        Assert.IsTrue(viewModel.Line.IsReviewAlertActive);
+        Assert.AreEqual(50, viewModel.Line.Total);
+    }
+
+    [TestMethod]
+    public async Task TwoLinesCanDisplayPersistentReviewSignalsAtTheSameTime()
+    {
+        var dashboard = new ListDashboardRepository(
+        [
+            ReadySnapshot(total: 50),
+            ReadySnapshotForLine(SecondLineId, "Línea 2", total: 100),
+        ]);
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 50));
+
+        await viewModel.InitializeAsync();
+
+        Assert.AreEqual(2, viewModel.Lines.Count);
+        Assert.IsTrue(viewModel.Lines[0].IsReviewAlertActive);
+        Assert.IsTrue(viewModel.Lines[1].IsReviewAlertActive);
+        Assert.AreEqual("REVISAR MERCURIO · 50 CAJUELAS", viewModel.Lines[0].ReviewAlertLabel);
+        Assert.AreEqual("REVISAR MERCURIO · 100 CAJUELAS", viewModel.Lines[1].ReviewAlertLabel);
+        Assert.IsTrue(viewModel.RegisterLineCajuelaCommand.CanExecute(LineId));
+        Assert.IsTrue(viewModel.RegisterLineCajuelaCommand.CanExecute(SecondLineId));
+    }
+
+    [TestMethod]
+    public async Task TransientNoticesForTwoLinesRemainVisibleTogether()
+    {
+        var dashboard = new ListDashboardRepository(
+        [
+            ReadySnapshot(total: 50),
+            ReadySnapshotForLine(SecondLineId, "Línea 2", total: 100),
+        ]);
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 50));
+        await viewModel.InitializeAsync();
+
+        viewModel.ShowSweepReminderCommand.Execute(LineId);
+        viewModel.ShowSweepReminderCommand.Execute(SecondLineId);
+
+        Assert.AreEqual(2, viewModel.MilestoneAlerts.Count);
+        CollectionAssert.AreEquivalent(
+            new[] { LineId, SecondLineId },
+            viewModel.MilestoneAlerts.Select(alert => alert.LineId).ToArray());
+        Assert.IsTrue(viewModel.RegisterLineCajuelaCommand.CanExecute(LineId));
     }
 
     [TestMethod]
@@ -352,6 +465,7 @@ public sealed class OperationViewModelTests
             new OperationInputGuard(safety, time),
             metrics ?? new RecordingMetrics(),
             feedback ?? new RecordingFeedback(),
+            new ProductionMilestoneService(),
             safety,
             Options.Create(new StationOptions { Id = StationId }),
             time);
@@ -557,7 +671,9 @@ public sealed class OperationViewModelTests
     private sealed class RecordingFeedback : IOperationFeedbackPlayer
     {
         public OperationFeedbackKind LastKind { get; private set; }
+        public int ReviewAlertCalls { get; private set; }
         public void Play(OperationFeedbackKind kind) => LastKind = kind;
+        public void PlayReviewAlert() => ReviewAlertCalls++;
     }
 
     private sealed class StubInputCommandSource : IInputCommandSource
