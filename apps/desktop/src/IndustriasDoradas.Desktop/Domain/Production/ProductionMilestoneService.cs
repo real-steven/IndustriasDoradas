@@ -112,19 +112,16 @@ public sealed class ProductionMilestoneService
         long baseline = lastSweepCumulativeTotal ?? 0;
         long nextSweepReference = checked(baseline + configuration.SweepInterval);
         long cajuelasSinceLastSweep = totalCajuelas - baseline;
-        long completedDisplaySegments = cajuelasSinceLastSweep / configuration.SweepInterval;
-        long displaySegmentStart = checked(
-            baseline + completedDisplaySegments * configuration.SweepInterval);
-        long displayReference = checked(displaySegmentStart + configuration.SweepInterval);
+        long displayProgress = Math.Min(cajuelasSinceLastSweep, configuration.SweepInterval);
 
         return new ProductionSweepProgressState(
             totalCajuelas,
             lastSweepCumulativeTotal,
             nextSweepReference,
             totalCajuelas >= nextSweepReference,
-            displaySegmentStart,
-            displayReference,
-            totalCajuelas - displaySegmentStart);
+            baseline,
+            nextSweepReference,
+            displayProgress);
     }
 
     private static void EnsureNonNegative(long value, string parameterName)

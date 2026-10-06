@@ -9,7 +9,8 @@ public sealed record ApiSession(
     Guid ProfileId,
     Guid OrganizationId,
     string Role,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    string DisplayName = "Jefe de planta");
 
 public sealed record StationAuthorization(
     Guid StationId,

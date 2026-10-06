@@ -103,8 +103,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnFocusOperation(object sender, RoutedEventArgs e) => CollapseHeader();
-
     private void OnShowHeader(object sender, RoutedEventArgs e)
     {
         ExpandHeader();

@@ -23,6 +23,8 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     private string reviewAlertLabel = string.Empty;
     private bool isSweepPending;
     private long nextSweepReference = 250;
+    private int lastSweepCumulativeTotal;
+    private int cajuelasSinceLastSweep;
     private double progressValue;
     private double progressMaximum = 250;
     private string progressStartDescription = "0";
@@ -102,6 +104,18 @@ public sealed class OperationLinePanelViewModel : ObservableObject
         private set => SetProperty(ref nextSweepReference, value);
     }
 
+    public int LastSweepCumulativeTotal
+    {
+        get => lastSweepCumulativeTotal;
+        private set => SetProperty(ref lastSweepCumulativeTotal, value);
+    }
+
+    public int CajuelasSinceLastSweep
+    {
+        get => cajuelasSinceLastSweep;
+        private set => SetProperty(ref cajuelasSinceLastSweep, value);
+    }
+
     public double ProgressValue
     {
         get => progressValue;
@@ -157,12 +171,13 @@ public sealed class OperationLinePanelViewModel : ObservableObject
             : string.Empty;
         IsSweepPending = sweep.IsSweepPending;
         NextSweepReference = sweep.NextSweepReference;
+        LastSweepCumulativeTotal = checked((int)(sweep.LastSweepCumulativeTotal ?? 0));
+        CajuelasSinceLastSweep = Math.Max(0, total - LastSweepCumulativeTotal);
         ProgressValue = sweep.CajuelasInDisplaySegment;
         ProgressMaximum = sweep.DisplayReference - sweep.DisplaySegmentStart;
-        ProgressStartDescription = sweep.DisplaySegmentStart.ToString(
-            System.Globalization.CultureInfo.InvariantCulture);
-        ProgressEndDescription = $"{sweep.DisplayReference} · BARRIDA";
-        TotalReferenceDescription = $"/ {sweep.DisplayReference}";
+        ProgressStartDescription = "0";
+        ProgressEndDescription = $"{ProgressMaximum:0} · BARRIDA";
+        TotalReferenceDescription = $"/ {ProgressMaximum:0}";
         double ratio = ProgressMaximum <= 0 ? 0 : ProgressValue / ProgressMaximum;
         ProgressColor = ratio switch
         {

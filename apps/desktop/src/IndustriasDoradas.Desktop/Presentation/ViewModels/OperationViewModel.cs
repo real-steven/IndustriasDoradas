@@ -19,7 +19,9 @@ public sealed record OperationMilestoneAlertViewModel(
     string AccentColor,
     string Icon,
     string Title,
-    string Message);
+    string Message,
+    string AlertKey = "",
+    bool IsPersistent = false);
 
 public sealed class OperationViewModel : ObservableObject
 {
@@ -27,6 +29,7 @@ public sealed class OperationViewModel : ObservableObject
     private readonly ILocalOperationDashboardRepository dashboard;
     private readonly RegisterCajuelaHandler registerHandler;
     private readonly RevertLastCajuelaHandler reversalHandler;
+    private readonly RecordProductionSweepHandler sweepHandler;
     private readonly TimeProvider timeProvider;
     private readonly IInputCommandSource inputSource;
     private readonly OperationInputGuard inputGuard;
@@ -37,12 +40,17 @@ public sealed class OperationViewModel : ObservableObject
     private readonly Guid stationId;
     private OperationLinePanelViewModel line = new();
     private PreparedCajuelaReversal? preparedReversal;
+    private PreparedProductionSweep? preparedSweep;
     private string localStorageStatus = "Preparando almacenamiento local…";
     private string pendingStatus = "Pendientes por enviar: —";
     private string lastResult = "Esperando una operación.";
     private string correctionSummary = string.Empty;
+    private string correctionReason = string.Empty;
+    private bool correctionRequiresPlantManager;
     private bool isBusy;
     private bool isCorrectionPending;
+    private bool isSweepConfirmationPending;
+    private string sweepConfirmationSummary = string.Empty;
     private bool isLocalStorageAvailable;
     private OperationFocusTarget focusedTarget = OperationFocusTarget.RegisterCajuela;
     private OperationFeedbackKind feedbackKind;
@@ -51,6 +59,7 @@ public sealed class OperationViewModel : ObservableObject
         ILocalOperationDashboardRepository dashboard,
         RegisterCajuelaHandler registerHandler,
         RevertLastCajuelaHandler reversalHandler,
+        RecordProductionSweepHandler sweepHandler,
         IInputCommandSource inputSource,
         OperationInputGuard inputGuard,
         IOperationInputMetrics inputMetrics,
@@ -63,6 +72,7 @@ public sealed class OperationViewModel : ObservableObject
         this.dashboard = dashboard;
         this.registerHandler = registerHandler;
         this.reversalHandler = reversalHandler;
+        this.sweepHandler = sweepHandler;
         this.inputSource = inputSource;
         this.inputGuard = inputGuard;
         this.inputMetrics = inputMetrics;
@@ -82,10 +92,17 @@ public sealed class OperationViewModel : ObservableObject
         RegisterLineCajuelaCommand = new AsyncRelayCommand<Guid>(
             RegisterLineCajuelaAsync,
             CanRegisterLineCajuela);
+        RegisterFiveLineCajuelasCommand = new AsyncRelayCommand<Guid>(
+            RegisterFiveLineCajuelasAsync,
+            CanRegisterLineCajuela);
         PrepareLineCorrectionCommand = new AsyncRelayCommand<Guid>(
             PrepareLineCorrectionAsync,
             CanPrepareLineCorrection);
-        ShowSweepReminderCommand = new RelayCommand<Guid>(ShowSweepReminder);
+        PrepareLineSweepCommand = new AsyncRelayCommand<Guid>(
+            PrepareLineSweepAsync,
+            CanPrepareLineSweep);
+        ConfirmSweepCommand = new AsyncRelayCommand(ConfirmSweepAsync, CanConfirmSweep);
+        CancelSweepCommand = new RelayCommand(CancelSweep, CanCancelSweep);
         ShowComingSoonCommand = new RelayCommand(ShowComingSoon);
         DismissMilestoneAlertCommand = new RelayCommand<Guid>(DismissMilestoneAlert);
         MilestoneAlerts.CollectionChanged += (_, _) =>
@@ -124,6 +141,36 @@ public sealed class OperationViewModel : ObservableObject
     {
         get => correctionSummary;
         private set => SetProperty(ref correctionSummary, value);
+    }
+
+    public string CorrectionReason
+    {
+        get => correctionReason;
+        set => SetProperty(ref correctionReason, value);
+    }
+
+    public bool CorrectionRequiresPlantManager
+    {
+        get => correctionRequiresPlantManager;
+        private set => SetProperty(ref correctionRequiresPlantManager, value);
+    }
+
+    public bool IsSweepConfirmationPending
+    {
+        get => isSweepConfirmationPending;
+        private set
+        {
+            if (SetProperty(ref isSweepConfirmationPending, value))
+            {
+                NotifyCommandStates();
+            }
+        }
+    }
+
+    public string SweepConfirmationSummary
+    {
+        get => sweepConfirmationSummary;
+        private set => SetProperty(ref sweepConfirmationSummary, value);
     }
 
     public bool IsMilestoneAlertVisible => MilestoneAlerts.Count > 0;
@@ -171,8 +218,11 @@ public sealed class OperationViewModel : ObservableObject
     public IAsyncRelayCommand RefreshCommand { get; }
     public IAsyncRelayCommand<OperationInputAction> DispatchInputCommand { get; }
     public IAsyncRelayCommand<Guid> RegisterLineCajuelaCommand { get; }
+    public IAsyncRelayCommand<Guid> RegisterFiveLineCajuelasCommand { get; }
     public IAsyncRelayCommand<Guid> PrepareLineCorrectionCommand { get; }
-    public IRelayCommand<Guid> ShowSweepReminderCommand { get; }
+    public IAsyncRelayCommand<Guid> PrepareLineSweepCommand { get; }
+    public IAsyncRelayCommand ConfirmSweepCommand { get; }
+    public IRelayCommand CancelSweepCommand { get; }
     public IRelayCommand ShowComingSoonCommand { get; }
     public IRelayCommand<Guid> DismissMilestoneAlertCommand { get; }
 
@@ -268,10 +318,148 @@ public sealed class OperationViewModel : ObservableObject
         await RegisterCajuelaAsync().ConfigureAwait(true);
     }
 
+    private async Task RegisterFiveLineCajuelasAsync(Guid lineId)
+    {
+        if (!TrySelectLine(lineId)) return;
+        if (!CanRegisterLineCajuela(lineId))
+        {
+            ShowFeedback(OperationFeedbackKind.Warning,
+                "Agregar cinco cajuelas no está disponible en el estado actual.");
+            return;
+        }
+
+        OperationLinePanelViewModel selectedLine = Line;
+        int previousTotal = selectedLine.Total;
+        int savedCount = 0;
+        bool succeeded = await RunAsync(async () =>
+        {
+            int currentTotal = previousTotal;
+            for (int index = 0; index < 5; index++)
+            {
+                var inputCommand = new OperationInputCommand(
+                    Guid.NewGuid(),
+                    OperationInputAction.RegisterCajuela,
+                    new OperationInputOrigin(
+                        "CLICK",
+                        "shared-pointer",
+                        "RegisterFiveCajuelas",
+                        selectedLine.LineSlot,
+                        false),
+                    timeProvider.GetUtcNow());
+                long started = timeProvider.GetTimestamp();
+                try
+                {
+                    RegisterCajuelaCommand command = RegisterCajuelaHandler.CreateCommand(
+                        stationId,
+                        selectedLine.LineId,
+                        inputCommand);
+                    RegisterCajuelaResult result = await registerHandler.ExecuteAsync(command)
+                        .ConfigureAwait(true);
+                    currentTotal = result.Total;
+                    if (!result.WasDuplicate) savedCount++;
+                    RecordMetric(
+                        inputCommand,
+                        OperationInputMetricOutcome.Accepted,
+                        started,
+                        null,
+                        null);
+                }
+                catch
+                {
+                    RecordMetric(
+                        inputCommand,
+                        OperationInputMetricOutcome.Failed,
+                        started,
+                        null,
+                        "LOCAL_WRITE_FAILED");
+                    throw;
+                }
+            }
+
+            selectedLine.Total = currentTotal;
+            ProductionReviewAlertState review = ApplyMilestones(
+                selectedLine, currentTotal, selectedLine.LastSweepCumulativeTotal);
+            ProductionReviewAlertState previousReview = milestones.CalculateReviewAlert(previousTotal);
+            if (review.IsActive &&
+                (!previousReview.IsActive || previousReview.ActiveReference != review.ActiveReference))
+            {
+                ShowReviewAlert(selectedLine, review.ActiveReference!.Value);
+            }
+
+            ShowFeedback(
+                OperationFeedbackKind.Success,
+                $"{savedCount} cajuelas guardadas en {selectedLine.LineName}. Total: {currentTotal}.");
+            await RefreshSnapshotAsync().ConfigureAwait(true);
+        }, "No se completó el registro de cinco cajuelas. Revise el contexto local.").ConfigureAwait(true);
+
+        if (!succeeded)
+        {
+            ShowFeedback(OperationFeedbackKind.Error, LastResult);
+        }
+    }
+
     private async Task PrepareLineCorrectionAsync(Guid lineId)
     {
         if (!TrySelectLine(lineId)) return;
         await PrepareCorrectionAsync().ConfigureAwait(true);
+    }
+
+    private async Task PrepareLineSweepAsync(Guid lineId)
+    {
+        if (!TrySelectLine(lineId)) return;
+        bool prepared = await RunAsync(async () =>
+        {
+            preparedSweep = await sweepHandler.PrepareAsync(stationId, lineId).ConfigureAwait(true);
+            SweepConfirmationSummary =
+                $"{Line.LineName}: se incluirán {preparedSweep.CajuelaQuantity} cajuelas " +
+                $"hasta el total acumulado {preparedSweep.TotalCajuelas}. " +
+                "La recuperación de mercurio quedará pendiente.";
+            IsSweepConfirmationPending = true;
+            ShowFeedback(
+                OperationFeedbackKind.Warning,
+                "Barrida preparada. Active Modo Jefe de Planta para confirmarla.");
+        }, "No hay cajuelas nuevas disponibles para registrar en una barrida.").ConfigureAwait(true);
+        if (!prepared)
+        {
+            ShowFeedback(OperationFeedbackKind.Warning, LastResult);
+        }
+    }
+
+    private async Task ConfirmSweepAsync()
+    {
+        PreparedProductionSweep? prepared = preparedSweep;
+        if (prepared is null) return;
+        bool confirmed = await RunAsync(async () =>
+        {
+            LocalSweepRegistration result = await sweepHandler
+                .ConfirmAsync(prepared, isFinal: false)
+                .ConfigureAwait(true);
+            preparedSweep = null;
+            IsSweepConfirmationPending = false;
+            SweepConfirmationSummary = string.Empty;
+            ShowFeedback(
+                OperationFeedbackKind.Success,
+                result.WasDuplicate
+                    ? $"La barrida ya estaba registrada. Acumulado barrido: {result.CumulativeSweptTotal}."
+                    : $"Barrida registrada: {result.Sweep.CajuelaQuantity} cajuelas. " +
+                      $"Próxima referencia: {result.CumulativeSweptTotal + 250}.");
+            await RefreshSnapshotAsync().ConfigureAwait(true);
+        }, "No se pudo confirmar la barrida; prepárela nuevamente.").ConfigureAwait(true);
+        if (!confirmed)
+        {
+            preparedSweep = null;
+            IsSweepConfirmationPending = false;
+            SweepConfirmationSummary = string.Empty;
+            ShowFeedback(OperationFeedbackKind.Error, LastResult);
+        }
+    }
+
+    private void CancelSweep()
+    {
+        preparedSweep = null;
+        IsSweepConfirmationPending = false;
+        SweepConfirmationSummary = string.Empty;
+        ShowFeedback(OperationFeedbackKind.Neutral, "Barrida cancelada; no se modificó el registro.");
     }
 
     private bool TrySelectLine(Guid lineId)
@@ -327,7 +515,8 @@ public sealed class OperationViewModel : ObservableObject
                 inputCommand);
             RegisterCajuelaResult result = await registerHandler.ExecuteAsync(command).ConfigureAwait(true);
             Line.Total = result.Total;
-            ProductionReviewAlertState review = ApplyMilestones(Line, result.Total);
+            ProductionReviewAlertState review = ApplyMilestones(
+                Line, result.Total, Line.LastSweepCumulativeTotal);
             ProductionReviewAlertState previousReview = milestones.CalculateReviewAlert(previousTotal);
             if (!result.WasDuplicate && review.IsActive &&
                 (!previousReview.IsActive || previousReview.ActiveReference != review.ActiveReference))
@@ -358,9 +547,14 @@ public sealed class OperationViewModel : ObservableObject
         {
             preparedReversal = await reversalHandler.PrepareAsync(stationId, Line.LineId)
                 .ConfigureAwait(true);
-            CorrectionSummary =
-                $"Se corregirá la última cajuela. El total cambiará de " +
-                $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}.";
+            CorrectionRequiresPlantManager = preparedReversal.RequiresPlantManager;
+            CorrectionReason = string.Empty;
+            CorrectionSummary = preparedReversal.RequiresPlantManager
+                ? $"La última cajuela tiene más de cinco minutos. El total cambiará de " +
+                  $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}; " +
+                  "active Modo Jefe de Planta e indique el motivo."
+                : $"Corrección rápida de la última cajuela. El total cambiará de " +
+                  $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}.";
             IsCorrectionPending = true;
             ShowFeedback(OperationFeedbackKind.Warning, "Confirme la corrección o cancele para conservar el conteo.");
         }, "No hay una última cajuela disponible para corregir.").ConfigureAwait(true);
@@ -379,13 +573,21 @@ public sealed class OperationViewModel : ObservableObject
         bool confirmed = await RunAsync(async () =>
         {
             RevertLastCajuelaResult result = inputCommand is null
-                ? await reversalHandler.ConfirmAsync(prepared).ConfigureAwait(true)
-                : await reversalHandler.ConfirmAsync(prepared, inputCommand.Origin).ConfigureAwait(true);
+                ? await reversalHandler.ConfirmAsync(
+                    prepared,
+                    OperationInputOrigin.Application(),
+                    CorrectionReason).ConfigureAwait(true)
+                : await reversalHandler.ConfirmAsync(
+                    prepared,
+                    inputCommand.Origin,
+                    CorrectionReason).ConfigureAwait(true);
             preparedReversal = null;
             IsCorrectionPending = false;
             CorrectionSummary = string.Empty;
+            CorrectionReason = string.Empty;
+            CorrectionRequiresPlantManager = false;
             Line.Total = result.Total;
-            ApplyMilestones(Line, result.Total);
+            ApplyMilestones(Line, result.Total, Line.LastSweepCumulativeTotal);
             ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Corrección ya aplicada. Total: {result.Total}."
                 : $"Última cajuela corregida con trazabilidad. Total: {result.Total}.");
@@ -398,6 +600,8 @@ public sealed class OperationViewModel : ObservableObject
             preparedReversal = null;
             IsCorrectionPending = false;
             CorrectionSummary = string.Empty;
+            CorrectionReason = string.Empty;
+            CorrectionRequiresPlantManager = false;
         }
     }
 
@@ -406,6 +610,8 @@ public sealed class OperationViewModel : ObservableObject
         preparedReversal = null;
         IsCorrectionPending = false;
         CorrectionSummary = string.Empty;
+        CorrectionReason = string.Empty;
+        CorrectionRequiresPlantManager = false;
         ShowFeedback(OperationFeedbackKind.Neutral, "Corrección cancelada. El conteo no cambió.");
     }
 
@@ -504,6 +710,7 @@ public sealed class OperationViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasActiveLines));
+        SynchronizeSweepAlerts();
         NotifyCommandStates();
     }
 
@@ -520,7 +727,7 @@ public sealed class OperationViewModel : ObservableObject
         panel.IsReady = snapshot.IsReady;
         panel.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
         panel.Total = snapshot.Total;
-        ApplyMilestones(panel, snapshot.Total);
+        ApplyMilestones(panel, snapshot.Total, snapshot.LastSweepCumulativeTotal);
         panel.SupplierName = snapshot.SupplierName ?? "Sin proveedor";
         panel.ResponsibleName = snapshot.ResponsibleName ?? "Sin responsable";
         WorkPeriod workPeriod = WorkPeriodSchedule.At(timeProvider.GetUtcNow());
@@ -576,6 +783,11 @@ public sealed class OperationViewModel : ObservableObject
             LastResult = failureMessage;
             return false;
         }
+        catch (UnauthorizedAccessException exception)
+        {
+            LastResult = exception.Message;
+            return false;
+        }
         catch (Exception exception) when (exception is IOException or SqliteException)
         {
             LocalStorageFailure failure = LocalStorageFailureClassifier.Classify(exception);
@@ -605,37 +817,35 @@ public sealed class OperationViewModel : ObservableObject
 
     private bool CanPrepareCorrection() =>
         Line.LineId != Guid.Empty && Line.IsReady && IsLocalStorageAvailable &&
-        Line.Total > 0 && !IsBusy && !IsCorrectionPending;
+        Line.Total > Line.LastSweepCumulativeTotal && !IsBusy && !IsCorrectionPending &&
+        !IsSweepConfirmationPending;
     private bool CanPrepareLineCorrection(Guid lineId) =>
-        Lines.Any(item => item.LineId == lineId && item.IsReady && item.Total > 0) &&
-        IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending;
+        Lines.Any(item => item.LineId == lineId && item.IsReady &&
+            item.Total > item.LastSweepCumulativeTotal) &&
+        IsLocalStorageAvailable && !IsBusy && !IsCorrectionPending && !IsSweepConfirmationPending;
     private bool CanConfirmCorrection() => IsCorrectionPending && !IsBusy;
-
-    private void ShowSweepReminder(Guid lineId)
-    {
-        OperationLinePanelViewModel? selected = Lines.FirstOrDefault(item => item.LineId == lineId);
-        if (selected is null) return;
-        string message = selected.IsSweepPending
-            ? $"{selected.LineName} superó la referencia de {selected.NextSweepReference} cajuelas. Puede continuar operando."
-            : $"{selected.LineName} tiene {selected.Total} cajuelas. La próxima referencia es {selected.NextSweepReference}.";
-        ShowTransientAlert(new OperationMilestoneAlertViewModel(
-            Guid.NewGuid(),
-            selected.LineId,
-            selected.AccentColor,
-            "🧹",
-            selected.IsSweepPending ? "Barrida pendiente" : "Próxima barrida",
-            message));
-        LastResult = "Próximamente: el registro persistente de barridas. Por ahora se muestra el recordatorio visual.";
-    }
+    private bool CanPrepareLineSweep(Guid lineId) =>
+        Lines.Any(item => item.LineId == lineId && item.IsReady &&
+            item.Total > item.LastSweepCumulativeTotal) &&
+        IsLocalStorageAvailable && !IsBusy && !IsSweepConfirmationPending;
+    private bool CanConfirmSweep() => IsSweepConfirmationPending && !IsBusy;
+    private bool CanCancelSweep() => IsSweepConfirmationPending && !IsBusy;
 
     private void ShowComingSoon() =>
         ShowFeedback(OperationFeedbackKind.Neutral,
             "Próximamente: confirmación persistente de revisiones y barridas.");
 
-    private ProductionReviewAlertState ApplyMilestones(OperationLinePanelViewModel panel, int total)
+    private ProductionReviewAlertState ApplyMilestones(
+        OperationLinePanelViewModel panel,
+        int total,
+        int lastSweepCumulativeTotal)
     {
         ProductionReviewAlertState review = milestones.CalculateReviewAlert(total);
-        panel.ApplyMilestones(review, milestones.CalculateSweepProgress(total));
+        panel.ApplyMilestones(
+            review,
+            milestones.CalculateSweepProgress(
+                total,
+                lastSweepCumulativeTotal == 0 ? null : lastSweepCumulativeTotal));
         return review;
     }
 
@@ -647,21 +857,55 @@ public sealed class OperationViewModel : ObservableObject
             linePanel.AccentColor,
             "🔎",
             "Revisar mercurio",
-            $"{linePanel.LineName} alcanzó {reference} cajuelas. Revise el mercurio."));
+            $"{linePanel.LineName} alcanzó {reference} cajuelas. Revise el mercurio.",
+            $"REVIEW:{linePanel.LineId:D}"));
         feedbackPlayer.PlayReviewAlert();
     }
 
     private void ShowTransientAlert(OperationMilestoneAlertViewModel alert)
     {
         OperationMilestoneAlertViewModel? previous = MilestoneAlerts.FirstOrDefault(
-            item => item.LineId == alert.LineId);
+            item => item.AlertKey == alert.AlertKey);
         if (previous is not null)
         {
             MilestoneAlerts.Remove(previous);
         }
 
         MilestoneAlerts.Add(alert);
-        _ = HideMilestoneAlertAsync(alert.Id);
+        if (!alert.IsPersistent)
+        {
+            _ = HideMilestoneAlertAsync(alert.Id);
+        }
+    }
+
+    private void SynchronizeSweepAlerts()
+    {
+        HashSet<string> activeKeys = Lines
+            .Where(item => item.IsSweepPending)
+            .Select(item => $"SWEEP:{item.LineId:D}")
+            .ToHashSet(StringComparer.Ordinal);
+        OperationMilestoneAlertViewModel[] obsolete = MilestoneAlerts
+            .Where(item => item.IsPersistent && !activeKeys.Contains(item.AlertKey))
+            .ToArray();
+        foreach (OperationMilestoneAlertViewModel alert in obsolete)
+        {
+            MilestoneAlerts.Remove(alert);
+        }
+
+        foreach (OperationLinePanelViewModel item in Lines.Where(item => item.IsSweepPending))
+        {
+            string key = $"SWEEP:{item.LineId:D}";
+            if (MilestoneAlerts.Any(alert => alert.AlertKey == key)) continue;
+            MilestoneAlerts.Add(new OperationMilestoneAlertViewModel(
+                Guid.NewGuid(),
+                item.LineId,
+                item.AccentColor,
+                "🧹",
+                "Barrida pendiente",
+                $"{item.LineName} superó la referencia de barrida. Puede seguir contando y registrar la barrida cuando corresponda.",
+                key,
+                true));
+        }
     }
 
     private async Task HideMilestoneAlertAsync(Guid alertId)
@@ -686,7 +930,7 @@ public sealed class OperationViewModel : ObservableObject
     private void DismissMilestoneAlert(Guid alertId)
     {
         OperationMilestoneAlertViewModel? alert = MilestoneAlerts.FirstOrDefault(item => item.Id == alertId);
-        if (alert is not null)
+        if (alert is not null && !alert.IsPersistent)
         {
             MilestoneAlerts.Remove(alert);
         }
@@ -710,7 +954,11 @@ public sealed class OperationViewModel : ObservableObject
         RefreshCommand.NotifyCanExecuteChanged();
         DispatchInputCommand.NotifyCanExecuteChanged();
         RegisterLineCajuelaCommand.NotifyCanExecuteChanged();
+        RegisterFiveLineCajuelasCommand.NotifyCanExecuteChanged();
         PrepareLineCorrectionCommand.NotifyCanExecuteChanged();
+        PrepareLineSweepCommand.NotifyCanExecuteChanged();
+        ConfirmSweepCommand.NotifyCanExecuteChanged();
+        CancelSweepCommand.NotifyCanExecuteChanged();
     }
 
     private static string FormatTime(DateTimeOffset instant) =>

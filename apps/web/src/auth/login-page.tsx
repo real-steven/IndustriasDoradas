@@ -9,14 +9,7 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   if (auth.profile !== null) {
-    return (
-      <Navigate
-        to={
-          auth.profile.role === "JEFE_EMPRESA" ? "/gerencia" : "/administracion"
-        }
-        replace
-      />
-    );
+    return <Navigate to="/gerencia" replace />;
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {

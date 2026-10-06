@@ -40,8 +40,6 @@
                         </Border>
                         <Button Margin="10,0,0,0" Command="{Binding RefreshCommand}"
                                 Content="↻  ACTUALIZAR" AutomationProperties.Name="Actualizar estado operativo" />
-                        <Button Margin="10,0,0,0" Click="OnFocusModeRequested"
-                                Content="▣  ENFOCAR" AutomationProperties.Name="Enfocar modo operación" />
                     </StackPanel>
                 </Grid>
 
@@ -87,29 +85,6 @@
                                             </Border>
                                         </Grid>
 
-                                        <Border Margin="0,13,0,0" Padding="12,9"
-                                                Background="#FFF7DD" BorderBrush="#E9A713"
-                                                BorderThickness="1" CornerRadius="10"
-                                                AutomationProperties.LiveSetting="Assertive">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsReviewAlertActive}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Margin="0,0,8,0" FontFamily="Segoe UI Emoji"
-                                                           FontSize="18" Text="🔎" />
-                                                <TextBlock VerticalAlignment="Center" Foreground="#76500A"
-                                                           FontSize="12" FontWeight="Bold"
-                                                           Text="{Binding ReviewAlertLabel}" />
-                                            </StackPanel>
-                                        </Border>
-
                                         <Grid Margin="0,15,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
@@ -136,19 +111,46 @@
                                         <Grid Margin="0,20,0,10">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
+                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <StackPanel>
                                                 <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="10"
-                                                           FontWeight="Bold" Text="🪣  CAJUELAS" />
+                                                            FontWeight="Bold" Text="🪣  DESDE LA ÚLTIMA BARRIDA" />
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="52"
-                                                               FontWeight="Bold" Text="{Binding Total}" />
+                                                                FontWeight="Bold" Text="{Binding CajuelasSinceLastSweep}" />
                                                     <TextBlock Margin="7,23,0,0" Foreground="#90A0AA" FontSize="16"
                                                                Text="{Binding TotalReferenceDescription}" />
                                                 </StackPanel>
                                             </StackPanel>
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
+                                             <Border Grid.Column="1" Margin="18,0" Padding="12,8"
+                                                     VerticalAlignment="Bottom" Background="#F8FAFB" CornerRadius="10">
+                                                 <Grid>
+                                                     <Grid.ColumnDefinitions>
+                                                         <ColumnDefinition Width="78" />
+                                                         <ColumnDefinition Width="1" />
+                                                         <ColumnDefinition Width="78" />
+                                                     </Grid.ColumnDefinitions>
+                                                     <StackPanel>
+                                                         <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
+                                                                    FontSize="8" FontWeight="Bold" Text="TOTAL" />
+                                                         <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center"
+                                                                    FontSize="17" FontWeight="Bold" Text="{Binding Total}"
+                                                                    AutomationProperties.Name="Total de cajuelas del cargamento" />
+                                                     </StackPanel>
+                                                     <Border Grid.Column="1" Background="{StaticResource SoftBorderBrush}" />
+                                                     <StackPanel Grid.Column="2">
+                                                         <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
+                                                                    FontSize="8" FontWeight="Bold" Text="YA BARRIDAS" />
+                                                         <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center"
+                                                                    FontSize="17" FontWeight="Bold"
+                                                                    Text="{Binding LastSweepCumulativeTotal}"
+                                                                    AutomationProperties.Name="Total de cajuelas incluidas en barridas" />
+                                                     </StackPanel>
+                                                 </Grid>
+                                             </Border>
+                                             <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
                                                 <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"
                                                            FontSize="9" FontWeight="Bold" Text="PRÓXIMA ALERTA" />
                                                 <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" FontSize="13"
@@ -195,10 +197,25 @@
                                             <Button Width="84" Height="82" Margin="12,0,0,0"
                                                     Background="{StaticResource WarningSoftBrush}" BorderBrush="#EAD7A9"
                                                     Foreground="#8B6310"
-                                                    Command="{Binding DataContext.ShowSweepReminderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Command="{Binding DataContext.PrepareLineSweepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding LineId}"
-                                                    AutomationProperties.Name="Recordatorio de barrida">
+                                                    ToolTip="Preparar el registro físico de una barrida"
+                                                    AutomationProperties.Name="Preparar barrida">
                                                 <TextBlock FontFamily="Segoe UI Emoji" FontSize="29" Text="🧹" />
+                                            </Button>
+                                            <Button Width="84" Height="82" Margin="10,0,0,0"
+                                                    Background="{StaticResource SuccessSoftBrush}" BorderBrush="#BCDCC9"
+                                                    Foreground="#187C43"
+                                                    Command="{Binding DataContext.RegisterFiveLineCajuelasCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding LineId}"
+                                                    ToolTip="Registra cinco cajuelas independientes en esta línea"
+                                                    AutomationProperties.Name="Agregar cinco cajuelas">
+                                                <StackPanel>
+                                                    <TextBlock HorizontalAlignment="Center" FontSize="25"
+                                                               FontWeight="Bold" Text="+5" />
+                                                    <TextBlock HorizontalAlignment="Center" FontSize="8"
+                                                               FontWeight="Bold" Text="CAJUELAS" />
+                                                </StackPanel>
                                             </Button>
                                         </StackPanel>
                                     </StackPanel>
@@ -229,34 +246,6 @@
                     </StackPanel>
                 </Border>
 
-                <Border Margin="8,14,8,0" Padding="20">
-                    <Border.Style>
-                        <Style TargetType="Border" BasedOn="{StaticResource WarningAlertStyle}">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsCorrectionPending}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock FontSize="17" FontWeight="Bold" Text="Confirmar corrección inmediata" />
-                            <TextBlock Margin="0,5,0,0" Foreground="{StaticResource Ink700Brush}"
-                                       Text="{Binding CorrectionSummary}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="18,0,0,0" Orientation="Horizontal">
-                            <Button Command="{Binding ConfirmCorrectionCommand}" Content="SÍ, CORREGIR" />
-                            <Button Margin="8,0,0,0" Command="{Binding CancelCorrectionCommand}" Content="CANCELAR" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
                 <Border Margin="8,13,8,0" Padding="14">
                     <Border.Style>
                         <Style TargetType="Border" BasedOn="{StaticResource InfoAlertStyle}">
@@ -282,40 +271,111 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ItemsControl Width="430" Margin="0,22,22,0"
-                      HorizontalAlignment="Right" VerticalAlignment="Top"
-                      Panel.ZIndex="40" ItemsSource="{Binding MilestoneAlerts}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Border Margin="0,0,0,10" Padding="16"
-                            AutomationProperties.LiveSetting="Assertive"
-                            Background="White" BorderBrush="{Binding AccentColor}"
-                            BorderThickness="7,1,1,1" CornerRadius="16">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="56" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Border Width="52" Height="52" Background="#FFF5D7" CornerRadius="14">
-                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           FontFamily="Segoe UI Emoji" FontSize="27" Text="{Binding Icon}" />
-                            </Border>
-                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
-                                <TextBlock FontSize="17" FontWeight="Bold" Text="{Binding Title}" />
-                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"
-                                           FontSize="13" FontWeight="SemiBold"
-                                           Text="{Binding Message}" TextWrapping="Wrap" />
-                            </StackPanel>
-                            <Button Grid.Column="2" Width="30" Height="30" MinHeight="0" Padding="0"
-                                    VerticalAlignment="Top" BorderThickness="0" Background="Transparent"
-                                    Command="{Binding DataContext.DismissMilestoneAlertCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    CommandParameter="{Binding Id}" Content="×"
-                                    AutomationProperties.Name="Cerrar aviso" />
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <StackPanel Width="460" Margin="0,22,22,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Panel.ZIndex="40">
+            <Border Margin="0,0,0,10" Padding="17" AutomationProperties.LiveSetting="Assertive">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource WarningAlertStyle}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Setter Property="BorderThickness" Value="7,1,1,1" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSweepConfirmationPending}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <TextBlock FontSize="17" FontWeight="Bold" Text="🧹  Confirmar barrida física" />
+                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource Ink700Brush}"
+                               Text="{Binding SweepConfirmationSummary}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,5,0,0" Foreground="#76500A" FontSize="11"
+                               Text="Requiere Modo Jefe de Planta. La alimentación puede continuar." />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <Button Command="{Binding ConfirmSweepCommand}"
+                                Content="CONFIRMAR BARRIDA"
+                                IsEnabled="{Binding DataContext.IsPlantManager, RelativeSource={RelativeSource AncestorType=Window}}" />
+                        <Button Margin="8,0,0,0" Command="{Binding CancelSweepCommand}" Content="CANCELAR" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Margin="0,0,0,10" Padding="17" AutomationProperties.LiveSetting="Assertive">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource WarningAlertStyle}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Setter Property="BorderThickness" Value="7,1,1,1" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCorrectionPending}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <TextBlock FontSize="17" FontWeight="Bold" Text="↶  Confirmar corrección" />
+                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource Ink700Brush}"
+                               Text="{Binding CorrectionSummary}" TextWrapping="Wrap" />
+                    <StackPanel Margin="0,10,0,0"
+                                Visibility="{Binding CorrectionRequiresPlantManager, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Foreground="#76500A" FontSize="11" FontWeight="Bold"
+                                   Text="MOTIVO DEL CAMBIO · OBLIGATORIO" />
+                        <TextBox Margin="0,5,0,0" MaxLength="240" MinHeight="48"
+                                 Text="{Binding CorrectionReason, UpdateSourceTrigger=PropertyChanged}"
+                                 TextWrapping="Wrap" AcceptsReturn="True"
+                                 AutomationProperties.Name="Motivo de la corrección" />
+                    </StackPanel>
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <Button Command="{Binding ConfirmCorrectionCommand}" Content="SÍ, CORREGIR" />
+                        <Button Margin="8,0,0,0" Command="{Binding CancelCorrectionCommand}" Content="CANCELAR" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <ItemsControl ItemsSource="{Binding MilestoneAlerts}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,10" Padding="16"
+                                AutomationProperties.LiveSetting="Assertive"
+                                Background="White" BorderBrush="{Binding AccentColor}"
+                                BorderThickness="7,1,1,1" CornerRadius="16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="52" Height="52" Background="#FFF5D7" CornerRadius="14">
+                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               FontFamily="Segoe UI Emoji" FontSize="27" Text="{Binding Icon}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock FontSize="17" FontWeight="Bold" Text="{Binding Title}" />
+                                    <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Text="{Binding Message}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Width="30" Height="30" MinHeight="0" Padding="0"
+                                        VerticalAlignment="Top" BorderThickness="0" Background="Transparent"
+                                        Command="{Binding DataContext.DismissMilestoneAlertCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding Id}" Content="×"
+                                         AutomationProperties.Name="Cerrar aviso">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPersistent}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
     </Grid>
 </UserControl>

@@ -19,10 +19,10 @@ describe("portal role matrix", () => {
     vi.unstubAllGlobals();
   });
 
-  it("denies an administrator route to a company manager", () => {
+  it("removes the legacy administrator portal route", () => {
     renderPortal("JEFE_EMPRESA", "/administracion");
     expect(
-      screen.getByRole("heading", { name: "Acceso restringido" }),
+      screen.getByRole("heading", { name: "Página no encontrada" }),
     ).toBeInTheDocument();
   });
 
@@ -34,11 +34,10 @@ describe("portal role matrix", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows only assigned administration modules", () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(emptyPage()));
-    renderPortal("ADMINISTRADOR", "/administracion");
+  it("denies the web portal to an administrator", () => {
+    renderPortal("ADMINISTRADOR", "/gerencia");
     expect(
-      screen.getByText("No tienes módulos administrativos asignados."),
+      screen.getByRole("heading", { name: "Acceso restringido" }),
     ).toBeInTheDocument();
   });
 
@@ -46,8 +45,8 @@ describe("portal role matrix", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia/administracion");
 
     expect(
-      screen.getByRole("link", { name: /Usuarios administradores/u }),
-    ).toHaveAttribute("href", "/gerencia/administracion/administradores");
+      screen.queryByRole("link", { name: /Usuarios administradores/u }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Jefes de planta/u }),
     ).toHaveAttribute("href", "/gerencia/administracion/jefes-planta");
@@ -66,81 +65,6 @@ describe("portal role matrix", () => {
     expect(
       screen.queryByRole("button", { name: "Crear e invitar" }),
     ).not.toBeInTheDocument();
-  });
-
-  it("selects administrator permissions by area and keeps advanced detail", async () => {
-    const permissions = [
-      {
-        code: "administrators.create",
-        description: "Crear cuentas administrativas.",
-        assigned: false,
-      },
-      {
-        code: "administrators.govern",
-        description: "Suspender cuentas administrativas.",
-        assigned: false,
-      },
-      {
-        code: "workers.read",
-        description: "Consultar trabajadores.",
-        assigned: false,
-      },
-      {
-        code: "inventory.manage",
-        description: "Gestionar inventario.",
-        assigned: false,
-      },
-    ];
-    const transport = vi
-      .fn<typeof fetch>()
-      .mockImplementation((input, init) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.href
-              : input.url;
-        if (init?.method === "POST") return Promise.resolve(accountResponse());
-        if (url.includes("administrator-permissions")) {
-          return Promise.resolve(permissionList(permissions));
-        }
-        return Promise.resolve(emptyPage());
-      });
-    vi.stubGlobal("fetch", transport);
-    const user = userEvent.setup();
-    renderPortal("JEFE_EMPRESA", "/gerencia/administracion/administradores");
-
-    await user.click(
-      await screen.findByRole("checkbox", { name: /Usuarios y personal/u }),
-    );
-    expect(screen.getByText("3 de 4 seleccionados")).toBeInTheDocument();
-
-    await user.click(
-      screen.getByText("Opciones avanzadas · configurar uno a uno"),
-    );
-    expect(screen.getByText("administrators.create")).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText("Nombre"), "Admin por área");
-    await user.type(screen.getByLabelText("Correo"), "area@example.com");
-    await user.click(screen.getByRole("button", { name: "Crear e invitar" }));
-
-    await vi.waitFor(() => {
-      const requestCall = transport.mock.calls.find(
-        ([, options]) => options?.method === "POST",
-      );
-      expect(requestCall).toBeDefined();
-      const requestBody = requestCall?.[1]?.body;
-      if (typeof requestBody !== "string") {
-        throw new Error("Expected a JSON request body");
-      }
-      expect(JSON.parse(requestBody)).toMatchObject({
-        permissionCodes: [
-          "administrators.create",
-          "administrators.govern",
-          "workers.read",
-        ],
-      });
-    });
   });
 
   it("requires the manager to provide the real suspension reason", async () => {
@@ -180,51 +104,6 @@ describe("portal role matrix", () => {
         }),
       ),
     );
-  });
-
-  it("explains when an administrator email is already registered", async () => {
-    const transport = vi
-      .fn<typeof fetch>()
-      .mockImplementation((input, init) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.href
-              : input.url;
-        if (init?.method === "POST") {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                code: "ACCOUNT_EMAIL_ALREADY_REGISTERED",
-                message: "The email address is already registered",
-              }),
-              {
-                status: 409,
-                headers: { "Content-Type": "application/json" },
-              },
-            ),
-          );
-        }
-        if (url.includes("permissions")) {
-          return Promise.resolve(permissionList());
-        }
-        return Promise.resolve(emptyPage());
-      });
-    vi.stubGlobal("fetch", transport);
-    const user = userEvent.setup();
-    renderPortal("JEFE_EMPRESA", "/gerencia/administracion/administradores");
-
-    const names = await screen.findAllByLabelText("Nombre");
-    await user.type(names[0]!, "Administración duplicada");
-    await user.type(screen.getByLabelText("Correo"), "existing@example.com");
-    await user.click(screen.getByRole("button", { name: "Crear e invitar" }));
-
-    expect(
-      await screen.findByText(
-        "Ese correo ya está registrado. Use otro correo para enviar una nueva invitación.",
-      ),
-    ).toBeInTheDocument();
   });
 });
 

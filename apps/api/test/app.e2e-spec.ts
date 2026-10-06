@@ -337,6 +337,7 @@ describe("API smoke (e2e)", () => {
       userId: VERIFIED_TOKEN.subject,
       sessionId: VERIFIED_TOKEN.sessionId,
       profileId: ACTIVE_PROFILE.id,
+      displayName: ACTIVE_PROFILE.displayName,
       organizationId: ACTIVE_PROFILE.organizationId,
       role: "JEFE_EMPRESA",
       permissions: ACTIVE_PROFILE.permissions,

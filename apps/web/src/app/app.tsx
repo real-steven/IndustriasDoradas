@@ -20,10 +20,6 @@ export function App() {
           <Route path="administracion">
             <Route index element={<AdminPage />} />
             <Route
-              path="administradores"
-              element={<AdminPage section="administradores" />}
-            />
-            <Route
               path="jefes-planta"
               element={<AdminPage section="jefes-planta" />}
             />
@@ -37,26 +33,6 @@ export function App() {
             />
             <Route path="plantas" element={<AdminPage section="plantas" />} />
           </Route>
-          <Route path="auditoria" element={<AuditPage />} />
-        </Route>
-      </Route>
-      <Route element={<ProtectedPortal roles={["ADMINISTRADOR"]} />}>
-        <Route path="administracion" element={<PortalLayout />}>
-          <Route index element={<AdminPage />} />
-          <Route
-            path="administradores"
-            element={<AdminPage section="administradores" />}
-          />
-          <Route
-            path="jefes-planta"
-            element={<AdminPage section="jefes-planta" />}
-          />
-          <Route path="operarios" element={<AdminPage section="operarios" />} />
-          <Route
-            path="proveedores"
-            element={<AdminPage section="proveedores" />}
-          />
-          <Route path="plantas" element={<AdminPage section="plantas" />} />
           <Route path="auditoria" element={<AuditPage />} />
         </Route>
       </Route>

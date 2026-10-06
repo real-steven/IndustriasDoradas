@@ -72,6 +72,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         "sessionId",
         "profileId",
         "organizationId",
+        "displayName",
         "role",
         "permissions",
         "issuedAt",
@@ -82,6 +83,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         sessionId: UUID,
         profileId: UUID,
         organizationId: UUID,
+        displayName: { type: "string", example: "Jefe de planta ficticio" },
         role: {
           type: "string",
           enum: ["JEFE_EMPRESA", "ADMINISTRADOR", "JEFE_PLANTA"],

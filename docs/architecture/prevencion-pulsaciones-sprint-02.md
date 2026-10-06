@@ -76,3 +76,21 @@ responsabilidad de `DevHenry`. La implementación y sus pruebas automatizadas
 permiten continuar con 2.11, pero esta deuda debe cerrarse con el procedimiento
 de PIN aprobado y la validación del jefe de desarrollo antes del cierre formal
 del sprint.
+
+## Excepción temporal para pruebas de volumen — 2026-10-05
+
+Durante las pruebas de alertas y barridas del Sprint 4, la espera por línea se
+configura temporalmente en `0 ms`. El filtro de rebote de 75 ms y el rechazo de
+señales `IsRepeat` permanecen activos; únicamente se retira la espera adicional
+de tres segundos para facilitar recorridos de 50, 100, 250 o más cajuelas.
+
+Cada tarjeta de línea activa incorpora provisionalmente una acción `+5`. La
+acción crea cinco eventos normales con UUID independientes en la línea de esa
+tarjeta, conserva outbox, autorización, métricas y auditoría, y actualiza la
+vista una sola vez al concluir. No existe un evento agregado ficticio de cinco
+cajuelas.
+
+Antes del piloto o producción, el cierre 8.14 debe restaurar
+`RegistrationCooldownMilliseconds` a `3000`, repetir las pruebas de doble
+pulsación y decidir con operación si la acción `+5` se elimina o queda limitada
+a un perfil explícito de pruebas.

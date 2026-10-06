@@ -184,6 +184,9 @@ public partial class App : System.Windows.Application
         });
 
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<PlantManagerModeState>();
+        builder.Services.AddSingleton<IPlantManagerModeAccessor>(services =>
+            services.GetRequiredService<PlantManagerModeState>());
         builder.Services.AddSingleton<IInputCommandSource, ConfigurableInputCommandSource>();
         builder.Services.AddSingleton<OperationInputGuard>();
         builder.Services.AddSingleton<IOperationFeedbackPlayer, WpfOperationFeedbackPlayer>();
@@ -203,7 +206,9 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalSyncChangeRepository, SqliteSyncChangeRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
+        builder.Services.AddSingleton<ILocalProductionSweepRepository, SqliteProductionSweepRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
+        builder.Services.AddSingleton<ILocalAuditRepository, SqliteAuditRepository>();
         builder.Services.AddSingleton<ILocalOperationInputMetricStore, SqliteOperationInputMetricStore>();
         builder.Services.AddSingleton<LocalOperationInputMetricService>();
         builder.Services.AddSingleton<IOperationInputMetrics>(services => services.GetRequiredService<LocalOperationInputMetricService>());
@@ -212,6 +217,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<LocalOperationService>();
         builder.Services.AddSingleton<RegisterCajuelaHandler>();
         builder.Services.AddSingleton<RevertLastCajuelaHandler>();
+        builder.Services.AddSingleton<RecordProductionSweepHandler>();
         builder.Services.AddSingleton<ProductionMilestoneService>();
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();

@@ -59,8 +59,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(12L, result.CurrentVersion);
-        Assert.AreEqual(12, result.AppliedCount);
+        Assert.AreEqual(13L, result.CurrentVersion);
+        Assert.AreEqual(13, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -69,7 +69,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(12L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(13L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -137,7 +137,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(11, result.AppliedCount);
+        Assert.AreEqual(12, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -157,8 +157,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(12L, result.CurrentVersion);
-        Assert.AreEqual(1, result.AppliedCount);
+        Assert.AreEqual(13L, result.CurrentVersion);
+        Assert.AreEqual(2, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -426,7 +426,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(12L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(13L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -576,7 +576,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(10, result.AppliedCount);
+        Assert.AreEqual(11, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -1519,6 +1519,105 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    [DataRow(50, false)]
+    [DataRow(30, true)]
+    [DataRow(60, false)]
+    public async Task ProductionSweepPersistsExactEventsAndIsIdempotent(
+        int quantity,
+        bool isFinal)
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        await StartOperationAsync(database.OperationService(time));
+        await RegisterManyAsync(database.RegisterHandler(time), time, quantity);
+        SqliteProductionSweepRepository repository = database.Sweeps();
+
+        LocalSweepPreparation preparation = await repository.PrepareAsync(StationId, LineId);
+        DateTimeOffset sweptAt = time.GetUtcNow().AddMilliseconds(1);
+        ProductionSweep sweep = ProductionSweep.Record(
+            Guid.NewGuid(),
+            preparation.UnsweptEvents,
+            ActorProfileId,
+            sweptAt,
+            sweptAt,
+            isFinal);
+
+        LocalSweepRegistration first = await repository.RecordAsync(sweep);
+        LocalSweepRegistration retry = await repository.RecordAsync(sweep);
+        LocalSweepPreparation after = await repository.PrepareAsync(StationId, LineId);
+
+        Assert.AreEqual(quantity, preparation.UnsweptEvents.Count);
+        Assert.AreEqual(quantity, preparation.TotalCajuelas);
+        Assert.AreEqual(quantity, first.CumulativeSweptTotal);
+        Assert.IsFalse(first.WasDuplicate);
+        Assert.IsTrue(retry.WasDuplicate);
+        Assert.AreEqual(0, after.UnsweptEvents.Count);
+        Assert.AreEqual(quantity, after.LastSweepCumulativeTotal);
+        Assert.AreEqual(SweepMercuryStatus.Pending, sweep.MercuryStatus);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_sweeps;"));
+        Assert.AreEqual(quantity, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM sweep_production_events;"));
+        Assert.AreEqual(isFinal ? 1L : 0L, await ScalarLongAsync(
+            connection,
+            "SELECT is_final FROM production_sweeps LIMIT 1;"));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM mercury_movements;"));
+    }
+
+    [TestMethod]
+    public async Task AuditGroupsCompletedShipmentSweepCorrectionAndResponsibility()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService operations = database.OperationService(time);
+        await StartOperationAsync(operations);
+        await RegisterManyAsync(database.RegisterHandler(time), time, 3);
+        PreparedCajuelaReversal correction = await database.RevertHandler(time)
+            .PrepareAsync(StationId, LineId);
+        await database.RevertHandler(time).ConfirmAsync(correction);
+        LocalSweepPreparation sweepPreparation = await database.Sweeps()
+            .PrepareAsync(StationId, LineId);
+        DateTimeOffset sweepTime = time.GetUtcNow().AddSeconds(1);
+        await database.Sweeps().RecordAsync(ProductionSweep.Record(
+            Guid.NewGuid(),
+            sweepPreparation.UnsweptEvents,
+            ActorProfileId,
+            sweepTime,
+            sweepTime,
+            isFinal: true));
+        time.SetUtcNow(sweepTime.AddSeconds(1));
+        PreparedOperationCompletion completion = await operations.PrepareCompletionAsync(
+            LineId,
+            Authority());
+        await operations.ConfirmCompletionAsync(completion);
+
+        IReadOnlyList<LocalCompletedShipmentAudit> shipments = await database.Audit()
+            .ListCompletedShipmentsAsync();
+        IReadOnlyList<LocalCajuelaCorrectionAudit> corrections = await database.Audit()
+            .ListCajuelaCorrectionsAsync();
+
+        Assert.HasCount(1, shipments);
+        Assert.AreEqual("Línea 1", shipments[0].LineName);
+        Assert.AreEqual("La Esperanza", shipments[0].SupplierName);
+        Assert.AreEqual(2, shipments[0].TotalCajuelas);
+        Assert.AreEqual(1, shipments[0].SweepCount);
+        Assert.AreEqual(2, shipments[0].SweptCajuelas);
+        Assert.AreEqual(1, shipments[0].CorrectionCount);
+        Assert.AreEqual(0, shipments[0].MercuryRecordedSweepCount);
+        Assert.HasCount(1, shipments[0].Responsibilities);
+        Assert.IsNotNull(shipments[0].Responsibilities[0].UnassignedAt);
+        Assert.HasCount(1, corrections);
+        Assert.AreEqual("Juan", corrections[0].ActorName);
+        Assert.AreEqual(3, corrections[0].TotalBefore);
+        Assert.AreEqual(2, corrections[0].TotalAfter);
+        Assert.IsFalse(corrections[0].RequiredPlantManager);
+    }
+
+    [TestMethod]
     [TestCategory("SyncChaos")]
     public async Task OfflineShiftPreservesTwoShipmentsReliefs120CajuelasReversalsAndRestarts()
     {
@@ -1949,6 +2048,10 @@ public sealed class LocalSqliteStorageTests
         public SqliteCajuelaRepository Cajuelas() => new(Factory);
 
         public SqliteOperationDashboardRepository Dashboard() => new(Factory);
+
+        public SqliteProductionSweepRepository Sweeps() => new(Factory);
+
+        public SqliteAuditRepository Audit() => new(Factory);
 
         public SqliteOperationInputMetricStore Metrics() => new(Factory);
 

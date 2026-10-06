@@ -100,7 +100,16 @@ public sealed class SqliteOperationDashboardRepository(
                    line.name, supplier.name, shipment.started_at_utc,
                    responsible.name, assignment.assigned_at_utc,
                    previous_worker.name, previous_assignment.unassigned_at_utc,
-                   COALESCE(counter.total, 0)
+                   COALESCE(counter.total, 0),
+                   COALESCE((
+                       SELECT SUM(sweep.cajuela_count)
+                       FROM production_sweeps AS sweep
+                       WHERE sweep.organization_id = session.organization_id
+                         AND sweep.station_id = session.station_id
+                         AND sweep.line_id = session.line_id
+                         AND sweep.feed_cycle_id = session.feed_cycle_id
+                         AND sweep.shipment_id = session.shipment_id
+                   ), 0)
             FROM operational_sessions AS session
             INNER JOIN cached_production_lines AS line ON line.id = session.line_id
             INNER JOIN cached_shipments AS shipment
@@ -173,7 +182,8 @@ public sealed class SqliteOperationDashboardRepository(
                 ? null
                 : SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(16)),
             reader.GetInt32(17),
-            0);
+            0,
+            LastSweepCumulativeTotal: reader.GetInt32(18));
     }
 
     private static async Task<OutboxCounts> ReadOutboxCountsAsync(

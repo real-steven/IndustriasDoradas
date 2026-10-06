@@ -77,19 +77,6 @@ interface PermissionGroupDefinition {
 
 const ADMIN_MODULES: readonly AdminModule[] = [
   {
-    section: "administradores",
-    title: "Usuarios administradores",
-    description: "Invitaciones, suspensión y permisos individuales.",
-    access: (permissions) =>
-      permissions.some((permission) =>
-        [
-          "administrators.create",
-          "administrators.govern",
-          "administrators.permissions.manage",
-        ].includes(permission),
-      ),
-  },
-  {
     section: "jefes-planta",
     title: "Jefes de planta",
     description: "Revisión y gobierno de las cuentas de planta.",

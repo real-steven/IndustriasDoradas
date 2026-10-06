@@ -292,6 +292,10 @@
       },
       "Session": {
         "properties": {
+          "displayName": {
+            "example": "Jefe de planta ficticio",
+            "type": "string"
+          },
           "expiresAt": { "format": "date-time", "type": "string" },
           "issuedAt": { "format": "date-time", "type": "string" },
           "organizationId": { "format": "uuid", "type": "string" },
@@ -309,6 +313,7 @@
           "sessionId",
           "profileId",
           "organizationId",
+          "displayName",
           "role",
           "permissions",
           "issuedAt",

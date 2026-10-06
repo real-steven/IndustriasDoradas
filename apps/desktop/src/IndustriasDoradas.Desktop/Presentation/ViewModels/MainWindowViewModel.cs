@@ -148,6 +148,11 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 await Station.InitializeAsync();
             }
+
+            if (Audit is not null)
+            {
+                await Audit.InitializeAsync();
+            }
         }
         catch (Exception exception) when (
             exception is IOException or SqliteException or InvalidOperationException)

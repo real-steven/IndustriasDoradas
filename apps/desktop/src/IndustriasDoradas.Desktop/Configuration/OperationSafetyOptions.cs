@@ -13,7 +13,8 @@ public sealed class OperationSafetyOptions
 
     public bool IsValid() =>
         DebounceMilliseconds is >= 25 and <= 500 &&
-        RegistrationCooldownMilliseconds is >= 500 and <= 10000 &&
-        RegistrationCooldownMilliseconds >= DebounceMilliseconds &&
+        (RegistrationCooldownMilliseconds == 0 ||
+         RegistrationCooldownMilliseconds is >= 500 and <= 10000 &&
+         RegistrationCooldownMilliseconds >= DebounceMilliseconds) &&
         MetricsQueueCapacity is >= 100 and <= 10000;
 }

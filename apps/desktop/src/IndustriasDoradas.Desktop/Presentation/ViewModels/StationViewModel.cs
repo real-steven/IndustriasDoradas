@@ -29,6 +29,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly LocalOperationService operations;
     private readonly TimeProvider timeProvider;
     private readonly ILocalOperationDashboardRepository? dashboard;
+    private readonly RecordProductionSweepHandler? sweepHandler;
+    private readonly PlantManagerModeState? sharedManagerMode;
     private readonly DispatcherTimer idleTimer;
     private bool isClosingForIdle;
     private bool isMaintainingSession;
@@ -53,6 +55,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private PreparedOperationStart? preparedStart;
     private PreparedResponsibleRelief? preparedRelief;
     private PreparedOperationCompletion? preparedCompletion;
+    private PreparedProductionSweep? preparedFinalSweep;
     private string preparationSummary =
         "Seleccione línea, proveedor y responsable para preparar el cargamento.";
     private string activeOperationSummary = "No hay un cargamento activo.";
@@ -65,7 +68,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         LocalOperationService operations,
         IOptions<StationOptions> options,
         TimeProvider timeProvider)
-        : this(coordinator, catalogs, operations, options, timeProvider, null)
+        : this(coordinator, catalogs, operations, options, timeProvider, null, null, null)
     {
     }
 
@@ -76,12 +79,39 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         IOptions<StationOptions> options,
         TimeProvider timeProvider,
         ILocalOperationDashboardRepository? dashboard)
+        : this(coordinator, catalogs, operations, options, timeProvider, dashboard, null, null)
+    {
+    }
+
+    public StationViewModel(
+        StationCoordinator coordinator,
+        ILocalCatalogRepository catalogs,
+        LocalOperationService operations,
+        IOptions<StationOptions> options,
+        TimeProvider timeProvider,
+        ILocalOperationDashboardRepository? dashboard,
+        RecordProductionSweepHandler? sweepHandler)
+        : this(coordinator, catalogs, operations, options, timeProvider, dashboard, sweepHandler, null)
+    {
+    }
+
+    public StationViewModel(
+        StationCoordinator coordinator,
+        ILocalCatalogRepository catalogs,
+        LocalOperationService operations,
+        IOptions<StationOptions> options,
+        TimeProvider timeProvider,
+        ILocalOperationDashboardRepository? dashboard,
+        RecordProductionSweepHandler? sweepHandler,
+        PlantManagerModeState? sharedManagerMode)
     {
         this.coordinator = coordinator;
         this.catalogs = catalogs;
         this.operations = operations;
         this.timeProvider = timeProvider;
         this.dashboard = dashboard;
+        this.sweepHandler = sweepHandler;
+        this.sharedManagerMode = sharedManagerMode;
         modeController = new PrivilegeModeController(
             timeProvider,
             TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds),
@@ -124,6 +154,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref mode, value))
             {
+                sharedManagerMode?.SetActive(value == StationMode.PlantManager);
                 OnPropertyChanged(nameof(IsPlantManager));
                 OnPropertyChanged(nameof(CanPrepareNewShipment));
                 OnPropertyChanged(nameof(CanManageActiveOperation));
@@ -585,12 +616,19 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         await RunAsync(async () =>
         {
             preparedRelief = null;
+            preparedFinalSweep = sweepHandler is null
+                ? null
+                : await sweepHandler.PrepareFinalIfNeededAsync(
+                    activeSession!.StationId,
+                    activeSession.LineId).ConfigureAwait(true);
             preparedCompletion = await operations.PrepareCompletionAsync(
                 activeSession!.LineId,
                 OperationAuthority.From(state)).ConfigureAwait(true);
-            ManagementSummary =
-                "Cierre pendiente: finalizará el cargamento y bloqueará nuevos registros. " +
-                "La línea continúa activa hasta confirmar.";
+            ManagementSummary = preparedFinalSweep is null
+                ? "Cierre pendiente: finalizará el cargamento y bloqueará nuevos registros. " +
+                  "No hay cajuelas posteriores a la última barrida. La línea continúa activa hasta confirmar."
+                : $"Cierre pendiente: antes de finalizar se registrará la barrida final de " +
+                  $"{preparedFinalSweep.CajuelaQuantity} cajuelas. La recuperación de mercurio quedará pendiente.";
             Status = "Revise y confirme el cierre del cargamento.";
             NotifyOperationCommands();
         }, "No se pudo preparar el cierre; el cargamento continúa activo.").ConfigureAwait(true);
@@ -602,6 +640,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         if (prepared is null) return;
         await RunAsync(async () =>
         {
+            if (preparedFinalSweep is not null)
+            {
+                await sweepHandler!.ConfirmAsync(preparedFinalSweep, isFinal: true).ConfigureAwait(true);
+                preparedFinalSweep = null;
+            }
             await operations.ConfirmCompletionAsync(prepared).ConfigureAwait(true);
             preparedCompletion = null;
             RemoveActiveSession(prepared.ExpectedSession.LineId);
@@ -622,6 +665,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
         preparedRelief = null;
         preparedCompletion = null;
+        preparedFinalSweep = null;
         ManagementSummary = "Cambio cancelado; el cargamento y responsable actuales se conservaron.";
         NotifyOperationCommands();
     }
@@ -640,6 +684,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
         preparedStart = null;
         preparedRelief = null;
+        preparedCompletion = null;
+        preparedFinalSweep = null;
         PreparationSummary = SelectedLine is null || SelectedSupplier is null || SelectedWorker is null
             ? "Seleccione línea, proveedor y responsable para preparar el cargamento."
             : $"{PilotLineName} · {SelectedSupplier.Name} · responsable {SelectedWorker.Name}.";

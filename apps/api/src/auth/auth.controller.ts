@@ -8,6 +8,7 @@ interface SessionResponse {
   sessionId: string;
   profileId: string;
   organizationId: string;
+  displayName: string;
   role: string;
   permissions: readonly string[];
   issuedAt: string;
@@ -33,6 +34,7 @@ export class AuthController {
       sessionId: auth.token.sessionId,
       profileId: auth.profile.id,
       organizationId: auth.profile.organizationId,
+      displayName: auth.profile.displayName,
       role: auth.profile.role.code,
       permissions: auth.profile.permissions,
       issuedAt: new Date(auth.token.issuedAt * 1000).toISOString(),

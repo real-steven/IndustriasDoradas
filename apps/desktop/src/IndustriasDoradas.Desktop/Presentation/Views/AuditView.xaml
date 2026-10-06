@@ -105,17 +105,78 @@
             <Border Margin="0,18,0,0" Padding="24" Style="{StaticResource SurfaceCardStyle}"
                     Visibility="{Binding IsOperationCategory, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
-                    <TextBlock FontSize="20" FontWeight="Bold" Text="Actividad de la operación actual" />
+                    <TextBlock FontSize="20" FontWeight="Bold" Text="Cargamentos finalizados" />
                     <TextBlock Margin="0,7,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
-                               Text="Aquí se mostrarán las cajuelas agregadas o corregidas, los cambios de responsable y el inicio o cierre de cargamentos de las líneas activas." />
-                    <Border Margin="0,18,0,0" Padding="18" Background="#F7F9FA" CornerRadius="11">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="Segoe UI Emoji" FontSize="30" Text="⌛" />
-                            <StackPanel Margin="14,0,0,0">
-                                <TextBlock FontWeight="Bold" Text="Historial operativo · Próximamente" />
-                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
-                                           Text="No se muestran datos ficticios ni se modifica la operación actual." />
-                            </StackPanel>
+                               Text="Cada botón representa un cargamento cerrado y reconstruye su actividad desde el historial local." />
+                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding CompletedShipments}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Width="300" MinHeight="105" Margin="0,0,10,10" Padding="16"
+                                        HorizontalContentAlignment="Stretch"
+                                        Command="{Binding DataContext.SelectShipmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="7" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Background="{Binding AccentColor}" CornerRadius="4" />
+                                        <StackPanel Grid.Column="1" Margin="13,0,0,0">
+                                            <TextBlock FontSize="15" FontWeight="Bold" Text="{Binding LineName}" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"
+                                                       Text="{Binding SupplierName}" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                                                       FontSize="10" Text="{Binding PeriodDescription}" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="10" FontWeight="SemiBold"
+                                                       Text="{Binding Summary}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Margin="0,14,0,0" Foreground="{StaticResource MutedBrush}"
+                               Text="Todavía no hay cargamentos finalizados en esta estación.">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasCompletedShipments}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <Border Margin="0,12,0,0" Padding="20" Background="#F7F9FA" CornerRadius="12"
+                            Visibility="{Binding HasSelectedShipment, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel DataContext="{Binding SelectedShipment}">
+                            <TextBlock FontSize="18" FontWeight="Bold"><Run Text="{Binding LineName, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding SupplierName, Mode=OneWay}" /></TextBlock>
+                            <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
+                                       Text="{Binding PeriodDescription}" />
+                            <UniformGrid Margin="0,15,0,0" Columns="5">
+                                <StackPanel><TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9" Text="CAJUELAS" /><TextBlock FontSize="19" FontWeight="Bold" Text="{Binding TotalCajuelas}" /></StackPanel>
+                                <StackPanel><TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9" Text="BARRIDAS" /><TextBlock FontSize="19" FontWeight="Bold" Text="{Binding SweepCount}" /></StackPanel>
+                                <StackPanel><TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9" Text="CAJUELAS BARRIDAS" /><TextBlock FontSize="19" FontWeight="Bold" Text="{Binding SweptCajuelas}" /></StackPanel>
+                                <StackPanel><TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9" Text="CORRECCIONES" /><TextBlock FontSize="19" FontWeight="Bold" Text="{Binding CorrectionCount}" /></StackPanel>
+                                <StackPanel><TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9" Text="MERCURIO" /><TextBlock FontSize="15" FontWeight="Bold" Text="{Binding MercuryStatusDescription}" /></StackPanel>
+                            </UniformGrid>
+                            <TextBlock Margin="0,17,0,7" FontWeight="Bold" Text="Responsables e intervalos" />
+                            <ItemsControl ItemsSource="{Binding Responsibilities}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,3">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="220" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding WorkerName}" />
+                                            <TextBlock Grid.Column="1" Foreground="{StaticResource MutedBrush}" Text="{Binding PeriodDescription}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -124,60 +185,24 @@
             <StackPanel Visibility="{Binding IsCorrectionsCategory, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Border Margin="0,18,0,0" Padding="23" Style="{StaticResource SurfaceCardStyle}">
                     <StackPanel>
-                        <TextBlock FontSize="19" FontWeight="Bold" Text="Eventos que requieren revisión" />
+                        <TextBlock FontSize="19" FontWeight="Bold" Text="Correcciones realizadas" />
                         <TextBlock Margin="0,5,0,12" Foreground="{StaticResource MutedBrush}"
-                                   Text="Son eventos conservados; no significan que SQLite esté dañada." />
-                        <TextBlock FontWeight="Bold" Text="{Binding LocalReviewCountDescription}" />
-                        <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
-                                   Text="{Binding PullReviewCount, StringFormat=Cambios centrales recibidos que requieren revisión: {0}}" />
-                        <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding ReviewEvents}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Margin="0,0,0,8" Padding="14"
-                                            Style="{StaticResource WarningAlertStyle}" CornerRadius="10">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock FontWeight="Bold" Text="{Binding OperationDescription}" />
-                                                <TextBlock Margin="0,3,0,0" Foreground="#8A5A00"
-                                                           FontSize="10" FontWeight="Bold" Text="{Binding ErrorCode}" />
-                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"
-                                                       Text="{Binding Cause}" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="1" Margin="20,0,0,0">
-                                                <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"
-                                                           FontSize="10" Text="{Binding LocalOccurredAt, StringFormat={}{0:dd/MM/yyyy HH:mm}}" />
-                                                <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right"
-                                                           Foreground="{StaticResource MutedBrush}" FontSize="10"
-                                                           Text="{Binding AttemptCount, StringFormat=Intentos: {0}}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-                <Border Margin="0,18,0,0" Padding="23" Style="{StaticResource SurfaceCardStyle}">
-                    <StackPanel>
-                        <TextBlock FontSize="19" FontWeight="Bold" Text="Correcciones recibidas" />
-                        <TextBlock Margin="0,5,0,12" Foreground="{StaticResource MutedBrush}"
-                                   Text="{Binding CorrectionCountDescription}" />
-                        <ItemsControl ItemsSource="{Binding Corrections}">
+                                   Text="Los rechazos técnicos de sincronización permanecen en Diagnóstico; aquí se muestra la actividad autorizada de planta." />
+                        <ItemsControl ItemsSource="{Binding CajuelaCorrections}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Margin="0,0,0,9" Padding="15" Background="#F7F9FA" CornerRadius="10">
-                                        <StackPanel>
-                                            <TextBlock FontWeight="Bold"><Run Text="{Binding Administrator}" /><Run Text=" · " /><Run Text="{Binding RoleCode}" /></TextBlock>
-                                            <TextBlock Margin="0,5,0,0" Foreground="{StaticResource Ink700Brush}"
-                                                       Text="{Binding Reason, StringFormat=Motivo indicado: {0}}" TextWrapping="Wrap" />
-                                            <ItemsControl Margin="0,7,0,0" ItemsSource="{Binding Changes}">
-                                                <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock FontWeight="Bold"><Run Text="{Binding ActorName, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding ActorRole, Mode=OneWay}" /></TextBlock>
+                                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"><Run Text="{Binding LineName, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding TotalDescription, Mode=OneWay}" /></TextBlock>
+                                                <TextBlock Margin="0,5,0,0" Foreground="{StaticResource Ink700Brush}"
+                                                           Text="{Binding Reason, StringFormat=Motivo: {0}}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Margin="18,0,0,0" Foreground="{StaticResource MutedBrush}"
+                                                       FontSize="10" Text="{Binding ConfirmedDescription}" />
+                                        </Grid>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

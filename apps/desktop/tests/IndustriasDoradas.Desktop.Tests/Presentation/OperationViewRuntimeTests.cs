@@ -50,7 +50,8 @@ public sealed class OperationViewRuntimeTests
 
         AssertCanRender(new HomeView());
         AssertCanRender(new DiagnosticsView());
-        AssertCanRender(new AuditView());
+        AssertCanRender(new AuditView { DataContext = AuditViewSmokeContext.Operation() });
+        AssertCanRender(new AuditView { DataContext = AuditViewSmokeContext.Corrections() });
         AssertCanRender(new SettingsView());
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Guid organizationId = Guid.NewGuid();
@@ -132,6 +133,73 @@ public sealed class OperationViewRuntimeTests
         public string LocalStorageStatus => $"Guardado local disponible · {Lines.Count}";
         public string PendingStatus => $"{Lines.Count - 1} pendientes";
         public string LastResult => $"{Lines.Count} línea lista para operar.";
+    }
+
+    private sealed class AuditViewSmokeContext
+    {
+        private AuditViewSmokeContext(bool showCorrections)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var source = new LocalCompletedShipmentAudit(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                "Línea cerrada",
+                "Proveedor visible",
+                now.AddHours(-2),
+                now,
+                260,
+                1,
+                260,
+                1,
+                0,
+                [new LocalResponsibilityAudit(Guid.NewGuid(), "Responsable visible", now.AddHours(-2), now)]);
+            SelectedShipment = new AuditShipmentItemViewModel(
+                source,
+                "#8959DD",
+                "06/10/2026 02:00 → 06/10/2026 04:00",
+                "260 cajuelas · 1 barrida · 1 corrección",
+                [new AuditResponsibilityItemViewModel("Responsable visible", "02:00 → 04:00")]);
+            CompletedShipments = [SelectedShipment];
+            CajuelaCorrections =
+            [
+                new AuditCorrectionItemViewModel(
+                    new LocalCajuelaCorrectionAudit(
+                        Guid.NewGuid(),
+                        source.ShipmentId,
+                        source.LineName,
+                        "Jefe de Planta 1",
+                        "JEFE_PLANTA",
+                        "Conteo físico confirmado",
+                        261,
+                        260,
+                        now,
+                        true),
+                    "06/10/2026 04:00",
+                    "Conteo: 261 → 260"),
+            ];
+            IsOperationCategory = !showCorrections;
+            IsCorrectionsCategory = showCorrections;
+            IsAccessCategory = false;
+            IsAdministrationCategory = false;
+            HasCompletedShipments = true;
+            HasSelectedShipment = true;
+            CanViewSensitiveAudit = true;
+            Status = "Registros cargados.";
+        }
+
+        public static AuditViewSmokeContext Operation() => new(false);
+        public static AuditViewSmokeContext Corrections() => new(true);
+        public bool IsOperationCategory { get; }
+        public bool IsCorrectionsCategory { get; }
+        public bool IsAccessCategory { get; }
+        public bool IsAdministrationCategory { get; }
+        public bool HasCompletedShipments { get; }
+        public bool HasSelectedShipment { get; }
+        public bool CanViewSensitiveAudit { get; }
+        public string Status { get; }
+        public IReadOnlyList<AuditShipmentItemViewModel> CompletedShipments { get; }
+        public AuditShipmentItemViewModel SelectedShipment { get; }
+        public IReadOnlyList<AuditCorrectionItemViewModel> CajuelaCorrections { get; }
     }
 
     private sealed class StationViewSmokeContext

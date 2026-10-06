@@ -52,11 +52,11 @@ public sealed class ProductionMilestoneServiceTests
     [TestMethod]
     [DataRow(0L, false, 250L, 0L, 250L, 0L)]
     [DataRow(249L, false, 250L, 0L, 250L, 249L)]
-    [DataRow(250L, true, 250L, 250L, 500L, 0L)]
-    [DataRow(251L, true, 250L, 250L, 500L, 1L)]
-    [DataRow(500L, true, 250L, 500L, 750L, 0L)]
-    [DataRow(760L, true, 250L, 750L, 1000L, 10L)]
-    public void ProgressKeepsFirstPendingSweepWhileDisplayAdvancesBySegments(
+    [DataRow(250L, true, 250L, 0L, 250L, 250L)]
+    [DataRow(251L, true, 250L, 0L, 250L, 250L)]
+    [DataRow(500L, true, 250L, 0L, 250L, 250L)]
+    [DataRow(760L, true, 250L, 0L, 250L, 250L)]
+    public void ProgressStaysFullAtPendingReferenceUntilARealSweep(
         long total,
         bool expectedPending,
         long expectedNextSweep,
@@ -78,8 +78,8 @@ public sealed class ProductionMilestoneServiceTests
     [TestMethod]
     [DataRow(260L, false, 510L, 260L, 510L, 0L)]
     [DataRow(509L, false, 510L, 260L, 510L, 249L)]
-    [DataRow(510L, true, 510L, 510L, 760L, 0L)]
-    [DataRow(761L, true, 510L, 760L, 1010L, 1L)]
+    [DataRow(510L, true, 510L, 260L, 510L, 250L)]
+    [DataRow(761L, true, 510L, 260L, 510L, 250L)]
     public void RealSweepAtArbitraryTotalSetsNextReferenceFromThatTotal(
         long total,
         bool expectedPending,
@@ -133,7 +133,7 @@ public sealed class ProductionMilestoneServiceTests
         Assert.AreEqual(27L, alert.ActiveThrough);
         Assert.IsTrue(progress.IsSweepPending);
         Assert.AreEqual(100L, progress.NextSweepReference);
-        Assert.AreEqual(200L, progress.DisplayReference);
+        Assert.AreEqual(100L, progress.DisplayReference);
     }
 
     [TestMethod]

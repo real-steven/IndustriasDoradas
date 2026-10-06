@@ -1,6 +1,7 @@
 using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
+using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using Microsoft.Extensions.Options;
@@ -56,6 +57,63 @@ public sealed class OperationViewModelTests
         StringAssert.Contains(viewModel.LastResult, "guardada localmente");
         Assert.AreEqual("2 pendientes · 0 requieren revisión · 0 sincronizados", viewModel.PendingStatus);
         Assert.AreEqual(OperationFeedbackKind.Success, feedback.LastKind);
+    }
+
+    [TestMethod]
+    public async Task AddFiveRegistersFiveIndependentEventsForTheCardLine()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 48),
+            ReadySnapshot(total: 53, pending: 6));
+        var cajuelas = new StubCajuelaRepository(total: 48);
+        var metrics = new RecordingMetrics();
+        var feedback = new RecordingFeedback();
+        OperationViewModel viewModel = Create(
+            dashboard,
+            cajuelas,
+            metrics: metrics,
+            feedback: feedback);
+        await viewModel.InitializeAsync();
+
+        await viewModel.RegisterFiveLineCajuelasCommand.ExecuteAsync(LineId);
+
+        Assert.AreEqual(5, cajuelas.RegisterCalls);
+        Assert.AreEqual(5, cajuelas.RegisterMutations.Count);
+        Assert.AreEqual(5, cajuelas.RegisterMutations.Select(item => item.ClientEventId).Distinct().Count());
+        Assert.IsTrue(cajuelas.RegisterMutations.All(item => item.LineId == LineId));
+        Assert.AreEqual(53, viewModel.Line.Total);
+        Assert.IsTrue(viewModel.Line.IsReviewAlertActive);
+        Assert.AreEqual(1, feedback.ReviewAlertCalls);
+        Assert.AreEqual(1, feedback.PlayCalls);
+        Assert.AreEqual(5, metrics.Items.Count(item => item.Outcome == OperationInputMetricOutcome.Accepted));
+        StringAssert.Contains(viewModel.LastResult, "5 cajuelas guardadas");
+    }
+
+    [TestMethod]
+    public async Task TemporaryZeroCooldownAcceptsNextDeliberateClickAfterDebounce()
+    {
+        var time = new ManualTimeProvider(Now);
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 0),
+            ReadySnapshot(total: 1),
+            ReadySnapshot(total: 2));
+        var cajuelas = new StubCajuelaRepository(total: 0);
+        OperationViewModel viewModel = Create(
+            dashboard,
+            cajuelas,
+            time,
+            safetyOptions: new OperationSafetyOptions
+            {
+                RegistrationCooldownMilliseconds = 0,
+            });
+        await viewModel.InitializeAsync();
+
+        await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
+        time.Advance(TimeSpan.FromMilliseconds(75));
+        await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
+
+        Assert.AreEqual(2, cajuelas.RegisterCalls);
+        Assert.AreEqual(2, viewModel.Line.Total);
     }
 
     [TestMethod]
@@ -117,13 +175,44 @@ public sealed class OperationViewModelTests
         await viewModel.RegisterLineCajuelaCommand.ExecuteAsync(LineId);
 
         Assert.IsTrue(viewModel.IsMilestoneAlertVisible);
-        Assert.AreEqual("Revisar mercurio", viewModel.MilestoneAlertTitle);
-        StringAssert.Contains(viewModel.MilestoneAlertMessage, "250");
+        Assert.IsTrue(viewModel.MilestoneAlerts.Any(alert =>
+            alert.Title == "Revisar mercurio" && alert.Message.Contains("250", StringComparison.Ordinal)));
+        Assert.IsTrue(viewModel.MilestoneAlerts.Any(alert =>
+            alert.Title == "Barrida pendiente" && alert.IsPersistent));
         Assert.IsTrue(viewModel.Line.IsReviewAlertActive);
         Assert.IsTrue(viewModel.Line.IsSweepPending);
-        Assert.AreEqual("/ 500", viewModel.Line.TotalReferenceDescription);
-        Assert.AreEqual(0d, viewModel.Line.ProgressValue);
+        Assert.AreEqual("/ 250", viewModel.Line.TotalReferenceDescription);
+        Assert.AreEqual(250d, viewModel.Line.ProgressValue);
         Assert.AreEqual("Barrida pendiente", viewModel.Line.NextAlertDescription);
+    }
+
+    [TestMethod]
+    public async Task CardSeparatesUnsweptCounterFromShipmentAndSweptTotals()
+    {
+        OperationViewModel beforeSweep = Create(
+            new QueueDashboardRepository(ReadySnapshot(total: 260)),
+            new StubCajuelaRepository(total: 260));
+        OperationViewModel justSwept = Create(
+            new QueueDashboardRepository(ReadySnapshot(total: 260, lastSweep: 260)),
+            new StubCajuelaRepository(total: 260));
+        OperationViewModel afterOneMore = Create(
+            new QueueDashboardRepository(ReadySnapshot(total: 261, lastSweep: 260)),
+            new StubCajuelaRepository(total: 261));
+
+        await beforeSweep.InitializeAsync();
+        await justSwept.InitializeAsync();
+        await afterOneMore.InitializeAsync();
+
+        Assert.AreEqual(260, beforeSweep.Line.CajuelasSinceLastSweep);
+        Assert.AreEqual(260, beforeSweep.Line.Total);
+        Assert.AreEqual(0, beforeSweep.Line.LastSweepCumulativeTotal);
+        Assert.AreEqual("/ 250", beforeSweep.Line.TotalReferenceDescription);
+        Assert.AreEqual(0, justSwept.Line.CajuelasSinceLastSweep);
+        Assert.AreEqual(260, justSwept.Line.Total);
+        Assert.AreEqual(260, justSwept.Line.LastSweepCumulativeTotal);
+        Assert.AreEqual(1, afterOneMore.Line.CajuelasSinceLastSweep);
+        Assert.AreEqual(261, afterOneMore.Line.Total);
+        Assert.AreEqual(260, afterOneMore.Line.LastSweepCumulativeTotal);
     }
 
     [TestMethod]
@@ -205,24 +294,33 @@ public sealed class OperationViewModelTests
     }
 
     [TestMethod]
-    public async Task TransientNoticesForTwoLinesRemainVisibleTogether()
+    public async Task SweepPreparationRequiresExplicitConfirmationAndDoesNotStopRegistration()
     {
-        var dashboard = new ListDashboardRepository(
-        [
+        var dashboard = new QueueDashboardRepository(
             ReadySnapshot(total: 50),
-            ReadySnapshotForLine(SecondLineId, "Línea 2", total: 100),
-        ]);
-        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 50));
+            ReadySnapshot(total: 50, lastSweep: 50));
+        var sweeps = new StubSweepRepository(50);
+        OperationViewModel viewModel = Create(
+            dashboard,
+            new StubCajuelaRepository(total: 50),
+            sweeps: sweeps);
         await viewModel.InitializeAsync();
 
-        viewModel.ShowSweepReminderCommand.Execute(LineId);
-        viewModel.ShowSweepReminderCommand.Execute(SecondLineId);
+        await viewModel.PrepareLineSweepCommand.ExecuteAsync(LineId);
 
-        Assert.AreEqual(2, viewModel.MilestoneAlerts.Count);
-        CollectionAssert.AreEquivalent(
-            new[] { LineId, SecondLineId },
-            viewModel.MilestoneAlerts.Select(alert => alert.LineId).ToArray());
+        Assert.IsTrue(viewModel.IsSweepConfirmationPending);
+        Assert.AreEqual(0, sweeps.RecordCalls);
+        StringAssert.Contains(viewModel.SweepConfirmationSummary, "50 cajuelas");
         Assert.IsTrue(viewModel.RegisterLineCajuelaCommand.CanExecute(LineId));
+
+        await viewModel.ConfirmSweepCommand.ExecuteAsync(null);
+
+        Assert.IsFalse(viewModel.IsSweepConfirmationPending);
+        Assert.AreEqual(1, sweeps.RecordCalls);
+        Assert.AreEqual(50, viewModel.Line.LastSweepCumulativeTotal);
+        Assert.AreEqual(0, viewModel.Line.CajuelasSinceLastSweep);
+        Assert.AreEqual(50, viewModel.Line.Total);
+        Assert.AreEqual("/ 250", viewModel.Line.TotalReferenceDescription);
     }
 
     [TestMethod]
@@ -453,14 +551,18 @@ public sealed class OperationViewModelTests
         ILocalCajuelaRepository cajuelas,
         TimeProvider? time = null,
         RecordingMetrics? metrics = null,
-        RecordingFeedback? feedback = null)
+        RecordingFeedback? feedback = null,
+        OperationSafetyOptions? safetyOptions = null,
+        StubSweepRepository? sweeps = null)
     {
         time ??= new FixedTimeProvider(Now);
-        var safety = Options.Create(new OperationSafetyOptions());
+        var safety = Options.Create(safetyOptions ?? new OperationSafetyOptions());
+        sweeps ??= new StubSweepRepository(1);
         return new OperationViewModel(
             dashboard,
             new RegisterCajuelaHandler(cajuelas, time),
             new RevertLastCajuelaHandler(cajuelas, time),
+            new RecordProductionSweepHandler(sweeps, new MemoryStationStore(State()), time),
             new StubInputCommandSource(),
             new OperationInputGuard(safety, time),
             metrics ?? new RecordingMetrics(),
@@ -471,7 +573,10 @@ public sealed class OperationViewModelTests
             time);
     }
 
-    private static LocalOperationDashboardSnapshot ReadySnapshot(int total, int pending = 1) =>
+    private static LocalOperationDashboardSnapshot ReadySnapshot(
+        int total,
+        int pending = 1,
+        int lastSweep = 0) =>
         new(
             Session(),
             LineId,
@@ -483,7 +588,8 @@ public sealed class OperationViewModelTests
             "Juan",
             Now.AddMinutes(-15),
             total,
-            pending);
+            pending,
+            LastSweepCumulativeTotal: lastSweep);
 
     private static LocalOperationDashboardSnapshot ReadySnapshotForLine(
         Guid lineId,
@@ -508,6 +614,21 @@ public sealed class OperationViewModelTests
             Now.AddHours(-1),
             Now.AddMinutes(-15),
             LineFeedCycleStatus.Active);
+
+    private static ProtectedStationState State() => new(
+        new AuthTokens("access", "refresh", Now.AddHours(1)),
+        new ApiSession(Guid.Parse("20000000-0000-4000-8000-000000000001"), OrganizationId, "JEFE_PLANTA", Now.AddHours(1)),
+        new StationAuthorization(
+            StationId,
+            PlantId,
+            OrganizationId,
+            "Estación de prueba",
+            1,
+            "verifier",
+            Now,
+            Now.AddHours(24)),
+        [],
+        OfflinePinState.Empty);
 
     private static OperationInputCommand Input(
         OperationInputAction action,
@@ -561,6 +682,7 @@ public sealed class OperationViewModelTests
         public int ReverseCalls { get; private set; }
         public RegisterCajuelaMutation? LastRegisterMutation { get; private set; }
         public ReverseCajuelaMutation? LastReverseMutation { get; private set; }
+        public List<RegisterCajuelaMutation> RegisterMutations { get; } = [];
 
         public Task<LocalCajuelaRegistration> RegisterAsync(
             RegisterCajuelaMutation mutation,
@@ -568,6 +690,7 @@ public sealed class OperationViewModelTests
         {
             RegisterCalls++;
             LastRegisterMutation = mutation;
+            RegisterMutations.Add(mutation);
             total++;
             return Task.FromResult(new LocalCajuelaRegistration(
                 Added(mutation.ClientEventId, RegisterCalls + 1),
@@ -635,6 +758,54 @@ public sealed class OperationViewModelTests
                 WorkerId);
     }
 
+    private sealed class StubSweepRepository(int quantity) : ILocalProductionSweepRepository
+    {
+        public int RecordCalls { get; private set; }
+
+        public Task<LocalSweepPreparation> PrepareAsync(
+            Guid stationId,
+            Guid lineId,
+            CancellationToken cancellationToken = default)
+        {
+            ProductionEvent[] events = Enumerable.Range(1, quantity)
+                .Select(index => ProductionEvent.CajuelaAdded(
+                    Guid.NewGuid(),
+                    ProductionEventContext.Create(
+                        OrganizationId,
+                        PlantId,
+                        StationId,
+                        lineId,
+                        CycleId,
+                        ShipmentId,
+                        WorkerId),
+                    index,
+                    Now.AddMinutes(-1),
+                    Now.AddMinutes(-1)))
+                .ToArray();
+            LocalOperationalSession session = Session() with { LineId = lineId };
+            return Task.FromResult(new LocalSweepPreparation(session, events, quantity, 0));
+        }
+
+        public Task<LocalSweepRegistration> RecordAsync(
+            ProductionSweep sweep,
+            CancellationToken cancellationToken = default)
+        {
+            RecordCalls++;
+            return Task.FromResult(new LocalSweepRegistration(sweep, sweep.CajuelaQuantity, false));
+        }
+    }
+
+    private sealed class MemoryStationStore(ProtectedStationState state) : IProtectedStationStore
+    {
+        public Task SaveAsync(ProtectedStationState value, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<ProtectedStationState?> LoadAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProtectedStationState?>(state);
+
+        public Task CloseSessionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
     private sealed class ThrowingDashboardRepository : ILocalOperationDashboardRepository
     {
         public Task<LocalOperationDashboardSnapshot> GetAsync(
@@ -672,7 +843,12 @@ public sealed class OperationViewModelTests
     {
         public OperationFeedbackKind LastKind { get; private set; }
         public int ReviewAlertCalls { get; private set; }
-        public void Play(OperationFeedbackKind kind) => LastKind = kind;
+        public int PlayCalls { get; private set; }
+        public void Play(OperationFeedbackKind kind)
+        {
+            LastKind = kind;
+            PlayCalls++;
+        }
         public void PlayReviewAlert() => ReviewAlertCalls++;
     }
 

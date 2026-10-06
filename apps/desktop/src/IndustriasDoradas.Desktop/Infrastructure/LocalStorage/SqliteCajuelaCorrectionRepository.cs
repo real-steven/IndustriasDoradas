@@ -256,6 +256,10 @@ public sealed partial class SqliteCajuelaRepository
               AND added.event_type = 'CAJUELA_ADDED'
               AND NOT EXISTS (
                   SELECT 1
+                  FROM sweep_production_events AS swept
+                  WHERE swept.production_event_id = added.client_event_id)
+              AND NOT EXISTS (
+                  SELECT 1
                   FROM production_events AS reversal
                   WHERE reversal.event_type = 'CAJUELA_REVERSED'
                     AND reversal.reverses_client_event_id = added.client_event_id)
@@ -352,12 +356,34 @@ public sealed partial class SqliteCajuelaRepository
         command.CommandText = """
             INSERT INTO production_event_corrections(
                 reversal_client_event_id, target_client_event_id, confirmation_id,
-                reason_code, prepared_at_utc, confirmed_at_utc)
+                reason_code, prepared_at_utc, confirmed_at_utc,
+                actor_kind, actor_id, actor_display_name, actor_role_code,
+                reason_detail, total_before, total_after, requires_plant_manager)
             VALUES (
                 $reversalClientEventId, $targetClientEventId, $confirmationId,
-                $reasonCode, $preparedAtUtc, $confirmedAtUtc);
+                $reasonCode, $preparedAtUtc, $confirmedAtUtc,
+                $actorKind, $actorId, $actorDisplayName, $actorRoleCode,
+                $reasonDetail, $totalBefore, $totalAfter, $requiresPlantManager);
             """;
         AddCorrectionParameters(command, mutation);
+        command.Parameters.AddWithValue("$actorKind", mutation.CorrectionActorKind);
+        command.Parameters.AddWithValue(
+            "$actorId",
+            mutation.CorrectionActorId?.ToString("D") ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$actorDisplayName",
+            mutation.CorrectionActorDisplayName ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$actorRoleCode",
+            mutation.CorrectionActorRoleCode ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("$reasonDetail", mutation.ReasonDetail ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$totalBefore",
+            mutation.TotalBeforeCorrection ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$totalAfter",
+            mutation.TotalAfterCorrection ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("$requiresPlantManager", mutation.RequiresPlantManager ? 1 : 0);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

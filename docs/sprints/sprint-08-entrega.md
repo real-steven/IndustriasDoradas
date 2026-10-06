@@ -57,7 +57,7 @@
 
 ### 8.6 Reportes por módulo
 
-**Prompt:** Añade reportes priorizados de producción/cajuelas, actividad de línea, cargamentos/proveedores, barridas/mercurio/oro/custodia/entregas y asistencia/horas. Inventario/novedades se incluyen solo si fueron aprobados. No muestres pago estimado salvo que tarifa/vigencia hayan sido aprobadas formalmente. `JEFE_EMPRESA` genera todos los reportes; un administrador solo los concedidos, incluidos los de oro/custodia/entregas cuando gerencia le haya asignado expresamente esa capacidad. Documenta campos/límites.
+**Prompt:** Añade reportes priorizados de producción/cajuelas, actividad de línea, cargamentos/proveedores, barridas/mercurio/oro/custodia/entregas y asistencia/horas. Inventario/novedades se incluyen solo si fueron aprobados. No muestres pago estimado salvo que tarifa/vigencia hayan sido aprobadas formalmente. En el alcance actual solo `JEFE_EMPRESA` genera y consulta reportes web. Documenta campos/límites.
 
 **Pausa:** cada responsable valida al menos un reporte contra pantalla/fuente.
 
@@ -95,7 +95,7 @@
 
 **Prompt:** Redacta manual técnico, instalación, operador visual, gerencia, administración, privacidad, respaldo y solución de problemas. Incluye procedimiento en papel si PC falla, cómo reingresar/conservar datos y canales responsables. Usa capturas actuales y lenguaje comprensible.
 
-**Pausa:** operario y administrador ejecutan tareas siguiendo manual, sin ayuda verbal.
+**Pausa:** operario, jefe de planta y gerente ejecutan sus tareas siguiendo el manual, sin ayuda verbal.
 
 ### 8.13 Piloto de una línea
 
@@ -105,6 +105,6 @@
 
 ### 8.14 Cierre y transferencia
 
-**Prompt:** Ejecuta prueba final y matriz de requisitos. Organiza deuda/backlog (PDF, sensor USB/HID, multiempresa, biometría si siguió aplazada y tarifa/estimación laboral si no fue aprobada), habilita MFA y dispositivos administrativos autorizados antes de producción, revisa versiones/licencias y entrega por canal seguro. Registra aceptación y continuidad.
+**Prompt:** Ejecuta prueba final y matriz de requisitos. Restaura la espera de seguridad entre cajuelas a 3000 ms, repite las pruebas contra doble pulsación y elimina o restringe el botón temporal `+5` antes del piloto. Organiza deuda/backlog (PDF, sensor USB/HID, multiempresa, biometría si siguió aplazada y tarifa/estimación laboral si no fue aprobada), habilita MFA y dispositivos administrativos autorizados antes de producción, revisa versiones/licencias y entrega por canal seguro. Registra aceptación y continuidad.
 
 **Pausa:** cero críticos/altos, todos los RF/RNF con evidencia, restauración demostrada y cierre firmado.

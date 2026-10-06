@@ -30,12 +30,13 @@ public sealed class StationPreparationViewModelTests
         var time = new FixedTimeProvider();
         ProtectedStationState state = State();
         var catalogs = new MemoryCatalogs();
+        var stationStore = new MemoryStationStore(state);
         var coordinator = new StationCoordinator(
             new StubAuth(),
             new StubStationApi(state, Snapshot()),
             catalogs,
             new MemoryStationSequences(),
-            new MemoryStationStore(state),
+            stationStore,
             new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }),
             time);
@@ -148,24 +149,28 @@ public sealed class StationPreparationViewModelTests
         var time = new FixedTimeProvider();
         ProtectedStationState state = State();
         var catalogs = new MemoryCatalogs();
+        var stationStore = new MemoryStationStore(state);
         var coordinator = new StationCoordinator(
             new StubAuth(),
             new StubStationApi(state, Snapshot()),
             catalogs,
             new MemoryStationSequences(),
-            new MemoryStationStore(state),
+            stationStore,
             new NoopEvidenceCapture(),
             Options.Create(new StationOptions { Id = StationId }),
             time);
         var sessions = new MemorySessions();
         var repository = new RecordingOperationRepository(sessions);
         var operations = new LocalOperationService(catalogs, sessions, repository, time);
+        var sweeps = new MemorySweepRepository(sessions, quantity: 30);
         using var viewModel = new StationViewModel(
             coordinator,
             catalogs,
             operations,
             Options.Create(new StationOptions { Id = StationId }),
-            time);
+            time,
+            dashboard: null,
+            new RecordProductionSweepHandler(sweeps, stationStore, time));
 
         await viewModel.InitializeAsync();
         await viewModel.ElevateAsync("123456");
@@ -197,10 +202,15 @@ public sealed class StationPreparationViewModelTests
         await viewModel.PrepareCompletionCommand.ExecuteAsync(null);
 
         Assert.AreEqual(0, repository.CompletionCalls);
-        StringAssert.Contains(viewModel.ManagementSummary, "La línea continúa activa hasta confirmar");
+        StringAssert.Contains(viewModel.ManagementSummary, "barrida final de 30 cajuelas");
         Assert.IsTrue(viewModel.ConfirmCompletionCommand.CanExecute(null));
         await viewModel.ConfirmCompletionCommand.ExecuteAsync(null);
 
+        Assert.AreEqual(1, sweeps.RecordCalls);
+        Assert.IsNotNull(sweeps.LastSweep);
+        Assert.IsTrue(sweeps.LastSweep.IsFinal);
+        Assert.AreEqual(30, sweeps.LastSweep.CajuelaQuantity);
+        Assert.AreEqual(SweepMercuryStatus.Pending, sweeps.LastSweep.MercuryStatus);
         Assert.AreEqual(1, repository.CompletionCalls);
         Assert.AreEqual(LineFeedCycleStatus.Completed, sessions.Current?.Status);
         Assert.IsFalse(viewModel.HasActiveOperation);
@@ -513,6 +523,49 @@ public sealed class StationPreparationViewModelTests
                 Status = LineFeedCycleStatus.Completed,
             };
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class MemorySweepRepository(
+        MemorySessions sessions,
+        int quantity) : ILocalProductionSweepRepository
+    {
+        public int RecordCalls { get; private set; }
+        public ProductionSweep? LastSweep { get; private set; }
+
+        public Task<LocalSweepPreparation> PrepareAsync(
+            Guid stationId,
+            Guid lineId,
+            CancellationToken cancellationToken = default)
+        {
+            LocalOperationalSession session = sessions.Current
+                ?? throw new InvalidOperationException("No hay sesión activa.");
+            ProductionEventContext context = ProductionEventContext.Create(
+                session.OrganizationId,
+                session.PlantId,
+                session.StationId,
+                session.LineId,
+                session.FeedCycleId,
+                session.ShipmentId,
+                session.ResponsibleWorkerId);
+            ProductionEvent[] events = Enumerable.Range(1, quantity)
+                .Select(index => ProductionEvent.CajuelaAdded(
+                    Guid.NewGuid(),
+                    context,
+                    index,
+                    Now.AddMinutes(-1),
+                    Now.AddMinutes(-1)))
+                .ToArray();
+            return Task.FromResult(new LocalSweepPreparation(session, events, quantity, 0));
+        }
+
+        public Task<LocalSweepRegistration> RecordAsync(
+            ProductionSweep sweep,
+            CancellationToken cancellationToken = default)
+        {
+            RecordCalls++;
+            LastSweep = sweep;
+            return Task.FromResult(new LocalSweepRegistration(sweep, sweep.CajuelaQuantity, false));
         }
     }
 

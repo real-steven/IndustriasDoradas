@@ -127,7 +127,15 @@ public sealed record ReverseCajuelaMutation(
     DateTimeOffset PreparedAt,
     DateTimeOffset ConfirmedAt,
     OperationInputOrigin InputOrigin,
-    OutboxAuthorizationEvidence? Authorization = null);
+    OutboxAuthorizationEvidence? Authorization = null,
+    string CorrectionActorKind = "OPERARIO",
+    Guid? CorrectionActorId = null,
+    string? CorrectionActorDisplayName = null,
+    string? CorrectionActorRoleCode = null,
+    string? ReasonDetail = null,
+    int? TotalBeforeCorrection = null,
+    int? TotalAfterCorrection = null,
+    bool RequiresPlantManager = false);
 
 public sealed record LocalCajuelaReversal(
     ProductionEvent Event,
@@ -135,6 +143,49 @@ public sealed record LocalCajuelaReversal(
     string ReasonCode,
     int Total,
     bool WasDuplicate);
+
+public sealed record LocalSweepPreparation(
+    LocalOperationalSession Session,
+    IReadOnlyList<ProductionEvent> UnsweptEvents,
+    int TotalCajuelas,
+    int LastSweepCumulativeTotal);
+
+public sealed record LocalSweepRegistration(
+    ProductionSweep Sweep,
+    int CumulativeSweptTotal,
+    bool WasDuplicate);
+
+public sealed record LocalResponsibilityAudit(
+    Guid WorkerId,
+    string WorkerName,
+    DateTimeOffset AssignedAt,
+    DateTimeOffset? UnassignedAt);
+
+public sealed record LocalCompletedShipmentAudit(
+    Guid ShipmentId,
+    Guid LineId,
+    string LineName,
+    string SupplierName,
+    DateTimeOffset StartedAt,
+    DateTimeOffset CompletedAt,
+    int TotalCajuelas,
+    int SweepCount,
+    int SweptCajuelas,
+    int CorrectionCount,
+      int MercuryRecordedSweepCount,
+    IReadOnlyList<LocalResponsibilityAudit> Responsibilities);
+
+public sealed record LocalCajuelaCorrectionAudit(
+    Guid ReversalEventId,
+    Guid ShipmentId,
+    string LineName,
+    string ActorName,
+    string ActorRole,
+    string Reason,
+    int? TotalBefore,
+    int? TotalAfter,
+    DateTimeOffset ConfirmedAt,
+    bool RequiredPlantManager);
 
 public sealed record LocalOperationDashboardSnapshot(
     LocalOperationalSession? Session,
@@ -149,7 +200,8 @@ public sealed record LocalOperationDashboardSnapshot(
     int Total,
     int PendingOutboxCount,
     int FailedReviewOutboxCount = 0,
-    int SyncedOutboxCount = 0)
+    int SyncedOutboxCount = 0,
+    int LastSweepCumulativeTotal = 0)
 {
     public bool IsReady => Session?.Status == LineFeedCycleStatus.Active;
 }
@@ -286,6 +338,27 @@ public interface ILocalCajuelaRepository
 
     Task<LocalCajuelaReversal> ReverseAsync(
         ReverseCajuelaMutation mutation,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalAuditRepository
+{
+    Task<IReadOnlyList<LocalCompletedShipmentAudit>> ListCompletedShipmentsAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalProductionSweepRepository
+{
+    Task<LocalSweepPreparation> PrepareAsync(
+        Guid stationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default);
+
+    Task<LocalSweepRegistration> RecordAsync(
+        ProductionSweep sweep,
         CancellationToken cancellationToken = default);
 }
 

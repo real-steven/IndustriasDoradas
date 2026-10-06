@@ -144,7 +144,7 @@ Reglas de acceso:
 - Todo cargamento termina con una barrida final, aunque el último grupo tenga menos de 50.
 - Cada barrida registra la cantidad real de cajuelas incluidas y sus eventos; no se presume que sean exactamente 50.
 - El conteo total de cajuelas del cargamento es acumulado y nunca se reinicia al barrer.
-- Como referencia visual adicional, la primera meta de barrida es 250 cajuelas. Al alcanzar una meta sin barrer, queda visible `Barrida pendiente`, la barra inicia un nuevo tramo de 250 y el denominador avanza: por ejemplo, `250/500`.
+- Como referencia visual adicional, la primera meta de barrida es 250 cajuelas. Al alcanzar o superar una meta sin barrer, queda visible `Barrida pendiente`, la barra permanece completa y el denominador no avanza. Solo una barrida física confirmada en el acumulado `N` abre el siguiente tramo hasta `N + 250`; por ejemplo, una barrida confirmada en 260 produce `260/510`.
 - La referencia de 250 no bloquea la alimentación ni obliga a barrer exactamente en el umbral. Si la barrida real ocurre en 260, la próxima meta es 510 y la vista parte de `260/510`.
 - Registrar una barrida conserva el total acumulado, cierra únicamente el tramo físico barrido y calcula la siguiente referencia como cantidad acumulada de la barrida más 250.
 - Al intentar cerrar un cargamento sin barrida final registrada, el sistema advierte que existe una barrida pendiente y ofrece confirmar la barrida física. Los movimientos de mercurio pueden completarse en ese momento o quedar pendientes; el oro se registra posteriormente y solo desde la web gerencial.
@@ -473,3 +473,33 @@ registra con elevación temporal las cargas, recargas y cantidades recuperadas
 de cada rastra. Los movimientos pueden quedar pendientes para no detener el
 flujo, se expresan en gramos y toda corrección conserva el historial. Rastra y
 barrida permanecen como entidades distintas.
+
+### 19.5 Reparto definitivo desktop/web y correcciones del 2026-10-05
+
+La empresa sustituyó el modelo de delegación administrativa descrito en 19.2 y
+19.4 para el alcance actual. La gerente será la única usuaria funcional de la
+web mediante `JEFE_EMPRESA`: consulta toda la actividad, estadísticas y datos
+sensibles, registra oro y puede ejecutar allí correcciones delicadas sin un
+límite funcional adicional. No se habilita un «modo gerente con permisos de
+empleado» ni un flujo vigente de administradores delegados. Las estructuras
+anteriores pueden conservarse temporalmente por compatibilidad de migraciones,
+pero no forman parte de la navegación ni de la prueba del MVP.
+
+Desktop queda reservado a la operación de planta:
+
+- el operario registra cajuelas y puede revertir únicamente la última cajuela
+  no barrida durante los cinco minutos posteriores a su registro;
+- una corrección posterior requiere Modo Jefe de Planta, motivo obligatorio y
+  conserva identidad, fecha, línea, cargamento y conteos anterior/posterior;
+- un evento incluido en una barrida nunca se revierte;
+- el jefe de planta administra cargamentos, responsables, barridas, mercurio y
+  las revisiones operativas locales;
+- los rechazos de sincronización son información técnica de Diagnóstico y no
+  solicitudes de aprobación para la gerente;
+- Auditoría separa cargamentos cerrados de correcciones. Cada cargamento cerrado
+  reconstruye proveedor, línea, periodo, cajuelas, responsables por intervalo,
+  barridas, correcciones y estado de medición de mercurio.
+
+Los avisos operativos no alteran el tamaño de las tarjetas: revisión de mercurio
+y barrida se presentan en la esquina superior derecha. La revisión es transitoria
+y la barrida pendiente permanece visible hasta que se registre físicamente.

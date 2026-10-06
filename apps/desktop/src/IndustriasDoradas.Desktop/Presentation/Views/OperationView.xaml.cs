@@ -11,8 +11,6 @@ public partial class OperationView : UserControl
 {
     private WpfKeyboardInputAdapter? keyboardAdapter;
 
-    public event RoutedEventHandler? FocusModeRequested;
-
     public OperationView()
     {
         InitializeComponent();
@@ -56,9 +54,6 @@ public partial class OperationView : UserControl
         await ViewModel.HandleInputCommandAsync(command);
         FocusCurrentTarget();
     }
-
-    private void OnFocusModeRequested(object sender, RoutedEventArgs e) =>
-        FocusModeRequested?.Invoke(this, e);
 
     private void FocusCurrentTarget()
     {

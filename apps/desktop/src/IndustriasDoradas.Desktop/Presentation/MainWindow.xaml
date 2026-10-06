@@ -24,7 +24,7 @@
         <DataTemplate DataType="{x:Type viewModels:HomeViewModel}"><views:HomeView /></DataTemplate>
         <DataTemplate DataType="{x:Type viewModels:DiagnosticsViewModel}"><views:DiagnosticsView /></DataTemplate>
         <DataTemplate DataType="{x:Type viewModels:StationViewModel}"><views:StationView /></DataTemplate>
-        <DataTemplate DataType="{x:Type viewModels:OperationViewModel}"><views:OperationView FocusModeRequested="OnFocusOperation" /></DataTemplate>
+        <DataTemplate DataType="{x:Type viewModels:OperationViewModel}"><views:OperationView /></DataTemplate>
         <DataTemplate DataType="{x:Type viewModels:AuditViewModel}"><views:AuditView /></DataTemplate>
         <DataTemplate DataType="{x:Type viewModels:SettingsViewModel}"><views:SettingsView /></DataTemplate>
 

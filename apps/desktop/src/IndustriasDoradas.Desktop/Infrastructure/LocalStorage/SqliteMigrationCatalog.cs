@@ -25,6 +25,7 @@ public static class SqliteMigrationCatalog
         Read(10, "sync_runtime_status", "010_sync_runtime_status.sql"),
         Read(11, "station_sequence_baseline", "011_station_sequence_baseline.sql"),
         Read(12, "sweeps_and_mercury", "012_sweeps_and_mercury.sql"),
+        Read(13, "correction_audit_context", "013_correction_audit_context.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)
