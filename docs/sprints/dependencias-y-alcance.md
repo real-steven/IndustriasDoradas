@@ -27,8 +27,9 @@ La web necesita datos centrales sincronizados; una barrida necesita cajuelas vá
 Autenticación de `JEFE_EMPRESA` y `JEFE_PLANTA`; Modo Operación sin cuenta
 compartida; auditoría; solicitudes/estados de trabajadores;
 planta/líneas/rastras/estaciones; proveedores/cargamentos; responsables;
-cajuelas y reversos; offline de 24 horas + sincronización; alertas cada 50;
-barridas reales; entrada/saldo final de mercurio por rastra; oro total opcional
+cajuelas y reversos; offline de 24 horas + sincronización; alertas de revisión
+cada 50 y referencia de barrida cada 250; barridas reales; entrada/saldo final
+de mercurio por rastra; oro total opcional
 por cargamento solo en web; portal gerencial; Excel del núcleo aprobado y
 recuperación. `ADMINISTRADOR`, custodia y entregas permanecen únicamente como
 compatibilidad histórica, no como alcance funcional.

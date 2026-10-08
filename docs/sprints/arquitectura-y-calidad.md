@@ -25,8 +25,13 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
   tiene un responsable principal vigente a la vez, conservando el historial de
   relevos; nunca se reparte entre líneas ni se mezclan resultados de cargamentos
   distintos.
-- La alerta de barrida es configurable, inicialmente cada 50 cajuelas, visible/sonora en los intervalos 50–55, 100–105, etc.; no bloquea producción.
-- Una barrida real puede incluir menos, exactamente o más de 50 cajuelas y siempre existe una barrida final al terminar el cargamento.
+- La alerta de revisión de mercurio es configurable, inicialmente cada 50
+  cajuelas y visible en los intervalos 50–55, 100–105, etc.; no bloquea
+  producción.
+- La referencia visual de barrida inicia cada 250 cajuelas y queda pendiente si
+  se supera. Una barrida real puede ocurrir antes, exactamente o después de la
+  referencia; al cerrar el cargamento se registra la barrida final que
+  corresponda.
 - Desktop registra entrada y saldo final de mercurio por cada una de las tres
   rastras y por barrida, sin recargas intermedias. `JEFE_EMPRESA` puede registrar
   desde web un único total opcional de oro por cargamento cerrado; no existen
