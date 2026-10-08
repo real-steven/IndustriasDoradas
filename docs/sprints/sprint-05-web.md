@@ -4,6 +4,20 @@
 
 **Entregable inicial confirmado:** una única cuenta `JEFE_EMPRESA` consulta resumen, operación, cargamentos y auditoría, y registra o corrige un único total de oro por cargamento cerrado. Trabajadores/horas, estadísticas avanzadas, reportes Excel, inventario/mantenimiento y configuración autoservicio aparecen como `Próximamente` y no bloquean el primer entregable.
 
+## Punto de partida y frontera
+
+- Sprint 4.11 ya centraliza cargamentos, responsables, cajuelas, correcciones,
+  barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
+  segundo protocolo de sincronización.
+- 5.1 y 5.2 están cerrados. El siguiente paso ejecutable es 5.3.
+- El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
+  por cargamento y 5.6 construirá su API e interfaz. El modelo legado por
+  barrida no se reutiliza.
+- La web actual pertenece a `JEFE_EMPRESA`. `ADMINISTRADOR` permanece solo como
+  compatibilidad histórica y no forma parte de navegación, aceptación ni
+  matriz funcional del MVP.
+- Desktop conserva toda la operación física y nunca recibe cantidades de oro.
+
 ## Decisiones de alcance
 
 1. La gerente es la única usuaria funcional de la web en el MVP. No se diseñan pantallas de roles, delegación ni permisos de administradores.
@@ -18,14 +32,14 @@
 1. ~~Cerrar Sprint 4.11: sincronización central de cargamentos, responsables, cajuelas, barridas y mercurio entre estaciones.~~ Cerrado técnica y manualmente el 2026-10-08.
 2. ~~Confirmar wireframes y las preguntas gerenciales del MVP.~~ Cerrado el 2026-10-08 con el concepto aprobado y el recorrido documentado.
 3. ~~Crear read models y definiciones únicas de totales.~~ Cerrado el 2026-10-08 con vistas centrales y pruebas SQL reproducibles.
-4. Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento.
-5. Implementar resumen y operación con frescura visible.
+4. Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento sobre los read models de 5.2.
+5. Implementar resumen y operación de solo lectura con frescura visible.
 6. Implementar historial/detalle y auditoría agrupada por cargamento.
-7. Implementar registro y corrección del oro total por cargamento.
+7. Implementar registro y corrección del oro total opcional por cargamento cerrado.
 8. Validar responsive, accesibilidad, sesión, errores y rendimiento.
 9. Dejar módulos futuros visibles como `Próximamente`, sin construir su lógica todavía.
 
-**Pruebas:** filtros y totales SQL conocidos; rutas de `JEFE_EMPRESA`; E2E login → resumen → línea → cargamento cerrado → oro total → auditoría; ausencia de oro en desktop; actualización entre estaciones solo después de aprobar 4.11.
+**Pruebas:** filtros y totales SQL conocidos; rutas de `JEFE_EMPRESA`; E2E login → resumen → línea → cargamento cerrado → oro total → auditoría; ausencia de oro en desktop; actualización web basada en la verdad central aprobada en 4.11.
 
 **Prueba manual:** iPhone Safari, Android Chrome y PC con red lenta; comparar web, API y desktop y verificar que la fecha de actualización sea comprensible.
 
@@ -64,19 +78,19 @@ después, cero versus ausente y correcciones append-only sin doble conteo.
 
 ### 5.4 Resumen y operación web
 
-**Prompt:** Implementa dashboard con líneas activas, cajuelas, meta de barrida, cargamento, proveedor, responsable, novedades y última sincronización. Muestra frescura por estación y estado desactualizado. No inventes tiempo real hasta que 4.11 proyecte toda la operación compartida.
+**Prompt:** Implementa dashboard con líneas activas, cajuelas, próxima referencia de barrida, cantidad de barridas, cargamento, proveedor, responsable y última actividad. Muestra frescura por estación y estado desactualizado. Consume únicamente la proyección central de 4.11 y los read models de 5.2; no recalcules totales en React ni agregues controles físicos de desktop.
 
 **Pausa:** cada tarjeta coincide con API/desktop y distingue estación desactualizada.
 
 ### 5.5 Historial, detalle y auditoría
 
-**Prompt:** Implementa cargamentos cerrados con semana actual, semana anterior, fecha específica, línea y proveedor. Conserva filtros en URL, pagina y abre detalle con cajuelas, barridas, mercurio, responsables y cambios auditados. Diferencia hora de dispositivo y servidor.
+**Prompt:** Implementa cargamentos cerrados con semana actual, semana anterior, fecha específica, línea, proveedor y responsable. Conserva filtros en URL, pagina con orden determinista y abre detalle con cajuelas, barridas, mercurio, responsables y cambios auditados. Agrupa Auditoría por cargamento y diferencia hora de ocurrencia de hora de confirmación central.
 
 **Pausa:** una URL filtrada reproduce exactamente la consulta en móvil y PC.
 
 ### 5.6 Oro total por cargamento
 
-**Prompt:** Permite a `JEFE_EMPRESA` registrar o corregir opcionalmente un único total de oro en gramos para un cargamento cerrado. Acepta entero o hasta dos decimales, vacío no registrado y cero válido; muestra palos solo como equivalencia `1 palo = 0,10 g`. Conserva autora, fecha, valor anterior, nuevo valor y motivo. No crees resultados parciales por barrida, no cargues datos históricos previos a la puesta en marcha ni sincronices oro a desktop. Las comparaciones por proveedor muestran cobertura de cargamentos registrados y excluidos.
+**Prompt:** Sobre `app.shipment_gold_result_entries`, permite a `JEFE_EMPRESA` registrar o corregir opcionalmente un único total de oro en gramos para un cargamento cerrado. Acepta entero o hasta dos decimales, vacío no registrado y cero válido; muestra palos solo como equivalencia `1 palo = 0,10 g`. Conserva autora, fecha, valor anterior, nuevo valor y motivo mediante entradas append-only. No uses `gold_result_entries` legado, no crees resultados parciales por barrida, no cargues datos históricos previos a la puesta en marcha ni sincronices oro a desktop. Las comparaciones por proveedor muestran cobertura de cargamentos registrados y excluidos.
 
 **Pausa:** el dataset manual coincide por cargamento, línea, proveedor y período, sin contar dos veces.
 

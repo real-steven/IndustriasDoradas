@@ -6,7 +6,9 @@
 - `apps/desktop`: WPF .NET 10; interfaz operativa local-first y control USB HID.
 - `apps/web`: React + TypeScript; portal adaptable para Safari/Chrome/iPhone/Android.
 - Supabase PostgreSQL central y SQLite por estación.
-- Supabase Auth para identidad y Supabase Storage privado para fotografías/documentos.
+- Supabase Auth para identidad. Supabase Storage privado se incorpora solo para
+  fotografías/documentos cuya política haya sido aprobada en el sprint
+  correspondiente.
 - REST/JSON + OpenAPI. Sincronización Outbox con UUID e idempotencia.
 
 Los frontends no consultan tablas de negocio de Supabase directamente. Supabase Auth emite la identidad; NestJS valida sus JWT y concentra permisos, validaciones, auditoría y reglas. La clave `service_role` existe solo en el backend, nunca en desktop/web. Desktop confirma primero en SQLite y sincroniza después; registrar una cajuela nunca espera Internet.
@@ -25,13 +27,23 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
   distintos.
 - La alerta de barrida es configurable, inicialmente cada 50 cajuelas, visible/sonora en los intervalos 50–55, 100–105, etc.; no bloquea producción.
 - Una barrida real puede incluir menos, exactamente o más de 50 cajuelas y siempre existe una barrida final al terminar el cargamento.
-- Desktop registra entrada y saldo final de mercurio por cada una de las tres rastras y por barrida, sin recargas intermedias; `JEFE_EMPRESA` o un administrador expresamente autorizado registra oro por barrida desde web y el definitivo del cargamento es la suma de esos resultados.
+- Desktop registra entrada y saldo final de mercurio por cada una de las tres
+  rastras y por barrida, sin recargas intermedias. `JEFE_EMPRESA` puede registrar
+  desde web un único total opcional de oro por cargamento cerrado; no existen
+  parciales de oro por barrida ni cantidades de oro en desktop.
 - Interfaz y reportes web soportan español/inglés con preferencia por cuenta.
-- Jefe de empresa consulta/exporta y actúa como superadministrador; cada administrador modifica o consulta solo según concesiones; jefe de planta abre la estación y eleva permisos; Modo Operación compartido registra cajuelas y asistencia sin cuenta de operario.
-- La cuenta `JEFE_EMPRESA` es única y presenta Administración como módulo separado dentro de la misma sesión.
-- Un administrador no cambia sus propios permisos ni delega capacidades que no posee; toda concesión y revocación se audita y aplica en la solicitud siguiente.
+- `JEFE_EMPRESA` es la única usuaria funcional del portal web del MVP. Consulta,
+  exporta y corrige datos gerenciales dentro de su alcance; no se implementa
+  delegación ni administración de otras cuentas web.
+- `JEFE_PLANTA` abre la estación y eleva permisos; Modo Operación compartido
+  registra cajuelas y, cuando exista Sprint 6, asistencia sin cuenta de operario.
+- Las estructuras legadas de `ADMINISTRADOR` pueden conservarse para
+  compatibilidad, pero no aparecen en navegación, permisos ni criterios de
+  aceptación vigentes.
 - Trabajador provisional registra horas desde el primer día; a las 72 horas pasa a vencido sin bloqueo ni pérdida y exige atención administrativa urgente.
-- Check-in/out inicial usa fotografía pendiente; reconocimiento facial y sensor automático son posteriores y condicionados.
+- Check-in/out inicial no depende de fotografía. Sprint 6 decide si incorpora
+  evidencia fotográfica después de aprobar finalidad, retención, acceso y
+  contingencia; reconocimiento facial y sensor automático permanecen en backlog.
 
 ## Reglas contra código espagueti
 
@@ -40,15 +52,20 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
 3. Reglas como intervalos de alerta, barridas reales, mercurio por rastra, consolidación gerencial de oro y conversiones viven en servicios de dominio probados.
 4. No crear abstracciones “por si acaso”, excepto puertos necesarios de almacenamiento, reloj, cámara, entrada y sincronización.
 5. No duplicar reglas entre clientes; la API es autoridad central.
-6. Producción, barridas, oro, asistencia, inventario y entregas son eventos/movimientos trazables; errores se compensan y auditan, no se borran.
+6. Producción, barridas, resultado de oro, asistencia e inventario son
+   eventos/movimientos trazables; errores se compensan y auditan, no se borran.
 7. UTC al almacenar; `America/Costa_Rica` al mostrar. Oro/mercurio/dinero usan `decimal`, no `float`.
 8. Incluir `organization_id` desde el inicio para crecimiento futuro, sin construir ahora administración multiempresa.
 9. Migraciones compartidas no se reescriben. Secretos nunca entran al repositorio.
 10. Empezar como monolito modular desplegable; no microservicios, bus de eventos externo ni CQRS completo sin una necesidad medida.
 11. Fijar versiones y centralizar paquetes; toda dependencia nueva requiere propósito, mantenimiento activo y licencia compatible.
 12. Ninguna corrección, rechazo, fusión o vencimiento elimina horas, evidencias o eventos confirmados; se reasignan o compensan con auditoría.
-13. Un fallo de cámara no bloquea la elevación con PIN ni la continuidad; se registra ausencia de evidencia y se alerta.
-14. Fotografías en Storage privado y auditoría por referencia/checksum; la retención indefinida provisional no autoriza blobs en logs/base ni URLs permanentes y exige monitoreo de uso.
+13. Si se aprueba fotografía, un fallo de cámara no bloquea la elevación con PIN,
+    el check-in/out ni la continuidad; se registra la ausencia según la política
+    aprobada.
+14. Si se aprueban fotografías, se guardan en Storage privado y se auditan por
+    referencia/checksum; nunca se incluyen blobs en logs/base ni URLs
+    permanentes.
 
 ## Pruebas
 

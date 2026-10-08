@@ -1,110 +1,186 @@
 # Sprint 8 — Indicadores, reportes y entrega (semanas 16–17)
 
-**Objetivo:** apoyar decisiones y dejar una versión instalable, recuperable y mantenible.
+**Objetivo:** convertir la información ya validada en decisiones explicables y
+entregar una versión instalable, recuperable y mantenible.
 
-**Entregable:** comparación de proveedores, Excel bilingüe y ensayo completo de despliegue/recuperación.
+**Entregable:** comparación de proveedores con cobertura visible, reportes
+Excel del núcleo aprobado, endurecimiento de producción, instalador/rollback,
+restauración ensayada, manuales y piloto controlado.
+
+## Dependencias y límites heredados
+
+1. Los indicadores usan los read models y filtros de Sprint 5. React no
+   recalcula cifras de negocio.
+2. El oro es un único total opcional por cargamento; no existe custodia,
+   entrega, existencia acumulada ni importación histórica.
+3. Asistencia e inventario aparecen en indicadores/reportes solo si Sprints 6 y
+   7 fueron implementados y aceptados. Un módulo aplazado no se simula.
+4. Solo `JEFE_EMPRESA` consulta/genera reportes web en el alcance actual.
+   `ADMINISTRADOR` no reaparece en entrega, permisos ni manuales del MVP.
+5. Precio, kilataje, moneda, costo laboral y fórmulas financieras se incluyen
+   únicamente después de definir fuente, vigencia y fórmula con la gerente. El
+   sistema no es contabilidad ni nómina.
+6. PDF, sensores, reconocimiento facial, multiempresa y CMMS permanecen en
+   backlog salvo autorización posterior explícita.
 
 ## Orden de trabajo
 
-1. Aprobar fórmulas: cajuelas/palo, g/cajuela, oro/cargamento, mercurio/g, costo y rendimiento/precio. Tarifa horaria/estimación laboral solo si se aprueba expresamente y sin convertirla en nómina. Sin denominador = “datos insuficientes”.
-2. Servicios versionados y pruebas con datasets conocidos.
-3. Web: comparación por proveedor/cargamento/fecha/línea; tablas antes de gráficos decorativos.
-4. Excel es/en: resumen, fuente, filtros, unidades, fecha y zona horaria; PDF queda posterior.
-5. Reportes de producción, barridas, asistencia e inventario por permiso.
-6. Carga, seguridad, accesibilidad, compatibilidad, offline prolongado y regresión.
-7. Instalador/actualizador WPF con backup SQLite y rollback.
-8. Producción: HTTPS, secretos, alertas, backup/restauración Supabase ensayada.
-9. Manuales de instalación, operación, gerencia, contingencia y mantenimiento.
-10. Capacitación, piloto en una línea, correcciones críticas y expansión gradual.
+1. Aprobar preguntas, fórmulas, unidades, cobertura y comportamiento sin datos.
+2. Crear dataset dorado ficticio y resultados manuales esperados.
+3. Implementar indicadores versionados en backend/read models.
+4. Implementar comparación web por proveedor, cargamento, fecha y línea.
+5. Implementar Excel seguro con hojas de resumen y fuente trazable.
+6. Añadir reportes de módulos realmente cerrados, no de planes futuros.
+7. Medir volumen anual, consultas, render y sincronización antes de optimizar.
+8. Revisar seguridad, privacidad, sesión, dependencias y configuración.
+9. Ensayar respaldo/restauración central y SQLite con RPO/RTO acordados.
+10. Crear instalador, actualización y rollback que respeten operación activa.
+11. Preparar release API/web con ambientes y secretos separados.
+12. Actualizar manuales y contingencia en papel.
+13. Ejecutar piloto en una línea y expansión gradual.
+14. Retirar ayudas temporales de prueba, cerrar matriz y transferir.
 
-**Pruebas:** dataset dorado manual = dashboard/Excel; un año de volumen; instalación/actualización/rollback/restauración; revisión OWASP básica.
+**Pruebas:** dataset dorado = API/web/Excel; cero versus ausente; cobertura de
+oro; un año de volumen; instalación limpia/actualización/rollback; restauración;
+sesión/403; offline prolongado y regresión completa desktop/API/web.
 
-**Prueba manual final:** jornada completa con check-in, cargamento, estaciones/líneas, cajuelas, caída de red, barrida, mercurio, oro, inventario, sync, móvil y Excel.
+**Prueba manual final:** login, estación, cuatro líneas, cajuelas, reverso,
+caída de red, barrida, mercurio, cierre, oro web, auditoría, filtros, Excel y
+recuperación. Asistencia/inventario se incluyen solo si fueron cerrados.
 
-**Aceptación:** cero críticos/altos; restauración demostrada; aceptación gerencial; futuros quedan en backlog, nunca como código incompleto oculto.
+**Aceptación:** cero críticos/altos, cifras reproducibles, restauración
+demostrada, aceptación de operario/jefe/gerente y backlog explícito sin código
+incompleto oculto.
 
 ## Mini pasos, pausas y prompts
 
-### 8.1 Catálogo de indicadores y fórmulas
+### 8.1 Catálogo de indicadores
 
-**Prompt:** Facilita aprobación de cada indicador con nombre, pregunta que responde, fórmula, unidad, fuente, filtros, periodo, exclusiones, precisión y comportamiento sin datos. Incluye cajuelas/palo, g/cajuela, oro/cargamento, mercurio/g, costo/rendimiento y calidad/precio de proveedor. Trata tarifa horaria y estimación de costo laboral como decisión opcional separada; si se aprueba, exige vigencia histórica, moneda y auditoría, sin impuestos, deducciones, pago final ni nómina. No programes fórmulas no firmadas.
+**Prompt:** Para cada indicador documenta pregunta, fórmula, unidad, fuente,
+filtros, período, exclusiones, precisión, cobertura y respuesta sin denominador.
+Prioriza cajuelas por cargamento, barridas, oro por cajuela y comparación de
+proveedores usando solo cargamentos con oro registrado. Precio/kilataje/costos y
+horas monetizadas requieren aprobación separada; no programes fórmulas tomadas
+directamente de hojas históricas sin entenderlas.
 
-**Pausa:** gerencia calcula manualmente ejemplos y aprueba definiciones/insumos de costo.
+**Pausa:** la gerente recalcula y aprueba ejemplos del núcleo.
 
 ### 8.2 Dataset dorado
 
-**Prompt:** Crea dataset ficticio pequeño pero completo con resultados calculados a mano: varios proveedores/cargamentos, reversos, barridas, mercurio, paros, asistencia e inventario. Versiona entradas y resultados esperados para pruebas de API, web y Excel. No uses datos sensibles reales.
+**Prompt:** Crea un dataset ficticio versionado con proveedores, cargamentos,
+reversos, barridas tardías, mercurio pendiente/completo y oro ausente/cero/
+corregido. Añade asistencia e inventario solo si existen. Calcula manualmente
+resultados esperados sin usar datos reales de la empresa.
 
-**Pausa:** segunda persona recalcula una muestra sin consultar código.
+**Pausa:** una segunda persona reproduce una muestra sin consultar código.
 
 ### 8.3 Servicios de indicadores
 
-**Prompt:** Implementa cálculos versionados en backend/read models usando decimal y reglas aprobadas. Devuelve valor, unidad, periodo, cobertura/frescura y “datos insuficientes” cuando corresponda. Añade pruebas unitarias/integración contra dataset dorado; React no recalcula.
+**Prompt:** Implementa cálculos versionados en backend/read models con tipos
+decimales. Devuelve valor, unidad, período, cobertura, exclusiones, frescura y
+`datos insuficientes`. No sumes revisiones de oro ni mezcles cargamentos,
+proveedores o líneas. Añade pruebas contra el dataset dorado.
 
-**Pausa:** comparar todas las salidas API con tabla esperada.
+**Pausa:** API coincide exactamente con la tabla esperada.
 
 ### 8.4 Comparación gerencial
 
-**Prompt:** Implementa web para comparar proveedor/cargamento/fecha/línea con tablas ordenables y pocos gráficos justificados. Muestra tamaño de muestra, costo faltante y frescura para evitar conclusiones engañosas. Añade accesibilidad, móvil y permisos.
+**Prompt:** Implementa el módulo `Estadísticas` para `JEFE_EMPRESA` con filtros
+reutilizables por proveedor/cargamento/fecha/línea. Usa tablas antes que gráficos
+y muestra tamaño de muestra, cobertura y frescura para evitar conclusiones
+engañosas. Mantén filtros en URL y diseño mobile-first.
 
-**Pausa:** gerencia responde cuál proveedor rindió mejor y por qué, sin confundir falta de datos con cero.
+**Pausa:** la gerente explica qué proveedor rindió mejor y qué datos se
+excluyeron.
 
-### 8.5 Motor de reportes y Excel
+### 8.5 Motor Excel
 
-**Prompt:** Implementa exportación Excel desde backend con streaming/límites, nombre seguro y hojas de resumen + fuente. Cubre oro, cajuelas/producción, asistencia/horas, actividad de líneas, cargamentos y proveedores. Genera es/en según selección, por defecto preferencia de cuenta. Incluye unidades, zona horaria, versión y autor; evita inyección. No agregues PDF todavía.
+**Prompt:** Genera Excel desde backend con streaming/límites, nombre seguro y
+hojas `Resumen`, `Fuente` y `Definiciones`. Incluye filtros, unidades, zona
+horaria, versión y fecha de generación. Mitiga inyección de fórmulas y aplica
+preferencia es/en si sigue aprobada. PDF permanece fuera de alcance.
 
-**Pausa:** abrir en Excel/iPhone si aplica y cotejar dataset dorado celda por celda en muestra.
+**Pausa:** archivo abre correctamente y una muestra coincide celda por celda.
 
-### 8.6 Reportes por módulo
+### 8.6 Reportes por alcance cerrado
 
-**Prompt:** Añade reportes priorizados de producción/cajuelas, actividad de línea, cargamentos/proveedores, barridas/mercurio/oro/custodia/entregas y asistencia/horas. Inventario/novedades se incluyen solo si fueron aprobados. No muestres pago estimado salvo que tarifa/vigencia hayan sido aprobadas formalmente. En el alcance actual solo `JEFE_EMPRESA` genera y consulta reportes web. Documenta campos/límites.
+**Prompt:** Entrega primero cargamentos, cajuelas/producción, barridas/mercurio,
+oro y proveedores. Añade asistencia/horas e inventario únicamente si sus
+sprints cerraron. No incluyas custodia/entregas de oro, pago estimado ni módulos
+`Próximamente`. Documenta campos, cobertura y límites.
 
-**Pausa:** cada responsable valida al menos un reporte contra pantalla/fuente.
+**Pausa:** cada reporte coincide con su pantalla/read model para los mismos
+filtros.
 
-### 8.7 Regresión, rendimiento y estabilidad
+### 8.7 Regresión, volumen y rendimiento
 
-**Prompt:** Ejecuta suite completa y pruebas con volumen proyectado de un año: registro local, outbox grande, sincronización, API concurrente, dashboard y Excel. Perfila antes de optimizar; corrige bloqueos, fugas y consultas lentas con evidencia. Establece umbrales medidos.
+**Prompt:** Ejecuta la suite completa y volumen proyectado de un año para
+registro local, outbox, pull, read models, endpoints, portal y Excel. Perfila
+antes de agregar índice/caché. Define umbrales medidos y comprueba que optimizar
+no rompe idempotencia ni frescura.
 
-**Pausa:** informe comparativo antes/después y todos los recorridos críticos en verde.
+**Pausa:** informe antes/después y recorridos críticos en verde.
 
-### 8.8 Revisión de seguridad y privacidad
+### 8.8 Seguridad y privacidad
 
-**Prompt:** Revisa amenazas y OWASP aplicables: autenticación/autorización horizontal, validación, rate limit, CORS, headers, archivos, logs, dependencias, secretos, Storage privado, caché y biometría. Audita además volumen/costo, accesos y vigencia de la política de fotografías sin borrado automático. Ejecuta escaneos permitidos, actualiza dependencias con prudencia y corrige críticos/altos sin cambios masivos innecesarios.
+**Prompt:** Revisa JWT, autorización horizontal, CORS, headers, rate limit,
+validación, archivos, caché, logs, secretos, dependencias y Storage solo si se
+implementó. Habilita protección de contraseñas filtradas, MFA/dispositivos
+administrativos si están disponibles y corrige críticos/altos. No expongas
+`service_role` ni vistas `app` al navegador.
 
-**Pausa:** checklist firmado, cero secretos y cero hallazgos críticos/altos abiertos.
+**Pausa:** checklist firmado, cero secretos y cero críticos/altos abiertos.
 
 ### 8.9 Respaldo y recuperación
 
-**Prompt:** Define RPO/RTO con empresa. Configura/verifica respaldos Supabase disponibles, exportación lógica y respaldo consistente de SQLite/fotos. Escribe runbook y realiza restauración aislada, comprobando conteos/checksums y reconciliación posterior. No declares éxito sin restaurar.
+**Prompt:** Acordar RPO/RTO, documentar respaldo Supabase, exportación lógica y
+copia consistente de SQLite/archivos aplicables. Restaurar en entorno aislado,
+comparar conteos/checksums y ensayar reconciliación posterior. No declares éxito
+sin una restauración real.
 
-**Pausa:** otra persona sigue runbook y recupera dataset verificable.
+**Pausa:** otra persona sigue el runbook y recupera un dataset verificable.
 
 ### 8.10 Instalador y actualización desktop
 
-**Prompt:** Crea empaquetado/instalador firmado si hay certificado, configuración de estación y estrategia de actualización compatible con SQLite. Antes de actualizar: backup y comprobación de espacio; ante fallo: rollback seguro. No actualices automáticamente durante operación activa.
+**Prompt:** Crea empaquetado/instalador, configuración de estación y estrategia
+de actualización compatible con las migraciones SQLite. Antes de actualizar,
+respalda y verifica espacio; ante fallo, revierte. Nunca actualices durante un
+cargamento activo ni borres datos al desinstalar sin advertencia.
 
-**Pausa:** instalación limpia, actualización con datos, fallo simulado, rollback y desinstalación sin borrar datos sin aviso.
+**Pausa:** instalación limpia, actualización con datos, fallo simulado y
+rollback aprobados.
 
-### 8.11 Despliegue API/web y operación
+### 8.11 Despliegue API/web
 
-**Prompt:** Prepara ambientes, HTTPS, dominios, variables/secretos, migraciones controladas, logs/alertas, health/readiness y rollback para API/web. Separa desarrollo/producción y principio de mínimo privilegio. Documenta costos/servicios y procedimiento de liberación; no despliegues sin autorización explícita.
+**Prompt:** Prepara ambientes separados, HTTPS, dominio, variables/secretos,
+migraciones controladas, health/readiness, logs/alertas y rollback. Documenta
+costos y procedimiento de release. No despliegues producción sin autorización
+explícita.
 
-**Pausa:** ensayo de release en ambiente no productivo y rollback comprobado.
+**Pausa:** ensayo no productivo y rollback comprobado.
 
 ### 8.12 Manuales y contingencia
 
-**Prompt:** Redacta manual técnico, instalación, operador visual, gerencia, administración, privacidad, respaldo y solución de problemas. Incluye procedimiento en papel si PC falla, cómo reingresar/conservar datos y canales responsables. Usa capturas actuales y lenguaje comprensible.
+**Prompt:** Actualiza manual técnico, instalación, operario, jefe de planta,
+gerencia, privacidad, respaldo y solución de problemas. Incluye operación en
+papel si falla la computadora y cómo reingresar/conservar datos sin duplicar.
+Usa capturas actuales y elimina referencias a roles/módulos descartados.
 
-**Pausa:** operario, jefe de planta y gerente ejecutan sus tareas siguiendo el manual, sin ayuda verbal.
+**Pausa:** cada perfil completa su recorrido sin ayuda verbal.
 
 ### 8.13 Piloto de una línea
 
-**Prompt:** Planifica piloto controlado en una línea con criterios de inicio/parada, responsables, doble registro temporal para comparar, métricas de adopción, fallos y reunión diaria. Despliega solo con autorización, recopila evidencia y corrige críticos antes de ampliar.
+**Prompt:** Define inicio/parada, responsables, doble registro temporal,
+métricas, reunión diaria y rollback. Despliega una línea solo con autorización,
+compara contra cuaderno y corrige críticos antes de ampliar a las cuatro.
 
-**Pausa:** periodo piloto acordado sin pérdida; diferencia con cuaderno explicada y aceptación de usuario.
+**Pausa:** piloto sin pérdida y diferencias explicadas/aceptadas.
 
 ### 8.14 Cierre y transferencia
 
-**Prompt:** Ejecuta prueba final y matriz de requisitos. Restaura la espera de seguridad entre cajuelas a 3000 ms, repite las pruebas contra doble pulsación y elimina o restringe el botón temporal `+5` antes del piloto. Organiza deuda/backlog (PDF, sensor USB/HID, multiempresa, biometría si siguió aplazada y tarifa/estimación laboral si no fue aprobada), habilita MFA y dispositivos administrativos autorizados antes de producción, revisa versiones/licencias y entrega por canal seguro. Registra aceptación y continuidad.
+**Prompt:** Restaura la espera de seguridad entre cajuelas a 3000 ms, repite
+pruebas de doble pulsación y elimina o restringe `+5`. Revisa que oro nunca
+aparezca en desktop y que módulos aplazados sigan marcados. Cierra matriz
+RF/RNF, versiones, licencias, respaldo, aceptación y backlog.
 
-**Pausa:** cero críticos/altos, todos los RF/RNF con evidencia, restauración demostrada y cierre firmado.
+**Pausa:** cero críticos/altos, restauración demostrada y cierre firmado.

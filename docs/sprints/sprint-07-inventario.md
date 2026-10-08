@@ -1,84 +1,159 @@
-# Sprint 7 — Inventario (semanas 14–15)
+# Sprint 7 — Inventario y mantenimiento básico (semanas 14–15)
 
-**Objetivo:** herramientas y utensilios mediante movimientos y revisiones trazables.
+**Objetivo:** conocer existencias y vida útil de herramientas/componentes
+mediante movimientos y revisiones trazables, sin construir compras,
+contabilidad ni un CMMS.
 
-**Entregable:** entradas, salidas, devoluciones, ajustes, kardex sin negativos y revisión periódica.
+**Entregable:** catálogo validado, kardex append-only sin negativos, revisiones
+físicas, operación local-first para `JEFE_PLANTA`, consulta/corrección gerencial,
+registro básico de instalación/retiro de componentes de rastra y novedades
+simples de paro/mantenimiento transferidas desde 4.10.
+
+## Dependencias y límites heredados
+
+1. Reutiliza catálogos, desactivación y auditoría de Sprint 1.
+2. Reutiliza persistencia local, outbox y sincronización idempotente de Sprints
+   2–4.
+3. Reutiliza API, filtros, frescura y shell web de Sprint 5. No depende
+   funcionalmente de asistencia, aunque se ejecute después de Sprint 6.
+4. Desktop pertenece a `JEFE_PLANTA`; web pertenece a `JEFE_EMPRESA`.
+   `ADMINISTRADOR` no forma parte del alcance vigente.
+5. Las mediciones `SWEEP_INPUT/SWEEP_REMAINDER` de mercurio no son movimientos
+   de inventario ni permiten inferir consumo, pérdida o merma.
+6. El nombre técnico y la unidad del componente de desgaste de las rastras
+   deben validarse en 7.1; no se codifica “neumático”, “forro” u otro término
+   provisional como verdad del dominio.
+7. Asignar herramientas a un operario es opcional y solo se implementa si el
+   flujo real lo requiere.
 
 ## Orden de trabajo
 
-1. Levantar catálogo real de palas, escaleras, tornillos, taladros y otros; validar unidades enteras/consumibles.
-2. Movimientos inmutables `ENTRADA/SALIDA/CONSUMO/DEVOLUCION/AJUSTE`; existencia = suma.
-3. CRUD + API transaccional con permisos/auditoría.
-4. Desktop local-first y sync idempotente.
-5. Mercurio de barrida referencia exactamente un movimiento.
-6. Asignación/devolución de herramientas a operario.
-7. Web: kardex, existencias, última revisión y recordatorios; sin mínimos inicialmente.
-8. Importación inicial solo si hay catálogo limpio, con previsualización/validación.
+1. Levantar catálogo, unidades, responsables, ubicación lógica y componentes
+   reemplazables reales.
+2. Diseñar artículos, movimientos inmutables, reversos y revisiones físicas.
+3. Diseñar historial de instalación/retiro/condición de componentes de rastra,
+   más novedades simples de planta/línea, sin órdenes de mantenimiento.
+4. Implementar PostgreSQL/SQLite, integridad, idempotencia e índices.
+5. Implementar API transaccional y permisos vigentes.
+6. Implementar movimientos/revisiones local-first en desktop.
+7. Extender push/pull y resolver concurrencia sin ocultar conflictos.
+8. Implementar en web existencias, kardex, revisiones y vida útil.
+9. Integrar mercurio únicamente si se aprueba un movimiento físico separado;
+   nunca derivarlo de las mediciones de barrida.
+10. Carga inicial, conciliación y cierre.
 
-**Pruebas:** concurrencia, UUID repetido, decimales/unidades, insuficiente, reverso, permisos y mercurio único.
+**Pruebas:** UUID repetido, entrada/salida/reverso, unidad inválida, stock
+insuficiente, dos estaciones offline, llegada fuera de orden, ajuste con motivo,
+revisión sin diferencias, reemplazo de componente conservando historial y
+novedad que atraviesa un cambio de jornada.
 
-**Prueba manual:** conteo físico pequeño, carga, dos estaciones offline, sincronización y conciliación.
+**Prueba manual:** conteo físico pequeño, carga inicial, movimientos desde
+desktop, desconexión, consolidación, consulta web y conciliación con la misma
+fecha de corte.
 
-**Aceptación:** conteo = movimientos; ajustar exige motivo/permiso; ningún movimiento confirmado se borra silenciosamente.
+**Aceptación:** existencia = suma explicable de movimientos vigentes; ninguna
+confirmación desaparece; los conflictos offline quedan visibles; cada ajuste o
+reemplazo conserva actor, motivo y estado anterior/nuevo.
 
 ## Mini pasos, pausas y prompts
 
-### 7.1 Levantamiento y alcance de inventario
+### 7.1 Levantamiento y vocabulario
 
-**Prompt:** Identifica catálogo real de herramientas/utensilios, unidades y responsables. Parte de cantidades enteras y una sola ubicación lógica (planta), sin mínimos ni negativos. Valida consumibles/envases como gasolina antes de modelarlos. Separa compras/contabilidad fuera de alcance.
+**Prompt:** Identifica con la empresa herramientas, consumibles, envases,
+unidades, ubicación y responsables reales. Confirma el nombre del componente de
+desgaste de cada rastra, intervalo aproximado de reemplazo y datos que se anotan
+hoy. Parte de una sola planta y cantidades enteras solo cuando la unidad lo
+permita. Deja compras, costos y múltiples bodegas fuera de alcance.
 
-**Pausa:** validar catálogo de ejemplo y flujo de cinco movimientos reales.
+**Pausa:** catálogo y cinco movimientos/reemplazos reales aprobados.
 
-### 7.2 Modelo de catálogo y kardex
+### 7.2 Kardex y revisiones
 
-**Prompt:** Diseña artículo/tipo/unidad y movimientos inmutables `ENTRADA`, `SALIDA`, `CONSUMO`, `DEVOLUCION`, `AJUSTE`, `REVERSO`, además de revisión `SIN_DIFERENCIAS/CON_DIFERENCIAS`. Define existencia derivada sin negativos y estados de herramienta. No agregues costo/lotes sin aprobación.
+**Prompt:** Diseña artículo, unidad y movimientos append-only `ENTRADA`,
+`SALIDA`, `CONSUMO`, `DEVOLUCION`, `AJUSTE` y `REVERSO`. La existencia se deriva
+de movimientos y no puede quedar negativa. Modela revisión
+`SIN_DIFERENCIAS/CON_DIFERENCIAS`; una revisión sin diferencias no reescribe
+stock.
 
-**Pausa:** calcular a mano un kardex con reversos y comparar dominio.
+**Pausa:** un kardex manual con reverso/ajuste coincide con el dominio.
 
-### 7.3 Migraciones e integridad
+### 7.3 Componentes de rastra y novedades
 
-**Prompt:** Implementa esquemas PostgreSQL/SQLite, checks decimales, FK, índices, UUID/idempotencia y restricciones de unidad. Prueba actualización desde Sprint 6 y concurrencia. No mantengas un campo stock editable como única verdad.
+**Prompt:** Diseña un historial mínimo de componente instalado: rastra, tipo,
+identificador opcional, fecha de instalación, retiro, condición, responsable y
+observación. El reemplazo cierra una instalación y abre otra sin borrar la
+anterior. Modela además una novedad simple con planta/línea, tipo opcional,
+descripción, responsable, inicio y fin opcional para explicar paros, feriados,
+emergencias o mantenimiento. Puede atravesar jornada. No agregues órdenes,
+repuestos, predicción ni agenda CMMS.
 
-**Pausa:** base vacía/actualizada y restricciones contra cantidad inválida verificadas.
+**Pausa:** dos reemplazos producen una línea temporal clara y una novedad
+explica un período sin producción.
 
-### 7.4 Catálogo y movimientos API
+### 7.4 Migraciones e integridad
 
-**Prompt:** Implementa casos/API para artículos, movimientos y revisiones. Jefe de planta, `JEFE_EMPRESA` y administradores con permisos de inventario registran; ajustes requieren permiso separado y motivo; desactivar conserva kardex; existencia insuficiente siempre rechaza. Una revisión sin diferencias no reescribe cantidades.
+**Prompt:** Implementa PostgreSQL/SQLite con aislamiento por organización,
+checks de cantidad/unidad, FK, índices, UUID, append-only y actualización desde
+Sprint 6. No mantengas un `stock` editable como única verdad. Prueba base vacía,
+actualización e historial referenciado.
 
-**Pausa:** Swagger recorre entrada→consumo→reverso→ajuste y roles rechazados.
+**Pausa:** migraciones repetibles y restricciones verificadas.
 
-### 7.5 Inventario local-first
+### 7.5 API y autorización
 
-**Prompt:** Implementa en WPF los movimientos esenciales disponibles offline con catálogo cacheado, outbox e indicador de existencia local/última central. Evita prometer stock global exacto mientras otras estaciones están offline; muestra advertencia comprensible.
+**Prompt:** Implementa casos específicos para catálogo, movimientos, reversos,
+ajustes, revisiones y componentes. `JEFE_PLANTA` opera desde desktop y
+`JEFE_EMPRESA` consulta/corrige desde web según política. Ajuste y corrección
+requieren motivo; desactivar conserva kardex; no implementes CRUD genérico ni
+borrado físico.
 
-**Pausa:** dos estaciones registran movimientos desconectadas y la UI no presenta una certeza falsa.
+**Pausa:** OpenAPI recorre entrada→salida→reverso→ajuste y rechaza accesos no
+autorizados.
 
-### 7.6 Sincronización y concurrencia
+### 7.6 Inventario local-first
 
-**Prompt:** Extiende protocolo a inventario con idempotencia y política para consumos concurrentes que superen stock al consolidar. Ningún movimiento desaparece: aceptar, rechazar para revisión o compensar según decisión aprobada. Añade pruebas de carreras y llegada fuera de orden.
+**Prompt:** Implementa WPF para movimientos y revisiones esenciales con
+catálogo cacheado, evento + outbox atómicos y última frescura central. Mientras
+otra estación esté offline, presenta saldo local/central con advertencia y no
+prometas existencia global exacta.
 
-**Pausa:** dos consumos simultáneos ensayados y resultado central explicable/auditable.
+**Pausa:** registrar, reiniciar y continuar offline sin perder movimientos.
 
-### 7.7 Mercurio integrado
+### 7.7 Sincronización y concurrencia
 
-**Prompt:** Al cerrar/confirmar consumo de mercurio de una barrida, genera o referencia exactamente un movimiento de inventario mediante operación idempotente. Define comportamiento sin artículo configurado, corrección y reverso. No dupliques la cantidad en cálculos independientes.
+**Prompt:** Extiende push/pull con idempotencia y llegada fuera de orden. Define
+la política cuando dos salidas desconectadas superarían el stock central:
+ningún movimiento desaparece; el servidor acepta, rechaza para revisión o exige
+compensación según la regla aprobada. Añade pruebas de carrera y convergencia.
 
-**Pausa:** repetir sincronización/corrección y comprobar un solo efecto neto.
+**Pausa:** dos estaciones producen un resultado central auditable y comprensible.
 
-### 7.8 Herramientas asignadas
+### 7.8 Inventario web
 
-**Prompt:** Implementa asignación/devolución de herramientas a operario con estado, fecha, condición y observación. Evita prestar una herramienta no disponible y conserva historial. No agregues órdenes de mantenimiento; un daño puede crear evento básico relacionado.
+**Prompt:** Implementa el módulo `Inventario` de Sprint 5 para
+`JEFE_EMPRESA`: existencias, kardex, diferencias, fecha de corte, última
+revisión e historial de componentes. Conserva filtros en URL, paginación y
+frescura. Recordatorios de revisión/reemplazo son informativos y configurables,
+nunca bloquean.
 
-**Pausa:** préstamo, intento doble, devolución dañada y trazabilidad por operario.
+**Pausa:** un artículo y una rastra se reconstruyen desde su primer evento.
 
-### 7.9 Kardex y alertas web
+### 7.9 Frontera con mercurio y asignaciones
 
-**Prompt:** Implementa web de lectura con existencias, kardex, última revisión, diferencias y tiempo transcurrido. Recordatorios configurables orientativos (24/36/48/72 h), visibles para jefe de planta y jefe de empresa, no bloquean. Sin mínimos inicialmente.
+**Prompt:** No conviertas entrada menos remanente de mercurio en consumo de
+inventario. Si la empresa confirma un acto físico separado de retiro/ingreso de
+mercurio, enlaza ese movimiento idempotentemente con la barrida sin duplicar
+cantidades. Implementa asignación de herramientas a trabajador únicamente si
+7.1 confirmó responsable, entrega y devolución.
 
-**Pausa:** conciliar artículo seleccionado desde movimiento inicial hasta saldo mostrado.
+**Pausa:** repetir sincronización/corrección mantiene un solo efecto neto y las
+mediciones de barrida permanecen intactas.
 
-### 7.10 Carga inicial y conciliación
+### 7.10 Carga inicial y cierre
 
-**Prompt:** Si existe catálogo confiable, implementa importación CSV/Excel con plantilla, previsualización, validación por fila y aplicación transaccional/idempotente; si no, documenta carga manual. Ejecuta conteo piloto, dos estaciones offline, sync y conciliación. Completa pruebas/manual Sprint 7.
+**Prompt:** Si existe catálogo confiable, ofrece plantilla CSV/Excel con
+previsualización y aplicación transaccional; de lo contrario usa carga manual.
+Ejecuta conteo piloto, dos estaciones offline, conciliación, regresión y cierre.
+No importes cuadernos sin fecha/unidad verificable.
 
-**Pausa:** saldo físico = kardex para muestra aprobada; cero críticos/altos.
+**Pausa:** muestra física = kardex para el mismo corte y cero críticos/altos.

@@ -160,6 +160,11 @@
 
 ### 4.8 Oro total por cargamento
 
+**Estado transferido:** las decisiones funcionales quedaron aprobadas aquí,
+pero la implementación pertenece a Sprint 5. La base canónica por cargamento se
+creó en 5.2 y la API/interfaz se completa en 5.6; 4.8 no usa ni amplía el
+modelo legado por barrida.
+
 **Prompt:** Implementa en web un único resultado total opcional de oro por cargamento cerrado en gramos, aceptando enteros o hasta dos decimales, vacío no registrado y cero medido. Lucía consolida primero sus apuntes físicos; no se registran parciales por barrida ni datos anteriores a la puesta en marcha. Solo `JEFE_EMPRESA` puede consultar, crear y corregir en el alcance actual. No sincronices cantidades a SQLite desktop. Deriva consultas por línea, período, cargamento y proveedor sin tratar vacíos como cero. Toda comparación de proveedores indica cuántos cargamentos sí tienen oro y cuántos quedaron excluidos. Muestra palos solo como conversión visual `1 palo = 0,10 g` sin alterar el valor canónico.
 
 **Pausa:** dataset manual coincide por todos los cortes, cada cargamento tiene como máximo un resultado vigente y una corrección no duplica el total.
@@ -171,6 +176,10 @@
 **Pausa:** no aplica; paso cerrado por decisión de alcance.
 
 ### 4.10 Novedades operativas
+
+**Estado transferido:** no se implementó durante Sprint 4 para priorizar el
+cierre de sincronización 4.11. Se retoma en Sprint 7 junto al historial básico
+de inventario/componentes, sin convertirlo en CMMS.
 
 **Prompt:** Implementa notas simples para paro, mantenimiento, emergencia, feriado u otro motivo: línea/planta, tipo opcional, descripción, responsable e inicio/fin si aplica. Puede atravesar jornada. No construyas CMMS ni categorías rígidas no existentes.
 

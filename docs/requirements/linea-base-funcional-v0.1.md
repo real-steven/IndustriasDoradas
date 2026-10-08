@@ -127,7 +127,9 @@ Reglas de acceso:
 - La reversión requiere un segundo paso de confirmación, no texto libre, y usa un motivo automático de error inmediato.
 - Visualmente resta uno; técnicamente crea `CAJUELA_REVERSED` y conserva el original.
 - El jefe de planta puede corregir registros operativos antes del cierre/revisión del ciclo correspondiente.
-- Después del cierre, solo el administrador corrige desde la web mediante eventos o ajustes auditados. El escritorio recibe la corrección al sincronizar.
+- Después del cierre, `JEFE_PLANTA` corrige desde Auditoría desktop mediante
+  elevación, motivo y eventos compensatorios. La web gerencial no recibe una
+  cola de aprobaciones operativas.
 
 ## 6. Regla de alerta y barrida
 
@@ -178,26 +180,36 @@ No se modelan existencia acumulada, custodia, entrega, transporte, venta, gasto 
 - Jornada diurna/nocturna clasifica horas y no representa el estado de la línea.
 - Actualmente el jefe de planta anota entradas y salidas en cuaderno.
 - La primera versión digital registra solo check-in y check-out; no descansos ni almuerzo.
-- El trabajador accede desde el Modo Operación, selecciona su perfil y la estación toma una fotografía para crear una marca pendiente con su hora original. No necesita una cuenta ni contraseña.
-- El jefe de planta confirma o rechaza marcas pendientes recientes desde su modo temporal. El administrador conserva revisión global y corrige decisiones mediante ajustes auditados, nunca borrando el evento original.
-- El jefe de planta puede consultar evidencia pendiente y reciente durante las primeras 24 horas. Después, la fotografía queda visible solo para el administrador mediante acceso temporal y auditado.
+- El trabajador accede desde el Modo Operación, selecciona su perfil y crea una
+  marca con su hora original. No necesita una cuenta ni contraseña.
+- La fotografía es condicionada: Sprint 6 debe aprobar finalidad,
+  consentimiento, acceso y retención antes de capturarla. Si se aplaza, la
+  asistencia funciona sin imagen.
+- El jefe de planta resuelve incidencias recientes desde su modo temporal.
+  `JEFE_EMPRESA` consulta la consolidación y ejecuta únicamente correcciones
+  centrales expresamente aprobadas, siempre mediante ajustes auditados.
 - El jefe de planta solicita un trabajador con nombre como dato mínimo y correo opcional de contacto. El perfil nace `PROVISIONAL`, puede marcar y acumular horas inmediatamente y espera aprobación administrativa.
-- A las 72 horas sin resolución pasa a `PROVISIONAL_VENCIDO`: muestra aviso visible y alertas urgentes para administrador/gerencia, pero continúa registrando horas sin descartarlas ni bloquear la operación.
-- Si la solicitud se rechaza o era duplicada, las horas y evidencias se conservan. El administrador debe reasignarlas al trabajador correcto, fusionar perfiles o documentar el rechazo.
+- A las 72 horas sin resolución pasa a `PROVISIONAL_VENCIDO`: muestra aviso
+  visible para jefe de planta/gerencia, pero continúa registrando horas sin
+  descartarlas ni bloquear la operación.
+- Si la solicitud se rechaza o era duplicada, las horas y evidencias se
+  conservan. La resolución aprobada debe reasignar, fusionar o documentar el
+  rechazo sin recuperar el rol legado `ADMINISTRADOR`.
 - La jornada habitual es hasta 8 horas y puede extenderse aproximadamente hasta 10; la regla exacta de horas extra/dobles queda pendiente.
 - El sistema calcula duración e incidencias, no salarios, impuestos ni deducciones.
-- Olvidos o marcas históricas se corrigen por administrador mediante ajuste auditable.
+- Olvidos o marcas históricas se corrigen mediante el caso de uso y actor
+  aprobados en Sprint 6, nunca editando el evento original.
 - El escritorio debe soportar asistencia offline.
 
 ### Biometría posterior y condicionada
 
 - Reconocimiento facial no es requisito del núcleo inicial.
 - Antes de activarlo se aprueban consentimiento, retención, precisión, enrolamiento y alternativa segura.
-- El enrolamiento debe capturar varios ángulos y superar una prueba de reconocimiento antes de considerarse válido; el trabajador permanece provisional hasta la aprobación administrativa.
-- Un intento fallido guarda foto, hora original, trabajador propuesto, estación y tipo de marca.
-- El jefe de planta puede ver la evidencia y aceptar/rechazar; al aceptar se conserva la hora del intento.
+- Solo una autorización posterior puede definir enrolamiento, ángulos,
+  umbrales, evidencia de intentos y responsables de revisión.
 - No se usará PIN como sustituto ordinario porque permitiría marcar a un trabajador ausente.
-- Administrador o jefe de planta puede repetir el enrolamiento cuando falle.
+- Reconocimiento facial no es criterio de cierre de Sprint 6 y permanece en
+  backlog salvo autorización posterior explícita.
 
 ## 9. Inventario y novedades
 
@@ -205,11 +217,15 @@ No se modelan existencia acumulada, custodia, entrega, transporte, venta, gasto 
 
 - Alcance: herramientas y utensilios como palas, escaleras, tornillos, taladros y unidades o envases completos por definir.
 - Las cantidades iniciales son enteras y no se permiten existencias negativas.
-- Jefe de planta y administrador registran entradas, salidas, consumos, devoluciones y ajustes.
+- `JEFE_PLANTA` registra movimientos/revisiones desde desktop y
+  `JEFE_EMPRESA` consulta o corrige desde web según la política aprobada.
 - No se requieren varias ubicaciones ni existencias mínimas inicialmente.
 - La revisión es recomendada; si todo coincide se registra “inventario revisado sin diferencias”.
 - El sistema recuerda el tiempo desde la última revisión con intervalos configurables; jefe de planta y gerencia pueden consultarlo.
 - Catálogo, unidades definitivas y tratamiento de consumibles se validan en Sprint 7.
+- Sprint 7 también valida el nombre real y la vida útil de los componentes de
+  desgaste de las rastras. Las mediciones de mercurio no se convierten
+  automáticamente en consumo de inventario.
 
 ### Novedades operativas
 
@@ -230,12 +246,13 @@ El perfil jefe de empresa consulta en modo informativo:
 - check-in/check-out y horas;
 - inventario, última revisión y novedades;
 - estado/frescura de sincronización;
-- entregas de oro pendientes y confirmadas.
 - historial de cambios y alertas de acceso administrativo, sin posibilidad de alterar la auditoría.
 
 Reportes iniciales:
 
-- Excel de oro, cajuelas/producción, asistencia, horas, actividad de líneas, cargamentos y proveedores.
+- Excel de oro, cajuelas/producción, barridas/mercurio, actividad de líneas,
+  cargamentos y proveedores. Asistencia/horas e inventario se agregan solo si
+  sus sprints fueron cerrados.
 - PDF queda fuera de la primera versión.
 - El idioma se puede elegir; por defecto usa la preferencia de la cuenta.
 - La interfaz web y sus reportes soportan español e inglés; el texto libre no se traduce automáticamente.
@@ -270,11 +287,11 @@ Reportes iniciales:
 | RF-07 | Registrar barridas reales y entrada/saldo final de mercurio por rastra desde desktop; registrar un único total de oro por cargamento cerrado únicamente desde web con `JEFE_EMPRESA`, todo con trazabilidad al cargamento. |
 | RF-08 | Comparar rendimiento de proveedores usando únicamente cargamentos con resultado de oro registrado y mostrando la cobertura de datos. |
 | RF-09 | Consultar operación central desde web responsive en español e inglés. |
-| RF-10 | Registrar check-in/out con fotografía pendiente, trabajadores provisionales y vencidos, aprobación/reasignación auditable y horas revisables sin bloqueo. |
-| RF-11 | Gestionar inventario básico sin existencias negativas y registrar revisiones. |
+| RF-10 | Registrar check-in/out local-first, trabajadores provisionales/vencidos, ajustes auditables y horas revisables; fotografía solo con política aprobada. |
+| RF-11 | Gestionar inventario básico sin existencias negativas, revisiones e historial mínimo de componentes de rastra. |
 | RF-12 | Registrar novedades simples de paro, mantenimiento, emergencia o cierre. |
 | RF-13 | Generar reportes Excel bilingües según permisos. |
-| RF-14 | Auditar accesos, mutaciones, correcciones, entregas y eliminaciones. |
+| RF-14 | Auditar accesos, mutaciones, correcciones, barridas, resultados y eliminaciones autorizadas. |
 | RF-15 | Incorporar biometría solo después de aprobar política y medir precisión. |
 
 ## 13. Requerimientos no funcionales consolidados
@@ -285,8 +302,8 @@ Reportes iniciales:
 - Tipos decimales para oro, mercurio y dinero; nunca `float` binario.
 - JWT de Supabase validado por NestJS; `service_role` solo en backend.
 - Logs sin tokens, claves, fotografías o plantillas biométricas.
-- Fotografías privadas con acceso temporal y auditado.
-- Una falla de cámara no bloquea la elevación del jefe ni la continuidad de la operación; genera evidencia de ausencia y alerta prioritaria.
+- Si Sprint 6 aprueba fotografías, serán privadas y tendrán acceso temporal y auditado.
+- Si se aprueba fotografía, una falla de cámara no bloquea la elevación del jefe ni la continuidad de la operación; genera la evidencia de ausencia definida por la política.
 - MFA y dispositivos administrativos autorizados antes de producción.
 - Instalación, respaldo y restauración ensayados.
 - Monolito modular, sin microservicios ni servidor local de planta hasta que una necesidad medida lo justifique.
@@ -298,11 +315,14 @@ Reportes iniciales:
 - La gerente puede iniciar una eliminación manual bajo protocolo únicamente cuando no rompa referencias legales u operativas; para catálogos y líneas se prefiere desactivar y conservar historial.
 - La fotografía/plantilla biométrica tiene ciclo de vida separado del historial laboral.
 - El acceso futuro a evidencias privadas debe realizarse desde funciones protegidas de la web, nunca directamente a la base de datos.
-- Jefe de planta accede únicamente a fotografías pendientes o recientes necesarias para resolver intentos durante las primeras 24 horas.
-- Por ahora las fotografías no tienen eliminación automática y se conservan indefinidamente como evidencia vinculada a auditoría, hasta que Sprint 6 apruebe una política definitiva. Deben monitorearse volumen y costo; conservar no significa hacerlas públicas ni permitir acceso irrestricto.
-- La fotografía vive en almacenamiento privado; la auditoría guarda identificador, ruta lógica, checksum, actor, motivo y fechas, no el binario de la imagen ni una URL permanente.
+- Si Sprint 6 aprueba fotografías, jefe de planta accede únicamente a evidencia
+  pendiente/reciente necesaria y `JEFE_EMPRESA` según una ventana auditada.
+- No se captura ni conserva fotografía de asistencia hasta aprobar retención y
+  eliminación. Si se aprueba, vive en almacenamiento privado y la auditoría
+  guarda identificador, checksum, actor, motivo y fechas, no blob ni URL
+  permanente.
 - Nombre es el único dato obligatorio inicial del trabajador; correo y demás datos de contacto son opcionales y no sirven para iniciar sesión.
-- Horas, fotos y decisiones ya registradas no se eliminan al vencer, rechazar o fusionar un perfil provisional.
+- Horas, decisiones y, si existen, fotografías ya registradas no se eliminan al vencer, rechazar o fusionar un perfil provisional fuera de su política de retención.
 
 ## 15. Alcance y exclusiones
 
@@ -316,7 +336,7 @@ Reportes iniciales:
 
 ### Posterior dentro del plan
 
-- Asistencia básica con fotografía pendiente, sin reconocimiento facial inicial.
+- Asistencia básica; fotografía condicionada.
 - Inventario básico.
 - Reconocimiento facial condicionado.
 - Sensor sencillo de cajuelas como mejora futura, solo después de validar clic/teclado/controlador; no condiciona la aceptación del MVP.
@@ -335,12 +355,11 @@ Reportes iniciales:
 
 | Pendiente | Debe resolverse en |
 |---|---|
-| Umbral de oro para notificar recogida | Sprint 4/5 |
 | Política de retención y escalamiento de mediciones pendientes de barridas | Validar durante Sprint 4 sin bloquear el registro físico |
 | Política exacta de corrección administrativa y eliminación | Sprint 1 |
 | Matriz detallada de permisos, gobierno de cuentas, PIN y acceso offline de 24 horas | Aprobada al iniciar el prompt 1.2 el 2026-08-17 |
 | Cardinalidades y modelo relacional de identidad, organización y catálogos iniciales | Aprobados al iniciar el prompt 1.3 el 2026-08-17 |
-| Comportamiento de check-in cuando la cámara de asistencia no está disponible | Sprint 6 |
+| Decisión de incluir fotografía y comportamiento cuando la cámara no está disponible | Sprint 6 |
 | Regla de horas extra/dobles; la clasificación operativa 06:00/18:00 ya fue confirmada | Sprint 6 |
 | Confirmación o sustitución de la retención indefinida provisional de fotografías; consentimiento, enrolamiento y precisión biométrica | Sprint 6 |
 | Catálogo/unidades definitivas e intervalos de revisión de inventario | Sprint 7 |
@@ -366,21 +385,21 @@ esté implementado.
 
 | ID | Sprint | Evidencia prevista |
 | --- | ---: | --- |
-| RF-01 | 1 | Matriz de permisos y accesos rechazados |
+| RF-01 | 1 | Sesión, elevación y accesos rechazados para roles vigentes |
 | RF-02 | 1 | Catálogos y cuatro líneas configurables |
 | RF-03 | 2 | Cargamento y responsable obligatorios |
 | RF-04 | 2 | Cajuela y reverso local probados |
 | RF-05 | 3 | Caída, reintento y convergencia sin duplicados |
 | RF-06 | 4 | Casos 49/50/55/56 y múltiplos |
-| RF-07 | 4 | Barridas y oro consolidado por cargamento |
-| RF-08 | 4–5 | Entrega, confirmación, rechazo y discrepancia |
+| RF-07 | 4–5 | Barridas/mercurio en desktop y oro total por cargamento solo en web |
+| RF-08 | 5 y 8 | Comparación por proveedor con cobertura y dataset aprobado |
 | RF-09 | 5 | Portal español/inglés en móvil y escritorio |
 | RF-10 | 6 | Entrada/salida offline y ajustes |
 | RF-11 | 7 | Kardex sin negativos y revisión |
 | RF-12 | 7 | Novedad que puede atravesar jornada |
 | RF-13 | 8 | Excel bilingüe con dataset aprobado |
 | RF-14 | 1–8 | Auditoría transversal por módulo |
-| RF-15 | 6 | Política/precisión aprobadas o aplazamiento |
+| RF-15 | Backlog | Política/precisión aprobadas antes de cualquier implementación biométrica |
 
 Seguridad, accesibilidad, rendimiento, UTC, decimales, recuperación y
 observabilidad se verifican transversalmente cuando se introduce cada flujo.
