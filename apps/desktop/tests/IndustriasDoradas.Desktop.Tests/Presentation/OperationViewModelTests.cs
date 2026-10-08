@@ -183,6 +183,8 @@ public sealed class OperationViewModelTests
         Assert.IsTrue(viewModel.Line.IsSweepPending);
         Assert.AreEqual("/ 250", viewModel.Line.TotalReferenceDescription);
         Assert.AreEqual(250d, viewModel.Line.ProgressValue);
+        Assert.AreEqual("Mercurio en 50", viewModel.Line.NextMercuryAlertDescription);
+        Assert.AreEqual("Barrida pendiente", viewModel.Line.NextSweepAlertDescription);
         Assert.AreEqual("Barrida pendiente", viewModel.Line.NextAlertDescription);
     }
 

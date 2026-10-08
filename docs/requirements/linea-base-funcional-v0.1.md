@@ -60,7 +60,7 @@ Existen tres roles autenticados y un modo operativo compartido. `JEFE_EMPRESA` e
 |---|---|---|
 | Jefe de empresa | Web | Superadministrador permanente: consulta toda la operación, estadísticas, notificaciones, auditoría y reportes; puede ejecutar los casos de uso administrativos y operativos de todos los módulos, crear administradores, seleccionar/editar sus permisos y suspenderlos. Siempre posee el control completo del oro y puede delegar capacidades específicas a administradores de confianza. La interfaz prioriza datos y separa las ediciones en un módulo de Administración dentro de la misma sesión. |
 | Administrador | Web | Cuenta de privilegio mínimo. Solo consulta o modifica los módulos concedidos individualmente. Puede llegar a tener acceso amplio si un jefe de empresa lo decide. Solo crea administradores, gobierna sus estados o asigna permisos cuando recibe cada capacidad específica. |
-| Jefe de planta | Desktop | Inicia y habilita la estación; solicita trabajadores; gestiona proveedores e inventario; asigna responsables; registra cargas, recargas y recuperación de mercurio por rastra; revisa asistencia pendiente reciente y corrige durante el ciclo abierto. No consulta ni registra cantidades de oro. Eleva temporalmente permisos mediante su PIN individual. |
+| Jefe de planta | Desktop | Inicia y habilita la estación; solicita trabajadores; gestiona proveedores e inventario; asigna responsables; registra por barrida la entrada y el saldo final de mercurio en cada rastra; revisa asistencia pendiente reciente y corrige durante el ciclo abierto. No consulta ni registra cantidades de oro. Eleva temporalmente permisos mediante su PIN individual. |
 | Modo Operación | Desktop compartido | No es una cuenta ni un rol de Supabase. Mantiene el flujo continuo, registra/revierte cajuelas y permite check-in/out; no accede a administración, inventario, certificaciones ni correcciones profundas. |
 
 Reglas de acceso:
@@ -74,6 +74,7 @@ Reglas de acceso:
 - El administrador crea, suspende o revoca cuentas de jefe de planta y administra sus PIN individuales.
 - Los trabajadores regulares no tienen cuenta de acceso. El jefe de planta crea una solicitud y el administrador aprueba, rechaza, reasigna o fusiona el perfil.
 - Tras la autenticación del jefe de planta, la estación permanece normalmente en Modo Operación y renueva de forma segura la sesión de Supabase mientras exista uso. Cierra la sesión local después de una hora de inactividad total y exige autenticación completa para volver a abrirla.
+- Al iniciar desktop, el login muestra el estado de comprobación de la sesión: amarillo mientras busca, verde cuando encuentra una sesión protegida vigente y rojo cuando no existe, fue finalizada o venció. Una sesión restaurable requiere únicamente que el usuario pulse `Abrir sesión`; correo y contraseña se habilitan solo cuando hace falta autenticar de nuevo.
 - El Modo Jefe de Planta exige el PIN personal, ofrece salida explícita y vuelve al modo restringido después de cinco minutos de inactividad total, con aviso previo. Un bloqueo conserva formularios no enviados para reanudarlos tras reautenticación.
 - Los intentos fallidos de PIN tienen límite y alerta configurables. Al excederlos se bloquea únicamente la elevación privilegiada: Modo Operación continúa. La recuperación exige contraseña completa en línea o restablecimiento administrativo; nunca se envía ni recupera el PIN por correo.
 - Toda cuenta autenticada usa un correo válido para recuperación de contraseña mediante Supabase Auth. El correo opcional del trabajador es solo contacto y no participa en autenticación.
@@ -155,12 +156,11 @@ Reglas de acceso:
 ### Mercurio operativo
 
 - Cada línea posee actualmente tres rastras. Rastra y barrida son conceptos distintos: la rastra es equipo físico; la barrida es una limpieza real que agrupa eventos de cajuelas.
-- El jefe de planta registra en desktop, con elevación temporal, cuánto mercurio se cargó realmente en cada rastra. Puede hacerlo al preparar la línea o completarlo después para no bloquear producción.
-- Una recarga se conserva como un movimiento adicional; no se suma dentro del texto de una medición ni reemplaza la carga anterior.
-- Al efectuar la barrida o terminar el proceso, el jefe de planta registra por rastra cuánto mercurio quedó o fue recuperado. El dato puede quedar pendiente y completarse después, incluso si el cargamento ya se cerró.
-- Carga, recarga y recuperación se expresan en gramos, aceptan enteros o hasta dos decimales, rechazan negativos y no tienen por ahora un máximo rígido. Vacío significa pendiente y `0,00` significa medido con resultado cero.
-- Cada movimiento conserva línea, rastra, cargamento, barrida cuando corresponda, responsable autenticado y momentos. Las correcciones agregan registros compensatorios o nuevas versiones auditadas; nunca borran el original.
-- El sistema puede mostrar totales cargados, recuperados y su diferencia, pero no denomina automáticamente esa diferencia como pérdida o consumo hasta validar la interpretación con planta.
+- Por cada barrida, el jefe de planta registra en desktop y con elevación temporal dos mediciones para cada rastra: cuánto mercurio entró y cuánto quedó al final. No se registra una recarga intermedia.
+- Cada línea conserva exactamente Rastra 1, Rastra 2 y Rastra 3. Las seis mediciones de una barrida pueden completarse después para no detener la producción, incluso si el cargamento ya fue cerrado.
+- Entrada y saldo final se expresan en gramos, aceptan enteros o hasta dos decimales, rechazan negativos y no tienen por ahora un máximo rígido. Vacío significa pendiente y `0,00` significa medido con resultado cero.
+- Cada medición conserva línea, rastra, cargamento, barrida, responsable autenticado y momentos. Las correcciones agregan nuevas versiones auditadas; nunca borran el original.
+- Los movimientos históricos de carga, recarga y recuperación se conservan por compatibilidad, pero el flujo vigente no los expone ni crea nuevos registros de esos tipos.
 
 ### Oro gestionado en web
 
@@ -469,10 +469,11 @@ oro, custodia o entregas a administradores de confianza para cubrir ausencias,
 viajes o distribución de responsabilidades.
 
 El jefe de planta conserva la responsabilidad operativa sobre el mercurio:
-registra con elevación temporal las cargas, recargas y cantidades recuperadas
-de cada rastra. Los movimientos pueden quedar pendientes para no detener el
-flujo, se expresan en gramos y toda corrección conserva el historial. Rastra y
-barrida permanecen como entidades distintas.
+registra con elevación temporal cuánto entró y cuánto quedó al final en cada una
+de las tres rastras de una barrida. Las mediciones pueden quedar pendientes para
+no detener el flujo, se expresan en gramos y toda corrección conserva el
+historial. No se trazabilizan recargas intermedias. Rastra y barrida permanecen
+como entidades distintas.
 
 ### 19.5 Reparto definitivo desktop/web y correcciones del 2026-10-05
 

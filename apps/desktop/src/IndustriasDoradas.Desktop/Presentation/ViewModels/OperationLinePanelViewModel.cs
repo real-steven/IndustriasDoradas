@@ -24,6 +24,7 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     private bool isSweepPending;
     private long nextSweepReference = 250;
     private int lastSweepCumulativeTotal;
+    private int sweepCount;
     private int cajuelasSinceLastSweep;
     private double progressValue;
     private double progressMaximum = 250;
@@ -31,7 +32,8 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     private string progressEndDescription = "250 · BARRIDA";
     private string totalReferenceDescription = "/ 250";
     private string progressColor = "#1F9D55";
-    private string nextAlertDescription = "Mercurio en 50";
+    private string nextMercuryAlertDescription = "Mercurio en 50";
+    private string nextSweepAlertDescription = "Barrida en 250";
 
     public Guid LineId { get => lineId; set => SetProperty(ref lineId, value); }
     public int LineSlot { get => lineSlot; set => SetProperty(ref lineSlot, value); }
@@ -110,6 +112,12 @@ public sealed class OperationLinePanelViewModel : ObservableObject
         private set => SetProperty(ref lastSweepCumulativeTotal, value);
     }
 
+    public int SweepCount
+    {
+        get => sweepCount;
+        set => SetProperty(ref sweepCount, value);
+    }
+
     public int CajuelasSinceLastSweep
     {
         get => cajuelasSinceLastSweep;
@@ -152,11 +160,19 @@ public sealed class OperationLinePanelViewModel : ObservableObject
         private set => SetProperty(ref progressColor, value);
     }
 
-    public string NextAlertDescription
+    public string NextMercuryAlertDescription
     {
-        get => nextAlertDescription;
-        private set => SetProperty(ref nextAlertDescription, value);
+        get => nextMercuryAlertDescription;
+        private set => SetProperty(ref nextMercuryAlertDescription, value);
     }
+
+    public string NextSweepAlertDescription
+    {
+        get => nextSweepAlertDescription;
+        private set => SetProperty(ref nextSweepAlertDescription, value);
+    }
+
+    public string NextAlertDescription => NextSweepAlertDescription;
 
     public void ApplyMilestones(
         ProductionReviewAlertState review,
@@ -188,11 +204,11 @@ public sealed class OperationLinePanelViewModel : ObservableObject
 
         long reviewDistance = review.NextReference - review.TotalCajuelas;
         long sweepDistance = sweep.NextSweepReference - sweep.TotalCajuelas;
-        NextAlertDescription = sweep.IsSweepPending
+        NextMercuryAlertDescription = $"Mercurio en {Math.Max(0, reviewDistance)}";
+        NextSweepAlertDescription = sweep.IsSweepPending
             ? "Barrida pendiente"
-            : sweepDistance <= reviewDistance
-                ? $"Barrida en {sweepDistance}"
-                : $"Mercurio en {reviewDistance}";
+            : $"Barrida en {Math.Max(0, sweepDistance)}";
+        OnPropertyChanged(nameof(NextAlertDescription));
     }
 
     public bool IsReady { get => isReady; set => SetProperty(ref isReady, value); }

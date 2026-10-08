@@ -106,6 +106,7 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public bool IsStationOpen => Station?.IsStationOpen ?? true;
+    public bool IsApplicationUnlocked => Station?.IsApplicationUnlocked ?? true;
     public bool IsPlantManager => Station?.IsPlantManager ?? false;
     public bool IsHomePage => ReferenceEquals(CurrentPage, Home);
     public bool IsOperationPage => ReferenceEquals(CurrentPage, Operation);
@@ -192,6 +193,16 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(IsStationOpen));
             if (Station?.IsStationOpen == true)
+            {
+                CurrentPage = Home;
+            }
+            return;
+        }
+
+        if (e.PropertyName == nameof(StationViewModel.IsApplicationUnlocked))
+        {
+            OnPropertyChanged(nameof(IsApplicationUnlocked));
+            if (Station?.IsApplicationUnlocked == true)
             {
                 CurrentPage = Home;
             }

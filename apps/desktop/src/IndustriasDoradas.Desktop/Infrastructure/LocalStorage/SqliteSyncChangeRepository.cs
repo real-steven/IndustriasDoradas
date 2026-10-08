@@ -186,6 +186,34 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$active", Bool(payload, "is_active") ? 1 : 0),
                     ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc))).ConfigureAwait(false);
                 break;
+            case "LINE_COMPONENT":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO cached_line_components(
+                        id, organization_id, line_id, component_type_code, code, name,
+                        display_order, is_active, updated_at_utc)
+                    VALUES ($id, $organizationId, $lineId, $type, $code, $name,
+                            $displayOrder, $active, $updated)
+                    ON CONFLICT(id) DO UPDATE SET
+                        organization_id=excluded.organization_id,
+                        line_id=excluded.line_id,
+                        component_type_code=excluded.component_type_code,
+                        code=excluded.code,
+                        name=excluded.name,
+                        display_order=excluded.display_order,
+                        is_active=excluded.is_active,
+                        updated_at_utc=excluded.updated_at_utc;
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$lineId", Text(payload, "production_line_id")),
+                    ("$type", LineComponentType(payload)),
+                    ("$code", Text(payload, "code")),
+                    ("$name", Text(payload, "name")),
+                    ("$displayOrder", Integer(payload, "display_order")),
+                    ("$active", Bool(payload, "is_active") ? 1 : 0),
+                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc)))
+                    .ConfigureAwait(false);
+                break;
             case "SHIPMENT":
                 await ExecuteAsync(connection, transaction, """
                     INSERT INTO cached_shipments(id, organization_id, supplier_id, line_id, feed_cycle_id,
@@ -239,6 +267,21 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             ("$version", change.EntityVersion), ("$action", change.Action), ("$payload", payload),
             ("$hash", hash), ("$changed", SqliteLocalStorageConverters.Timestamp(change.ChangedAtUtc)))
             .ConfigureAwait(false);
+
+    private static string LineComponentType(JsonElement payload)
+    {
+        if (payload.TryGetProperty("component_type_code", out JsonElement type) &&
+            type.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(type.GetString()))
+        {
+            return type.GetString()!;
+        }
+
+        string code = Text(payload, "code");
+        return code.StartsWith("RASTRA_", StringComparison.OrdinalIgnoreCase)
+            ? "RASTRA"
+            : "MOLINO";
+    }
 
     private static async Task<(long Version, string Hash)?> ReadEntityVersionAsync(
         SqliteConnection connection, SqliteTransaction transaction, SyncChange change,
@@ -305,6 +348,9 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
     private static bool Bool(JsonElement payload, string name) =>
         payload.TryGetProperty(name, out JsonElement value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? value.GetBoolean() : throw new InvalidOperationException($"Falta {name} en cambio remoto.");
+    private static int Integer(JsonElement payload, string name) =>
+        payload.TryGetProperty(name, out JsonElement value) && value.TryGetInt32(out int result)
+            ? result : throw new InvalidOperationException($"Falta {name} en cambio remoto.");
     private static string Timestamp(JsonElement payload, string name, DateTimeOffset fallback) =>
         NullableText(payload, name) ?? SqliteLocalStorageConverters.Timestamp(fallback);
 }

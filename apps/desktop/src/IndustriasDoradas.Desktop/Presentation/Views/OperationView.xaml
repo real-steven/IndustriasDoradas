@@ -116,45 +116,28 @@
                                             </Grid.ColumnDefinitions>
                                             <StackPanel>
                                                 <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="10"
-                                                            FontWeight="Bold" Text="🪣  DESDE LA ÚLTIMA BARRIDA" />
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="52"
-                                                                FontWeight="Bold" Text="{Binding CajuelasSinceLastSweep}" />
-                                                    <TextBlock Margin="7,23,0,0" Foreground="#90A0AA" FontSize="16"
-                                                               Text="{Binding TotalReferenceDescription}" />
-                                                </StackPanel>
+                                                            FontWeight="Bold" Text="🪣  CAJUELAS DEL CARGAMENTO" />
+                                                <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="52"
+                                                           FontWeight="Bold" Text="{Binding Total}"
+                                                           AutomationProperties.Name="Total de cajuelas del cargamento" />
                                             </StackPanel>
-                                             <Border Grid.Column="1" Margin="18,0" Padding="12,8"
-                                                     VerticalAlignment="Bottom" Background="#F8FAFB" CornerRadius="10">
-                                                 <Grid>
-                                                     <Grid.ColumnDefinitions>
-                                                         <ColumnDefinition Width="78" />
-                                                         <ColumnDefinition Width="1" />
-                                                         <ColumnDefinition Width="78" />
-                                                     </Grid.ColumnDefinitions>
-                                                     <StackPanel>
-                                                         <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
-                                                                    FontSize="8" FontWeight="Bold" Text="TOTAL" />
-                                                         <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center"
-                                                                    FontSize="17" FontWeight="Bold" Text="{Binding Total}"
-                                                                    AutomationProperties.Name="Total de cajuelas del cargamento" />
-                                                     </StackPanel>
-                                                     <Border Grid.Column="1" Background="{StaticResource SoftBorderBrush}" />
-                                                     <StackPanel Grid.Column="2">
-                                                         <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
-                                                                    FontSize="8" FontWeight="Bold" Text="YA BARRIDAS" />
-                                                         <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center"
-                                                                    FontSize="17" FontWeight="Bold"
-                                                                    Text="{Binding LastSweepCumulativeTotal}"
-                                                                    AutomationProperties.Name="Total de cajuelas incluidas en barridas" />
-                                                     </StackPanel>
-                                                 </Grid>
-                                             </Border>
+                                            <Border Grid.Column="1" Margin="18,0" Padding="16,9"
+                                                    VerticalAlignment="Bottom" Background="#F8FAFB" CornerRadius="10">
+                                                <StackPanel>
+                                                    <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
+                                                               FontSize="8" FontWeight="Bold" Text="CANTIDAD DE BARRIDAS" />
+                                                    <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center"
+                                                               FontSize="20" FontWeight="Bold" Text="{Binding SweepCount}"
+                                                               AutomationProperties.Name="Cantidad de barridas realizadas" />
+                                                </StackPanel>
+                                            </Border>
                                              <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
                                                 <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"
-                                                           FontSize="9" FontWeight="Bold" Text="PRÓXIMA ALERTA" />
-                                                <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" FontSize="13"
-                                                           FontWeight="Bold" Text="{Binding NextAlertDescription}" />
+                                                           FontSize="9" FontWeight="Bold" Text="PRÓXIMAS ALERTAS" />
+                                                <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" FontSize="12"
+                                                           FontWeight="Bold" Text="{Binding NextMercuryAlertDescription}" />
+                                                <TextBlock Margin="0,2,0,0" HorizontalAlignment="Right" FontSize="12"
+                                                           FontWeight="Bold" Text="{Binding NextSweepAlertDescription}" />
                                             </StackPanel>
                                         </Grid>
 

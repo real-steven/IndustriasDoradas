@@ -13,6 +13,16 @@ using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
+public enum LoginSessionState
+{
+    Checking,
+    Available,
+    NotFound,
+    Closed,
+    Expired,
+    SignInFailed,
+}
+
 public sealed record StationLineStatus(
     Guid Id,
     string Name,
@@ -20,6 +30,47 @@ public sealed record StationLineStatus(
     bool IsSelected,
     string AccentColor,
     string Detail);
+
+// Se conserva para compatibilidad binaria con pruebas y extensiones anteriores.
+// La interfaz actual registra únicamente entrada y saldo final por barrida.
+public sealed record MercuryMovementOption(
+    MercuryMovementKind Kind,
+    string Name,
+    string Description);
+
+public sealed record MercurySweepOption(
+    LocalMercurySweepTarget Source,
+    string Description)
+{
+    public Guid Id => Source.Id;
+}
+
+public sealed class MercuryRastraEntryViewModel(
+    CachedLineComponent component) : ObservableObject
+{
+    private string inputAmountText = string.Empty;
+    private string remainderAmountText = string.Empty;
+    private string currentDescription = "Entrada pendiente · saldo final pendiente";
+
+    public CachedLineComponent Component { get; } = component;
+    public Guid Id => Component.Id;
+    public string Name => Component.Name;
+    public string InputAmountText
+    {
+        get => inputAmountText;
+        set => SetProperty(ref inputAmountText, value);
+    }
+    public string RemainderAmountText
+    {
+        get => remainderAmountText;
+        set => SetProperty(ref remainderAmountText, value);
+    }
+    public string CurrentDescription
+    {
+        get => currentDescription;
+        set => SetProperty(ref currentDescription, value);
+    }
+}
 
 public sealed class StationViewModel : ObservableObject, IDisposable
 {
@@ -31,10 +82,13 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly ILocalOperationDashboardRepository? dashboard;
     private readonly RecordProductionSweepHandler? sweepHandler;
     private readonly PlantManagerModeState? sharedManagerMode;
+    private readonly RecordMercuryMovementHandler? mercuryHandler;
     private readonly DispatcherTimer idleTimer;
     private bool isClosingForIdle;
     private bool isMaintainingSession;
     private bool wasSessionRestored;
+    private bool isApplicationUnlocked;
+    private LoginSessionState loginSessionState = LoginSessionState.Checking;
     private DateTimeOffset nextSessionMaintenanceAt = DateTimeOffset.MinValue;
     private ProtectedStationState? state;
     private string status = "Inicia sesión como jefe de planta para abrir la estación.";
@@ -61,6 +115,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private string activeOperationSummary = "No hay un cargamento activo.";
     private string managementSummary = "Seleccione una acción para el cargamento activo.";
     private string activeSupplierName = "Proveedor registrado";
+    private IReadOnlyList<MercuryRastraEntryViewModel> mercuryRastras = [];
+    private IReadOnlyList<MercurySweepOption> mercurySweeps = [];
+    private IReadOnlyList<LocalMercuryMovement> mercuryMovements = [];
+    private MercurySweepOption? selectedMercurySweep;
+    private string mercuryStatus = "Seleccione una línea activa para consultar sus rastras.";
 
     public StationViewModel(
         StationCoordinator coordinator,
@@ -104,6 +163,29 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         ILocalOperationDashboardRepository? dashboard,
         RecordProductionSweepHandler? sweepHandler,
         PlantManagerModeState? sharedManagerMode)
+        : this(
+            coordinator,
+            catalogs,
+            operations,
+            options,
+            timeProvider,
+            dashboard,
+            sweepHandler,
+            sharedManagerMode,
+            null)
+    {
+    }
+
+    public StationViewModel(
+        StationCoordinator coordinator,
+        ILocalCatalogRepository catalogs,
+        LocalOperationService operations,
+        IOptions<StationOptions> options,
+        TimeProvider timeProvider,
+        ILocalOperationDashboardRepository? dashboard,
+        RecordProductionSweepHandler? sweepHandler,
+        PlantManagerModeState? sharedManagerMode,
+        RecordMercuryMovementHandler? mercuryHandler)
     {
         this.coordinator = coordinator;
         this.catalogs = catalogs;
@@ -112,6 +194,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         this.dashboard = dashboard;
         this.sweepHandler = sweepHandler;
         this.sharedManagerMode = sharedManagerMode;
+        this.mercuryHandler = mercuryHandler;
         modeController = new PrivilegeModeController(
             timeProvider,
             TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds),
@@ -136,6 +219,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             () => IsPlantManager && !IsBusy && (preparedRelief is not null || preparedCompletion is not null));
         ShowComingSoonCommand = new RelayCommand<string>(ShowComingSoon);
         SelectLineCommand = new RelayCommand<Guid>(SelectLine);
+        RecordMercuryCommand = new AsyncRelayCommand(RecordMercuryAsync, () => CanRecordMercury);
+        RefreshMercuryCommand = new AsyncRelayCommand(RefreshMercuryAsync, () => !IsBusy);
         idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         idleTimer.Tick += OnIdleTick;
         idleTimer.Start();
@@ -159,6 +244,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(CanPrepareNewShipment));
                 OnPropertyChanged(nameof(CanManageActiveOperation));
                 OnPropertyChanged(nameof(CanUseContextActions));
+                OnPropertyChanged(nameof(CanRecordMercury));
                 NotifyOperationCommands();
             }
         }
@@ -171,7 +257,9 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             if (SetProperty(ref isBusy, value))
             {
                 OnPropertyChanged(nameof(CanInteract));
+                OnPropertyChanged(nameof(NeedsCredentials));
                 OnPropertyChanged(nameof(CanUseContextActions));
+                OnPropertyChanged(nameof(CanRecordMercury));
                 CloseStationCommand.NotifyCanExecuteChanged();
                 NotifyOperationCommands();
             }
@@ -179,6 +267,66 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     }
     public bool IsPlantManager => Mode == StationMode.PlantManager;
     public bool IsStationOpen => state is not null;
+    public bool IsApplicationUnlocked
+    {
+        get => isApplicationUnlocked;
+        private set
+        {
+            if (!SetProperty(ref isApplicationUnlocked, value)) return;
+            OnPropertyChanged(nameof(HasRestorableSession));
+            OnPropertyChanged(nameof(NeedsCredentials));
+            OnPropertyChanged(nameof(LoginActionLabel));
+            OnPropertyChanged(nameof(LoginPrompt));
+        }
+    }
+    public LoginSessionState LoginSessionState
+    {
+        get => loginSessionState;
+        private set
+        {
+            if (!SetProperty(ref loginSessionState, value)) return;
+            OnPropertyChanged(nameof(LoginSessionTitle));
+            OnPropertyChanged(nameof(LoginSessionDescription));
+            OnPropertyChanged(nameof(LoginSessionColor));
+            OnPropertyChanged(nameof(HasRestorableSession));
+            OnPropertyChanged(nameof(NeedsCredentials));
+            OnPropertyChanged(nameof(LoginActionLabel));
+            OnPropertyChanged(nameof(LoginPrompt));
+        }
+    }
+    public bool HasRestorableSession => state is not null && !IsApplicationUnlocked &&
+        LoginSessionState == LoginSessionState.Available;
+    public bool NeedsCredentials => !IsBusy && LoginSessionState != LoginSessionState.Checking;
+    public string LoginActionLabel => HasRestorableSession
+        ? "ABRIR SESIÓN  →"
+        : "ABRIR ESTACIÓN  →";
+    public string LoginPrompt => HasRestorableSession
+        ? "Continúe sin contraseña o escriba sus credenciales para iniciar con otra cuenta."
+        : "Ingrese sus credenciales de jefe de planta para abrir la estación.";
+    public string LoginSessionTitle => LoginSessionState switch
+    {
+        LoginSessionState.Checking => "Buscando sesión protegida…",
+        LoginSessionState.Available => "Sesión abierta · lista para continuar",
+        LoginSessionState.Closed => "Sesión finalizada",
+        LoginSessionState.Expired => "Sesión vencida o revocada",
+        LoginSessionState.SignInFailed => "No se pudo iniciar sesión",
+        _ => "Sesión no encontrada",
+    };
+    public string LoginSessionDescription => LoginSessionState switch
+    {
+        LoginSessionState.Checking => "Comprobando la sesión guardada en este equipo.",
+        LoginSessionState.Available => "Presione Abrir sesión para entrar al sistema.",
+        LoginSessionState.Closed => "Ingrese sus credenciales para iniciar una sesión nueva.",
+        LoginSessionState.Expired => "La sesión anterior ya no es válida; autentíquese nuevamente.",
+        LoginSessionState.SignInFailed => "Revise el correo, la contraseña o la conexión e inténtelo otra vez.",
+        _ => "Ingrese su correo y contraseña para abrir la estación.",
+    };
+    public string LoginSessionColor => LoginSessionState switch
+    {
+        LoginSessionState.Checking => "#F2B84B",
+        LoginSessionState.Available => "#62D78B",
+        _ => "#EB6B70",
+    };
     public bool WasSessionRestored
     {
         get => wasSessionRestored;
@@ -202,6 +350,42 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         ? "Consulte el cargamento actual, cambie el responsable o finalice el trabajo de esta línea."
         : "Seleccione línea, proveedor y responsable para iniciar un cargamento.";
     public string ActiveSupplierName => activeSupplierName;
+    public IReadOnlyList<MercuryRastraEntryViewModel> MercuryRastras
+    {
+        get => mercuryRastras;
+        private set
+        {
+            if (!SetProperty(ref mercuryRastras, value)) return;
+            OnPropertyChanged(nameof(HasMercuryRastras));
+            OnPropertyChanged(nameof(CanRecordMercury));
+            RecordMercuryCommand.NotifyCanExecuteChanged();
+        }
+    }
+    public bool HasMercuryRastras => MercuryRastras.Count > 0;
+    public IReadOnlyList<MercurySweepOption> MercurySweeps
+    {
+        get => mercurySweeps;
+        private set => SetProperty(ref mercurySweeps, value);
+    }
+    public MercurySweepOption? SelectedMercurySweep
+    {
+        get => selectedMercurySweep;
+        set
+        {
+            if (!SetProperty(ref selectedMercurySweep, value)) return;
+            OnPropertyChanged(nameof(CanRecordMercury));
+            LoadMercuryInputs();
+            RecordMercuryCommand.NotifyCanExecuteChanged();
+        }
+    }
+    public bool CanRecordMercury => mercuryHandler is not null && IsPlantManager &&
+        IsSelectedLineActive && HasMercuryRastras && !IsBusy &&
+        SelectedMercurySweep is not null;
+    public string MercuryStatus
+    {
+        get => mercuryStatus;
+        private set => SetProperty(ref mercuryStatus, value);
+    }
     public IReadOnlyList<CachedSupplier> Suppliers
     {
         get => suppliers;
@@ -291,33 +475,72 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     public IRelayCommand CancelManagementChangeCommand { get; }
     public IRelayCommand<string> ShowComingSoonCommand { get; }
     public IRelayCommand<Guid> SelectLineCommand { get; }
+    public IAsyncRelayCommand RecordMercuryCommand { get; }
+    public IAsyncRelayCommand RefreshMercuryCommand { get; }
 
     public async Task InitializeAsync()
     {
-        state = await coordinator.ResumeAsync(networkAvailable: true).ConfigureAwait(true);
+        LoginSessionState = LoginSessionState.Checking;
+        IsApplicationUnlocked = false;
+        StationResumeResult resume = await coordinator
+            .InspectResumeAsync(networkAvailable: true)
+            .ConfigureAwait(true);
+        state = resume.State;
         WasSessionRestored = state is not null;
         OnPropertyChanged(nameof(IsStationOpen));
         CloseStationCommand.NotifyCanExecuteChanged();
         if (state is not null)
         {
-            StationSessionStatus = "Estación abierta mediante sesión protegida restaurada.";
-            OpenOperationMode(
-                "Sesión protegida de estación restaurada. No necesita abrirla nuevamente; Modo Operación activo.");
+            LoginSessionState = LoginSessionState.Available;
+            StationSessionStatus = "Estación con sesión protegida restaurada, encontrada y lista para continuar.";
+            Status = "Sesión abierta encontrada. Presione Abrir sesión para entrar al sistema.";
             await LoadPreparationCatalogsAsync().ConfigureAwait(true);
+            return;
         }
+
+        LoginSessionState = resume.Status switch
+        {
+            StationResumeStatus.Closed => LoginSessionState.Closed,
+            StationResumeStatus.ExpiredOrRevoked => LoginSessionState.Expired,
+            _ => LoginSessionState.NotFound,
+        };
+        StationSessionStatus = LoginSessionTitle;
+        Status = LoginSessionDescription;
     }
 
-    public Task SignInAsync(string email, string password) => RunAsync(async () =>
+    public void EnterRestoredSession()
     {
-        Status = "Abriendo y validando la estación…";
-        state = await coordinator.SignInAsync(email, password).ConfigureAwait(true);
-        WasSessionRestored = false;
-        OnPropertyChanged(nameof(IsStationOpen));
-        CloseStationCommand.NotifyCanExecuteChanged();
-        StationSessionStatus = "Estación abierta mediante autenticación reciente.";
-        await LoadPreparationCatalogsAsync().ConfigureAwait(true);
-        OpenOperationMode("Estación abierta. Modo Operación activo.");
-    }, "No se pudo abrir la estación.");
+        if (!HasRestorableSession) return;
+        IsApplicationUnlocked = true;
+        OpenOperationMode(
+            "Sesión protegida restaurada. No necesita autenticarse nuevamente; Modo Operación activo.");
+    }
+
+    public async Task SignInAsync(string email, string password)
+    {
+        LoginSessionState = LoginSessionState.Checking;
+        await RunAsync(async () =>
+        {
+            Status = "Abriendo y validando la estación…";
+            state = await coordinator.SignInAsync(email, password).ConfigureAwait(true);
+            WasSessionRestored = false;
+            LoginSessionState = LoginSessionState.Available;
+            IsApplicationUnlocked = true;
+            OnPropertyChanged(nameof(IsStationOpen));
+            CloseStationCommand.NotifyCanExecuteChanged();
+            StationSessionStatus = "Estación abierta mediante autenticación reciente.";
+            await LoadPreparationCatalogsAsync().ConfigureAwait(true);
+            OpenOperationMode("Estación abierta. Modo Operación activo.");
+        }, "No se pudo abrir la estación.").ConfigureAwait(true);
+
+        if (state is null)
+        {
+            IsApplicationUnlocked = false;
+            LoginSessionState = LoginSessionState.SignInFailed;
+            StationSessionStatus = LoginSessionTitle;
+            Status = LoginSessionDescription;
+        }
+    }
 
     public async Task ElevateAsync(string pin)
     {
@@ -335,6 +558,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 if (refreshed is null)
                 {
                     state = null;
+                    IsApplicationUnlocked = false;
+                    LoginSessionState = LoginSessionState.Expired;
                     modeController.CloseStation();
                     Mode = modeController.Mode;
                     StationSessionStatus = "Estación cerrada; la autorización ya no es válida.";
@@ -376,6 +601,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         await coordinator.CloseSessionAsync().ConfigureAwait(true);
         state = null;
         WasSessionRestored = false;
+        IsApplicationUnlocked = false;
+        LoginSessionState = LoginSessionState.Closed;
         modeController.CloseStation();
         Mode = modeController.Mode;
         StationSessionStatus = "Estación cerrada manualmente.";
@@ -440,6 +667,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             state = null;
             WasSessionRestored = false;
+            IsApplicationUnlocked = false;
+            LoginSessionState = LoginSessionState.Expired;
             Mode = modeController.Mode;
             StationSessionStatus = "Estación cerrada por inactividad.";
             OnPropertyChanged(nameof(IsStationOpen));
@@ -464,6 +693,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             {
                 state = null;
                 WasSessionRestored = false;
+                IsApplicationUnlocked = false;
+                LoginSessionState = LoginSessionState.Expired;
                 modeController.CloseStation();
                 Mode = modeController.Mode;
                 StationSessionStatus = "Estación cerrada; la sesión ya no es válida.";
@@ -573,6 +804,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             preparedStart = null;
             Status = "Línea lista. Modo Jefe de Planta continúa activo.";
             PreparationSummary = "Cargamento confirmado y guardado localmente.";
+            await RefreshMercuryAsync().ConfigureAwait(true);
             NotifyOperationCommands();
         }, "No se pudo confirmar el cargamento; el contexto anterior se conservó.").ConfigureAwait(true);
     }
@@ -628,7 +860,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 ? "Cierre pendiente: finalizará el cargamento y bloqueará nuevos registros. " +
                   "No hay cajuelas posteriores a la última barrida. La línea continúa activa hasta confirmar."
                 : $"Cierre pendiente: antes de finalizar se registrará la barrida final de " +
-                  $"{preparedFinalSweep.CajuelaQuantity} cajuelas. La recuperación de mercurio quedará pendiente.";
+                  $"{preparedFinalSweep.CajuelaQuantity} cajuelas. Las mediciones de mercurio por rastra quedarán pendientes.";
             Status = "Revise y confirme el cierre del cargamento.";
             NotifyOperationCommands();
         }, "No se pudo preparar el cierre; el cargamento continúa activo.").ConfigureAwait(true);
@@ -764,8 +996,195 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             ? "No hay un cargamento activo."
             : $"{LineName(activeSession.LineId)} · cargamento iniciado {FormatLocalTime(activeSession.StartedAt)} · " +
               $"responsable {WorkerName(activeSession.ResponsibleWorkerId)}.";
+        _ = RefreshMercurySafelyAsync();
         NotifyOperationCommands();
     }
+
+    private async Task RefreshMercurySafelyAsync()
+    {
+        try
+        {
+            await RefreshMercuryAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (
+            exception is IOException or SqliteException or InvalidOperationException)
+        {
+            MercuryRastras = [];
+            MercurySweeps = [];
+            mercuryMovements = [];
+            MercuryStatus = "No se pudo leer el registro local de mercurio.";
+        }
+    }
+
+    private async Task RefreshMercuryAsync()
+    {
+        LocalOperationalSession? session = activeSession;
+        if (mercuryHandler is null || session is null)
+        {
+            MercuryRastras = [];
+            MercurySweeps = [];
+            mercuryMovements = [];
+            SelectedMercurySweep = null;
+            MercuryStatus = session is null
+                ? "Seleccione una línea activa para consultar sus rastras."
+                : "El registro de mercurio no está disponible.";
+            return;
+        }
+
+        IReadOnlyList<CachedLineComponent> components = await mercuryHandler.ListRastrasAsync(
+                session.OrganizationId,
+                session.LineId)
+            .ConfigureAwait(true);
+        IReadOnlyList<MercurySweepOption> sweeps = (await mercuryHandler.ListSweepsAsync(session.ShipmentId)
+                .ConfigureAwait(true))
+            .Select((sweep, index) => new MercurySweepOption(
+                sweep,
+                $"Barrida {index + 1} · {sweep.CajuelaCount} cajuelas" +
+                (sweep.IsFinal ? " · final" : string.Empty)))
+            .ToArray();
+        IReadOnlyList<LocalMercuryMovement> movements = await mercuryHandler.ListCurrentAsync(session.ShipmentId)
+            .ConfigureAwait(true);
+        if (activeSession?.ShipmentId != session.ShipmentId) return;
+
+        MercuryRastras = components.Select(component => new MercuryRastraEntryViewModel(component))
+            .ToArray();
+        MercurySweeps = sweeps;
+        mercuryMovements = movements;
+        SelectedMercurySweep = PreserveSweep(SelectedMercurySweep, MercurySweeps);
+        LoadMercuryInputs();
+        MercuryStatus = components.Count == 0
+            ? "Esta línea todavía no tiene rastras disponibles en el catálogo local."
+            : "Seleccione una barrida y registre, por cada rastra, cuánto entró y cuánto quedó al final. Vacío significa pendiente.";
+    }
+
+    private async Task RecordMercuryAsync()
+    {
+        LocalOperationalSession? session = activeSession;
+        if (mercuryHandler is null || session is null || !CanRecordMercury) return;
+        RecordActivity();
+        var parsed = new List<(MercuryRastraEntryViewModel Rastra, decimal? Input, decimal? Remainder)>();
+        foreach (MercuryRastraEntryViewModel rastra in MercuryRastras)
+        {
+            if (!TryParseMercury(rastra.InputAmountText, out decimal? input, out string? inputError))
+            {
+                MercuryStatus = $"{rastra.Name}, mercurio que entró: {inputError}";
+                return;
+            }
+            if (!TryParseMercury(
+                    rastra.RemainderAmountText,
+                    out decimal? remainder,
+                    out string? remainderError))
+            {
+                MercuryStatus = $"{rastra.Name}, mercurio que quedó al final: {remainderError}";
+                return;
+            }
+            parsed.Add((rastra, input, remainder));
+        }
+
+        IsBusy = true;
+        try
+        {
+            foreach ((MercuryRastraEntryViewModel rastra, decimal? input, decimal? remainder) in parsed)
+            {
+                await mercuryHandler.RecordAsync(
+                        session.StationId,
+                        session.ShipmentId,
+                        rastra.Id,
+                        MercuryMovementKind.SweepInput,
+                        input,
+                        SelectedMercurySweep!.Id,
+                        replaceCurrent: true)
+                    .ConfigureAwait(true);
+                await mercuryHandler.RecordAsync(
+                        session.StationId,
+                        session.ShipmentId,
+                        rastra.Id,
+                        MercuryMovementKind.SweepRemainder,
+                        remainder,
+                        SelectedMercurySweep.Id,
+                        replaceCurrent: true)
+                    .ConfigureAwait(true);
+            }
+            await RefreshMercuryAsync().ConfigureAwait(true);
+            MercuryStatus = $"Entrada y saldo final guardados para {parsed.Count} rastra(s). " +
+                "Modo Jefe de Planta continúa activo.";
+        }
+        catch (Exception exception) when (
+            exception is IOException or SqliteException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            MercuryStatus = exception is UnauthorizedAccessException
+                ? exception.Message
+                : "No se pudieron guardar las mediciones de mercurio; los datos anteriores se conservaron.";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void LoadMercuryInputs()
+    {
+        Guid? sweepId = SelectedMercurySweep?.Id;
+        foreach (MercuryRastraEntryViewModel rastra in MercuryRastras)
+        {
+            LocalMercuryMovement? input = mercuryMovements.LastOrDefault(item =>
+                item.LineComponentId == rastra.Id &&
+                item.Kind == MercuryMovementKind.SweepInput &&
+                item.SweepId == sweepId);
+            LocalMercuryMovement? remainder = mercuryMovements.LastOrDefault(item =>
+                item.LineComponentId == rastra.Id &&
+                item.Kind == MercuryMovementKind.SweepRemainder &&
+                item.SweepId == sweepId);
+            rastra.CurrentDescription =
+                $"Entró {FormatMercury(input?.AmountGrams)} · quedó {FormatMercury(remainder?.AmountGrams)}";
+            rastra.InputAmountText = FormatMercuryInput(input?.AmountGrams);
+            rastra.RemainderAmountText = FormatMercuryInput(remainder?.AmountGrams);
+        }
+    }
+
+    private static MercurySweepOption? PreserveSweep(
+        MercurySweepOption? current,
+        IReadOnlyList<MercurySweepOption> available) =>
+        current is null
+            ? (available.Count == 0 ? null : available[0])
+            : available.FirstOrDefault(item => item.Id == current.Id) ??
+              (available.Count == 0 ? null : available[0]);
+
+    private static bool TryParseMercury(
+        string? text,
+        out decimal? amount,
+        out string? error)
+    {
+        string normalized = (text ?? string.Empty).Trim().Replace(',', '.');
+        if (normalized.Length == 0)
+        {
+            amount = null;
+            error = null;
+            return true;
+        }
+        if (!decimal.TryParse(
+                normalized,
+                System.Globalization.NumberStyles.AllowDecimalPoint,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out decimal value) ||
+            value < 0 || decimal.Round(value, 2) != value)
+        {
+            amount = null;
+            error = "use un número positivo o cero con máximo dos decimales.";
+            return false;
+        }
+        amount = value;
+        error = null;
+        return true;
+    }
+
+    private static string FormatMercury(decimal? amount) =>
+        amount is null
+            ? "pendiente"
+            : $"{amount.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} g";
+
+    private static string FormatMercuryInput(decimal? amount) =>
+        amount?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
 
     private void UpdateLineStatuses()
     {
@@ -831,5 +1250,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         PrepareCompletionCommand.NotifyCanExecuteChanged();
         ConfirmCompletionCommand.NotifyCanExecuteChanged();
         CancelManagementChangeCommand.NotifyCanExecuteChanged();
+        RecordMercuryCommand.NotifyCanExecuteChanged();
+        RefreshMercuryCommand.NotifyCanExecuteChanged();
     }
 }

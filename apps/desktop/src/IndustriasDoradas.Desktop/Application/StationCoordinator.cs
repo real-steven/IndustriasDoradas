@@ -8,6 +8,18 @@ using Microsoft.Extensions.Options;
 
 namespace IndustriasDoradas.Desktop.Application;
 
+public enum StationResumeStatus
+{
+    Available,
+    NotFound,
+    Closed,
+    ExpiredOrRevoked,
+}
+
+public sealed record StationResumeResult(
+    StationResumeStatus Status,
+    ProtectedStationState? State);
+
 public sealed class StationCoordinator(
     ISupabaseAuthService auth,
     IStationApi api,
@@ -46,15 +58,33 @@ public sealed class StationCoordinator(
 
     public async Task<ProtectedStationState?> ResumeAsync(bool networkAvailable, CancellationToken cancellationToken = default)
     {
-        ProtectedStationState? saved = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
-        if (saved is null || saved.IsClosed) return null;
-        if (!networkAvailable)
-            return saved;
+        StationResumeResult result = await InspectResumeAsync(networkAvailable, cancellationToken)
+            .ConfigureAwait(false);
+        return result.State;
+    }
 
-        return await RefreshAuthorizationAsync(
+    public async Task<StationResumeResult> InspectResumeAsync(
+        bool networkAvailable,
+        CancellationToken cancellationToken = default)
+    {
+        ProtectedStationState? saved = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (saved is null) return new StationResumeResult(StationResumeStatus.NotFound, null);
+        if (saved.IsClosed) return new StationResumeResult(StationResumeStatus.Closed, null);
+        if (!networkAvailable)
+        {
+            return new StationResumeResult(StationResumeStatus.Available, saved);
+        }
+
+        ProtectedStationState? refreshed = await RefreshAuthorizationAsync(
                 saved,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        if (refreshed is null)
+        {
+            return new StationResumeResult(StationResumeStatus.ExpiredOrRevoked, null);
+        }
+
+        return new StationResumeResult(StationResumeStatus.Available, refreshed);
     }
 
     public async Task<ProtectedStationState?> RefreshAuthorizationAsync(

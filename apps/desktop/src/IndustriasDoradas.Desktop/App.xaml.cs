@@ -207,6 +207,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
         builder.Services.AddSingleton<ILocalProductionSweepRepository, SqliteProductionSweepRepository>();
+        builder.Services.AddSingleton<ILocalMercuryRepository, SqliteMercuryRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
         builder.Services.AddSingleton<ILocalAuditRepository, SqliteAuditRepository>();
         builder.Services.AddSingleton<ILocalOperationInputMetricStore, SqliteOperationInputMetricStore>();
@@ -218,6 +219,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<RegisterCajuelaHandler>();
         builder.Services.AddSingleton<RevertLastCajuelaHandler>();
         builder.Services.AddSingleton<RecordProductionSweepHandler>();
+        builder.Services.AddSingleton<RecordMercuryMovementHandler>();
         builder.Services.AddSingleton<ProductionMilestoneService>();
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();

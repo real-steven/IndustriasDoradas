@@ -51,11 +51,23 @@ public sealed class StationPreparationViewModelTests
         await viewModel.InitializeAsync();
         Assert.IsTrue(viewModel.IsStationOpen);
         Assert.IsTrue(viewModel.WasSessionRestored);
+        Assert.IsFalse(viewModel.IsApplicationUnlocked);
+        Assert.IsTrue(viewModel.HasRestorableSession);
+        Assert.IsTrue(viewModel.NeedsCredentials);
+        Assert.AreEqual(LoginSessionState.Available, viewModel.LoginSessionState);
+        StringAssert.Contains(viewModel.LoginSessionTitle, "lista para continuar");
+
+        viewModel.EnterRestoredSession();
+
+        Assert.IsTrue(viewModel.IsApplicationUnlocked);
+        Assert.AreEqual(StationMode.Operation, viewModel.Mode);
 
         await viewModel.CloseStationCommand.ExecuteAsync(null);
 
         Assert.IsFalse(viewModel.IsStationOpen);
+        Assert.IsFalse(viewModel.IsApplicationUnlocked);
         Assert.IsFalse(viewModel.WasSessionRestored);
+        Assert.AreEqual(LoginSessionState.Closed, viewModel.LoginSessionState);
         Assert.AreEqual(StationMode.SignedOut, viewModel.Mode);
         StringAssert.Contains(viewModel.StationSessionStatus, "cerrada manualmente");
     }

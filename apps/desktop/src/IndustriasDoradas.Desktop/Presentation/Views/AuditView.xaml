@@ -16,6 +16,105 @@
             <Setter Property="BorderBrush" Value="{StaticResource SoftBorderBrush}" />
             <Setter Property="SnapsToDevicePixels" Value="True" />
         </Style>
+        <Style x:Key="AuditComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="Foreground" Value="{StaticResource Ink900Brush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="OptionChrome" Margin="3,2" Padding="{TemplateBinding Padding}"
+                                Background="Transparent" CornerRadius="7">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="OptionChrome" Property="Background" Value="#EAF3F7" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="OptionChrome" Property="Background" Value="#DDEEF5" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="Foreground" Value="{StaticResource NavyBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="AuditComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#C8D8DF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource Ink900Brush}" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource AuditComboBoxItemStyle}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid x:Name="InputRoot">
+                            <Border x:Name="InputChrome"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="9">
+                                <Grid>
+                                    <ContentPresenter Margin="12,0,40,0" HorizontalAlignment="Left"
+                                                      VerticalAlignment="Center"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}"
+                                                      IsHitTestVisible="False" />
+                                    <Border Width="32" Margin="0,5,5,5" HorizontalAlignment="Right"
+                                            Background="#EDF4F7" CornerRadius="6">
+                                        <Path Width="9" Height="5" HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" Data="M 0 0 L 4.5 4.5 L 9 0"
+                                              Stroke="{StaticResource NavyBrush}" StrokeThickness="1.5" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+                            <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" /></ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
+                                   PlacementTarget="{Binding ElementName=InputRoot}" PopupAnimation="Fade">
+                                <Border Width="{Binding ActualWidth, ElementName=InputRoot}" Margin="0,5,0,0"
+                                        Padding="4" Background="White" BorderBrush="#C8D8DF"
+                                        BorderThickness="1" CornerRadius="9">
+                                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="InputChrome" Property="BorderBrush" Value="#79A9BE" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="InputChrome" Property="BorderBrush" Value="#2F7EA4" />
+                                <Setter TargetName="InputChrome" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="InputChrome" Property="Background" Value="#F1F4F5" />
+                                <Setter Property="Foreground" Value="#748792" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource SoftCanvasBrush}">
@@ -105,19 +204,66 @@
             <Border Margin="0,18,0,0" Padding="24" Style="{StaticResource SurfaceCardStyle}"
                     Visibility="{Binding IsOperationCategory, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
-                    <TextBlock FontSize="20" FontWeight="Bold" Text="Cargamentos finalizados" />
-                    <TextBlock Margin="0,7,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
-                               Text="Cada botón representa un cargamento cerrado y reconstruye su actividad desde el historial local." />
-                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding CompletedShipments}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock FontSize="20" FontWeight="Bold" Text="Cargamentos finalizados" />
+                            <TextBlock Margin="0,7,20,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                                       Text="Seleccione primero una línea. Después podrá abrir únicamente el cargamento que desea consultar." />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Width="42" Height="42" MinHeight="0" Padding="0"
+                                        FontSize="18" Command="{Binding PreviousPeriodCommand}"
+                                        Content="‹" AutomationProperties.Name="Periodo anterior" />
+                                <ComboBox Width="156" Margin="7,0" Style="{StaticResource AuditComboBoxStyle}"
+                                          DisplayMemberPath="Name" ItemsSource="{Binding PeriodOptions}"
+                                          SelectedItem="{Binding SelectedPeriodOption}"
+                                          AutomationProperties.Name="Filtrar cargamentos por periodo" />
+                                <Button Width="42" Height="42" MinHeight="0" Padding="0"
+                                        FontSize="18" Command="{Binding NextPeriodCommand}"
+                                        Content="›" AutomationProperties.Name="Periodo siguiente" />
+                                <DatePicker Width="145" Height="42" Margin="7,0,0,0" Padding="7,4"
+                                            Background="White" BorderBrush="#C8D8DF" BorderThickness="1"
+                                            SelectedDate="{Binding SelectedFilterDate}"
+                                            Visibility="{Binding IsFilterDateVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            AutomationProperties.Name="Fecha del filtro" />
+                                <Button Height="42" MinHeight="0" Margin="7,0,0,0" Padding="12,0"
+                                        Command="{Binding ResetPeriodCommand}" Content="ESTA SEMANA" />
+                            </StackPanel>
+                            <StackPanel Margin="0,7,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <TextBlock Foreground="#2F7EA4" FontSize="10" FontWeight="SemiBold"
+                                           Text="{Binding PeriodDescription}" />
+                                <TextBlock Margin="9,0,0,0" Foreground="{StaticResource MutedBrush}" FontSize="10"
+                                           Text="{Binding FilteredShipmentCountDescription}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding ShipmentLines}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Width="300" MinHeight="105" Margin="0,0,10,10" Padding="16"
+                                <Button Width="240" MinHeight="74" Margin="0,0,10,10" Padding="14"
                                         HorizontalContentAlignment="Stretch"
-                                        Command="{Binding DataContext.SelectShipmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        Command="{Binding DataContext.SelectLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                            <Setter Property="Background" Value="#F7F9FA" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource SoftBorderBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter Property="Background" Value="#EEF6FA" />
+                                                    <Setter Property="BorderBrush" Value="#9DC6D8" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="7" />
@@ -127,17 +273,70 @@
                                         <StackPanel Grid.Column="1" Margin="13,0,0,0">
                                             <TextBlock FontSize="15" FontWeight="Bold" Text="{Binding LineName}" />
                                             <TextBlock Margin="0,4,0,0" Foreground="{StaticResource Ink700Brush}"
-                                                       Text="{Binding SupplierName}" />
-                                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
-                                                       FontSize="10" Text="{Binding PeriodDescription}" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="10" FontWeight="SemiBold"
-                                                       Text="{Binding Summary}" />
+                                                       FontSize="10" Text="{Binding ShipmentCountDescription}" />
                                         </StackPanel>
                                     </Grid>
                                 </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <Border Margin="0,4,0,0" Padding="16" Background="#F7F9FA" CornerRadius="10">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasCompletedShipments}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding HasCompletedShipments}" Value="True" />
+                                            <Condition Binding="{Binding HasSelectedLine}" Value="True" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Foreground="{StaticResource MutedBrush}"
+                                   Text="Seleccione una línea para consultar sus cargamentos finalizados." />
+                    </Border>
+
+                    <StackPanel Margin="0,10,0,0"
+                                Visibility="{Binding HasSelectedLine, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock FontSize="15" FontWeight="Bold">
+                            <Run Text="Cargamentos de " /><Run Text="{Binding SelectedLine.LineName, Mode=OneWay}" />
+                        </TextBlock>
+                        <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding VisibleCompletedShipments}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Width="300" MinHeight="100" Margin="0,0,10,10" Padding="16"
+                                            HorizontalContentAlignment="Stretch"
+                                            Command="{Binding DataContext.SelectShipmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="7" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Background="{Binding AccentColor}" CornerRadius="4" />
+                                            <StackPanel Grid.Column="1" Margin="13,0,0,0">
+                                                <TextBlock FontSize="14" FontWeight="Bold" Text="{Binding SupplierName}" />
+                                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                                                           FontSize="10" Text="{Binding PeriodDescription}" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="10" FontWeight="SemiBold"
+                                                           Text="{Binding Summary}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                     <TextBlock Margin="0,14,0,0" Foreground="{StaticResource MutedBrush}"
                                Text="Todavía no hay cargamentos finalizados en esta estación.">
                         <TextBlock.Style>
@@ -177,6 +376,71 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,12,0,0" Padding="20" Background="#FFFDF7"
+                            BorderBrush="#EAD7A9" BorderThickness="1" CornerRadius="12"
+                            Visibility="{Binding HasSelectedShipment, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock FontSize="17" FontWeight="Bold" Text="Mercurio del cargamento" />
+                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                                       Text="Por barrida y por rastra, complete cuánto mercurio entró y cuánto quedó al final. El oro se mantiene fuera de desktop."
+                                       TextWrapping="Wrap" />
+                            <Grid Margin="0,13,0,0">
+                                <StackPanel>
+                                    <TextBlock FontSize="9" FontWeight="Bold" Text="BARRIDA" />
+                                    <ComboBox Margin="0,5,0,0" Style="{StaticResource AuditComboBoxStyle}"
+                                              DisplayMemberPath="Description"
+                                              ItemsSource="{Binding MercurySweeps}"
+                                              SelectedItem="{Binding SelectedMercurySweep}"
+                                              IsEnabled="{Binding CanEditMercury}" />
+                                </StackPanel>
+                            </Grid>
+                            <ItemsControl Margin="-5,12,-5,0" ItemsSource="{Binding MercuryRastras}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="5" Padding="11" Background="White"
+                                                BorderBrush="{StaticResource SoftBorderBrush}"
+                                                BorderThickness="1" CornerRadius="10">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="Bold" Text="{Binding Name}" />
+                                                <Grid Margin="0,7,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="8" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock FontSize="9" FontWeight="Bold" Text="ENTRÓ (g)" />
+                                                        <TextBox Margin="0,5,0,0" MinHeight="38" Padding="9,7"
+                                                                 Text="{Binding InputAmountText, UpdateSourceTrigger=PropertyChanged}"
+                                                                 IsEnabled="{Binding DataContext.CanEditMercury, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock FontSize="9" FontWeight="Bold" Text="QUEDÓ AL FINAL (g)" />
+                                                        <TextBox Margin="0,5,0,0" MinHeight="38" Padding="9,7"
+                                                                 Text="{Binding RemainderAmountText, UpdateSourceTrigger=PropertyChanged}"
+                                                                 IsEnabled="{Binding DataContext.CanEditMercury, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock Margin="0,6,0,0" Foreground="{StaticResource MutedBrush}"
+                                                           FontSize="9" Text="{Binding CurrentDescription}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,8,0,0" Foreground="{StaticResource MutedBrush}"
+                                       FontSize="10" Text="{Binding MercuryStatus}" TextWrapping="Wrap" />
+                            <Button Margin="0,11,0,0" HorizontalAlignment="Left"
+                                    Command="{Binding RecordMercuryCommand}"
+                                    IsEnabled="{Binding CanEditMercury}"
+                                    Content="🔒  GUARDAR MERCURIO" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

@@ -727,6 +727,7 @@ public sealed class OperationViewModel : ObservableObject
         panel.IsReady = snapshot.IsReady;
         panel.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
         panel.Total = snapshot.Total;
+        panel.SweepCount = snapshot.SweepCount;
         ApplyMilestones(panel, snapshot.Total, snapshot.LastSweepCumulativeTotal);
         panel.SupplierName = snapshot.SupplierName ?? "Sin proveedor";
         panel.ResponsibleName = snapshot.ResponsibleName ?? "Sin responsable";

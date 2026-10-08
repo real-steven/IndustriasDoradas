@@ -10,7 +10,7 @@
 2. Modelar barrida por eventos incluidos, cantidad real, línea, cargamento y responsable.
 3. Separar las alertas de revisión cada 50 de la referencia visual de barrida cada 250, sin bloquear alimentación.
 4. Permitir barrida menor, igual o mayor a las referencias; al cerrar, guiar el registro de la barrida final sin exigir mediciones inmediatas.
-5. Registrar desde desktop cargas, recargas y recuperación de mercurio por rastra, o dejar los datos pendientes.
+5. Registrar desde desktop, por barrida, entrada y saldo final de mercurio en cada una de las tres rastras, o dejar los datos pendientes.
 6. Registrar oro parcial por barrida únicamente desde la web de `JEFE_EMPRESA`.
 7. Consolidar oro por línea, jornada, día, cargamento y proveedor.
 8. Registrar custodia y solicitudes de entrega en gramos.
@@ -27,7 +27,7 @@
 
 ### 4.1 Validar medidas pendientes
 
-**Prompt:** Contrasta con planta la unidad definitiva y precisión del mercurio, rangos razonables, variación de `1 palo = 0,1 g` y cualquier redondeo. Distingue cargas, recargas y recuperación por cada rastra. Mantén gramos como unidad canónica de oro y reserva sus cantidades al canal web de `JEFE_EMPRESA`. Documenta decisiones y no programes fórmulas no aprobadas.
+**Prompt:** Contrasta con planta la unidad definitiva y precisión del mercurio, rangos razonables, variación de `1 palo = 0,1 g` y cualquier redondeo. Distingue entrada y saldo final por cada rastra y barrida, sin recargas intermedias. Mantén gramos como unidad canónica de oro y reserva sus cantidades al canal web de `JEFE_EMPRESA`. Documenta decisiones y no programes fórmulas no aprobadas.
 
 **Decisiones confirmadas el 2026-09-30:**
 
@@ -112,7 +112,7 @@
 
 **Ajuste visual y de responsabilidad 2026-10-05:** los avisos dejaron de ocupar espacio dentro de las tarjetas. La revisión de mercurio aparece transitoriamente arriba a la derecha y la barrida pendiente permanece allí hasta su registro, de modo que las cuatro líneas conservan tamaño estable. Los rechazos técnicos se consultan en Diagnóstico; no se envían como aprobaciones a la gerente.
 
-**Ajuste de lectura del contador 2026-10-06:** la tarjeta distingue tres cifras sin agregar una fila nueva. El valor principal representa cajuelas desde la última barrida y puede superar `250 / 250` mientras siga pendiente; al confirmar la barrida vuelve a `0 / 250`. Dos valores secundarios conservan el total acumulado del cargamento y el total ya incluido en barridas. Por ejemplo: antes de barrer `260 / 250`, total `260`, barridas `0`; después `0 / 250`, total `260`, barridas `260`; la siguiente cajuela muestra `1 / 250`, total `261`, barridas `260`. Es una presentación derivada y reversible: no cambia eventos, barridas ni auditoría.
+**Ajuste de lectura del contador 2026-10-08:** el valor principal de la tarjeta representa el total acumulado del cargamento y nunca se reinicia al barrer. Se eliminan la fracción visual `/ 250`, el total secundario duplicado y la cantidad acumulada de cajuelas ya barridas; el único resumen secundario muestra cuántas barridas se han registrado (`0`, `1`, `2`, etc.). La barra conserva el progreso desde la última barrida y se reinicia al confirmarla, mientras las alertas mantienen su lógica actual. Es una presentación derivada y reversible: no cambia eventos, barridas ni auditoría.
 
 ### 4.6 Registro de barrida
 
@@ -133,11 +133,30 @@
 
 **Refinamiento operativo 2026-10-05:** el operario puede corregir la última cajuela no barrida durante cinco minutos. Después requiere Modo Jefe de Planta y motivo obligatorio. SQLite conserva actor, rol, motivo y total anterior/posterior. Auditoría presenta un resumen por cargamento finalizado con proveedor, línea, periodo, responsables, barridas, correcciones y estado pendiente/completo de mercurio; las correcciones forman una lista separada. La web queda reservada a la gerente y este refinamiento no inicia 4.7.
 
+**Ajuste de consulta 2026-10-08:** Auditoría agrupa primero los cargamentos finalizados por línea. Ningún detalle se abre automáticamente: el usuario selecciona una línea, luego uno de sus cargamentos y finalmente consulta el resumen reconstruido. Esto evita mezclar visualmente la actividad de varias líneas.
+
 ### 4.7 Mercurio
 
-**Prompt:** Registra en desktop los movimientos reales de mercurio por rastra, línea y cargamento: carga inicial, cada recarga adicional y recuperación asociada a la barrida cuando corresponda. Acepta gramos enteros o con hasta dos decimales, vacío pendiente y cero medido; rechaza negativos y no impongas un máximo no validado. Permite completar datos más tarde en Modo Jefe de Planta, conserva cada cambio auditado y no califica automáticamente la diferencia como pérdida o consumo. Prepara referencia a inventario posterior sin descontar dos veces.
+**Prompt actualizado:** Registra en desktop, por cada barrida, cuánto mercurio entró y cuánto quedó al final en Rastra 1, Rastra 2 y Rastra 3. No traces recargas intermedias. Acepta gramos enteros o con hasta dos decimales, vacío pendiente y cero medido; rechaza negativos y no impongas un máximo no validado. Permite completar datos más tarde en Modo Jefe de Planta y conserva cada corrección auditada.
 
 **Pausa:** validar decimales, unidad, cero/negativo/extremo y reversión idempotente.
+
+**Resultado 2026-10-06:**
+
+- Desktop proyecta desde la sincronización las tres rastras activas de cada línea y la migración local 14 repara instalaciones que ya habían recibido esos componentes antes de existir la proyección específica.
+- Estación permite seleccionar una barrida real del cargamento activo y registrar, para Rastra 1, Rastra 2 y Rastra 3, únicamente cuánto mercurio entró y cuánto quedó al final. Los campos aceptan enteros o hasta dos decimales, coma o punto, cero medido y vacío pendiente; no existe recarga intermedia en el flujo vigente.
+- Entrada y saldo final se corrigen agregando una nueva versión que referencia la anterior. Ningún registro previo se actualiza o elimina, y la diferencia entre ambas mediciones no se etiqueta como pérdida ni consumo.
+- Auditoría permite seleccionar línea, cargamento y barrida para completar o corregir las mismas mediciones después del cierre, únicamente con Modo Jefe de Planta activo. El oro no se solicita, guarda ni muestra en desktop.
+- Cada par de mediciones se vincula con una barrida concreta. El resumen solo considera completa una barrida cuando las tres rastras tienen entrada y saldo final no pendientes; `0,00` cuenta como medición válida y vacío continúa pendiente.
+- La escritura exige sesión protegida vigente y elevación activa, conserva perfil y momentos, comparte la secuencia monotónica de estación y queda preparada para incorporarse al outbox en 4.11 sin descontar inventario en este paso.
+
+**Pausa cumplida el 2026-10-08:** la validación manual confirmó selección de barridas, tres rastras, enteros/decimales, cero, pendiente, rechazo de negativos, corrección posterior desde Auditoría, persistencia tras reinicio y ausencia de oro en desktop. El selector vacío de Estación se corrigió eliminando la suposición visual de que todos los catálogos exponen una propiedad `Name`; ahora presenta correctamente `Description` y comparte el acabado del selector de Auditoría.
+
+**Decisión confirmada 2026-10-08:** cada barrida conserva únicamente mercurio de entrada y saldo final para Rastra 1, Rastra 2 y Rastra 3. No existe recarga en el flujo vigente. La migración local 15 y PostgreSQL amplían el modelo sin eliminar registros históricos. En cada tarjeta de operación se muestran simultáneamente la próxima revisión de mercurio y la próxima barrida —o `Barrida pendiente`— para que una alerta no oculte a la otra.
+
+**Refinamiento de cierre 2026-10-08:** la auditoría de cargamentos finalizados abre por defecto la semana actual según la fecha de cierre en Costa Rica. Permite navegar periodos, elegir semana, consultar un día específico o mostrar todo el historial; conserva la selección por línea y no modifica datos operativos.
+
+**Estado:** 4.7 cerrado funcional y técnicamente. No iniciar 4.8 sin una nueva autorización.
 
 ### 4.8 Oro parcial y definitivo
 

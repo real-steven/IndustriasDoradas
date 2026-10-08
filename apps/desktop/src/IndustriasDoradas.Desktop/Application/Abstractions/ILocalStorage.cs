@@ -25,6 +25,16 @@ public sealed record CachedProductionLine(
     bool IsActive,
     DateTimeOffset UpdatedAt);
 
+public sealed record CachedLineComponent(
+    Guid Id,
+    Guid OrganizationId,
+    Guid LineId,
+    string Code,
+    string Name,
+    int DisplayOrder,
+    bool IsActive,
+    DateTimeOffset UpdatedAt);
+
 public sealed record CachedShipment(
     Guid Id,
     Guid OrganizationId,
@@ -155,6 +165,50 @@ public sealed record LocalSweepRegistration(
     int CumulativeSweptTotal,
     bool WasDuplicate);
 
+public enum MercuryMovementKind
+{
+    InitialLoad,
+    Reload,
+    Recovery,
+    SweepInput,
+    SweepRemainder,
+}
+
+public sealed record LocalMercurySweepTarget(
+    Guid Id,
+    Guid ShipmentId,
+    int CajuelaCount,
+    DateTimeOffset SweptAt,
+    bool IsFinal);
+
+public sealed record RecordLocalMercuryMovement(
+    Guid Id,
+    Guid StationId,
+    Guid ShipmentId,
+    Guid LineComponentId,
+    Guid? SweepId,
+    MercuryMovementKind Kind,
+    decimal? AmountGrams,
+    Guid RecordedByProfileId,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset RecordedAt,
+    bool ReplaceCurrent,
+    string? Notes = null);
+
+public sealed record LocalMercuryMovement(
+    Guid Id,
+    Guid ShipmentId,
+    Guid LineId,
+    Guid LineComponentId,
+    Guid? SweepId,
+    MercuryMovementKind Kind,
+    decimal? AmountGrams,
+    Guid RecordedByProfileId,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset RecordedAt,
+    Guid? SupersedesMovementId,
+    string? Notes);
+
 public sealed record LocalResponsibilityAudit(
     Guid WorkerId,
     string WorkerName,
@@ -201,7 +255,8 @@ public sealed record LocalOperationDashboardSnapshot(
     int PendingOutboxCount,
     int FailedReviewOutboxCount = 0,
     int SyncedOutboxCount = 0,
-    int LastSweepCumulativeTotal = 0)
+    int LastSweepCumulativeTotal = 0,
+    int SweepCount = 0)
 {
     public bool IsReady => Session?.Status == LineFeedCycleStatus.Active;
 }
@@ -359,6 +414,30 @@ public interface ILocalProductionSweepRepository
 
     Task<LocalSweepRegistration> RecordAsync(
         ProductionSweep sweep,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalMercuryRepository
+{
+    Task<IReadOnlyList<CachedLineComponent>> ListRastrasAsync(
+        Guid organizationId,
+        Guid lineId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<CachedLineComponent>> ListRastrasForShipmentAsync(
+        Guid shipmentId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LocalMercurySweepTarget>> ListSweepsAsync(
+        Guid shipmentId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LocalMercuryMovement>> ListCurrentAsync(
+        Guid shipmentId,
+        CancellationToken cancellationToken = default);
+
+    Task<LocalMercuryMovement> RecordAsync(
+        RecordLocalMercuryMovement movement,
         CancellationToken cancellationToken = default);
 }
 

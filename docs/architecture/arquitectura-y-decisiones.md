@@ -234,10 +234,10 @@ en
   correcciones, custodia y entregas de oro, y puede delegar capacidades
   específicas a `ADMINISTRADOR`. La autorización se evalúa por acción y puede
   revocarse; ninguna cantidad de oro se replica en vistas o SQLite de desktop.
-- **Mercurio operativo por rastra:** desktop registra cargas, recargas y
-  recuperaciones en gramos por rastra, línea y cargamento. Rastra es equipo físico
-  y no equivale a barrida; una recuperación puede relacionarse con la barrida que
-  cerró ese tramo. Las correcciones son aditivas y auditadas.
+- **Mercurio operativo por rastra:** desktop registra por cada barrida cuánto
+  mercurio entró y cuánto quedó al final en Rastra 1, Rastra 2 y Rastra 3. No
+  registra recargas intermedias. Rastra es equipo físico y no equivale a barrida;
+  las correcciones crean nuevas versiones auditadas.
 - **Administración granular:** `ADMINISTRADOR` combina permisos base mínimos con
   concesiones individuales vigentes. Jefe de empresa crea la cuenta y selecciona
   sus permisos; una revocación se consulta en cada solicitud y surte efecto sin

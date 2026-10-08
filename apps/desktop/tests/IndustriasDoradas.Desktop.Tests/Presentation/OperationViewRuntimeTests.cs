@@ -24,6 +24,7 @@ public sealed class OperationViewRuntimeTests
             StateLabel = "ACTIVA",
             IsReady = true,
             Total = 50,
+            SweepCount = 1,
         };
         var milestoneService = new ProductionMilestoneService();
         line.ApplyMilestones(
@@ -50,6 +51,29 @@ public sealed class OperationViewRuntimeTests
 
         AssertCanRender(new HomeView());
         AssertCanRender(new DiagnosticsView());
+        var login = new LoginView
+        {
+            DataContext = new
+            {
+                LoginSessionColor = "#62D78B",
+                LoginSessionTitle = "Sesión abierta · lista para continuar",
+                LoginSessionDescription = "Presione Abrir sesión para entrar al sistema.",
+                LoginPrompt = "Encontramos una sesión protegida vigente.",
+                LoginActionLabel = "ABRIR SESIÓN  →",
+                NeedsCredentials = true,
+                CanInteract = true,
+                Status = "Sesión protegida restaurada.",
+            },
+        };
+        AssertCanRender(login);
+        TextBox loginEmail = FindVisualChildren<TextBox>(login).Single();
+        PasswordBox loginPassword = FindVisualChildren<PasswordBox>(login).Single();
+        loginEmail.Text = "jefe@planta.test";
+        loginPassword.Password = "12345678";
+        Assert.IsTrue(loginEmail.IsEnabled);
+        Assert.IsTrue(loginPassword.IsEnabled);
+        Assert.AreEqual("jefe@planta.test", loginEmail.Text);
+        Assert.AreEqual("12345678", loginPassword.Password);
         AssertCanRender(new AuditView { DataContext = AuditViewSmokeContext.Operation() });
         AssertCanRender(new AuditView { DataContext = AuditViewSmokeContext.Corrections() });
         AssertCanRender(new SettingsView());
@@ -87,10 +111,11 @@ public sealed class OperationViewRuntimeTests
         AssertCanRender(station);
 
         ComboBox[] selectors = FindVisualChildren<ComboBox>(station).ToArray();
-        Assert.HasCount(3, selectors);
+        Assert.IsTrue(selectors.Length >= 4);
         Assert.AreEqual("Línea visible", SelectionText(selectors[0]));
         Assert.AreEqual("Proveedor visible", SelectionText(selectors[1]));
         Assert.AreEqual("Responsable visible", SelectionText(selectors[2]));
+        Assert.AreEqual("Barrida 1 · 50 cajuelas", SelectionText(selectors[3]));
     }
 
     private static void EnsureApplicationResources()
@@ -111,7 +136,16 @@ public sealed class OperationViewRuntimeTests
     private static string? SelectionText(ComboBox comboBox)
     {
         comboBox.ApplyTemplate();
-        return (comboBox.Template.FindName("SelectionText", comboBox) as TextBlock)?.Text;
+        ContentPresenter? presenter = comboBox.Template.FindName(
+            "SelectionContent",
+            comboBox) as ContentPresenter;
+        presenter?.ApplyTemplate();
+        string? rendered = presenter is null
+            ? null
+            : FindVisualChildren<TextBlock>(presenter).FirstOrDefault()?.Text;
+        if (!string.IsNullOrWhiteSpace(rendered)) return rendered;
+        object? selected = comboBox.SelectedItem;
+        return selected?.GetType().GetProperty(comboBox.DisplayMemberPath)?.GetValue(selected)?.ToString();
     }
 
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent)
@@ -160,6 +194,16 @@ public sealed class OperationViewRuntimeTests
                 "260 cajuelas · 1 barrida · 1 corrección",
                 [new AuditResponsibilityItemViewModel("Responsable visible", "02:00 → 04:00")]);
             CompletedShipments = [SelectedShipment];
+            SelectedLine = new AuditLineFilterViewModel(
+                source.LineId,
+                source.LineName,
+                "#8959DD",
+                1)
+            {
+                IsSelected = true,
+            };
+            ShipmentLines = [SelectedLine];
+            VisibleCompletedShipments = CompletedShipments;
             CajuelaCorrections =
             [
                 new AuditCorrectionItemViewModel(
@@ -182,6 +226,7 @@ public sealed class OperationViewRuntimeTests
             IsAccessCategory = false;
             IsAdministrationCategory = false;
             HasCompletedShipments = true;
+            HasSelectedLine = true;
             HasSelectedShipment = true;
             CanViewSensitiveAudit = true;
             Status = "Registros cargados.";
@@ -194,16 +239,46 @@ public sealed class OperationViewRuntimeTests
         public bool IsAccessCategory { get; }
         public bool IsAdministrationCategory { get; }
         public bool HasCompletedShipments { get; }
+        public bool HasSelectedLine { get; }
         public bool HasSelectedShipment { get; }
         public bool CanViewSensitiveAudit { get; }
         public string Status { get; }
         public IReadOnlyList<AuditShipmentItemViewModel> CompletedShipments { get; }
+        public IReadOnlyList<AuditLineFilterViewModel> ShipmentLines { get; }
+        public IReadOnlyList<AuditShipmentItemViewModel> VisibleCompletedShipments { get; }
+        public AuditLineFilterViewModel SelectedLine { get; }
         public AuditShipmentItemViewModel SelectedShipment { get; }
         public IReadOnlyList<AuditCorrectionItemViewModel> CajuelaCorrections { get; }
     }
 
     private sealed class StationViewSmokeContext
     {
+        private readonly MercuryMovementOption initialLoad = new(
+            MercuryMovementKind.InitialLoad,
+            "Carga inicial",
+            "Carga de prueba");
+        private readonly MercurySweepOption sweep = new(
+            new LocalMercurySweepTarget(
+                Guid.NewGuid(), Guid.NewGuid(), 50, DateTimeOffset.UtcNow, false),
+            "Barrida 1 · 50 cajuelas");
+
+        public StationViewSmokeContext()
+        {
+            SelectedMercuryMovement = initialLoad;
+            MercuryMovementOptions = [initialLoad];
+            SelectedMercurySweep = sweep;
+            MercurySweeps = [sweep];
+            MercuryRastras =
+            [
+                new MercuryRastraEntryViewModel(new CachedLineComponent(
+                    Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "RASTRA_1", "Rastra 1",
+                    1, true, DateTimeOffset.UtcNow)),
+            ];
+            IsSelectedLineActive = true;
+            CanRecordMercury = true;
+            MercuryStatus = "Mercurio disponible.";
+        }
+
         public string Draft { get; set; } = string.Empty;
         public IReadOnlyList<CachedProductionLine> Lines { get; init; } = [];
         public CachedProductionLine? SelectedLine { get; set; }
@@ -212,5 +287,13 @@ public sealed class OperationViewRuntimeTests
         public IReadOnlyList<CachedWorker> Workers { get; init; } = [];
         public CachedWorker? SelectedWorker { get; set; }
         public IReadOnlyList<StationLineStatus> LineStatuses { get; init; } = [];
+        public bool IsSelectedLineActive { get; }
+        public bool CanRecordMercury { get; }
+        public MercuryMovementOption SelectedMercuryMovement { get; set; }
+        public IReadOnlyList<MercuryMovementOption> MercuryMovementOptions { get; }
+        public MercurySweepOption SelectedMercurySweep { get; set; }
+        public IReadOnlyList<MercurySweepOption> MercurySweeps { get; }
+        public IReadOnlyList<MercuryRastraEntryViewModel> MercuryRastras { get; }
+        public string MercuryStatus { get; }
     }
 }

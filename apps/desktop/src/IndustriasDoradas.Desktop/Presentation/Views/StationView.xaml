@@ -23,8 +23,12 @@
                     <ControlTemplate TargetType="ComboBoxItem">
                         <Border x:Name="OptionChrome" Margin="4,2" Padding="{TemplateBinding Padding}"
                                 Background="Transparent" CornerRadius="7">
-                            <TextBlock Text="{Binding Content.Name, RelativeSource={RelativeSource TemplatedParent}}"
-                                       TextTrimming="CharacterEllipsis" />
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                              VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
@@ -61,10 +65,13 @@
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="10">
                                 <Grid>
-                                    <TextBlock x:Name="SelectionText" Margin="13,0,46,0"
-                                               HorizontalAlignment="Left" VerticalAlignment="Center"
-                                               Text="{Binding SelectedItem.Name, RelativeSource={RelativeSource TemplatedParent}}"
-                                               TextTrimming="CharacterEllipsis" IsHitTestVisible="False" />
+                                    <ContentPresenter x:Name="SelectionContent" Margin="13,0,46,0"
+                                                      HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}"
+                                                      IsHitTestVisible="False" />
                                     <Border Width="38" Margin="0,5,5,5" HorizontalAlignment="Right"
                                             Background="#EDF4F7" CornerRadius="7">
                                         <Path Width="10" Height="6" HorizontalAlignment="Center"
@@ -365,6 +372,84 @@
                                     Style="{StaticResource WarningAlertStyle}">
                                 <TextBlock AutomationProperties.LiveSetting="Polite"
                                            Text="{Binding PreparationSummary}" TextWrapping="Wrap" />
+                            </Border>
+
+                            <Border Margin="0,16,0,0" Padding="16" Background="#F7F9FA"
+                                    BorderBrush="{StaticResource SoftBorderBrush}" BorderThickness="1"
+                                    CornerRadius="13"
+                                    Visibility="{Binding IsSelectedLineActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontSize="16" FontWeight="Bold" Text="Mercurio por rastra" />
+                                            <TextBlock Margin="0,3,0,0" Foreground="{StaticResource MutedBrush}"
+                                                       FontSize="11" Text="Por cada barrida: cuánto entró y cuánto quedó al final. No incluye oro." />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" MinHeight="0" Padding="10,6"
+                                                Command="{Binding RefreshMercuryCommand}"
+                                                Content="↻ ACTUALIZAR" />
+                                    </Grid>
+                                    <Grid Margin="0,13,0,0">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource FieldLabel}" Text="BARRIDA" />
+                                            <ComboBox Style="{StaticResource StationComboBoxStyle}"
+                                                      DisplayMemberPath="Description"
+                                                      ItemsSource="{Binding MercurySweeps}"
+                                                      SelectedItem="{Binding SelectedMercurySweep}"
+                                                      IsEnabled="{Binding CanRecordMercury}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <ItemsControl Margin="-5,12,-5,0" ItemsSource="{Binding MercuryRastras}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="5" Padding="11" Background="White"
+                                                        BorderBrush="{StaticResource SoftBorderBrush}"
+                                                        BorderThickness="1" CornerRadius="10">
+                                                    <StackPanel>
+                                                        <TextBlock FontWeight="Bold" Text="{Binding Name}" />
+                                                        <Grid Margin="0,7,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="8" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock Style="{StaticResource FieldLabel}" Text="ENTRÓ (g)" />
+                                                                <TextBox MinHeight="38" Padding="9,7"
+                                                                         Text="{Binding InputAmountText, UpdateSourceTrigger=PropertyChanged}"
+                                                                         IsEnabled="{Binding DataContext.CanRecordMercury, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                         AutomationProperties.Name="Mercurio que entró en gramos" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="2">
+                                                                <TextBlock Style="{StaticResource FieldLabel}" Text="QUEDÓ AL FINAL (g)" />
+                                                                <TextBox MinHeight="38" Padding="9,7"
+                                                                         Text="{Binding RemainderAmountText, UpdateSourceTrigger=PropertyChanged}"
+                                                                         IsEnabled="{Binding DataContext.CanRecordMercury, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                         AutomationProperties.Name="Mercurio que quedó al final en gramos" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <TextBlock Margin="0,6,0,0" Foreground="{StaticResource MutedBrush}"
+                                                                   FontSize="9" Text="{Binding CurrentDescription}"
+                                                                   TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource MutedBrush}"
+                                               FontSize="10" Text="{Binding MercuryStatus}" TextWrapping="Wrap" />
+                                    <Button Margin="0,11,0,0" HorizontalAlignment="Left"
+                                            Command="{Binding RecordMercuryCommand}"
+                                            IsEnabled="{Binding CanRecordMercury}"
+                                            Content="🔒  GUARDAR MEDICIONES" />
+                                </StackPanel>
                             </Border>
 
                             <Grid Margin="0,18,0,0">

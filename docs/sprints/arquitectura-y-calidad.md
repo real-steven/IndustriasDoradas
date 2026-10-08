@@ -25,7 +25,7 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
   distintos.
 - La alerta de barrida es configurable, inicialmente cada 50 cajuelas, visible/sonora en los intervalos 50–55, 100–105, etc.; no bloquea producción.
 - Una barrida real puede incluir menos, exactamente o más de 50 cajuelas y siempre existe una barrida final al terminar el cargamento.
-- Desktop registra cargas, recargas y recuperación de mercurio por rastra; `JEFE_EMPRESA` o un administrador expresamente autorizado registra oro por barrida desde web y el definitivo del cargamento es la suma de esos resultados.
+- Desktop registra entrada y saldo final de mercurio por cada una de las tres rastras y por barrida, sin recargas intermedias; `JEFE_EMPRESA` o un administrador expresamente autorizado registra oro por barrida desde web y el definitivo del cargamento es la suma de esos resultados.
 - Interfaz y reportes web soportan español/inglés con preferencia por cuenta.
 - Jefe de empresa consulta/exporta y actúa como superadministrador; cada administrador modifica o consulta solo según concesiones; jefe de planta abre la estación y eleva permisos; Modo Operación compartido registra cajuelas y asistencia sin cuenta de operario.
 - La cuenta `JEFE_EMPRESA` es única y presenta Administración como módulo separado dentro de la misma sesión.

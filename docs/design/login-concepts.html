@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Propuestas de login · Industrias Doradas</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --navy: #173b50;
+        --navy-2: #24556f;
+        --ink: #172026;
+        --muted: #6f828f;
+        --line: #dce6ea;
+        --canvas: #eef2f3;
+        --gold: #c89024;
+        --gold-soft: #fbf0d5;
+        --success: #1f9d55;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(
+            circle at 12% 8%,
+            rgba(200, 144, 36, 0.13),
+            transparent 22rem
+          ),
+          linear-gradient(145deg, #f8fafb, #e8eef0);
+        color: var(--ink);
+        font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .page {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 30px 0 48px;
+      }
+
+      .intro {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #2f7ea4;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(26px, 3vw, 40px);
+        letter-spacing: -0.04em;
+      }
+
+      .intro p:last-child {
+        max-width: 670px;
+        margin: 10px 0 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin: 26px 0 22px;
+      }
+
+      .tab {
+        min-height: 44px;
+        padding: 0 17px;
+        border: 1px solid #cddbe1;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.76);
+        color: #4d6573;
+        cursor: pointer;
+        font-weight: 750;
+        transition: 160ms ease;
+      }
+
+      .tab:hover {
+        border-color: #9fbfcd;
+        color: var(--navy);
+        transform: translateY(-1px);
+      }
+
+      .tab.active {
+        border-color: var(--navy);
+        background: var(--navy);
+        color: white;
+        box-shadow: 0 8px 22px rgba(23, 59, 80, 0.2);
+      }
+
+      .stage {
+        display: grid;
+        min-height: 780px;
+        place-items: center;
+        padding: 34px;
+        overflow: hidden;
+        border: 1px solid #d7e1e5;
+        border-radius: 28px;
+        background:
+          linear-gradient(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.55)),
+          repeating-linear-gradient(135deg, #edf2f3 0 14px, #e9eff1 14px 28px);
+        box-shadow: 0 18px 50px rgba(23, 59, 80, 0.1);
+      }
+
+      .concept {
+        display: none;
+        width: 100%;
+        animation: enter 220ms ease-out;
+      }
+
+      .concept.active {
+        display: grid;
+        place-items: center;
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(8px) scale(0.99);
+        }
+      }
+
+      .window {
+        overflow: hidden;
+        border: 1px solid #d4e0e5;
+        background: white;
+        box-shadow: 0 26px 70px rgba(23, 59, 80, 0.18);
+      }
+
+      .titlebar {
+        display: flex;
+        height: 34px;
+        align-items: center;
+        justify-content: space-between;
+        padding-left: 12px;
+        border-bottom: 1px solid #e7edef;
+        background: #fbfcfc;
+        color: #465d69;
+        font-size: 11px;
+      }
+
+      .title-left {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .mini-logo {
+        width: 17px;
+        height: 17px;
+        border-radius: 5px;
+      }
+
+      .window-actions {
+        display: flex;
+        height: 100%;
+      }
+
+      .window-actions span {
+        display: grid;
+        width: 42px;
+        place-items: center;
+        color: #536974;
+      }
+
+      .window-actions span:last-child:hover {
+        background: #c42b1c;
+        color: white;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+      }
+
+      .brand img {
+        width: 50px;
+        height: 50px;
+        border-radius: 15px;
+        object-fit: cover;
+      }
+
+      .brand strong {
+        display: block;
+        color: var(--navy);
+        font-size: 18px;
+        letter-spacing: 0.01em;
+      }
+
+      .brand small {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+      }
+
+      .login-title {
+        margin: 0;
+        color: var(--ink);
+        font-size: 30px;
+        letter-spacing: -0.035em;
+      }
+
+      .lead {
+        margin: 9px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .field {
+        display: grid;
+        gap: 7px;
+        margin-top: 17px;
+      }
+
+      .field label {
+        color: #334b58;
+        font-size: 10px;
+        font-weight: 850;
+        letter-spacing: 0.06em;
+      }
+
+      .control {
+        display: flex;
+        height: 48px;
+        align-items: center;
+        gap: 10px;
+        padding: 0 13px;
+        border: 1px solid #cbd8de;
+        border-radius: 10px;
+        background: white;
+        transition: 140ms ease;
+      }
+
+      .control:focus-within {
+        border-color: #3b8db4;
+        box-shadow: 0 0 0 3px rgba(53, 173, 221, 0.13);
+      }
+
+      .control svg {
+        width: 17px;
+        color: #78909c;
+      }
+
+      .control input {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--ink);
+        font-size: 13px;
+      }
+
+      .form-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 13px;
+        color: #536a76;
+        font-size: 11px;
+      }
+
+      .remember {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .remember input {
+        accent-color: var(--navy);
+      }
+
+      .link {
+        border: 0;
+        background: none;
+        color: #2479a1;
+        cursor: pointer;
+        font-size: 11px;
+      }
+
+      .primary {
+        width: 100%;
+        min-height: 50px;
+        margin-top: 20px;
+        border: 0;
+        border-radius: 11px;
+        background: var(--navy);
+        color: white;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        box-shadow: 0 9px 18px rgba(23, 59, 80, 0.16);
+        transition: 150ms ease;
+      }
+
+      .primary:hover {
+        background: var(--navy-2);
+        transform: translateY(-1px);
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 19px;
+        padding: 12px 13px;
+        border-radius: 10px;
+        background: #f4f8f9;
+        color: #4d6571;
+        font-size: 11px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        flex: none;
+        border-radius: 999px;
+        background: var(--success);
+        box-shadow: 0 0 0 4px rgba(31, 157, 85, 0.1);
+      }
+
+      .secure {
+        margin-top: 17px;
+        color: #80939e;
+        font-size: 10px;
+        text-align: center;
+      }
+
+      /* Concepto 1 */
+      .minimal-window {
+        width: 526px;
+        border-radius: 18px;
+      }
+
+      .minimal-body {
+        position: relative;
+        padding: 38px 48px 34px;
+      }
+
+      .minimal-body::before {
+        position: absolute;
+        top: 0;
+        right: 46px;
+        left: 46px;
+        height: 4px;
+        border-radius: 0 0 6px 6px;
+        background: linear-gradient(90deg, #f7c843, #b66b12);
+        content: "";
+      }
+
+      .minimal-body .brand {
+        justify-content: center;
+      }
+
+      .minimal-heading {
+        margin-top: 29px;
+        text-align: center;
+      }
+
+      .secure-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 8px;
+        color: #2f7ea4;
+        font-size: 10px;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+      }
+
+      /* Concepto 2 */
+      .split-window {
+        width: 800px;
+        border-radius: 19px;
+      }
+
+      .split-body {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        min-height: 570px;
+      }
+
+      .split-brand {
+        position: relative;
+        display: flex;
+        overflow: hidden;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 38px 32px;
+        background: linear-gradient(155deg, #14384c, #245a73);
+        color: white;
+      }
+
+      .split-brand::after {
+        position: absolute;
+        right: -90px;
+        bottom: -100px;
+        width: 270px;
+        height: 270px;
+        border: 34px solid rgba(255, 255, 255, 0.06);
+        border-radius: 50%;
+        content: "";
+      }
+
+      .split-brand .brand strong,
+      .split-brand .brand small {
+        color: white;
+      }
+
+      .split-copy {
+        position: relative;
+        z-index: 1;
+      }
+
+      .split-copy h2 {
+        max-width: 220px;
+        margin: 0 0 12px;
+        font-size: 29px;
+        line-height: 1.08;
+        letter-spacing: -0.04em;
+      }
+
+      .split-copy p {
+        color: #d3e3ea;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .station-pill {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 11px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.07);
+        color: #e7f3f7;
+        font-size: 11px;
+      }
+
+      .station-pill .dot {
+        background: #66d68f;
+      }
+
+      .split-form {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 46px 50px;
+      }
+
+      .split-form .eyebrow {
+        margin-bottom: 7px;
+        font-size: 10px;
+      }
+
+      /* Concepto 3 */
+      .header-window {
+        width: 565px;
+        border-radius: 20px;
+      }
+
+      .header-hero {
+        position: relative;
+        overflow: hidden;
+        padding: 28px 38px 30px;
+        background: linear-gradient(120deg, #fff9e9, #fff 58%);
+        border-bottom: 1px solid #eadcb9;
+      }
+
+      .header-hero::after {
+        position: absolute;
+        top: -74px;
+        right: -40px;
+        width: 220px;
+        height: 220px;
+        border: 28px solid rgba(200, 144, 36, 0.08);
+        border-radius: 50%;
+        content: "";
+      }
+
+      .header-hero .brand,
+      .header-hero h2,
+      .header-hero p {
+        position: relative;
+        z-index: 1;
+      }
+
+      .header-hero h2 {
+        margin: 25px 0 0;
+        font-size: 27px;
+        letter-spacing: -0.035em;
+      }
+
+      .header-hero p {
+        max-width: 390px;
+        margin: 7px 0 0;
+        color: #687d88;
+        font-size: 12px;
+      }
+
+      .header-form {
+        padding: 27px 38px 32px;
+      }
+
+      .access-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 14px;
+        align-items: end;
+      }
+
+      .access-chip {
+        display: flex;
+        height: 48px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 13px;
+        border: 1px solid #e4d4a9;
+        border-radius: 10px;
+        background: #fffaf0;
+        color: #7d5c17;
+        font-size: 10px;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+
+      .design-note {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .note {
+        display: none;
+        padding: 15px 17px;
+        border: 1px solid #d7e2e6;
+        border-radius: 13px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #526a76;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .note.active {
+        display: block;
+        grid-column: 1 / -1;
+      }
+
+      .note strong {
+        color: var(--navy);
+      }
+
+      @media (max-width: 860px) {
+        .stage {
+          min-height: auto;
+          padding: 18px;
+        }
+
+        .window {
+          max-width: 100%;
+        }
+
+        .split-body {
+          grid-template-columns: 1fr;
+        }
+
+        .split-brand {
+          min-height: 230px;
+        }
+
+        .split-form {
+          padding: 34px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Exploración visual · Desktop</p>
+          <h1>Tres propuestas para el inicio de sesión</h1>
+          <p>
+            Los tres conceptos conservan el flujo actual: correo recordado,
+            contraseña, recuperación y estado de la estación. Cambia únicamente
+            la presentación.
+          </p>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="Seleccionar propuesta">
+        <button class="tab active" data-target="minimal">
+          1 · Minimalista premium
+        </button>
+        <button class="tab" data-target="split">2 · Industrial dividido</button>
+        <button class="tab" data-target="header">3 · Encabezado dorado</button>
+      </nav>
+
+      <section class="stage">
+        <article class="concept active" id="minimal">
+          <div class="window minimal-window">
+            <div class="titlebar">
+              <div class="title-left">
+                <img
+                  class="mini-logo"
+                  src="../../apps/desktop/src/IndustriasDoradas.Desktop/Assets/logo-industrias-doradas.png"
+                  alt=""
+                />
+                <span>Industrias Doradas</span>
+              </div>
+              <div class="window-actions">
+                <span>—</span><span>□</span><span>×</span>
+              </div>
+            </div>
+            <div class="minimal-body">
+              <div class="brand">
+                <img
+                  src="../../apps/desktop/src/IndustriasDoradas.Desktop/Assets/logo-industrias-doradas.png"
+                  alt="Logo"
+                />
+                <div>
+                  <strong>INDUSTRIAS DORADAS</strong
+                  ><small>Sistema de planta</small>
+                </div>
+              </div>
+              <div class="minimal-heading">
+                <div class="secure-badge">◆ INICIO SEGURO</div>
+                <h2 class="login-title">Abrir estación</h2>
+                <p class="lead">
+                  Identifíquese como jefe de planta para habilitar la operación
+                  diaria.
+                </p>
+              </div>
+              <div class="field">
+                <label>CORREO</label>
+                <div class="control">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  >
+                    <path d="M3 6h18v12H3z" />
+                    <path d="m3 7 9 6 9-6" />
+                  </svg>
+                  <input value="planta.dev@example.com" aria-label="Correo" />
+                </div>
+              </div>
+              <div class="field">
+                <label>CONTRASEÑA</label>
+                <div class="control">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  >
+                    <rect x="5" y="10" width="14" height="10" rx="2" />
+                    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                  </svg>
+                  <input
+                    type="password"
+                    value="12345678"
+                    aria-label="Contraseña"
+                  />
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="remember"
+                  ><input type="checkbox" checked /> Recordar este correo</label
+                >
+                <button class="link">Recuperar contraseña</button>
+              </div>
+              <button class="primary">ABRIR ESTACIÓN</button>
+              <div class="status">
+                <span class="dot"></span> Estación disponible para iniciar
+                sesión.
+              </div>
+              <div class="secure">
+                Autenticación protegida · Supabase Auth mediante API
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="concept" id="split">
+          <div class="window split-window">
+            <div class="titlebar">
+              <div class="title-left">
+                <img
+                  class="mini-logo"
+                  src="../../apps/desktop/src/IndustriasDoradas.Desktop/Assets/logo-industrias-doradas.png"
+                  alt=""
+                />
+                <span>Industrias Doradas</span>
+              </div>
+              <div class="window-actions">
+                <span>—</span><span>□</span><span>×</span>
+              </div>
+            </div>
+            <div class="split-body">
+              <aside class="split-brand">
+                <div class="brand">
+                  <img
+                    src="../../apps/desktop/src/IndustriasDoradas.Desktop/Assets/logo-industrias-doradas.png"
+                    alt="Logo"
+                  />
+                  <div>
+                    <strong>INDUSTRIAS<br />DORADAS</strong
+                    ><small>Sistema de planta</small>
+                  </div>
+                </div>
+                <div class="split-copy">
+                  <p class="eyebrow" style="color: #f0c45f">
+                    ESTACIÓN DE PLANTA
+                  </p>
+                  <h2>Operación lista para comenzar.</h2>
+                  <p>
+                    Un único acceso abre la estación para los operarios y
+                    mantiene la actividad protegida.
+                  </p>
+                </div>
+                <div class="station-pill">
+                  <span class="dot"></span> Catálogo local disponible
+                </div>
+              </aside>
+              <section class="split-form">
+                <p class="eyebrow">ACCESO PROTEGIDO</p>
+                <h2 class="login-title">Bienvenido</h2>
+                <p class="lead">
+                  Ingrese sus credenciales de jefe de planta para abrir la
+                  estación.
+                </p>
+                <div class="field">
+                  <label>CORREO</label>
+                  <div class="control">
+                    <input value="planta.dev@example.com" aria-label="Correo" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>CONTRASEÑA</label>
+                  <div class="control">
+                    <input
+                      type="password"
+                      value="12345678"
+                      aria-label="Contraseña"
+                    />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <label class="remember"
+                    ><input type="checkbox" checked /> Recordar correo</label
+                  >
+                  <button class="link">¿Olvidó su contraseña?</button>
+                </div>
+                <button class="primary">ABRIR ESTACIÓN →</button>
+                <div class="secure">🔒 Sesión protegida y auditable</div>
+              </section>
+            </div>
+          </div>
+        </article>
+
+        <article class="concept" id="header">
+          <div class="window header-window">
+            <div class="titlebar">
+              <div class="title-left">
+                <img
+                  class="mini-logo"
+                  src="../../apps/desktop/src/IndustriasDoradas.Desktop/Assets/logo-industrias-doradas.png"
+                  alt=""
+                />
+                <span>Industrias Doradas</span>
+              </div>
+              <div class="window-actions">
+                <span>—</span><span>□</span><span>×</span>
+              </div>
+            </div>
+            <header class="header-hero">
+              <div class="brand">
+                <img
+                  src="../../apps/desktop/src/IndustriasDoradas.Desktop/Assets/logo-industrias-doradas.png"
+                  alt="Logo"
+                />
+                <div>
+                  <strong>INDUSTRIAS DORADAS</strong
+                  ><small>Control de producción</small>
+                </div>
+              </div>
+              <h2>Abrir estación de planta</h2>
+              <p>
+                Inicie la jornada y deje el sistema preparado para el equipo de
+                operación.
+              </p>
+            </header>
+            <section class="header-form">
+              <div class="access-row">
+                <div class="field" style="margin-top: 0">
+                  <label>CORREO DEL JEFE DE PLANTA</label>
+                  <div class="control">
+                    <input value="planta.dev@example.com" aria-label="Correo" />
+                  </div>
+                </div>
+                <div class="access-chip">● DISPONIBLE</div>
+              </div>
+              <div class="field">
+                <label>CONTRASEÑA</label>
+                <div class="control">
+                  <input
+                    type="password"
+                    value="12345678"
+                    aria-label="Contraseña"
+                  />
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="remember"
+                  ><input type="checkbox" checked /> Recordar este correo en el
+                  equipo</label
+                >
+              </div>
+              <button class="primary">ABRIR ESTACIÓN</button>
+              <div class="form-row" style="justify-content: center">
+                <button class="link">RECUPERAR CONTRASEÑA</button>
+              </div>
+              <div class="status">
+                <span class="dot"></span> Conexión y datos locales disponibles.
+              </div>
+            </section>
+          </div>
+        </article>
+      </section>
+
+      <section class="design-note">
+        <div class="note active" data-note="minimal">
+          <strong>Propuesta 1:</strong> evolución directa del login actual.
+          Mantiene la card pequeña, agrega jerarquía, iconos discretos y un
+          acento dorado sin volverla recargada.
+        </div>
+        <div class="note" data-note="split">
+          <strong>Propuesta 2:</strong> la más distintiva. Separa marca y
+          formulario, se siente más industrial y aprovecha mejor una ventana
+          horizontal compacta.
+        </div>
+        <div class="note" data-note="header">
+          <strong>Propuesta 3:</strong> equilibrio entre las anteriores. Usa un
+          encabezado dorado suave, estado visible y un formulario limpio debajo.
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const tabs = [...document.querySelectorAll(".tab")];
+      const concepts = [...document.querySelectorAll(".concept")];
+      const notes = [...document.querySelectorAll(".note")];
+
+      for (const tab of tabs) {
+        tab.addEventListener("click", () => {
+          const target = tab.dataset.target;
+          tabs.forEach((item) => item.classList.toggle("active", item === tab));
+          concepts.forEach((item) =>
+            item.classList.toggle("active", item.id === target),
+          );
+          notes.forEach((item) =>
+            item.classList.toggle("active", item.dataset.note === target),
+          );
+        });
+      }
+    </script>
+  </body>
+</html>

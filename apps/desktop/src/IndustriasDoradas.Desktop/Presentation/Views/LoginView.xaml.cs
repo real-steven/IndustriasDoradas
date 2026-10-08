@@ -31,6 +31,12 @@ public partial class LoginView : UserControl
     private async void OnSignIn(object sender, RoutedEventArgs e)
     {
         if (ViewModel is null) return;
+        if (ViewModel.HasRestorableSession && string.IsNullOrWhiteSpace(PasswordBox.Password))
+        {
+            ViewModel.EnterRestoredSession();
+            return;
+        }
+
         await ViewModel.SignInAsync(EmailBox.Text, PasswordBox.Password);
         PasswordBox.Clear();
         if (ViewModel.IsStationOpen)

@@ -139,6 +139,8 @@ biometría, producción ni asistencia. La migración remota de desarrollo es
 
 **Pausa:** probar credenciales válidas/inválidas, token vencido, reinicio, offline permitido y revocación.
 
+**Refinamiento desktop 2026-10-08:** el login adopta una composición dividida y presenta el estado real de restauración con indicador amarillo, verde o rojo. Encontrar una sesión protegida no abre la interfaz de forma silenciosa: muestra `Abrir sesión` y permite continuar sin contraseña. Cuando la sesión no existe, fue cerrada o dejó de ser válida, se habilitan las credenciales y se explica el estado al usuario.
+
 ### 1.9 Login y administración web
 
 **Estado:** ejecutado el 2026-08-19 y revisado el 2026-08-20. React usa Supabase Auth con clave

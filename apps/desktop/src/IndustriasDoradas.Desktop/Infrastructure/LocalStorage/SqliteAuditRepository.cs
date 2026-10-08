@@ -36,13 +36,53 @@ public sealed class SqliteAuditRepository(
                          AND target.line_id = shipment.line_id
                          AND target.feed_cycle_id = shipment.feed_cycle_id
                          AND target.shipment_id = shipment.id), 0),
-                   COALESCE((SELECT COUNT(DISTINCT movement.sweep_id)
-                       FROM mercury_movements AS movement
-                       WHERE movement.organization_id = shipment.organization_id
-                         AND movement.line_id = shipment.line_id
-                         AND movement.feed_cycle_id = shipment.feed_cycle_id
-                         AND movement.shipment_id = shipment.id
-                         AND movement.movement_kind = 'RECOVERY'), 0)
+                   COALESCE((SELECT COUNT(*)
+                       FROM production_sweeps AS measured_sweep
+                       WHERE measured_sweep.organization_id = shipment.organization_id
+                         AND measured_sweep.line_id = shipment.line_id
+                         AND measured_sweep.feed_cycle_id = shipment.feed_cycle_id
+                         AND measured_sweep.shipment_id = shipment.id
+                         AND EXISTS (
+                             SELECT 1 FROM cached_line_components AS available_rastra
+                             WHERE available_rastra.organization_id = shipment.organization_id
+                               AND available_rastra.line_id = shipment.line_id
+                               AND available_rastra.component_type_code = 'RASTRA'
+                               AND available_rastra.is_active = 1)
+                         AND NOT EXISTS (
+                             SELECT 1 FROM cached_line_components AS rastra
+                             WHERE rastra.organization_id = shipment.organization_id
+                               AND rastra.line_id = shipment.line_id
+                               AND rastra.component_type_code = 'RASTRA'
+                               AND rastra.is_active = 1
+                               AND (
+                                   NOT EXISTS (
+                                       SELECT 1 FROM mercury_movements AS movement
+                                       WHERE movement.organization_id = shipment.organization_id
+                                         AND movement.line_id = shipment.line_id
+                                         AND movement.feed_cycle_id = shipment.feed_cycle_id
+                                         AND movement.shipment_id = shipment.id
+                                         AND movement.sweep_id = measured_sweep.id
+                                         AND movement.line_component_id = rastra.id
+                                         AND movement.movement_kind = 'SWEEP_INPUT'
+                                         AND movement.amount_centigrams IS NOT NULL
+                                         AND NOT EXISTS (
+                                             SELECT 1 FROM mercury_movements AS replacement
+                                             WHERE replacement.organization_id = movement.organization_id
+                                               AND replacement.supersedes_movement_id = movement.id))
+                                   OR NOT EXISTS (
+                                       SELECT 1 FROM mercury_movements AS movement
+                                       WHERE movement.organization_id = shipment.organization_id
+                                         AND movement.line_id = shipment.line_id
+                                         AND movement.feed_cycle_id = shipment.feed_cycle_id
+                                         AND movement.shipment_id = shipment.id
+                                         AND movement.sweep_id = measured_sweep.id
+                                         AND movement.line_component_id = rastra.id
+                                         AND movement.movement_kind = 'SWEEP_REMAINDER'
+                                         AND movement.amount_centigrams IS NOT NULL
+                                         AND NOT EXISTS (
+                                             SELECT 1 FROM mercury_movements AS replacement
+                                             WHERE replacement.organization_id = movement.organization_id
+                                               AND replacement.supersedes_movement_id = movement.id))))), 0)
             FROM cached_shipments AS shipment
             INNER JOIN cached_production_lines AS line ON line.id = shipment.line_id
             INNER JOIN cached_suppliers AS supplier ON supplier.id = shipment.supplier_id

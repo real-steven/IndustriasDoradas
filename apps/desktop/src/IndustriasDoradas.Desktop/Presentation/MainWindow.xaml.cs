@@ -31,20 +31,17 @@ public partial class MainWindow : Window
         PreviewKeyDown += OnActivity;
         PreviewMouseDown += OnActivity;
         PreviewTouchDown += OnActivity;
+        UpdateWindowPresentation();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
         await viewModel.InitializeAsync();
-        if (viewModel.Station?.WasSessionRestored == true)
-        {
-            SessionRestoreNotice.Visibility = Visibility.Visible;
-            RestartNoticeTimer();
-        }
         UpdateClock();
         clockTimer.Start();
         UpdateHeaderForCurrentPage();
+        UpdateWindowPresentation();
     }
 
     private void OnActivity(object? sender, InputEventArgs e)
@@ -68,11 +65,54 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainWindowViewModel.IsApplicationUnlocked))
+        {
+            if (viewModel.IsApplicationUnlocked && viewModel.Station?.WasSessionRestored == true)
+            {
+                SessionRestoreNotice.Visibility = Visibility.Visible;
+                RestartNoticeTimer();
+            }
+            UpdateWindowPresentation();
+            return;
+        }
+
         if (e.PropertyName is nameof(MainWindowViewModel.CurrentPage) or
             nameof(MainWindowViewModel.IsOperationPage))
         {
             UpdateHeaderForCurrentPage();
         }
+    }
+
+    private void UpdateWindowPresentation()
+    {
+        if (!viewModel.IsApplicationUnlocked)
+        {
+            WindowState = WindowState.Normal;
+            ResizeMode = ResizeMode.NoResize;
+            MinWidth = 0;
+            MinHeight = 0;
+            SizeToContent = SizeToContent.WidthAndHeight;
+            CenterWindowAfterLayout();
+            return;
+        }
+
+        SizeToContent = SizeToContent.Manual;
+        ResizeMode = ResizeMode.CanResize;
+        MinWidth = 1050;
+        MinHeight = 650;
+        Width = Math.Min(1280, SystemParameters.WorkArea.Width);
+        Height = Math.Min(800, SystemParameters.WorkArea.Height);
+        CenterWindowAfterLayout();
+    }
+
+    private void CenterWindowAfterLayout() =>
+        Dispatcher.BeginInvoke(CenterWindowOnWorkingArea, DispatcherPriority.ContextIdle);
+
+    private void CenterWindowOnWorkingArea()
+    {
+        Rect workArea = SystemParameters.WorkArea;
+        Left = workArea.Left + Math.Max(0, (workArea.Width - ActualWidth) / 2);
+        Top = workArea.Top + Math.Max(0, (workArea.Height - ActualHeight) / 2);
     }
 
     private void UpdateHeaderForCurrentPage()

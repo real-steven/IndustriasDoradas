@@ -59,8 +59,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(13L, result.CurrentVersion);
-        Assert.AreEqual(13, result.AppliedCount);
+        Assert.AreEqual(15L, result.CurrentVersion);
+        Assert.AreEqual(15, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -69,7 +69,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(13L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(15L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -137,7 +137,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(12, result.AppliedCount);
+        Assert.AreEqual(14, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -157,8 +157,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(13L, result.CurrentVersion);
-        Assert.AreEqual(2, result.AppliedCount);
+        Assert.AreEqual(15L, result.CurrentVersion);
+        Assert.AreEqual(4, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -426,7 +426,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(13L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(15L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -576,7 +576,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(11, result.AppliedCount);
+        Assert.AreEqual(13, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -799,6 +799,71 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task IncrementalPullProjectsLineComponentsForMercury()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await database.Catalogs().UpsertLineAsync(new CachedProductionLine(
+            LineId, OrganizationId, PlantId, "Línea 1", true, StartedAt));
+        var repository = new SqliteSyncChangeRepository(database.Factory);
+        Guid rastraId = Guid.Parse("46000000-0000-4000-8000-000000000001");
+        using JsonDocument rastra = JsonDocument.Parse($$"""
+            {"id":"{{rastraId:D}}","organization_id":"{{OrganizationId:D}}",
+             "production_line_id":"{{LineId:D}}","code":"RASTRA_1","name":"Rastra 1",
+             "display_order":2,"is_active":true,"updated_at":"{{StartedAt:O}}"}
+            """);
+        var page = new SyncPullPage(
+            1, null, "cursor-component", false, StartedAt,
+            [new SyncChange(Guid.NewGuid(), 1, "LINE_COMPONENT", rastraId, 1, "UPSERT",
+                StartedAt, 1, rastra.RootElement.Clone())]);
+
+        await repository.ApplyPageAsync(page);
+
+        IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
+            .ListRastrasAsync(OrganizationId, LineId);
+        Assert.HasCount(1, rastras);
+        Assert.AreEqual(rastraId, rastras[0].Id);
+        Assert.AreEqual("Rastra 1", rastras[0].Name);
+    }
+
+    [TestMethod]
+    public async Task MigrationFourteenBackfillsPreviouslySynchronizedRastras()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(13).ToArray());
+        await database.Catalogs().UpsertLineAsync(new CachedProductionLine(
+            LineId, OrganizationId, PlantId, "Línea 1", true, StartedAt));
+        Guid rastraId = Guid.Parse("46000000-0000-4000-8000-000000000001");
+        await using (SqliteConnection connection = await database.Factory.OpenAsync())
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                INSERT INTO sync_entity_cache(
+                    entity_type, entity_id, entity_version, action,
+                    payload_json, payload_hash, changed_at_utc)
+                VALUES ('LINE_COMPONENT', $id, 1, 'UPSERT', $payload, 'hash', $changedAt);
+                """;
+            command.Parameters.AddWithValue("$id", rastraId.ToString("D"));
+            command.Parameters.AddWithValue("$payload", $$"""
+                {"id":"{{rastraId:D}}","organization_id":"{{OrganizationId:D}}",
+                 "production_line_id":"{{LineId:D}}","code":"RASTRA_1","name":"Rastra 1",
+                 "display_order":2,"is_active":true,"updated_at":"{{StartedAt:O}}"}
+                """);
+            command.Parameters.AddWithValue("$changedAt", StartedAt.ToString("O"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
+        IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
+            .ListRastrasAsync(OrganizationId, LineId);
+
+        Assert.AreEqual(15L, result.CurrentVersion);
+        Assert.AreEqual(2, result.AppliedCount);
+        Assert.HasCount(1, rastras);
+        Assert.AreEqual(rastraId, rastras[0].Id);
+    }
+
+    [TestMethod]
     public async Task DiagnosticsExposeClockAndSafeAdministrativeCorrection()
     {
         await using var database = new TestDatabase();
@@ -927,7 +992,7 @@ public sealed class LocalSqliteStorageTests
         await database.Migrator.MigrateAsync();
         await SeedSelectableCatalogsAsync(database);
         var time = new MutableTimeProvider(StartedAt);
-        await StartOperationAsync(database.OperationService(time));
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
         var input = new OperationInputCommand(
             EventId(91),
             OperationInputAction.RegisterCajuela,
@@ -1556,6 +1621,8 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(0, after.UnsweptEvents.Count);
         Assert.AreEqual(quantity, after.LastSweepCumulativeTotal);
         Assert.AreEqual(SweepMercuryStatus.Pending, sweep.MercuryStatus);
+        LocalOperationDashboardSnapshot dashboard = await database.Dashboard().GetAsync(StationId);
+        Assert.AreEqual(1, dashboard.SweepCount);
 
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_sweeps;"));
@@ -1564,6 +1631,62 @@ public sealed class LocalSqliteStorageTests
             connection,
             "SELECT is_final FROM production_sweeps LIMIT 1;"));
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM mercury_movements;"));
+    }
+
+    [TestMethod]
+    public async Task MercuryMeasurementsPreserveLegacyHistoryPendingAndCorrections()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        Guid rastraId = Guid.Parse("46000000-0000-4000-8000-000000000001");
+        await SeedRastraAsync(database, rastraId);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService operations = database.OperationService(time);
+        LocalOperationContext operation = await StartOperationAsync(operations);
+        await RegisterManyAsync(database.RegisterHandler(time), time, 3);
+        LocalSweepPreparation preparation = await database.Sweeps().PrepareAsync(StationId, LineId);
+        DateTimeOffset sweptAt = time.GetUtcNow().AddSeconds(1);
+        ProductionSweep sweep = ProductionSweep.Record(
+            Guid.NewGuid(), preparation.UnsweptEvents, ActorProfileId, sweptAt, sweptAt, false);
+        await database.Sweeps().RecordAsync(sweep);
+        SqliteMercuryRepository repository = database.Mercury();
+
+        Guid shipmentId = operation.Session!.ShipmentId;
+        await repository.RecordAsync(Mercury(
+            Guid.NewGuid(), shipmentId, rastraId, MercuryMovementKind.InitialLoad, 400.7m));
+        await repository.RecordAsync(Mercury(
+            Guid.NewGuid(), shipmentId, rastraId, MercuryMovementKind.Reload, 10m, replaceCurrent: false));
+        LocalMercuryMovement pending = await repository.RecordAsync(Mercury(
+            Guid.NewGuid(), shipmentId, rastraId, MercuryMovementKind.SweepInput, null, sweep.Id));
+        LocalMercuryMovement correction = await repository.RecordAsync(Mercury(
+            Guid.NewGuid(), shipmentId, rastraId, MercuryMovementKind.SweepInput, 400.7m, sweep.Id));
+        await repository.RecordAsync(Mercury(
+            Guid.NewGuid(), shipmentId, rastraId, MercuryMovementKind.SweepRemainder, 281m, sweep.Id));
+
+        IReadOnlyList<CachedLineComponent> rastras = await repository.ListRastrasAsync(
+            OrganizationId, LineId);
+        IReadOnlyList<LocalMercurySweepTarget> sweeps = await repository.ListSweepsAsync(shipmentId);
+        IReadOnlyList<LocalMercuryMovement> current = await repository.ListCurrentAsync(shipmentId);
+
+        Assert.HasCount(1, rastras);
+        Assert.HasCount(1, sweeps);
+        Assert.HasCount(4, current);
+        Assert.AreEqual(pending.Id, correction.SupersedesMovementId);
+        Assert.AreEqual(400.7m, current.Single(item => item.Kind == MercuryMovementKind.SweepInput).AmountGrams);
+        Assert.AreEqual(281m, current.Single(item => item.Kind == MercuryMovementKind.SweepRemainder).AmountGrams);
+        Assert.AreEqual(10m, current.Single(item => item.Kind == MercuryMovementKind.Reload).AmountGrams);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(5L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM mercury_movements;"));
+        Assert.AreEqual(5L, await ScalarLongAsync(
+            connection, "SELECT COUNT(DISTINCT client_sequence) FROM mercury_movements;"));
+        time.SetUtcNow(StartedAt.AddHours(2));
+        PreparedOperationCompletion completion = await operations.PrepareCompletionAsync(
+            LineId, Authority());
+        await operations.ConfirmCompletionAsync(completion);
+        IReadOnlyList<LocalCompletedShipmentAudit> audit = await database.Audit()
+            .ListCompletedShipmentsAsync();
+        Assert.AreEqual(1, audit[0].MercuryRecordedSweepCount);
     }
 
     [TestMethod]
@@ -2001,6 +2124,48 @@ public sealed class LocalSqliteStorageTests
         transaction.Commit();
     }
 
+    private static RecordLocalMercuryMovement Mercury(
+        Guid id,
+        Guid shipmentId,
+        Guid rastraId,
+        MercuryMovementKind kind,
+        decimal? amount,
+        Guid? sweepId = null,
+        bool replaceCurrent = true)
+    {
+        DateTimeOffset occurredAt = StartedAt.AddHours(1);
+        return new RecordLocalMercuryMovement(
+            id,
+            StationId,
+            shipmentId,
+            rastraId,
+            sweepId,
+            kind,
+            amount,
+            ActorProfileId,
+            occurredAt,
+            occurredAt,
+            replaceCurrent);
+    }
+
+    private static async Task SeedRastraAsync(TestDatabase database, Guid rastraId)
+    {
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO cached_line_components(
+                id, organization_id, line_id, component_type_code, code, name,
+                display_order, is_active, updated_at_utc)
+            VALUES ($id, $organizationId, $lineId, 'RASTRA', 'RASTRA_1', 'Rastra 1',
+                    1, 1, $updatedAt);
+            """;
+        command.Parameters.AddWithValue("$id", rastraId.ToString("D"));
+        command.Parameters.AddWithValue("$organizationId", OrganizationId.ToString("D"));
+        command.Parameters.AddWithValue("$lineId", LineId.ToString("D"));
+        command.Parameters.AddWithValue("$updatedAt", StartedAt.ToString("O"));
+        await command.ExecuteNonQueryAsync();
+    }
+
     private static void DeleteRoot(string root)
     {
         SqliteConnection.ClearAllPools();
@@ -2050,6 +2215,8 @@ public sealed class LocalSqliteStorageTests
         public SqliteOperationDashboardRepository Dashboard() => new(Factory);
 
         public SqliteProductionSweepRepository Sweeps() => new(Factory);
+
+        public SqliteMercuryRepository Mercury() => new(Factory);
 
         public SqliteAuditRepository Audit() => new(Factory);
 

@@ -119,6 +119,107 @@ public sealed class DiagnosticsViewModelTests
         Assert.IsTrue(viewModel.HasCorrections);
     }
 
+    [TestMethod]
+    public async Task AuditRequiresLineAndShipmentSelectionBeforeShowingDetails()
+    {
+        Guid firstLineId = Guid.NewGuid();
+        Guid secondLineId = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        LocalCompletedShipmentAudit[] shipments =
+        [
+            Shipment(firstLineId, "Línea 1", "Proveedor A", now.AddHours(-4), now.AddHours(-3)),
+            Shipment(firstLineId, "Línea 1", "Proveedor B", now.AddHours(-2), now.AddHours(-1)),
+            Shipment(secondLineId, "Línea 2", "Proveedor C", now.AddHours(-1), now),
+        ];
+        DiagnosticsViewModel diagnostics = new(
+            new StubHealthService(SystemHealth.Available("api", now)),
+            new StubLocalDiagnostics(Healthy()));
+        AuditViewModel audit = new(diagnostics, null, new StubAuditRepository(shipments));
+
+        await audit.InitializeAsync();
+
+        Assert.AreEqual(2, audit.ShipmentLines.Count);
+        Assert.IsFalse(audit.HasSelectedLine);
+        Assert.IsFalse(audit.HasSelectedShipment);
+        Assert.AreEqual(0, audit.VisibleCompletedShipments.Count);
+
+        AuditLineFilterViewModel firstLine = audit.ShipmentLines.Single(line =>
+            line.LineId == firstLineId);
+        await audit.SelectLineCommand.ExecuteAsync(firstLine);
+
+        Assert.IsTrue(audit.HasSelectedLine);
+        Assert.AreEqual(2, audit.VisibleCompletedShipments.Count);
+        Assert.IsFalse(audit.HasSelectedShipment);
+
+        await audit.SelectShipmentCommand.ExecuteAsync(audit.VisibleCompletedShipments[0]);
+
+        Assert.IsTrue(audit.HasSelectedShipment);
+        Assert.AreEqual(firstLineId, audit.SelectedShipment!.Source.LineId);
+    }
+
+    [TestMethod]
+    public async Task AuditFiltersCompletedShipmentsByWeekDayAndFullHistory()
+    {
+        DateTime today = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-6)).Date;
+        int daysSinceMonday = ((int)today.DayOfWeek + 6) % 7;
+        DateTime currentWeekStart = today.AddDays(-daysSinceMonday);
+        DateTime previousWeekDay = currentWeekStart.AddDays(-5);
+        DateTimeOffset currentCompletion = new(today.AddHours(12), TimeSpan.FromHours(-6));
+        DateTimeOffset previousCompletion = new(previousWeekDay.AddHours(10), TimeSpan.FromHours(-6));
+        DateTimeOffset olderCompletion = previousCompletion.AddDays(-14);
+        Guid lineId = Guid.NewGuid();
+        LocalCompletedShipmentAudit[] shipments =
+        [
+            Shipment(lineId, "Línea 1", "Actual", currentCompletion.AddHours(-1), currentCompletion),
+            Shipment(lineId, "Línea 1", "Anterior", previousCompletion.AddHours(-1), previousCompletion),
+            Shipment(lineId, "Línea 1", "Antiguo", olderCompletion.AddHours(-1), olderCompletion),
+        ];
+        DiagnosticsViewModel diagnostics = new(
+            new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
+            new StubLocalDiagnostics(Healthy()));
+        AuditViewModel audit = new(diagnostics, null, new StubAuditRepository(shipments));
+
+        await audit.InitializeAsync();
+
+        Assert.AreEqual(1, audit.CompletedShipments.Count);
+        Assert.AreEqual("Actual", audit.CompletedShipments[0].SupplierName);
+
+        audit.SelectedPeriodOption = audit.PeriodOptions.Single(option =>
+            option.Mode == AuditPeriodMode.PreviousWeek);
+        Assert.AreEqual(1, audit.CompletedShipments.Count);
+        Assert.AreEqual("Anterior", audit.CompletedShipments[0].SupplierName);
+
+        audit.SelectedPeriodOption = audit.PeriodOptions.Single(option =>
+            option.Mode == AuditPeriodMode.SpecificDay);
+        audit.SelectedFilterDate = previousWeekDay;
+        Assert.AreEqual(1, audit.CompletedShipments.Count);
+        Assert.AreEqual("Anterior", audit.CompletedShipments[0].SupplierName);
+
+        audit.SelectedPeriodOption = audit.PeriodOptions.Single(option =>
+            option.Mode == AuditPeriodMode.AllHistory);
+        Assert.AreEqual(3, audit.CompletedShipments.Count);
+    }
+
+    private static LocalCompletedShipmentAudit Shipment(
+        Guid lineId,
+        string lineName,
+        string supplierName,
+        DateTimeOffset startedAt,
+        DateTimeOffset completedAt) =>
+        new(
+            Guid.NewGuid(),
+            lineId,
+            lineName,
+            supplierName,
+            startedAt,
+            completedAt,
+            100,
+            1,
+            100,
+            0,
+            0,
+            []);
+
     private static LocalDatabaseHealth Healthy() => new(
         LocalDatabaseHealthState.Healthy,
         LocalDatabaseHealthIssue.None,
@@ -144,5 +245,16 @@ public sealed class DiagnosticsViewModelTests
             string destinationDirectory,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Path.Combine(destinationDirectory, "recovery.sqlite3"));
+    }
+
+    private sealed class StubAuditRepository(
+        IReadOnlyList<LocalCompletedShipmentAudit> shipments) : ILocalAuditRepository
+    {
+        public Task<IReadOnlyList<LocalCompletedShipmentAudit>> ListCompletedShipmentsAsync(
+            CancellationToken cancellationToken = default) => Task.FromResult(shipments);
+
+        public Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<LocalCajuelaCorrectionAudit>>([]);
     }
 }
