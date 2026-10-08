@@ -29,6 +29,14 @@ const OPERATION_SCHEMAS: Readonly<
     aggregateType: "production_event",
     version: 2,
   },
+  PRODUCTION_SWEEP_RECORDED: {
+    aggregateType: "production_sweep",
+    version: 1,
+  },
+  MERCURY_MOVEMENT_RECORDED: {
+    aggregateType: "mercury_movement",
+    version: 1,
+  },
 };
 
 export function normalizeSyncItem(
@@ -107,6 +115,12 @@ function normalizePayload(
     const payload = item.payload;
     if (operationType === "PRODUCTION_EVENT_CREATED") {
       return normalizeProductionEvent(payload, item, scope);
+    }
+    if (operationType === "PRODUCTION_SWEEP_RECORDED") {
+      return normalizeProductionSweep(payload, item, scope);
+    }
+    if (operationType === "MERCURY_MOVEMENT_RECORDED") {
+      return normalizeMercuryMovement(payload, item, scope);
     }
     const common = normalizeOperationalCommon(payload, scope, item);
     if (operationType === "OPERATION_STARTED") {
@@ -199,6 +213,135 @@ function normalizePayload(
   } catch {
     return { payload: canonicalObject(item.payload), code: "INVALID_EVENT" };
   }
+}
+
+function normalizeProductionSweep(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "sweepId",
+    "organizationId",
+    "plantId",
+    "stationId",
+    "lineId",
+    "feedCycleId",
+    "shipmentId",
+    "clientSequence",
+    "cajuelaCount",
+    "eventIds",
+    "sweptAtUtc",
+    "recordedAtUtc",
+    "recordedByProfileId",
+    "isFinal",
+    "notes",
+  ]);
+  const sweptAtUtc = requireDate(payload, "sweptAtUtc");
+  const recordedAtUtc = requireDate(payload, "recordedAtUtc");
+  const eventIds = requireUuidArray(payload, "eventIds");
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    sweepId: requireUuid(payload, "sweepId"),
+    organizationId: requireUuid(payload, "organizationId"),
+    plantId: requireUuid(payload, "plantId"),
+    stationId: requireUuid(payload, "stationId"),
+    lineId: requireUuid(payload, "lineId"),
+    feedCycleId: requireUuid(payload, "feedCycleId"),
+    shipmentId: requireUuid(payload, "shipmentId"),
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    cajuelaCount: requirePositiveInteger(payload, "cajuelaCount"),
+    eventIds,
+    sweptAtUtc,
+    recordedAtUtc,
+    recordedByProfileId: requireUuid(payload, "recordedByProfileId"),
+    isFinal: requireBoolean(payload, "isFinal"),
+    notes: requireNullableText(payload, "notes", 500),
+  };
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.organizationId !== scope.organizationId ||
+    normalized.plantId !== scope.plantId ||
+    normalized.stationId !== scope.stationId ||
+    normalized.sweepId !== item.aggregateId ||
+    normalized.recordedByProfileId !== item.authorization.actorProfileId ||
+    Date.parse(recordedAtUtc) < Date.parse(sweptAtUtc) ||
+    eventIds.length === 0 ||
+    new Set(eventIds).size !== eventIds.length
+  )
+    throw new Error("invalid production sweep");
+  validateAuthorizationWindow(item, sweptAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
+}
+
+function normalizeMercuryMovement(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "movementId",
+    "organizationId",
+    "plantId",
+    "stationId",
+    "lineId",
+    "feedCycleId",
+    "shipmentId",
+    "lineComponentId",
+    "sweepId",
+    "clientSequence",
+    "movementKind",
+    "amountGrams",
+    "unitCode",
+    "occurredAtUtc",
+    "recordedAtUtc",
+    "recordedByProfileId",
+    "supersedesMovementId",
+    "notes",
+  ]);
+  const kind = requireText(payload, "movementKind", 40);
+  const sweepId = requireNullableUuid(payload, "sweepId");
+  const amountGrams = requireNullableAmount(payload, "amountGrams");
+  const occurredAtUtc = requireDate(payload, "occurredAtUtc");
+  const recordedAtUtc = requireDate(payload, "recordedAtUtc");
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    movementId: requireUuid(payload, "movementId"),
+    organizationId: requireUuid(payload, "organizationId"),
+    plantId: requireUuid(payload, "plantId"),
+    stationId: requireUuid(payload, "stationId"),
+    lineId: requireUuid(payload, "lineId"),
+    feedCycleId: requireUuid(payload, "feedCycleId"),
+    shipmentId: requireUuid(payload, "shipmentId"),
+    lineComponentId: requireUuid(payload, "lineComponentId"),
+    sweepId,
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    movementKind: kind,
+    amountGrams,
+    unitCode: requireText(payload, "unitCode", 4),
+    occurredAtUtc,
+    recordedAtUtc,
+    recordedByProfileId: requireUuid(payload, "recordedByProfileId"),
+    supersedesMovementId: requireNullableUuid(payload, "supersedesMovementId"),
+    notes: requireNullableText(payload, "notes", 500),
+  };
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.organizationId !== scope.organizationId ||
+    normalized.plantId !== scope.plantId ||
+    normalized.stationId !== scope.stationId ||
+    normalized.movementId !== item.aggregateId ||
+    normalized.recordedByProfileId !== item.authorization.actorProfileId ||
+    normalized.unitCode !== "g" ||
+    !["SWEEP_INPUT", "SWEEP_REMAINDER"].includes(kind) ||
+    sweepId === null ||
+    Date.parse(recordedAtUtc) < Date.parse(occurredAtUtc)
+  )
+    throw new Error("invalid mercury movement");
+  validateAuthorizationWindow(item, occurredAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
 }
 
 function normalizeOperationalCommon(
@@ -374,6 +517,52 @@ function requireUuid(value: Record<string, unknown>, key: string): string {
     throw new Error(`invalid ${key}`);
   }
   return field.toLowerCase();
+}
+
+function requireNullableUuid(
+  value: Record<string, unknown>,
+  key: string,
+): string | null {
+  return value[key] === null ? null : requireUuid(value, key);
+}
+
+function requireUuidArray(
+  value: Record<string, unknown>,
+  key: string,
+): string[] {
+  const field = value[key];
+  if (!Array.isArray(field)) throw new Error(`invalid ${key}`);
+  return field.map((item) => {
+    if (typeof item !== "string" || !isUUID(item))
+      throw new Error(`invalid ${key}`);
+    return item.toLowerCase();
+  });
+}
+
+function requireNullableAmount(
+  value: Record<string, unknown>,
+  key: string,
+): number | null {
+  const field = value[key];
+  if (field === null) return null;
+  if (
+    typeof field !== "number" ||
+    !Number.isFinite(field) ||
+    field < 0 ||
+    Math.round(field * 100) !== field * 100
+  )
+    throw new Error(`invalid ${key}`);
+  return field;
+}
+
+function requireNullableText(
+  value: Record<string, unknown>,
+  key: string,
+  maxLength: number,
+): string | null {
+  const field = value[key];
+  if (field === null) return null;
+  return requireText(value, key, maxLength);
 }
 
 function requireDate(value: Record<string, unknown>, key: string): string {

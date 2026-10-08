@@ -2,6 +2,7 @@ using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
+using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using Microsoft.Extensions.Options;
 
@@ -209,8 +210,9 @@ public sealed class DiagnosticsViewModelTests
         var repository = new StubAuditRepository([]);
         AuditViewModel audit = new(diagnostics, null, repository);
         var notifier = new SyncStatusNotifier();
+        var dispatcher = new RecordingUiDispatcher();
         using MainWindowViewModel shell = new(
-            new HomeViewModel(), diagnostics, null, null, audit, null, notifier);
+            new HomeViewModel(), diagnostics, null, null, audit, null, notifier, dispatcher);
 
         await audit.InitializeAsync();
         await shell.ShowAuditCommand.ExecuteAsync(null);
@@ -222,6 +224,7 @@ public sealed class DiagnosticsViewModelTests
         await WaitUntilAsync(() => repository.CompletedShipmentReads >= 3);
 
         Assert.AreEqual(3, repository.CompletedShipmentReads);
+        Assert.AreEqual(1, dispatcher.Invocations);
     }
 
     private static LocalCompletedShipmentAudit Shipment(
@@ -296,5 +299,16 @@ public sealed class DiagnosticsViewModelTests
         public Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<LocalCajuelaCorrectionAudit>>([]);
+    }
+
+    private sealed class RecordingUiDispatcher : IUiDispatcher
+    {
+        public int Invocations { get; private set; }
+
+        public async Task InvokeAsync(Func<Task> action)
+        {
+            Invocations++;
+            await action();
+        }
     }
 }

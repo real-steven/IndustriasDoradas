@@ -23,11 +23,51 @@ export function App() {
           <Route path="oro" element={<GoldPage />} />
           <Route path="cargamentos" element={<ShipmentsPage />} />
           <Route path="auditoria" element={<AuditPage />} />
-          <Route path="estadisticas" element={<UpcomingPage title="Estadísticas" description="Comparación de proveedores, líneas y períodos con cobertura de datos visible." />} />
-          <Route path="trabajadores" element={<UpcomingPage title="Trabajadores" description="Creación futura de operarios y jefes de planta, asistencia y horas." />} />
-          <Route path="reportes" element={<UpcomingPage title="Reportes" description="Generación futura de archivos Excel gerenciales." />} />
-          <Route path="inventario" element={<UpcomingPage title="Inventario" description="Trazabilidad futura de herramientas, componentes y mantenimiento." />} />
-          <Route path="configuracion" element={<UpcomingPage title="Configuración" description="Administración futura de líneas y catálogos sin eliminar historial." />} />
+          <Route
+            path="estadisticas"
+            element={
+              <UpcomingPage
+                title="Estadísticas"
+                description="Comparación de proveedores, líneas y períodos con cobertura de datos visible."
+              />
+            }
+          />
+          <Route
+            path="trabajadores"
+            element={
+              <UpcomingPage
+                title="Trabajadores"
+                description="Creación futura de operarios y jefes de planta, asistencia y horas."
+              />
+            }
+          />
+          <Route
+            path="reportes"
+            element={
+              <UpcomingPage
+                title="Reportes"
+                description="Generación futura de archivos Excel gerenciales."
+              />
+            }
+          />
+          <Route
+            path="inventario"
+            element={
+              <UpcomingPage
+                title="Inventario"
+                description="Trazabilidad futura de herramientas, componentes y mantenimiento."
+              />
+            }
+          />
+          <Route
+            path="configuracion"
+            element={
+              <UpcomingPage
+                title="Configuración"
+                description="Administración futura de líneas y catálogos sin eliminar historial."
+              />
+            }
+          />
         </Route>
       </Route>
       <Route element={<PublicLayout />}>

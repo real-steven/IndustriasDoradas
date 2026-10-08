@@ -39,6 +39,7 @@ public sealed class OperationViewModel : ObservableObject
     private readonly OperationSafetyOptions safetyOptions;
     private readonly Guid stationId;
     private OperationLinePanelViewModel line = new();
+    private IReadOnlyList<LocalOperationDashboardSnapshot> appliedDashboardSnapshots = [];
     private PreparedCajuelaReversal? preparedReversal;
     private PreparedProductionSweep? preparedSweep;
     private string localStorageStatus = "Preparando almacenamiento local…";
@@ -304,6 +305,39 @@ public sealed class OperationViewModel : ObservableObject
             LocalStorageStatus = "Guardado local disponible";
             PendingStatus = FormatOutboxStatus(snapshots.Count == 0 ? null : snapshots[0]);
         }, "No se pudo leer el estado local. Avise al jefe de planta.").ConfigureAwait(true);
+    }
+
+    public async Task RefreshFromExternalChangeAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<LocalOperationDashboardSnapshot> snapshots = await dashboard.ListAsync(stationId)
+                .ConfigureAwait(true);
+            if (IsBusy)
+            {
+                return;
+            }
+
+            PendingStatus = FormatOutboxStatus(snapshots.Count == 0 ? null : snapshots[0]);
+            IsLocalStorageAvailable = true;
+            LocalStorageStatus = "Guardado local disponible";
+            if (snapshots.Select(WithoutOutboxCounts).SequenceEqual(appliedDashboardSnapshots))
+            {
+                return;
+            }
+
+            Apply(snapshots);
+        }
+        catch (Exception exception) when (
+            exception is IOException or SqliteException or InvalidOperationException)
+        {
+            // El sondeo visible es un respaldo: conserva la última card válida y vuelve a intentar.
+        }
     }
 
     private Task RegisterCajuelaAsync() => TryRegisterCajuelaAsync(new OperationInputCommand(
@@ -670,6 +704,7 @@ public sealed class OperationViewModel : ObservableObject
 
     private void Apply(IReadOnlyList<LocalOperationDashboardSnapshot> snapshots)
     {
+        appliedDashboardSnapshots = snapshots.Select(WithoutOutboxCounts).ToArray();
         Guid selectedLineId = Line.LineId;
         Dictionary<Guid, OperationLinePanelViewModel> existing = Lines
             .Where(item => item.LineId != Guid.Empty)
@@ -763,6 +798,14 @@ public sealed class OperationViewModel : ObservableObject
         : $"{snapshot.PendingOutboxCount} pendientes · " +
           $"{snapshot.FailedReviewOutboxCount} requieren revisión · " +
           $"{snapshot.SyncedOutboxCount} sincronizados";
+
+    private static LocalOperationDashboardSnapshot WithoutOutboxCounts(
+        LocalOperationDashboardSnapshot snapshot) => snapshot with
+        {
+            PendingOutboxCount = 0,
+            FailedReviewOutboxCount = 0,
+            SyncedOutboxCount = 0,
+        };
 
     private async Task<bool> RunAsync(Func<Task> action, string failureMessage)
     {

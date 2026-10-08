@@ -1,10 +1,5 @@
 import type { PropsWithChildren } from "react";
-import {
-  Navigate,
-  NavLink,
-  Outlet,
-  useLocation,
-} from "react-router-dom";
+import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth, type RoleCode } from "../../auth/auth-context";
 
@@ -87,7 +82,9 @@ export function PortalLayout() {
         </nav>
 
         <div className="manager-identity">
-          <span className="manager-avatar" aria-hidden="true">LG</span>
+          <span className="manager-avatar" aria-hidden="true">
+            LG
+          </span>
           <span>
             <strong>Cuenta gerencial</strong>
             <small>Sesión de Lucía</small>
@@ -106,16 +103,33 @@ export function PortalLayout() {
 
       <div className="manager-workspace">
         <header className="manager-topbar">
-          <p>Planta principal / <strong>{pageTitles[location.pathname] ?? "Portal"}</strong></p>
+          <p>
+            Planta principal /{" "}
+            <strong>{pageTitles[location.pathname] ?? "Portal"}</strong>
+          </p>
           <div className="topbar-actions">
-            <span className="freshness neutral"><i />Datos pendientes de conectar</span>
-            <NavLink className="icon-button" to="/estado" aria-label="Ver estado del sistema">↻</NavLink>
+            <span className="freshness neutral">
+              <i />
+              Datos pendientes de conectar
+            </span>
+            <NavLink
+              className="icon-button"
+              to="/estado"
+              aria-label="Ver estado del sistema"
+            >
+              ↻
+            </NavLink>
           </div>
         </header>
         <div className="implementation-note">
-          NUEVA ESTRUCTURA WEB · LOS DATOS OPERATIVOS SE CONECTARÁN DESPUÉS DE CERRAR LA SINCRONIZACIÓN
+          NUEVA ESTRUCTURA WEB · LOS DATOS OPERATIVOS SE CONECTARÁN DESPUÉS DE
+          CERRAR LA SINCRONIZACIÓN
         </div>
-        <main id="contenido-gerencial" className="manager-content" tabIndex={-1}>
+        <main
+          id="contenido-gerencial"
+          className="manager-content"
+          tabIndex={-1}
+        >
           <Outlet />
         </main>
       </div>
@@ -140,9 +154,13 @@ function PortalNavLink({
     <NavLink
       to={to}
       end={end}
-      className={({ isActive }) => `manager-nav-link${isActive ? " active" : ""}`}
+      className={({ isActive }) =>
+        `manager-nav-link${isActive ? " active" : ""}`
+      }
     >
-      <span className="nav-icon" aria-hidden="true">{icon}</span>
+      <span className="nav-icon" aria-hidden="true">
+        {icon}
+      </span>
       <span>{label}</span>
       {future && <small>PRÓX.</small>}
     </NavLink>

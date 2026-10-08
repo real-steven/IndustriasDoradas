@@ -287,11 +287,12 @@ en
   una transacción SQLite. SSE solo avisa que puede haber cambios y siempre se
   respalda con polling incremental a NestJS.
 - **Alcance operativo entre estaciones:** la señal SSE puede llegar en pocos
-  segundos, pero no equivale a una proyección completa. Antes de habilitar
-  operación compartida, Sprint 4.11 debe publicar y aplicar cargamentos,
-  responsables, cajuelas, barridas y mercurio con alcance de planta. No se
-  amplía solamente el filtro de estación porque produciría vistas parciales o
-  conteos en cero en los demás equipos.
+  segundos, pero no equivale por sí sola a una proyección completa. Sprint 4.11
+  publica cargamentos, responsables, cajuelas, barridas y mercurio con alcance
+  de planta y los aplica en orden en una transacción SQLite. Los cambios
+  operativos se marcan con `station_id = NULL` en el feed —el origen permanece
+  dentro del payload—, mientras configuración de estación conserva su alcance
+  local. Oro queda fuera del pull desktop.
 - **Seguridad:** los clientes no acceden directamente a tablas de producción,
   recibos, feed ni Supabase Realtime. NestJS valida JWT, cuenta, organización,
   estación, versión y permisos en cada solicitud.

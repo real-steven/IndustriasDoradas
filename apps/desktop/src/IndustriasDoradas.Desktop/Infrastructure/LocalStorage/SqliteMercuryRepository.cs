@@ -209,6 +209,12 @@ public sealed class SqliteMercuryRepository(
         command.Parameters.AddWithValue("$supersedes", supersedes?.ToString("D") ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("$notes", movement.Notes ?? (object)DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        if (movement.Kind is MercuryMovementKind.SweepInput or MercuryMovementKind.SweepRemainder)
+        {
+            await InsertOutboxAsync(
+                    connection, transaction, movement, scope, supersedes, sequence, cancellationToken)
+                .ConfigureAwait(false);
+        }
         await AdvanceSequenceAsync(
                 connection, transaction, movement.StationId, sequence + 1,
                 movement.RecordedAt, cancellationToken)
@@ -228,6 +234,65 @@ public sealed class SqliteMercuryRepository(
             movement.RecordedAt,
             supersedes,
             movement.Notes);
+    }
+
+    private static async Task InsertOutboxAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        RecordLocalMercuryMovement movement,
+        ShipmentScope scope,
+        Guid? supersedes,
+        long clientSequence,
+        CancellationToken cancellationToken)
+    {
+        var payload = new MercuryMovementOutboxPayload(
+            1,
+            movement.Id,
+            scope.OrganizationId,
+            scope.PlantId,
+            movement.StationId,
+            scope.LineId,
+            scope.FeedCycleId,
+            movement.ShipmentId,
+            movement.LineComponentId,
+            movement.SweepId,
+            clientSequence,
+            ToStorage(movement.Kind),
+            movement.AmountGrams,
+            "g",
+            movement.OccurredAt,
+            movement.RecordedAt,
+            movement.RecordedByProfileId,
+            supersedes,
+            movement.Notes);
+        string payloadJson = System.Text.Json.JsonSerializer.Serialize(
+            payload,
+            LocalStorageJsonSerializerContext.Default.MercuryMovementOutboxPayload);
+
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO outbox_messages(
+                id, station_id, station_sequence, operation_type, aggregate_type,
+                aggregate_id, payload_json, actor_profile_id, permission_version,
+                authorization_validated_at_utc, authorization_offline_until_utc,
+                authorization_state, state, attempt_count, created_at_utc, updated_at_utc)
+            VALUES (
+                $id, $stationId, $stationSequence, 'MERCURY_MOVEMENT_RECORDED',
+                'mercury_movement', $aggregateId, $payloadJson, $actorProfileId,
+                $permissionVersion, $authorizationValidatedAt,
+                $authorizationOfflineUntil, $authorizationState,
+                'PENDING', 0, $createdAtUtc, $createdAtUtc);
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
+        command.Parameters.AddWithValue("$stationId", movement.StationId.ToString("D"));
+        command.Parameters.AddWithValue("$stationSequence", clientSequence);
+        command.Parameters.AddWithValue("$aggregateId", movement.Id.ToString("D"));
+        command.Parameters.AddWithValue("$payloadJson", payloadJson);
+        command.Parameters.AddWithValue(
+            "$createdAtUtc", SqliteLocalStorageConverters.Timestamp(movement.RecordedAt));
+        SqliteLocalStorageConverters.AddAuthorizationParameters(command, movement.Authorization);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<ShipmentScope> LoadScopeAsync(
@@ -315,6 +380,8 @@ public sealed class SqliteMercuryRepository(
                 COALESCE((SELECT MAX(client_sequence) + 1 FROM production_sweeps
                           WHERE station_id = $stationId), 1),
                 COALESCE((SELECT MAX(client_sequence) + 1 FROM mercury_movements
+                          WHERE station_id = $stationId), 1),
+                COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages
                           WHERE station_id = $stationId), 1),
                 COALESCE((SELECT next_sequence FROM station_sequence_state
                           WHERE station_id = $stationId), 1));

@@ -827,6 +827,92 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task IncrementalPullReconstructsRemoteShipmentSweepAndMercury()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        Guid rastraId = Guid.Parse("46000000-0000-4000-8000-000000000001");
+        await SeedRastraAsync(database, rastraId);
+        Guid shipmentId = Guid.NewGuid();
+        Guid feedCycleId = Guid.NewGuid();
+        Guid assignmentId = Guid.NewGuid();
+        Guid eventId = Guid.NewGuid();
+        Guid sweepId = Guid.NewGuid();
+        Guid movementId = Guid.NewGuid();
+        DateTimeOffset completedAt = StartedAt.AddMinutes(10);
+        var changes = new List<SyncChange>();
+
+        void Add(string type, Guid id, string json)
+        {
+            using JsonDocument document = JsonDocument.Parse(json);
+            long sequence = changes.Count + 1;
+            changes.Add(new SyncChange(Guid.NewGuid(), sequence, type, id, sequence,
+                "UPSERT", completedAt, 1, document.RootElement.Clone()));
+        }
+
+        Add("SHIPMENT", shipmentId, $$"""
+            {"id":"{{shipmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{SecondStationId:D}}",
+             "production_line_id":"{{LineId:D}}","supplier_id":"{{SupplierId:D}}",
+             "feed_cycle_id":"{{feedCycleId:D}}","started_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{StartedAt:O}}","completed_at_utc":"{{completedAt:O}}",
+             "status":"COMPLETED"}
+            """);
+        Add("RESPONSIBILITY_ASSIGNMENT", assignmentId, $$"""
+            {"id":"{{assignmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "shipment_id":"{{shipmentId:D}}","worker_id":"{{WorkerId:D}}",
+             "assigned_by_profile_id":"{{ActorProfileId:D}}","started_at_utc":"{{StartedAt:O}}",
+             "ended_at_utc":"{{completedAt:O}}"}
+            """);
+        Add("PRODUCTION_EVENT", eventId, $$"""
+            {"id":"{{eventId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{SecondStationId:D}}",
+             "production_line_id":"{{LineId:D}}","feed_cycle_id":"{{feedCycleId:D}}",
+             "shipment_id":"{{shipmentId:D}}","responsible_worker_id":"{{WorkerId:D}}",
+             "event_type":"CAJUELA_ADDED","work_period":"DAY",
+             "occurred_at_utc":"{{StartedAt.AddMinutes(1):O}}",
+             "recorded_at_utc":"{{StartedAt.AddMinutes(1):O}}","client_sequence":1,
+             "reverses_client_event_id":null}
+            """);
+        Add("PRODUCTION_SWEEP", sweepId, $$"""
+            {"id":"{{sweepId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{SecondStationId:D}}",
+             "production_line_id":"{{LineId:D}}","feed_cycle_id":"{{feedCycleId:D}}",
+             "shipment_id":"{{shipmentId:D}}","client_sequence":2,"cajuela_count":1,
+             "swept_at_utc":"{{StartedAt.AddMinutes(2):O}}",
+             "recorded_at_utc":"{{StartedAt.AddMinutes(2):O}}",
+             "recorded_by_profile_id":"{{ActorProfileId:D}}","is_final":true,"notes":null,
+             "event_ids":["{{eventId:D}}"]}
+            """);
+        Add("MERCURY_MOVEMENT", movementId, $$"""
+            {"id":"{{movementId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{SecondStationId:D}}",
+             "production_line_id":"{{LineId:D}}","feed_cycle_id":"{{feedCycleId:D}}",
+             "shipment_id":"{{shipmentId:D}}","line_component_id":"{{rastraId:D}}",
+             "sweep_id":"{{sweepId:D}}","client_sequence":3,
+             "movement_kind":"SWEEP_INPUT","amount_grams":12.30,"unit_code":"g",
+             "occurred_at_utc":"{{StartedAt.AddMinutes(3):O}}",
+             "recorded_at_utc":"{{StartedAt.AddMinutes(3):O}}",
+             "recorded_by_profile_id":"{{ActorProfileId:D}}",
+             "supersedes_movement_id":null,"notes":null}
+            """);
+
+        await new SqliteSyncChangeRepository(database.Factory).ApplyPageAsync(
+            new SyncPullPage(1, null, "cursor-complete", false, completedAt, changes));
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT total FROM production_counters;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_sweeps;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM sweep_production_events;"));
+        Assert.AreEqual(1230L, await ScalarLongAsync(connection, "SELECT amount_centigrams FROM mercury_movements;"));
+        IReadOnlyList<LocalCompletedShipmentAudit> audit = await database.Audit().ListCompletedShipmentsAsync();
+        Assert.HasCount(1, audit);
+        Assert.AreEqual(1, audit[0].TotalCajuelas);
+        Assert.AreEqual(1, audit[0].SweepCount);
+    }
+
+    [TestMethod]
     public async Task MigrationFourteenBackfillsPreviouslySynchronizedRastras()
     {
         await using var database = new TestDatabase();
@@ -1631,6 +1717,8 @@ public sealed class LocalSqliteStorageTests
             connection,
             "SELECT is_final FROM production_sweeps LIMIT 1;"));
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM mercury_movements;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection,
+            "SELECT COUNT(*) FROM outbox_messages WHERE operation_type = 'PRODUCTION_SWEEP_RECORDED';"));
     }
 
     [TestMethod]
@@ -1680,6 +1768,8 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(5L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM mercury_movements;"));
         Assert.AreEqual(5L, await ScalarLongAsync(
             connection, "SELECT COUNT(DISTINCT client_sequence) FROM mercury_movements;"));
+        Assert.AreEqual(3L, await ScalarLongAsync(connection,
+            "SELECT COUNT(*) FROM outbox_messages WHERE operation_type = 'MERCURY_MOVEMENT_RECORDED';"));
         time.SetUtcNow(StartedAt.AddHours(2));
         PreparedOperationCompletion completion = await operations.PrepareCompletionAsync(
             LineId, Authority());

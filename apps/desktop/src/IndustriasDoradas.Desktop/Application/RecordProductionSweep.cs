@@ -49,7 +49,8 @@ public sealed class RecordProductionSweepHandler(
             prepared.PerformedAt,
             recordedAt,
             isFinal);
-        return await repository.RecordAsync(sweep, cancellationToken).ConfigureAwait(false);
+        OutboxAuthorizationEvidence authorization = OutboxAuthorizationCapture.From(state, recordedAt);
+        return await repository.RecordAsync(sweep, authorization, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<PreparedProductionSweep?> PrepareCoreAsync(

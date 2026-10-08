@@ -77,7 +77,8 @@ public sealed class RecordMercuryMovementHandler(
                 now,
                 now,
                 replaceCurrent,
-                NormalizeNotes(notes)),
+                NormalizeNotes(notes),
+                OutboxAuthorizationCapture.From(state, now)),
             cancellationToken).ConfigureAwait(false);
     }
 

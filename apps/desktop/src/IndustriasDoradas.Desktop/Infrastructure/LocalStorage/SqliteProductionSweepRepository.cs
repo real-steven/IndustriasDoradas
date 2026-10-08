@@ -34,6 +34,7 @@ public sealed class SqliteProductionSweepRepository(
 
     public async Task<LocalSweepRegistration> RecordAsync(
         ProductionSweep sweep,
+        OutboxAuthorizationEvidence? authorization = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sweep);
@@ -72,6 +73,9 @@ public sealed class SqliteProductionSweepRepository(
         await InsertSweepAsync(connection, transaction, sweep, clientSequence, cancellationToken)
             .ConfigureAwait(false);
         await InsertEventReferencesAsync(connection, transaction, sweep, cancellationToken)
+            .ConfigureAwait(false);
+        await InsertOutboxAsync(
+                connection, transaction, sweep, clientSequence, authorization, cancellationToken)
             .ConfigureAwait(false);
         await AdvanceSequenceAsync(
                 connection,
@@ -273,6 +277,61 @@ public sealed class SqliteProductionSweepRepository(
         }
     }
 
+    private static async Task InsertOutboxAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ProductionSweep sweep,
+        long clientSequence,
+        OutboxAuthorizationEvidence? authorization,
+        CancellationToken cancellationToken)
+    {
+        var payload = new ProductionSweepOutboxPayload(
+            1,
+            sweep.Id,
+            sweep.OrganizationId,
+            sweep.PlantId,
+            sweep.StationId,
+            sweep.LineId,
+            sweep.FeedCycleId,
+            sweep.ShipmentId,
+            clientSequence,
+            sweep.CajuelaQuantity,
+            sweep.EventReferences.Select(item => item.ClientEventId).ToArray(),
+            sweep.PerformedAt,
+            sweep.RecordedAt,
+            sweep.RecordedByProfileId,
+            sweep.IsFinal,
+            null);
+        string payloadJson = System.Text.Json.JsonSerializer.Serialize(
+            payload,
+            LocalStorageJsonSerializerContext.Default.ProductionSweepOutboxPayload);
+
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO outbox_messages(
+                id, station_id, station_sequence, operation_type, aggregate_type,
+                aggregate_id, payload_json, actor_profile_id, permission_version,
+                authorization_validated_at_utc, authorization_offline_until_utc,
+                authorization_state, state, attempt_count, created_at_utc, updated_at_utc)
+            VALUES (
+                $id, $stationId, $stationSequence, 'PRODUCTION_SWEEP_RECORDED',
+                'production_sweep', $aggregateId, $payloadJson, $actorProfileId,
+                $permissionVersion, $authorizationValidatedAt,
+                $authorizationOfflineUntil, $authorizationState,
+                'PENDING', 0, $createdAtUtc, $createdAtUtc);
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
+        command.Parameters.AddWithValue("$stationId", sweep.StationId.ToString("D"));
+        command.Parameters.AddWithValue("$stationSequence", clientSequence);
+        command.Parameters.AddWithValue("$aggregateId", sweep.Id.ToString("D"));
+        command.Parameters.AddWithValue("$payloadJson", payloadJson);
+        command.Parameters.AddWithValue(
+            "$createdAtUtc", SqliteLocalStorageConverters.Timestamp(sweep.RecordedAt));
+        SqliteLocalStorageConverters.AddAuthorizationParameters(command, authorization);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private static async Task<bool> SweepExistsAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -428,6 +487,8 @@ public sealed class SqliteProductionSweepRepository(
                 COALESCE((SELECT MAX(client_sequence) + 1 FROM production_sweeps
                           WHERE station_id = $stationId), 1),
                 COALESCE((SELECT MAX(client_sequence) + 1 FROM mercury_movements
+                          WHERE station_id = $stationId), 1),
+                COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages
                           WHERE station_id = $stationId), 1),
                 COALESCE((SELECT next_sequence FROM station_sequence_state
                           WHERE station_id = $stationId), 1));

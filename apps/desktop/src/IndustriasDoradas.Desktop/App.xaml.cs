@@ -234,6 +234,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddHostedService<IncrementalPullSignalWorker>();
 
         builder.Services.AddSingleton<HomeViewModel>();
+        builder.Services.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
         builder.Services.AddSingleton<DiagnosticsViewModel>();
         builder.Services.AddSingleton<AuditViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();

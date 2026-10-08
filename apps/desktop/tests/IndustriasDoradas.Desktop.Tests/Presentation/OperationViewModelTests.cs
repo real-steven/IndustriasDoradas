@@ -60,6 +60,40 @@ public sealed class OperationViewModelTests
     }
 
     [TestMethod]
+    public async Task ExternalRefreshUpdatesVisibleTotalWithoutOperatorInput()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 7),
+            ReadySnapshot(total: 12));
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 7));
+        await viewModel.InitializeAsync();
+
+        await viewModel.RefreshFromExternalChangeAsync();
+
+        Assert.AreEqual(12, viewModel.Line.Total);
+        Assert.AreEqual(12, viewModel.Lines.Single().Total);
+        Assert.IsTrue(viewModel.RegisterLineCajuelaCommand.CanExecute(LineId));
+    }
+
+    [TestMethod]
+    public async Task ExternalRefreshDoesNotRebuildCardsWhenOnlyOutboxStatusChanged()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 7, pending: 1),
+            ReadySnapshot(total: 7, pending: 2));
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 7));
+        await viewModel.InitializeAsync();
+        int collectionChanges = 0;
+        viewModel.Lines.CollectionChanged += (_, _) => collectionChanges++;
+
+        await viewModel.RefreshFromExternalChangeAsync();
+
+        Assert.AreEqual(0, collectionChanges);
+        Assert.AreEqual(7, viewModel.Line.Total);
+        Assert.AreEqual("2 pendientes · 0 requieren revisión · 0 sincronizados", viewModel.PendingStatus);
+    }
+
+    [TestMethod]
     public async Task AddFiveRegistersFiveIndependentEventsForTheCardLine()
     {
         var dashboard = new QueueDashboardRepository(
@@ -790,6 +824,7 @@ public sealed class OperationViewModelTests
 
         public Task<LocalSweepRegistration> RecordAsync(
             ProductionSweep sweep,
+            OutboxAuthorizationEvidence? authorization = null,
             CancellationToken cancellationToken = default)
         {
             RecordCalls++;

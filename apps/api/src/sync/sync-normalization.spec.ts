@@ -75,6 +75,26 @@ describe("normalizeSyncItem", () => {
 
     expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
   });
+
+  it("accepts an exact sweep and rejects duplicate event references", () => {
+    const item = productionSweep();
+    expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
+    item.payload.eventIds = [
+      "45000000-0000-4000-8000-000000000001",
+      "45000000-0000-4000-8000-000000000001",
+    ];
+    expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
+  });
+
+  it("accepts optional two-decimal mercury and rejects legacy reloads", () => {
+    const item = mercuryMovement();
+    expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
+    item.payload.amountGrams = 10.123;
+    expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
+    item.payload.amountGrams = 10.12;
+    item.payload.movementKind = "RELOAD";
+    expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
+  });
 });
 
 function operationStarted(): SyncEnvelopeItem {
@@ -142,6 +162,71 @@ function productionEvent(): SyncEnvelopeItem {
       inputSignalCode: "RegisterCajuela",
       inputLineSlot: 1,
       inputWasRepeat: false,
+    },
+  };
+}
+
+function productionSweep(): SyncEnvelopeItem {
+  return {
+    outboxMessageId: "41000000-0000-4000-8000-000000000003",
+    stationSequence: 3,
+    operationType: "PRODUCTION_SWEEP_RECORDED",
+    aggregateType: "production_sweep",
+    aggregateId: "47000000-0000-4000-8000-000000000001",
+    payloadSchemaVersion: 1,
+    createdAtUtc: "2026-09-15T18:05:00.000Z",
+    authorization: operationStarted().authorization,
+    payload: {
+      schemaVersion: 1,
+      sweepId: "47000000-0000-4000-8000-000000000001",
+      organizationId: scope.organizationId,
+      plantId: scope.plantId,
+      stationId: scope.stationId,
+      lineId: "32000000-0000-4000-8000-000000000001",
+      feedCycleId: "43000000-0000-4000-8000-000000000001",
+      shipmentId: "42000000-0000-4000-8000-000000000001",
+      clientSequence: 3,
+      cajuelaCount: 1,
+      eventIds: ["45000000-0000-4000-8000-000000000001"],
+      sweptAtUtc: "2026-09-15T18:05:00.000Z",
+      recordedAtUtc: "2026-09-15T18:05:01.000Z",
+      recordedByProfileId: operationStarted().authorization.actorProfileId,
+      isFinal: false,
+      notes: null,
+    },
+  };
+}
+
+function mercuryMovement(): SyncEnvelopeItem {
+  return {
+    outboxMessageId: "41000000-0000-4000-8000-000000000004",
+    stationSequence: 4,
+    operationType: "MERCURY_MOVEMENT_RECORDED",
+    aggregateType: "mercury_movement",
+    aggregateId: "48000000-0000-4000-8000-000000000001",
+    payloadSchemaVersion: 1,
+    createdAtUtc: "2026-09-15T18:06:00.000Z",
+    authorization: operationStarted().authorization,
+    payload: {
+      schemaVersion: 1,
+      movementId: "48000000-0000-4000-8000-000000000001",
+      organizationId: scope.organizationId,
+      plantId: scope.plantId,
+      stationId: scope.stationId,
+      lineId: "32000000-0000-4000-8000-000000000001",
+      feedCycleId: "43000000-0000-4000-8000-000000000001",
+      shipmentId: "42000000-0000-4000-8000-000000000001",
+      lineComponentId: "46000000-0000-4000-8000-000000000001",
+      sweepId: "47000000-0000-4000-8000-000000000001",
+      clientSequence: 4,
+      movementKind: "SWEEP_INPUT",
+      amountGrams: 400.7,
+      unitCode: "g",
+      occurredAtUtc: "2026-09-15T18:06:00.000Z",
+      recordedAtUtc: "2026-09-15T18:06:01.000Z",
+      recordedByProfileId: operationStarted().authorization.actorProfileId,
+      supersedesMovementId: null,
+      notes: null,
     },
   };
 }

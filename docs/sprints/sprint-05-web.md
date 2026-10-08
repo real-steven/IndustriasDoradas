@@ -10,12 +10,12 @@
 2. El oro se anota físicamente durante el trabajo y después puede registrarse en web como un total por cargamento cerrado, no por barrida. No se cargan resultados anteriores a la puesta en marcha.
 3. Vacío significa no registrado y `0,00` significa resultado medido en cero. Cada corrección conserva valor anterior, autora, fecha y motivo.
 4. Desktop nunca consulta ni almacena cantidades de oro.
-5. La operación en vivo debe mostrar frescura. SSE/polling solo avisa que hay cambios; Sprint 4.11 debe completar primero las proyecciones operativas compartidas entre estaciones para no mostrar cargamentos parciales o conteos en cero.
+5. La operación en vivo debe mostrar frescura. SSE/polling avisa que hay cambios y Sprint 4.11 ya entrega las proyecciones operativas compartidas; la web debe consumir read models centrales, no inventar totales en el cliente.
 6. La configuración futura permitirá renombrar, colorear, agregar y desactivar líneas/catálogos. Desactivar conserva historial y se bloquea mientras haya operación activa; no se usa borrado físico.
 
 ## Orden de trabajo
 
-1. Cerrar Sprint 4.11: sincronización central de cargamentos, responsables, cajuelas, barridas y mercurio entre estaciones.
+1. ~~Cerrar Sprint 4.11: sincronización central de cargamentos, responsables, cajuelas, barridas y mercurio entre estaciones.~~ Cerrado técnica y manualmente el 2026-10-08.
 2. Confirmar wireframes y las preguntas gerenciales del MVP.
 3. Crear read models y definiciones únicas de totales.
 4. Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento.

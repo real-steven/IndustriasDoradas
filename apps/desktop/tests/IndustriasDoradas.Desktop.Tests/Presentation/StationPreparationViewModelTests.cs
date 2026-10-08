@@ -573,6 +573,7 @@ public sealed class StationPreparationViewModelTests
 
         public Task<LocalSweepRegistration> RecordAsync(
             ProductionSweep sweep,
+            OutboxAuthorizationEvidence? authorization = null,
             CancellationToken cancellationToken = default)
         {
             RecordCalls++;

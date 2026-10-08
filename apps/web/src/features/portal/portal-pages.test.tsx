@@ -50,9 +50,10 @@ describe("portal gerencial", () => {
       "href",
       "/gerencia/oro",
     );
-    expect(
-      screen.getByRole("link", { name: /Trabajadores/u }),
-    ).toHaveAttribute("href", "/gerencia/trabajadores");
+    expect(screen.getByRole("link", { name: /Trabajadores/u })).toHaveAttribute(
+      "href",
+      "/gerencia/trabajadores",
+    );
     expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
   });
 
@@ -62,8 +63,12 @@ describe("portal gerencial", () => {
     expect(
       screen.getByRole("heading", { name: "Oro por cargamento" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Vacío significa no registrado/u)).toBeInTheDocument();
-    expect(screen.getByText(/sin custodia ni existencia acumulada/u)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Vacío significa no registrado/u),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/sin custodia ni existencia acumulada/u),
+    ).toBeInTheDocument();
   });
 
   it("conserva la consulta real de auditoria en la nueva estructura", async () => {

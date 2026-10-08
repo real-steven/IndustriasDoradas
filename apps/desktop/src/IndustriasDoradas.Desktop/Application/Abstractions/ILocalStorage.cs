@@ -193,7 +193,8 @@ public sealed record RecordLocalMercuryMovement(
     DateTimeOffset OccurredAt,
     DateTimeOffset RecordedAt,
     bool ReplaceCurrent,
-    string? Notes = null);
+    string? Notes = null,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record LocalMercuryMovement(
     Guid Id,
@@ -414,6 +415,7 @@ public interface ILocalProductionSweepRepository
 
     Task<LocalSweepRegistration> RecordAsync(
         ProductionSweep sweep,
+        OutboxAuthorizationEvidence? authorization = null,
         CancellationToken cancellationToken = default);
 }
 

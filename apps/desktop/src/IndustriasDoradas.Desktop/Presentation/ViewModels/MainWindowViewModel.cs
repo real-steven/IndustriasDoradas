@@ -12,8 +12,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private object currentPage;
     private readonly ISyncStatusNotifier? syncStatusNotifier;
-    private readonly SynchronizationContext? uiContext;
+    private readonly IUiDispatcher uiDispatcher;
     private bool isRefreshingAfterSync;
+    private bool isRefreshRequestedAfterSync;
 
     public MainWindowViewModel(HomeViewModel home, DiagnosticsViewModel diagnostics)
         : this(home, diagnostics, null, null, null, null, null)
@@ -66,6 +67,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         AuditViewModel? audit,
         SettingsViewModel? settings,
         ISyncStatusNotifier? syncStatusNotifier)
+        : this(home, diagnostics, station, operation, audit, settings, syncStatusNotifier, new WpfUiDispatcher())
+    {
+    }
+
+    public MainWindowViewModel(
+        HomeViewModel home,
+        DiagnosticsViewModel diagnostics,
+        StationViewModel? station,
+        OperationViewModel? operation,
+        AuditViewModel? audit,
+        SettingsViewModel? settings,
+        ISyncStatusNotifier? syncStatusNotifier,
+        IUiDispatcher uiDispatcher)
     {
         Home = home;
         Diagnostics = diagnostics;
@@ -74,7 +88,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Audit = audit;
         Settings = settings;
         this.syncStatusNotifier = syncStatusNotifier;
-        uiContext = SynchronizationContext.Current;
+        this.uiDispatcher = uiDispatcher;
         currentPage = operation ?? (object?)station ?? home;
         ShowHomeCommand = new RelayCommand(() => CurrentPage = Home);
         ShowDiagnosticsCommand = new RelayCommand(
@@ -265,36 +279,36 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void OnSyncStatusChanged(object? sender, SyncStatusNotification notification)
     {
         if (!notification.HasDataChanges) return;
-        if (uiContext is null)
-        {
-            _ = RefreshVisibleDataAfterSyncAsync();
-            return;
-        }
-        uiContext.Post(static state =>
-        {
-            _ = ((MainWindowViewModel)state!).RefreshVisibleDataAfterSyncAsync();
-        }, this);
+        _ = uiDispatcher.InvokeAsync(RequestVisibleDataRefreshAfterSyncAsync);
     }
 
-    private async Task RefreshVisibleDataAfterSyncAsync()
+    private async Task RequestVisibleDataRefreshAfterSyncAsync()
     {
+        isRefreshRequestedAfterSync = true;
         if (isRefreshingAfterSync) return;
         isRefreshingAfterSync = true;
         try
         {
-            if (ReferenceEquals(CurrentPage, Audit) && Audit is not null)
+            while (isRefreshRequestedAfterSync)
             {
-                await Audit.RefreshAsync();
+                isRefreshRequestedAfterSync = false;
+                try
+                {
+                    if (ReferenceEquals(CurrentPage, Audit) && Audit is not null)
+                    {
+                        await Audit.RefreshAsync();
+                    }
+                    else if (ReferenceEquals(CurrentPage, Operation) && Operation is not null)
+                    {
+                        await Operation.RefreshAsync();
+                    }
+                }
+                catch (Exception exception) when (
+                    exception is IOException or SqliteException or InvalidOperationException)
+                {
+                    // El siguiente cambio o la apertura manual de la vista vuelve a consultar SQLite.
+                }
             }
-            else if (ReferenceEquals(CurrentPage, Operation) && Operation is not null)
-            {
-                await Operation.RefreshAsync();
-            }
-        }
-        catch (Exception exception) when (
-            exception is IOException or SqliteException or InvalidOperationException)
-        {
-            // El siguiente cambio o la apertura manual de la vista vuelve a consultar SQLite.
         }
         finally
         {

@@ -249,6 +249,126 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$assigned", Timestamp(payload, "started_at_utc", change.ChangedAtUtc)),
                     ("$unassigned", NullableText(payload, "ended_at_utc") ?? (object)DBNull.Value)).ConfigureAwait(false);
                 break;
+            case "PRODUCTION_EVENT":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT OR IGNORE INTO production_events(
+                        client_event_id, organization_id, plant_id, station_id, line_id,
+                        feed_cycle_id, shipment_id, responsible_worker_id, event_type,
+                        work_period, occurred_at_utc, recorded_at_utc, client_sequence,
+                        reverses_client_event_id)
+                    VALUES ($id, $organizationId, $plantId, $stationId, $lineId,
+                        $cycleId, $shipmentId, $workerId, $eventType, $workPeriod,
+                        $occurred, $recorded, $sequence, $reverses);
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$stationId", Text(payload, "station_id")),
+                    ("$lineId", Text(payload, "production_line_id")),
+                    ("$cycleId", Text(payload, "feed_cycle_id")),
+                    ("$shipmentId", Text(payload, "shipment_id")),
+                    ("$workerId", Text(payload, "responsible_worker_id")),
+                    ("$eventType", Text(payload, "event_type")),
+                    ("$workPeriod", Text(payload, "work_period")),
+                    ("$occurred", Timestamp(payload, "occurred_at_utc", change.ChangedAtUtc)),
+                    ("$recorded", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)),
+                    ("$sequence", Long(payload, "client_sequence")),
+                    ("$reverses", NullableText(payload, "reverses_client_event_id") ?? (object)DBNull.Value))
+                    .ConfigureAwait(false);
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO production_counters(
+                        organization_id, plant_id, line_id, shipment_id, feed_cycle_id,
+                        total, updated_at_utc)
+                    VALUES ($organizationId, $plantId, $lineId, $shipmentId, $cycleId,
+                        (SELECT COALESCE(SUM(CASE event_type
+                            WHEN 'CAJUELA_ADDED' THEN 1 ELSE -1 END), 0)
+                         FROM production_events
+                         WHERE organization_id=$organizationId AND line_id=$lineId
+                           AND shipment_id=$shipmentId AND feed_cycle_id=$cycleId), $updated)
+                    ON CONFLICT(line_id, shipment_id) DO UPDATE SET
+                        total=excluded.total, updated_at_utc=excluded.updated_at_utc;
+                    """, cancellationToken,
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$lineId", Text(payload, "production_line_id")),
+                    ("$shipmentId", Text(payload, "shipment_id")),
+                    ("$cycleId", Text(payload, "feed_cycle_id")),
+                    ("$updated", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)))
+                    .ConfigureAwait(false);
+                break;
+            case "PRODUCTION_SWEEP":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT OR IGNORE INTO production_sweeps(
+                        id, organization_id, plant_id, station_id, line_id, feed_cycle_id,
+                        shipment_id, client_sequence, cajuela_count, swept_at_utc,
+                        recorded_at_utc, recorded_by_profile_id, is_final, notes)
+                    VALUES ($id, $organizationId, $plantId, $stationId, $lineId, $cycleId,
+                        $shipmentId, $sequence, $count, $swept, $recorded, $recordedBy,
+                        $isFinal, $notes);
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$stationId", Text(payload, "station_id")),
+                    ("$lineId", Text(payload, "production_line_id")),
+                    ("$cycleId", Text(payload, "feed_cycle_id")),
+                    ("$shipmentId", Text(payload, "shipment_id")),
+                    ("$sequence", Long(payload, "client_sequence")),
+                    ("$count", Integer(payload, "cajuela_count")),
+                    ("$swept", Timestamp(payload, "swept_at_utc", change.ChangedAtUtc)),
+                    ("$recorded", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)),
+                    ("$recordedBy", Text(payload, "recorded_by_profile_id")),
+                    ("$isFinal", Bool(payload, "is_final") ? 1 : 0),
+                    ("$notes", NullableText(payload, "notes") ?? (object)DBNull.Value))
+                    .ConfigureAwait(false);
+                foreach (string eventId in StringArray(payload, "event_ids"))
+                {
+                    await ExecuteAsync(connection, transaction, """
+                        INSERT OR IGNORE INTO sweep_production_events(
+                            organization_id, sweep_id, production_event_id,
+                            shipment_id, line_id, feed_cycle_id)
+                        VALUES ($organizationId, $sweepId, $eventId,
+                            $shipmentId, $lineId, $cycleId);
+                        """, cancellationToken,
+                        ("$organizationId", Text(payload, "organization_id")),
+                        ("$sweepId", Text(payload, "id")), ("$eventId", eventId),
+                        ("$shipmentId", Text(payload, "shipment_id")),
+                        ("$lineId", Text(payload, "production_line_id")),
+                        ("$cycleId", Text(payload, "feed_cycle_id")))
+                        .ConfigureAwait(false);
+                }
+                break;
+            case "MERCURY_MOVEMENT":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT OR IGNORE INTO mercury_movements(
+                        id, organization_id, plant_id, station_id, line_id, feed_cycle_id,
+                        shipment_id, line_component_id, sweep_id, client_sequence,
+                        movement_kind, amount_centigrams, unit_code, occurred_at_utc,
+                        recorded_at_utc, recorded_by_profile_id, supersedes_movement_id, notes)
+                    VALUES ($id, $organizationId, $plantId, $stationId, $lineId, $cycleId,
+                        $shipmentId, $componentId, $sweepId, $sequence, $kind, $amount,
+                        $unit, $occurred, $recorded, $recordedBy, $supersedes, $notes);
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$stationId", Text(payload, "station_id")),
+                    ("$lineId", Text(payload, "production_line_id")),
+                    ("$cycleId", Text(payload, "feed_cycle_id")),
+                    ("$shipmentId", Text(payload, "shipment_id")),
+                    ("$componentId", Text(payload, "line_component_id")),
+                    ("$sweepId", NullableText(payload, "sweep_id") ?? (object)DBNull.Value),
+                    ("$sequence", Long(payload, "client_sequence")),
+                    ("$kind", Text(payload, "movement_kind")),
+                    ("$amount", Centigrams(payload, "amount_grams") ?? (object)DBNull.Value),
+                    ("$unit", Text(payload, "unit_code")),
+                    ("$occurred", Timestamp(payload, "occurred_at_utc", change.ChangedAtUtc)),
+                    ("$recorded", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)),
+                    ("$recordedBy", Text(payload, "recorded_by_profile_id")),
+                    ("$supersedes", NullableText(payload, "supersedes_movement_id") ?? (object)DBNull.Value),
+                    ("$notes", NullableText(payload, "notes") ?? (object)DBNull.Value))
+                    .ConfigureAwait(false);
+                break;
         }
     }
 
@@ -351,6 +471,25 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
     private static int Integer(JsonElement payload, string name) =>
         payload.TryGetProperty(name, out JsonElement value) && value.TryGetInt32(out int result)
             ? result : throw new InvalidOperationException($"Falta {name} en cambio remoto.");
+    private static long Long(JsonElement payload, string name) =>
+        payload.TryGetProperty(name, out JsonElement value) && value.TryGetInt64(out long result)
+            ? result : throw new InvalidOperationException($"Falta {name} en cambio remoto.");
+    private static long? Centigrams(JsonElement payload, string name)
+    {
+        if (!payload.TryGetProperty(name, out JsonElement value) || value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (!value.TryGetDecimal(out decimal grams) || grams < 0 || decimal.Round(grams, 2) != grams)
+            throw new InvalidOperationException($"Valor inválido para {name} en cambio remoto.");
+        return checked((long)(grams * 100m));
+    }
+    private static string[] StringArray(JsonElement payload, string name)
+    {
+        if (!payload.TryGetProperty(name, out JsonElement value) || value.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"Falta {name} en cambio remoto.");
+        return value.EnumerateArray().Select(item => item.ValueKind == JsonValueKind.String
+            ? item.GetString()!
+            : throw new InvalidOperationException($"Valor inválido en {name}.")).ToArray();
+    }
     private static string Timestamp(JsonElement payload, string name, DateTimeOffset fallback) =>
         NullableText(payload, name) ?? SqliteLocalStorageConverters.Timestamp(fallback);
 }
