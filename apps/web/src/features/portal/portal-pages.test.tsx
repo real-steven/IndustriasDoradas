@@ -13,131 +13,123 @@ import {
   type RoleCode,
 } from "../../auth/auth-context";
 
-describe("portal role matrix", () => {
+describe("portal gerencial", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
   });
 
-  it("removes the legacy administrator portal route", () => {
-    renderPortal("JEFE_EMPRESA", "/administracion");
+  it("retira las rutas del antiguo modulo de administracion", () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia/administracion");
+
     expect(
       screen.getByRole("heading", { name: "Página no encontrada" }),
     ).toBeInTheDocument();
   });
 
-  it("shows report access only to management", () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(emptyPage()));
+  it("presenta el nuevo resumen sin inventar datos operativos", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia");
+
     expect(
-      screen.getByRole("heading", { name: "Reportes" }),
+      screen.getByRole("heading", { name: "Buenos días, Lucía." }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Sin datos en vivo")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Administración/u }),
+    ).not.toBeInTheDocument();
   });
 
-  it("denies the web portal to an administrator", () => {
+  it("expone la navegacion confirmada y separa los modulos futuros", () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia");
+
+    expect(screen.getByRole("link", { name: "Operación" })).toHaveAttribute(
+      "href",
+      "/gerencia/operacion",
+    );
+    expect(screen.getByRole("link", { name: "Oro" })).toHaveAttribute(
+      "href",
+      "/gerencia/oro",
+    );
+    expect(
+      screen.getByRole("link", { name: /Trabajadores/u }),
+    ).toHaveAttribute("href", "/gerencia/trabajadores");
+    expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
+  });
+
+  it("explica que el oro es opcional y no representa custodia", () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia/oro");
+
+    expect(
+      screen.getByRole("heading", { name: "Oro por cargamento" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Vacío significa no registrado/u)).toBeInTheDocument();
+    expect(screen.getByText(/sin custodia ni existencia acumulada/u)).toBeInTheDocument();
+  });
+
+  it("conserva la consulta real de auditoria en la nueva estructura", async () => {
+    const transport = vi.fn<typeof fetch>((input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      expect(url).toContain("/audit-events");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer fictitious-token",
+      );
+      return Promise.resolve(emptyPage());
+    });
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal("JEFE_EMPRESA", "/gerencia/auditoria");
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Aún no hay movimientos disponibles",
+      }),
+    ).toBeInTheDocument();
+    expect(transport).toHaveBeenCalledOnce();
+  });
+
+  it("permite cerrar la sesion desde el menu gerencial", async () => {
+    const user = userEvent.setup();
+    const signOut = vi.fn(() => Promise.resolve());
+    renderPortal("JEFE_EMPRESA", "/gerencia", signOut);
+
+    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+
+    expect(signOut).toHaveBeenCalledOnce();
+  });
+
+  it("rechaza perfiles web fuera del alcance vigente", () => {
     renderPortal("ADMINISTRADOR", "/gerencia");
+
     expect(
       screen.getByRole("heading", { name: "Acceso restringido" }),
     ).toBeInTheDocument();
   });
-
-  it("presents administration as separate module links", () => {
-    renderPortal("JEFE_EMPRESA", "/gerencia/administracion");
-
-    expect(
-      screen.queryByRole("link", { name: /Usuarios administradores/u }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Jefes de planta/u }),
-    ).toHaveAttribute("href", "/gerencia/administracion/jefes-planta");
-    expect(screen.getByRole("link", { name: /Operarios/u })).toHaveAttribute(
-      "href",
-      "/gerencia/administracion/operarios",
-    );
-    expect(screen.getByRole("link", { name: /Proveedores/u })).toHaveAttribute(
-      "href",
-      "/gerencia/administracion/proveedores",
-    );
-    expect(screen.getByRole("link", { name: /Plantas/u })).toHaveAttribute(
-      "href",
-      "/gerencia/administracion/plantas",
-    );
-    expect(
-      screen.queryByRole("button", { name: "Crear e invitar" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("requires the manager to provide the real suspension reason", async () => {
-    const transport = vi
-      .fn<typeof fetch>()
-      .mockImplementation((input, init) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.href
-              : input.url;
-        if (init?.method === "POST") return Promise.resolve(accountResponse());
-        if (url.includes("permissions"))
-          return Promise.resolve(permissionList());
-        if (url.includes("roleCode=JEFE_PLANTA"))
-          return Promise.resolve(accountPage());
-        return Promise.resolve(emptyPage());
-      });
-    vi.stubGlobal("fetch", transport);
-    const user = userEvent.setup();
-    renderPortal("JEFE_EMPRESA", "/gerencia/administracion/jefes-planta");
-
-    const reason = await screen.findByLabelText("Razón de suspensión");
-    const suspend = screen.getByRole("button", { name: "Suspender" });
-    expect(suspend).toBeDisabled();
-
-    await user.type(reason, "Revisión gerencial ficticia");
-    await user.click(suspend);
-
-    await vi.waitFor(() =>
-      expect(transport).toHaveBeenCalledWith(
-        expect.stringContaining("/suspend"),
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({ reason: "Revisión gerencial ficticia" }),
-        }),
-      ),
-    );
-  });
 });
 
-function renderPortal(role: RoleCode, path: string): void {
+function renderPortal(
+  role: RoleCode,
+  path: string,
+  signOut = vi.fn(() => Promise.resolve()),
+): AuthState {
   const auth: AuthState = {
     session: { access_token: "fictitious-token" } as Session,
     profile: {
       profileId: "a1000000-0000-4000-8000-000000000001",
       organizationId: "30000000-0000-4000-8000-000000000001",
       role,
-      permissions:
-        role === "JEFE_EMPRESA"
-          ? [
-              "reports.read",
-              "audit.read_redacted",
-              "audit.read_operational",
-              "organization_catalogs.read",
-              "organization_catalogs.manage",
-              "suppliers.manage",
-              "workers.resolve",
-              "workers.read",
-              "plant_managers.manage",
-              "administrators.create",
-              "administrators.govern",
-              "administrators.permissions.manage",
-            ]
-          : [],
-      expiresAt: "2026-08-19T01:00:00Z",
+      permissions: role === "JEFE_EMPRESA" ? ["audit.read_redacted"] : [],
+      expiresAt: "2026-10-09T01:00:00Z",
     },
     loading: false,
     error: null,
     signIn: vi.fn(),
     recover: vi.fn(),
-    signOut: vi.fn(),
+    signOut,
   };
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -151,13 +143,7 @@ function renderPortal(role: RoleCode, path: string): void {
       </QueryProvider>
     </AuthContext.Provider>,
   );
-}
-
-function permissionList(items: unknown[] = []): Response {
-  return new Response(JSON.stringify(items), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return auth;
 }
 
 function emptyPage(): Response {
@@ -173,37 +159,5 @@ function emptyPage(): Response {
       status: 200,
       headers: { "Content-Type": "application/json" },
     },
-  );
-}
-
-function accountPage(): Response {
-  return new Response(
-    JSON.stringify({
-      items: [
-        {
-          id: "a1000000-0000-4000-8000-000000000002",
-          displayName: "Administración ficticia",
-          preferredLocale: "es",
-          accountStatus: "ACTIVE",
-          roleCode: "ADMINISTRADOR",
-          statusReason: null,
-        },
-      ],
-      page: 1,
-      pageSize: 25,
-      total: 1,
-      totalPages: 1,
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
-}
-
-function accountResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      id: "a1000000-0000-4000-8000-000000000002",
-      accountStatus: "SUSPENDED",
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
   );
 }

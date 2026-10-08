@@ -1,18 +1,23 @@
 # Portal web React
 
-Portal React con Supabase Auth, gerencia orientada a datos, Administración en la
-misma sesión de `JEFE_EMPRESA` y módulos filtrados por permisos individuales,
-catálogos, solicitudes, gobierno de cuentas, auditoría y estado técnico.
+Portal React con Supabase Auth y una experiencia gerencial orientada a datos
+para `JEFE_EMPRESA`. La navegación vigente separa Resumen, Operación, Oro,
+Cargamentos y Auditoría. Estadísticas, Trabajadores, Reportes, Inventario y
+Configuración permanecen visibles como módulos futuros, sin acciones falsas.
 
-Administración abre primero un panel de módulos para evitar una página extensa.
-Según los permisos efectivos, ofrece accesos separados a administradores, jefes
-de planta, operarios, proveedores y plantas. Las rutas hijas conservan el prefijo
-`/gerencia/administracion` para `JEFE_EMPRESA` y `/administracion` para
-`ADMINISTRADOR`.
+El MVP no ofrece gobierno de administradores ni delegación de permisos. La
+arquitectura puede admitir más cuentas gerenciales en el futuro, pero la
+experiencia actual corresponde a Lucía como única usuaria funcional.
 
-La asignación de permisos administrativos ofrece selección rápida por áreas y
-mantiene el detalle individual dentro de Opciones avanzadas. Ambos controles
-modifican el mismo conjunto de permisos granulares; no crean roles implícitos.
+El oro es un resultado opcional por cargamento cerrado desde la puesta en
+marcha. Vacío significa no registrado y nunca se interpreta como cero. No se
+modelan custodia, entrega, existencia acumulada ni carga histórica. Las
+comparaciones futuras por proveedor deberán indicar la cobertura de cargamentos
+con resultado registrado.
+
+La estructura visual no presenta cifras ficticias. Operación y cargamentos se
+conectarán cuando la sincronización central proyecte datos completos entre
+estaciones; Auditoría conserva su consulta real a la API.
 
 ## Ejecutar
 
@@ -42,8 +47,8 @@ pnpm.cmd --filter @industrias-doradas/web test
 | Paquete | Propósito |
 | --- | --- |
 | `react` y `react-dom` | Renderizar la interfaz y conectarla con el DOM. |
-| `react-router-dom` | Declarar la navegación mínima y la ruta de estado. |
-| `@tanstack/react-query` | Gestionar la consulta health, caché, reintentos y actualización. |
+| `react-router-dom` | Declarar la navegación gerencial y la ruta de estado. |
+| `@tanstack/react-query` | Gestionar consultas de API, caché, reintentos y actualización. |
 | `@supabase/supabase-js` | Login, sesión, refresh y recuperación de contraseña. |
 
 ### Desarrollo y pruebas

@@ -2,12 +2,14 @@ import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 
 import { LoginPage } from "../auth/login-page";
 import {
-  AdminPage,
   AuditPage,
-  ManagerPage,
-  PortalLayout,
-  ProtectedPortal,
+  DashboardPage,
+  GoldPage,
+  OperationPage,
+  ShipmentsPage,
+  UpcomingPage,
 } from "../features/portal/portal-pages";
+import { PortalLayout, ProtectedPortal } from "../features/portal/portal-shell";
 import { StatusPage } from "../features/system-status/status-page";
 
 export function App() {
@@ -16,24 +18,16 @@ export function App() {
       <Route path="login" element={<LoginPage />} />
       <Route element={<ProtectedPortal roles={["JEFE_EMPRESA"]} />}>
         <Route path="gerencia" element={<PortalLayout />}>
-          <Route index element={<ManagerPage />} />
-          <Route path="administracion">
-            <Route index element={<AdminPage />} />
-            <Route
-              path="jefes-planta"
-              element={<AdminPage section="jefes-planta" />}
-            />
-            <Route
-              path="operarios"
-              element={<AdminPage section="operarios" />}
-            />
-            <Route
-              path="proveedores"
-              element={<AdminPage section="proveedores" />}
-            />
-            <Route path="plantas" element={<AdminPage section="plantas" />} />
-          </Route>
+          <Route index element={<DashboardPage />} />
+          <Route path="operacion" element={<OperationPage />} />
+          <Route path="oro" element={<GoldPage />} />
+          <Route path="cargamentos" element={<ShipmentsPage />} />
           <Route path="auditoria" element={<AuditPage />} />
+          <Route path="estadisticas" element={<UpcomingPage title="Estadísticas" description="Comparación de proveedores, líneas y períodos con cobertura de datos visible." />} />
+          <Route path="trabajadores" element={<UpcomingPage title="Trabajadores" description="Creación futura de operarios y jefes de planta, asistencia y horas." />} />
+          <Route path="reportes" element={<UpcomingPage title="Reportes" description="Generación futura de archivos Excel gerenciales." />} />
+          <Route path="inventario" element={<UpcomingPage title="Inventario" description="Trazabilidad futura de herramientas, componentes y mantenimiento." />} />
+          <Route path="configuracion" element={<UpcomingPage title="Configuración" description="Administración futura de líneas y catálogos sin eliminar historial." />} />
         </Route>
       </Route>
       <Route element={<PublicLayout />}>
