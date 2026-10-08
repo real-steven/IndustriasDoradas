@@ -16,8 +16,8 @@
 ## Orden de trabajo
 
 1. ~~Cerrar Sprint 4.11: sincronización central de cargamentos, responsables, cajuelas, barridas y mercurio entre estaciones.~~ Cerrado técnica y manualmente el 2026-10-08.
-2. Confirmar wireframes y las preguntas gerenciales del MVP.
-3. Crear read models y definiciones únicas de totales.
+2. ~~Confirmar wireframes y las preguntas gerenciales del MVP.~~ Cerrado el 2026-10-08 con el concepto aprobado y el recorrido documentado.
+3. ~~Crear read models y definiciones únicas de totales.~~ Cerrado el 2026-10-08 con vistas centrales y pruebas SQL reproducibles.
 4. Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento.
 5. Implementar resumen y operación con frescura visible.
 6. Implementar historial/detalle y auditoría agrupada por cargamento.
@@ -35,11 +35,22 @@
 
 ### 5.1 Necesidades gerenciales y wireframes
 
+**Estado:** cerrado el 2026-10-08. El alcance verificable está en
+`docs/product/gerencia-web-mvp.md`; la referencia visual aprobada es
+`docs/design/gerencia-web-concept.html`. Las rutas confirmadas y los módulos
+futuros tienen cobertura en las pruebas del portal.
+
 **Prompt:** Diseña y valida un portal mobile-first para la única cuenta `JEFE_EMPRESA`: Resumen, Operación, Oro por cargamento, Cargamentos y Auditoría. Muestra Estadísticas, Trabajadores, Reportes, Inventario y Configuración como `Próximamente`. Prioriza lectura; no agregues gobierno de usuarios ni permisos delegables. Toda mutación queda auditada.
 
 **Pausa:** Lucía encuentra operación actual, cargamento y oro pendiente sin explicación del desarrollador.
 
 ### 5.2 Read models y definiciones de totales
+
+**Estado:** cerrado el 2026-10-08. La migración
+`20261008120214_sprint_5_2_management_read_models.sql` incorpora el resultado
+canónico de oro por cargamento y vistas privadas para operación, cargamentos y
+mercurio. La prueba SQL 017 cubre reversos, barrida tardía, datos confirmados
+después, cero versus ausente y correcciones append-only sin doble conteo.
 
 **Prompt:** Diseña consultas/read models centrales derivados de eventos confirmados. Define cajuelas, barridas, cargamentos cerrados, resultado total de oro, cortes temporales, reversos y datos tardíos. Un cargamento tiene cero o un resultado total de oro; no sumes resultados por barrida. Evita duplicar lógica en React.
 

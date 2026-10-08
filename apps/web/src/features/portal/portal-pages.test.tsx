@@ -57,6 +57,16 @@ describe("portal gerencial", () => {
     expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
   });
 
+  it.each([
+    ["/gerencia/operacion", "Operación"],
+    ["/gerencia/oro", "Oro por cargamento"],
+    ["/gerencia/cargamentos", "Cargamentos"],
+  ])("expone la ruta gerencial %s", (path, heading) => {
+    renderPortal("JEFE_EMPRESA", path);
+
+    expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+  });
+
   it("explica que el oro es opcional y no representa custodia", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia/oro");
 
