@@ -332,7 +332,7 @@ public sealed class AuditViewModel : ObservableObject
 
     public Task InitializeAsync() => RefreshAsync();
 
-    private async Task RefreshAsync()
+    public async Task RefreshAsync()
     {
         Status = "Actualizando los registros disponibles…";
         await diagnostics.RefreshAsync().ConfigureAwait(true);

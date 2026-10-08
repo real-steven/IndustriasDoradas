@@ -2,7 +2,7 @@
 
 **Objetivo:** completar el ciclo desde la cajuela hasta la barrida, los movimientos de mercurio por rastra y el oro gestionado exclusivamente desde web.
 
-**Entregable:** alertas configurables en múltiplos de 50, barridas con cantidad real, mercurio por rastra-línea-cargamento y oro/custodia en web exclusivamente bajo la cuenta `JEFE_EMPRESA` de la gerente.
+**Entregable:** alertas configurables en múltiplos de 50, barridas con cantidad real, mercurio por rastra-línea-cargamento y resultado opcional de oro por cargamento en web exclusivamente bajo la cuenta `JEFE_EMPRESA` de la gerente.
 
 ## Orden de trabajo
 
@@ -11,17 +11,17 @@
 3. Separar las alertas de revisión cada 50 de la referencia visual de barrida cada 250, sin bloquear alimentación.
 4. Permitir barrida menor, igual o mayor a las referencias; al cerrar, guiar el registro de la barrida final sin exigir mediciones inmediatas.
 5. Registrar desde desktop, por barrida, entrada y saldo final de mercurio en cada una de las tres rastras, o dejar los datos pendientes.
-6. Registrar oro parcial por barrida únicamente desde la web de `JEFE_EMPRESA`.
-7. Consolidar oro por línea, jornada, día, cargamento y proveedor.
-8. Registrar custodia y solicitudes de entrega en gramos.
+6. Registrar un único total de oro por cargamento cerrado únicamente desde la web de `JEFE_EMPRESA`.
+7. Consultar el oro consolidado por línea, período, cargamento y proveedor sin inventar parciales por barrida.
+8. Comparar rendimiento de proveedores usando únicamente cargamentos con oro registrado y mostrando la cobertura de datos.
 9. Integrar novedades simples de paro/mantenimiento/feriado.
 10. Sincronizar y auditar todo idempotentemente.
 
-**Pruebas:** 49/50/55/56, 99/100/105/106, reverso 50→49→50, progreso 249/250/251/500, barrida real en 260 con siguiente meta 510, barrida final de 30, barrida única de 60, rechazo de mezcla entre cargamentos, cargas/recargas/recuperación por rastra, enteros/decimales, datos pendientes, acceso web de `JEFE_EMPRESA`, sesión vencida y llegada fuera de orden.
+**Pruebas:** 49/50/55/56, 99/100/105/106, reverso 50→49→50, progreso 249/250/251/500, barrida real en 260 con siguiente meta 510, barrida final de 30, barrida única de 60, rechazo de mezcla entre cargamentos, entrada/saldo final por rastra, enteros/decimales, datos pendientes, un total de oro por cargamento, acceso web de `JEFE_EMPRESA`, sesión vencida y llegada fuera de orden.
 
-**Prueba manual:** cargamentos separados en líneas distintas sin repartir ninguno, alertas, barridas reales, mercurio por las tres rastras, oro parcial/definitivo solo en web con cuenta autorizada, desconexión y custodia.
+**Prueba manual:** cargamentos separados en líneas distintas sin repartir ninguno, alertas, barridas reales, mercurio por las tres rastras, oro total opcional por cargamento solo en web con cuenta gerencial y desconexión.
 
-**Aceptación:** trazabilidad oro → barrida real → eventos → cargamento/línea/responsable; total del cargamento exacto; cifras pendientes no se inventan.
+**Aceptación:** trazabilidad oro → cargamento cerrado → línea/proveedor/responsable → barridas/eventos; total del cargamento exacto; cifras pendientes no se inventan.
 
 ## Mini pasos, pausas y prompts
 
@@ -43,7 +43,7 @@
 
 ### 4.2 Modelo de barrida real
 
-**Prompt:** Modela barrida como registro explícito de línea+cargamento y conjunto/rango verificable de eventos. La cantidad puede ser menor, igual o mayor a las referencias; nunca mezcla cargamentos y existe barrida final. Incluye responsable, momentos y estado separado para la recuperación de mercurio pendiente. El oro no pertenece al dominio operativo de desktop: se incorporará como registro gerencial web, vinculado a la barrida, sin revelar cantidades en planta.
+**Prompt:** Modela barrida como registro explícito de línea+cargamento y conjunto/rango verificable de eventos. La cantidad puede ser menor, igual o mayor a las referencias; nunca mezcla cargamentos y existe barrida final. Incluye responsable, momentos y estado separado para el mercurio pendiente. El oro no pertenece al dominio operativo de desktop: se incorporará como un resultado gerencial total del cargamento cerrado, sin revelar cantidades en planta.
 
 **Pausa:** ejemplos ficticios de cargamentos 30, 60 y 130 quedan representados sin ambigüedad.
 
@@ -60,7 +60,7 @@
 
 ### 4.3 Migraciones central/local
 
-**Prompt:** Implementa migraciones PostgreSQL/SQLite del modelo aprobado con checks decimales, unidades, FK, índices e idempotencia. Modela las rastras como equipos identificables de su línea; conserva movimientos de carga, recarga y recuperación de mercurio. En PostgreSQL separa oro/custodia con políticas para `JEFE_EMPRESA`; impide acceso a jefe de planta y SQLite desktop no guarda cantidades de oro. Prueba actualización desde Sprint 3.
+**Prompt:** Implementa migraciones PostgreSQL/SQLite del modelo aprobado con checks decimales, unidades, FK, índices e idempotencia. Modela las rastras como equipos identificables de su línea; conserva movimientos históricos de mercurio por compatibilidad. En PostgreSQL separa el resultado opcional de oro con políticas para `JEFE_EMPRESA`; impide acceso a jefe de planta y SQLite desktop no guarda cantidades de oro. Las estructuras de custodia legadas no se exponen ni se amplían. Prueba actualización desde Sprint 3.
 
 **Pausa:** migración nueva/actualizada conserva producción y no permite mezclar cargamentos.
 
@@ -158,17 +158,17 @@
 
 **Estado:** 4.7 cerrado funcional y técnicamente. No iniciar 4.8 sin una nueva autorización.
 
-### 4.8 Oro parcial y definitivo
+### 4.8 Oro total por cargamento
 
-**Prompt:** Implementa en web el registro de oro parcial por barrida en gramos, aceptando enteros o hasta dos decimales, vacío pendiente y cero medido. Solo `JEFE_EMPRESA` puede consultar, crear y corregir en el alcance actual. No sincronices cantidades a SQLite desktop. Deriva automáticamente totales por línea, jornada, día (medianoche Costa Rica), cargamento y proveedor sin tratar pendientes como cero. El definitivo del cargamento es la suma de sus barridas en la única línea asignada. Muestra palos solo como conversión visual `1 palo = 0,10 g` sin alterar el valor canónico.
+**Prompt:** Implementa en web un único resultado total opcional de oro por cargamento cerrado en gramos, aceptando enteros o hasta dos decimales, vacío no registrado y cero medido. Lucía consolida primero sus apuntes físicos; no se registran parciales por barrida ni datos anteriores a la puesta en marcha. Solo `JEFE_EMPRESA` puede consultar, crear y corregir en el alcance actual. No sincronices cantidades a SQLite desktop. Deriva consultas por línea, período, cargamento y proveedor sin tratar vacíos como cero. Toda comparación de proveedores indica cuántos cargamentos sí tienen oro y cuántos quedaron excluidos. Muestra palos solo como conversión visual `1 palo = 0,10 g` sin alterar el valor canónico.
 
-**Pausa:** dataset manual coincide por todos los cortes y no cuenta dos veces un parcial.
+**Pausa:** dataset manual coincide por todos los cortes, cada cargamento tiene como máximo un resultado vigente y una corrección no duplica el total.
 
-### 4.9 Custodia y entrega
+### 4.9 Custodia y entrega — descartado del alcance vigente
 
-**Prompt:** Modela oro bajo custodia y su entrega exclusivamente en web para `JEFE_EMPRESA`. Una discrepancia conserva cantidad registrada, cantidad recibida y motivo. Desktop no consulta cantidades ni inicia solicitudes. No agregues venta, transporte ni contabilidad.
+**Decisión 2026-10-08:** no se implementa custodia, entrega ni existencia acumulada de oro. Lucía es la única responsable y solo desea registrar opcionalmente cuánto produjo cada cargamento para comparar proveedores. No se registran gastos, ventas, cambios de tenencia ni oro histórico anterior a la puesta en marcha. Las estructuras técnicas previas pueden permanecer por compatibilidad, pero no se exponen ni se desarrollan.
 
-**Pausa:** producido − entregado confirmado = custodia; rechazo no descuenta silenciosamente.
+**Pausa:** no aplica; paso cerrado por decisión de alcance.
 
 ### 4.10 Novedades operativas
 
@@ -178,6 +178,6 @@
 
 ### 4.11 Sincronización, trazabilidad y cierre
 
-**Prompt:** Extiende push/pull/idempotencia a alertas emitidas, barridas y mercurio. Mantén oro, custodia y entregas fuera del pull de desktop; expón su consulta trazable en web solo a `JEFE_EMPRESA` como oro→barrida→cajuelas→cargamento/línea/responsable. Prueba llegada fuera de orden, sesión vencida y completa ciclo realista y ficha manual.
+**Prompt:** Extiende push/pull/idempotencia a alertas emitidas, eventos de producción, cargamentos, responsables, barridas y mercurio, incluyendo las proyecciones necesarias para que otra estación vea datos completos y no solo una señal de cambio. Mantén el oro fuera del pull de desktop; expón su consulta trazable en web solo a `JEFE_EMPRESA` como oro total opcional→cargamento/línea/proveedor/responsable→barridas/cajuelas. Prueba llegada fuera de orden, sesión vencida, propagación entre dos estaciones y completa ciclo realista y ficha manual.
 
 **Pausa:** totales local/central iguales, cadena completa y compuerta Sprint 4 aprobada.

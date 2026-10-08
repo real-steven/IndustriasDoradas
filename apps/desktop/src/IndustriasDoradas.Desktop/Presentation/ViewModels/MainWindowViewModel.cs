@@ -2,17 +2,21 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.IO;
 using System.ComponentModel;
+using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain;
 using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
-public sealed class MainWindowViewModel : ObservableObject
+public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private object currentPage;
+    private readonly ISyncStatusNotifier? syncStatusNotifier;
+    private readonly SynchronizationContext? uiContext;
+    private bool isRefreshingAfterSync;
 
     public MainWindowViewModel(HomeViewModel home, DiagnosticsViewModel diagnostics)
-        : this(home, diagnostics, null, null, null, null)
+        : this(home, diagnostics, null, null, null, null, null)
     {
     }
 
@@ -20,7 +24,7 @@ public sealed class MainWindowViewModel : ObservableObject
         HomeViewModel home,
         DiagnosticsViewModel diagnostics,
         StationViewModel? station)
-        : this(home, diagnostics, station, null, null, null)
+        : this(home, diagnostics, station, null, null, null, null)
     {
     }
 
@@ -29,7 +33,7 @@ public sealed class MainWindowViewModel : ObservableObject
         DiagnosticsViewModel diagnostics,
         StationViewModel? station,
         OperationViewModel? operation)
-        : this(home, diagnostics, station, operation, null, null)
+        : this(home, diagnostics, station, operation, null, null, null)
     {
     }
 
@@ -39,7 +43,7 @@ public sealed class MainWindowViewModel : ObservableObject
         StationViewModel? station,
         OperationViewModel? operation,
         AuditViewModel? audit)
-        : this(home, diagnostics, station, operation, audit, null)
+        : this(home, diagnostics, station, operation, audit, null, null)
     {
     }
 
@@ -50,6 +54,18 @@ public sealed class MainWindowViewModel : ObservableObject
         OperationViewModel? operation,
         AuditViewModel? audit,
         SettingsViewModel? settings)
+        : this(home, diagnostics, station, operation, audit, settings, null)
+    {
+    }
+
+    public MainWindowViewModel(
+        HomeViewModel home,
+        DiagnosticsViewModel diagnostics,
+        StationViewModel? station,
+        OperationViewModel? operation,
+        AuditViewModel? audit,
+        SettingsViewModel? settings,
+        ISyncStatusNotifier? syncStatusNotifier)
     {
         Home = home;
         Diagnostics = diagnostics;
@@ -57,16 +73,18 @@ public sealed class MainWindowViewModel : ObservableObject
         Operation = operation;
         Audit = audit;
         Settings = settings;
+        this.syncStatusNotifier = syncStatusNotifier;
+        uiContext = SynchronizationContext.Current;
         currentPage = operation ?? (object?)station ?? home;
         ShowHomeCommand = new RelayCommand(() => CurrentPage = Home);
         ShowDiagnosticsCommand = new RelayCommand(
             () => CurrentPage = Diagnostics,
             CanShowDiagnostics);
-        ShowAuditCommand = new RelayCommand(
-            () => CurrentPage = Audit!,
+        ShowAuditCommand = new AsyncRelayCommand(
+            ShowAuditAsync,
             CanShowAudit);
-        ShowAuditCorrectionsCommand = new RelayCommand(
-            ShowAuditCorrections,
+        ShowAuditCorrectionsCommand = new AsyncRelayCommand(
+            ShowAuditCorrectionsAsync,
             CanShowAuditCorrections);
         ShowSettingsCommand = new RelayCommand(
             () => CurrentPage = Settings!,
@@ -79,6 +97,10 @@ public sealed class MainWindowViewModel : ObservableObject
             () => Operation is not null);
         if (Station is not null) Station.PropertyChanged += OnStationPropertyChanged;
         Diagnostics.PropertyChanged += OnDiagnosticsPropertyChanged;
+        if (syncStatusNotifier is not null)
+        {
+            syncStatusNotifier.Changed += OnSyncStatusChanged;
+        }
     }
 
     public HomeViewModel Home { get; }
@@ -127,8 +149,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public IRelayCommand ShowHomeCommand { get; }
 
     public IRelayCommand ShowDiagnosticsCommand { get; }
-    public IRelayCommand ShowAuditCommand { get; }
-    public IRelayCommand ShowAuditCorrectionsCommand { get; }
+    public IAsyncRelayCommand ShowAuditCommand { get; }
+    public IAsyncRelayCommand ShowAuditCorrectionsCommand { get; }
     public IRelayCommand ShowSettingsCommand { get; }
     public IRelayCommand ShowStationCommand { get; }
     public IRelayCommand ShowOperationCommand { get; }
@@ -180,9 +202,17 @@ public sealed class MainWindowViewModel : ObservableObject
         CurrentPage = Operation;
     }
 
-    private void ShowAuditCorrections()
+    private async Task ShowAuditAsync()
     {
         if (Audit is null) return;
+        await Audit.RefreshAsync();
+        CurrentPage = Audit;
+    }
+
+    private async Task ShowAuditCorrectionsAsync()
+    {
+        if (Audit is null) return;
+        await Audit.RefreshAsync();
         Audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
         CurrentPage = Audit;
     }
@@ -230,5 +260,56 @@ public sealed class MainWindowViewModel : ObservableObject
             nameof(DiagnosticsViewModel.CorrectionNotification))) return;
         OnPropertyChanged(nameof(HasCorrectionNotification));
         OnPropertyChanged(nameof(CorrectionNotification));
+    }
+
+    private void OnSyncStatusChanged(object? sender, SyncStatusNotification notification)
+    {
+        if (!notification.HasDataChanges) return;
+        if (uiContext is null)
+        {
+            _ = RefreshVisibleDataAfterSyncAsync();
+            return;
+        }
+        uiContext.Post(static state =>
+        {
+            _ = ((MainWindowViewModel)state!).RefreshVisibleDataAfterSyncAsync();
+        }, this);
+    }
+
+    private async Task RefreshVisibleDataAfterSyncAsync()
+    {
+        if (isRefreshingAfterSync) return;
+        isRefreshingAfterSync = true;
+        try
+        {
+            if (ReferenceEquals(CurrentPage, Audit) && Audit is not null)
+            {
+                await Audit.RefreshAsync();
+            }
+            else if (ReferenceEquals(CurrentPage, Operation) && Operation is not null)
+            {
+                await Operation.RefreshAsync();
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or SqliteException or InvalidOperationException)
+        {
+            // El siguiente cambio o la apertura manual de la vista vuelve a consultar SQLite.
+        }
+        finally
+        {
+            isRefreshingAfterSync = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Station is not null) Station.PropertyChanged -= OnStationPropertyChanged;
+        Diagnostics.PropertyChanged -= OnDiagnosticsPropertyChanged;
+        if (syncStatusNotifier is not null)
+        {
+            syncStatusNotifier.Changed -= OnSyncStatusChanged;
+        }
+        GC.SuppressFinalize(this);
     }
 }

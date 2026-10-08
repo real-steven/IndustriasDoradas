@@ -1,85 +1,94 @@
 # Sprint 5 — Portal web gerencial (semanas 10–11)
 
-**Objetivo:** seguimiento remoto bilingüe, claro y seguro, con datos priorizados y administración separada por módulo dentro de la misma sesión gerencial.
+**Objetivo:** entregar a Lucía un portal web mobile-first para consultar la planta, registrar el oro total de cada cargamento cerrado y revisar información trazable sin depender de perfiles administrativos adicionales.
 
-**Entregable:** jefe de empresa consulta toda la operación y auditoría y, como superadministrador, accede a ediciones y gobierno granular de administradores desde móvil/PC en español o inglés.
+**Entregable inicial confirmado:** una única cuenta `JEFE_EMPRESA` consulta resumen, operación, cargamentos y auditoría, y registra o corrige un único total de oro por cargamento cerrado. Trabajadores/horas, estadísticas avanzadas, reportes Excel, inventario/mantenimiento y configuración autoservicio aparecen como `Próximamente` y no bloquean el primer entregable.
+
+## Decisiones de alcance
+
+1. La gerente es la única usuaria funcional de la web en el MVP. No se diseñan pantallas de roles, delegación ni permisos de administradores.
+2. El oro se anota físicamente durante el trabajo y después puede registrarse en web como un total por cargamento cerrado, no por barrida. No se cargan resultados anteriores a la puesta en marcha.
+3. Vacío significa no registrado y `0,00` significa resultado medido en cero. Cada corrección conserva valor anterior, autora, fecha y motivo.
+4. Desktop nunca consulta ni almacena cantidades de oro.
+5. La operación en vivo debe mostrar frescura. SSE/polling solo avisa que hay cambios; Sprint 4.11 debe completar primero las proyecciones operativas compartidas entre estaciones para no mostrar cargamentos parciales o conteos en cero.
+6. La configuración futura permitirá renombrar, colorear, agregar y desactivar líneas/catálogos. Desactivar conserva historial y se bloquea mientras haya operación activa; no se usa borrado físico.
 
 ## Orden de trabajo
 
-1. Read models solo después de estabilizar eventos.
-2. API paginada con fecha, planta, línea, jornada, proveedor, responsable y cargamento.
-3. Dashboard: línea activa, cajuelas, cercanía de barrida, última sync y alertas.
-4. Oro bajo custodia y entrega: registro, corrección, confirmación/rechazo y discrepancia para `JEFE_EMPRESA` o administradores expresamente autorizados.
-5. Historial/detalle/auditoría, diferenciando hora de dispositivo/servidor.
-6. React mobile-first bilingüe; vacío/carga/error/offline en Safari iOS y Chrome.
-7. Una cuenta jefe de empresa; navegación orientada a datos y módulo Administración separado, con edición auditada y permisos granulares de administradores.
-8. Actualización casi en tiempo real con frescura visible y respaldo incremental.
-9. Rendimiento con datos proyectados de un año.
+1. Cerrar Sprint 4.11: sincronización central de cargamentos, responsables, cajuelas, barridas y mercurio entre estaciones.
+2. Confirmar wireframes y las preguntas gerenciales del MVP.
+3. Crear read models y definiciones únicas de totales.
+4. Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento.
+5. Implementar resumen y operación con frescura visible.
+6. Implementar historial/detalle y auditoría agrupada por cargamento.
+7. Implementar registro y corrección del oro total por cargamento.
+8. Validar responsive, accesibilidad, sesión, errores y rendimiento.
+9. Dejar módulos futuros visibles como `Próximamente`, sin construir su lógica todavía.
 
-**Pruebas:** filtros/totales SQL conocidos, rutas/roles y E2E login → línea → cargamento → barrida.
+**Pruebas:** filtros y totales SQL conocidos; rutas de `JEFE_EMPRESA`; E2E login → resumen → línea → cargamento cerrado → oro total → auditoría; ausencia de oro en desktop; actualización entre estaciones solo después de aprobar 4.11.
 
-**Prueba manual:** iPhone Safari, Android Chrome y PC con red lenta; comparar con API/desktop.
+**Prueba manual:** iPhone Safari, Android Chrome y PC con red lenta; comparar web, API y desktop y verificar que la fecha de actualización sea comprensible.
 
-**Aceptación:** se distingue dato actualizado/offline; mismos filtros = mismos totales; gerencia puede administrar todos los módulos sin cambiar de cuenta y cada administrador queda limitado a sus concesiones vigentes.
+**Aceptación:** la gerente completa el recorrido sin ayuda, distingue dato reciente/offline, obtiene los mismos totales con los mismos filtros y ninguna vista mezcla cargamentos, proveedores o líneas.
 
 ## Mini pasos, pausas y prompts
 
 ### 5.1 Necesidades gerenciales y wireframes
 
-**Prompt:** Diseña wireframes mobile-first para jefe de empresa: resumen, línea, cargamento, barrida, oro/custodia, asistencia, inventario, historial y gobierno de administradores. Incluye español/inglés, preferencia y frescura. Prioriza datos; coloca altas, correcciones y edición de permisos en un módulo Administración claramente separado dentro de la misma sesión. Toda mutación queda auditada.
+**Prompt:** Diseña y valida un portal mobile-first para la única cuenta `JEFE_EMPRESA`: Resumen, Operación, Oro por cargamento, Cargamentos y Auditoría. Muestra Estadísticas, Trabajadores, Reportes, Inventario y Configuración como `Próximamente`. Prioriza lectura; no agregues gobierno de usuarios ni permisos delegables. Toda mutación queda auditada.
 
-**Pausa:** gerente encuentra tres respuestas clave en prototipo sin explicación del desarrollador.
+**Pausa:** Lucía encuentra operación actual, cargamento y oro pendiente sin explicación del desarrollador.
 
 ### 5.2 Read models y definiciones de totales
 
-**Prompt:** Diseña consultas/read models centrales derivados de eventos confirmados. Define formalmente cada total, corte temporal, estado sincronizado y tratamiento de reversos/datos tardíos. Evita duplicar lógica en React y documenta SQL/servicio fuente.
+**Prompt:** Diseña consultas/read models centrales derivados de eventos confirmados. Define cajuelas, barridas, cargamentos cerrados, resultado total de oro, cortes temporales, reversos y datos tardíos. Un cargamento tiene cero o un resultado total de oro; no sumes resultados por barrida. Evita duplicar lógica en React.
 
-**Pausa:** cinco escenarios manuales producen el total esperado y explicable.
+**Pausa:** cinco escenarios manuales producen totales esperados y explicables.
 
 ### 5.3 API de consulta
 
-**Prompt:** Implementa endpoints de consulta paginados/filtrables por fechas, planta, línea, jornada, proveedor, responsable y cargamento. Usa DTO estables, límites máximos, orden determinista e índices medidos. Añade autorización y pruebas contra dataset conocido.
+**Prompt:** Implementa endpoints paginados/filtrables por fechas, planta, línea, proveedor, responsable y cargamento. Usa DTO estables, límites máximos, orden determinista e índices medidos. Autoriza únicamente `JEFE_EMPRESA` en el alcance actual y añade pruebas contra un dataset conocido.
 
-**Pausa:** Swagger devuelve páginas estables, filtros combinados y 403 correctos.
+**Pausa:** Swagger devuelve páginas estables, filtros combinados y 401/403 correctos.
 
-### 5.4 Resumen operativo web
+### 5.4 Resumen y operación web
 
-**Prompt:** Implementa dashboard React con líneas operando/detenidas, cajuelas totales/progreso, cargamento/proveedor, jornada, responsable, novedades, barridas, oro y última sincronización. Las cantidades de oro solo se solicitan y muestran a `JEFE_EMPRESA` o administradores con permiso de lectura de oro. Usa TanStack Query, i18n y componentes accesibles; no agregues gráficos sin decisión asociada.
+**Prompt:** Implementa dashboard con líneas activas, cajuelas, meta de barrida, cargamento, proveedor, responsable, novedades y última sincronización. Muestra frescura por estación y estado desactualizado. No inventes tiempo real hasta que 4.11 proyecte toda la operación compartida.
 
-**Pausa:** comparar cada tarjeta con API/desktop y distinguir claramente estación desactualizada.
+**Pausa:** cada tarjeta coincide con API/desktop y distingue estación desactualizada.
 
-### 5.5 Historial y detalle
+### 5.5 Historial, detalle y auditoría
 
-**Prompt:** Implementa listado/historial con filtros conservados en URL, paginación y detalle de jornada/cargamento/barrida. Diferencia hora del dispositivo y servidor, eventos corregidos y datos pendientes/tardíos. Maneja vacío y filtros sin resultados.
+**Prompt:** Implementa cargamentos cerrados con semana actual, semana anterior, fecha específica, línea y proveedor. Conserva filtros en URL, pagina y abre detalle con cajuelas, barridas, mercurio, responsables y cambios auditados. Diferencia hora de dispositivo y servidor.
 
-**Pausa:** abrir/enviar URL filtrada en móvil y reproducir exactamente la consulta.
+**Pausa:** una URL filtrada reproduce exactamente la consulta en móvil y PC.
 
-### 5.6 Auditoría visible para autorizados
+### 5.6 Oro total por cargamento
 
-**Prompt:** Añade vista de auditoría de lectura para roles permitidos con actor, acción, entidad, motivo y correlación, redactando datos sensibles. El jefe de empresa ve estado/revisiones relevantes; el administrador ve detalle de mutaciones. No expongas tokens ni fotos.
+**Prompt:** Permite a `JEFE_EMPRESA` registrar o corregir opcionalmente un único total de oro en gramos para un cargamento cerrado. Acepta entero o hasta dos decimales, vacío no registrado y cero válido; muestra palos solo como equivalencia `1 palo = 0,10 g`. Conserva autora, fecha, valor anterior, nuevo valor y motivo. No crees resultados parciales por barrida, no cargues datos históricos previos a la puesta en marcha ni sincronices oro a desktop. Las comparaciones por proveedor muestran cobertura de cargamentos registrados y excluidos.
 
-**Pausa:** un usuario autorizado explica quién corrigió un dato y por qué; una cuenta no autorizada recibe 403 y ningún trabajador posee acceso web.
+**Pausa:** el dataset manual coincide por cargamento, línea, proveedor y período, sin contar dos veces.
 
 ### 5.7 Responsive, accesibilidad y navegadores
 
-**Prompt:** Refina layout mobile-first bilingüe para iPhone Safari, Android Chrome y escritorio. Prueba cambio es/en, textos largos ingleses, teclado, lector, contraste, objetivos táctiles, zoom, orientación y safe areas.
+**Prompt:** Refina layout mobile-first para iPhone Safari, Android Chrome y escritorio. Prueba textos largos, teclado, lector, contraste, objetivos táctiles, zoom, orientación y safe areas.
 
-**Pausa:** recorrido completo en dispositivos reales o emulación validada, sin scroll horizontal accidental.
+**Pausa:** recorrido completo sin scroll horizontal accidental ni controles inaccesibles.
 
-### 5.8 Sesiones, privacidad y errores
+### 5.8 Sesión, privacidad y errores
 
-**Prompt:** Endurece rutas/sesión: renovación, cierre, 401/403, revocación y caché por usuario. Evita que datos de una sesión queden visibles a la siguiente; mensajes no revelan existencia de usuarios. Implementa boundary de error y reintento controlado.
+**Prompt:** Endurece renovación y cierre de sesión, 401/403, caché por usuario, estados vacío/carga/error/offline y reintento controlado. Evita que datos de una sesión queden visibles después de salir y no expongas tokens, fotos ni diagnósticos técnicos.
 
-**Pausa:** cambiar de usuario/rol en mismo navegador y verificar cero fuga de caché.
+**Pausa:** cerrar y reabrir sesión produce cero fuga de caché.
 
 ### 5.9 Rendimiento y frescura
 
-**Prompt:** Genera volumen de un año, mide endpoints/render, agrega solo índices/caché/paginación justificados. Define intervalo de refresco y botón manual; evita polling agresivo. Muestra fecha de actualización y mide conexión satelital lenta.
+**Prompt:** Genera volumen de un año, mide endpoints/render y agrega solo índices, caché o paginación justificados. Consume la señal de cambios respaldada por pull incremental, muestra la fecha efectiva de actualización y conserva un botón manual. Evita polling agresivo.
 
-**Pausa:** objetivos acordados cumplidos en móvil/red lenta y sin degradar API de sincronización.
+**Pausa:** objetivos acordados se cumplen en móvil/red lenta sin degradar la sincronización de desktop.
 
 ### 5.10 E2E y aceptación gerencial
 
-**Prompt:** Automatiza E2E es/en: login gerencial único→dashboard→línea→cargamento→barrida→registro/entrega de oro→auditoría→Administración→permisos. Verifica un administrador sin acceso, otro con lectura y otro con edición de oro; comprueba revocación inmediata y distintas cuentas administrativas por área en iPhone/Android/PC. Impide autoasignación, delegación fuera del subconjunto y fuga de permisos/caché, compara totales y corrige críticos/altos.
+**Prompt:** Automatiza E2E: login gerencial → resumen → operación → cargamento → registro/corrección de oro total → auditoría → cierre de sesión. Comprueba filtros, totales, pendientes, cero válido, ausencia de oro en desktop y módulos futuros sin acciones falsas.
 
-**Pausa:** gerente completa tareas sin ayuda; compuerta aprobada.
+**Pausa:** Lucía completa las tareas sin ayuda y aprueba la compuerta.

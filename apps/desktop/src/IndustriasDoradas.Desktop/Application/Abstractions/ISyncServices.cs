@@ -103,7 +103,9 @@ public interface ISyncStationContext
     Task<ProtectedStationState?> GetActiveAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed record SyncStatusNotification(bool HasAdministrativeCorrection);
+public sealed record SyncStatusNotification(
+    bool HasAdministrativeCorrection,
+    bool HasDataChanges = false);
 
 public interface ISyncStatusNotifier
 {

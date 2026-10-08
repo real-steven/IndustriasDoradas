@@ -44,7 +44,8 @@ public sealed class IncrementalPullProcessor(
             }
             await local.ApplyPageAsync(page, cancellationToken).ConfigureAwait(false);
             statusNotifier.Notify(new SyncStatusNotification(
-                page.Changes.Any(change => change.Action == "CORRECTION_APPENDED")));
+                page.Changes.Any(change => change.Action == "CORRECTION_APPENDED"),
+                page.Changes.Count > 0));
             return page.HasMore;
         }
         finally

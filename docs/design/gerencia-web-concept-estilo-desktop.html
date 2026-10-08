@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Industrias Doradas · Web con estilo desktop</title>
+  <style>
+    :root {
+      --navy:#163d52; --navy-2:#245c74; --blue:#237ea5; --canvas:#f2f6f7;
+      --card:#fff; --ink:#0c2b3e; --muted:#6d8290; --line:#d9e5e9;
+      --green:#16925b; --green-soft:#e7f7ed; --gold:#ca8b21; --gold-soft:#fff4dc;
+      --purple:#8954df; --cyan:#34afe0; --pink:#ee6fa8; --orange:#f39a24;
+      --shadow:0 12px 32px rgba(17,49,66,.09);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--canvas); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    button,input,select { font:inherit; }
+    button { cursor:pointer; }
+    .topbar { position:sticky; top:0; z-index:30; min-height:76px; padding:12px 28px; display:flex; align-items:center; gap:28px; background:#fff; border-bottom:1px solid var(--line); }
+    .brand { min-width:270px; display:flex; align-items:center; gap:12px; }
+    .brand img { width:44px; height:44px; border-radius:13px; box-shadow:0 8px 19px rgba(139,86,0,.2); }
+    .brand strong { display:block; font-size:16px; letter-spacing:.03em; }
+    .brand small { display:block; color:var(--muted); font-size:11px; }
+    .nav { flex:1; display:flex; align-items:center; gap:5px; }
+    .nav button { height:42px; padding:0 15px; border:0; border-radius:11px; color:#536a78; background:transparent; font-weight:800; font-size:12px; }
+    .nav button:hover { color:var(--navy); background:#eef5f7; }
+    .nav button.active { color:white; background:var(--navy); box-shadow:0 6px 14px rgba(22,61,82,.2); }
+    .user-zone { display:flex; align-items:center; gap:10px; margin-left:auto; }
+    .fresh { padding:8px 11px; border-radius:999px; color:#0f7447; background:var(--green-soft); font-size:10px; font-weight:850; white-space:nowrap; }
+    .dot { display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:currentColor; }
+    .avatar { width:38px; height:38px; display:grid; place-items:center; border-radius:50%; color:white; background:#52798d; font-weight:850; }
+    .manager { line-height:1.2; white-space:nowrap; }
+    .manager strong { display:block; font-size:11px; }
+    .manager small { color:var(--muted); font-size:9px; }
+    .prototype { padding:7px 28px; color:#7a5a18; background:#fff5da; border-bottom:1px solid #eed8a5; font-size:10px; font-weight:800; letter-spacing:.05em; }
+    main { max-width:1460px; margin:auto; padding:30px 32px 60px; }
+    .view { display:none; }
+    .view.active { display:block; animation:enter .18s ease; }
+    @keyframes enter { from { opacity:0; transform:translateY(4px); } }
+    .page-head { margin-bottom:21px; display:flex; align-items:flex-end; justify-content:space-between; gap:20px; }
+    .eyebrow { color:var(--blue); font-size:10px; font-weight:900; letter-spacing:.13em; }
+    h1 { margin:5px 0 4px; font-size:30px; letter-spacing:-.03em; }
+    h2 { margin:0; font-size:18px; }
+    h3 { margin:0; font-size:15px; }
+    p { margin:0; }
+    .sub { color:var(--muted); font-size:12px; }
+    .actions { display:flex; gap:8px; }
+    .control,.btn { height:41px; border-radius:10px; }
+    .control { padding:0 13px; color:var(--ink); background:white; border:1px solid var(--line); }
+    .btn { padding:0 15px; border:1px solid var(--line); color:var(--ink); background:#fff; font-weight:850; font-size:11px; }
+    .btn.primary { color:#fff; background:var(--navy); border-color:var(--navy); }
+    .hero { min-height:176px; padding:29px 34px; border-radius:20px; color:white; background:linear-gradient(115deg,#173f54,#2a6b82); box-shadow:var(--shadow); display:grid; grid-template-columns:1.45fr .8fr; align-items:center; overflow:hidden; position:relative; }
+    .hero::after { content:""; position:absolute; width:350px; height:350px; right:-95px; border:50px solid rgba(255,255,255,.055); border-radius:50%; }
+    .hero h1 { font-size:31px; }
+    .hero p { max-width:690px; color:#d5e6ec; line-height:1.55; }
+    .hero-time { z-index:1; padding-left:32px; border-left:1px solid rgba(255,255,255,.18); }
+    .hero-time strong { display:block; font-size:34px; }
+    .hero-time span { color:#cfe1e8; font-size:11px; }
+    .metrics { margin-top:16px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:17px; box-shadow:var(--shadow); }
+    .metric { padding:18px; }
+    .metric-head { display:flex; justify-content:space-between; color:var(--muted); font-size:9px; font-weight:850; letter-spacing:.05em; }
+    .icon { width:34px; height:34px; display:grid; place-items:center; border-radius:10px; color:var(--navy); background:#edf4f7; font-size:16px; }
+    .metric strong { display:block; margin-top:10px; font-size:25px; }
+    .metric small { color:var(--muted); }
+    .panel { margin-top:16px; padding:20px; }
+    .panel-head { margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .panel-head small { color:var(--muted); }
+    .lines { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .line-card { position:relative; padding:17px 18px 15px 22px; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:#fbfcfd; }
+    .line-card::before { content:""; position:absolute; inset:0 auto 0 0; width:6px; background:var(--accent); }
+    .line-top { display:flex; justify-content:space-between; gap:8px; }
+    .status { padding:5px 9px; color:var(--green); background:var(--green-soft); border-radius:999px; font-size:9px; font-weight:900; }
+    .line-meta { margin-top:5px; color:var(--muted); font-size:10px; }
+    .count-row { margin-top:14px; display:flex; align-items:flex-end; justify-content:space-between; }
+    .count-row strong { font-size:32px; line-height:1; }
+    .count-row small { color:var(--muted); }
+    .alerts { text-align:right; }
+    .alerts b { display:block; font-size:10px; }
+    .alerts span { color:var(--muted); font-size:9px; }
+    .progress { height:8px; margin-top:10px; border-radius:999px; overflow:hidden; background:#e5edef; }
+    .progress i { display:block; width:var(--p); height:100%; border-radius:inherit; background:linear-gradient(90deg,#1ba265,#e6a929); }
+    .future-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:11px; }
+    .future { padding:16px; box-shadow:none; }
+    .future strong { display:block; margin-top:9px; font-size:12px; }
+    .future small { color:var(--muted); font-size:9px; }
+    .soon { float:right; padding:4px 7px; color:#93600c; background:var(--gold-soft); border-radius:999px; font-size:8px; font-weight:850; }
+    .gold-summary { display:grid; grid-template-columns:1.4fr repeat(3,.7fr); color:white; background:linear-gradient(115deg,#173f54,#2a6b82); }
+    .gold-summary > div { padding:22px; }
+    .gold-summary .kpi { border-left:1px solid rgba(255,255,255,.16); }
+    .gold-summary p { margin-top:6px; color:#cee1e8; font-size:11px; }
+    .gold-summary span { color:#bad3dd; font-size:9px; font-weight:850; }
+    .gold-summary strong { display:block; margin-top:6px; color:#ffd477; font-size:22px; }
+    .list { margin-top:15px; overflow:hidden; }
+    .list-head,.list-row { padding:15px 18px; display:grid; grid-template-columns:1.25fr .8fr .7fr auto; gap:15px; align-items:center; }
+    .list-head { color:var(--muted); background:#f8fafb; font-size:9px; font-weight:850; }
+    .list-row { border-top:1px solid var(--line); font-size:11px; }
+    .list-row strong { display:block; }
+    .list-row small { color:var(--muted); }
+    .pill { display:inline-flex; padding:5px 8px; border-radius:999px; color:#97620e; background:var(--gold-soft); font-size:9px; font-weight:850; }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; }
+    th { padding:12px 15px; color:var(--muted); background:#f8fafb; text-align:left; font-size:9px; }
+    td { padding:15px; border-top:1px solid var(--line); font-size:11px; }
+    .empty { padding:55px 24px; text-align:center; }
+    .empty .icon { margin:auto; width:48px; height:48px; }
+    .empty h2 { margin-top:12px; }
+    .empty p { max-width:610px; margin:8px auto 0; color:var(--muted); line-height:1.55; }
+    .modal { position:fixed; inset:0; z-index:60; display:none; place-items:center; padding:20px; background:rgba(10,31,43,.48); backdrop-filter:blur(4px); }
+    .modal.open { display:grid; }
+    .dialog { width:min(570px,100%); padding:24px; background:#fff; border-radius:18px; box-shadow:0 30px 80px rgba(0,0,0,.25); }
+    .dialog-head { display:flex; justify-content:space-between; }
+    .close { border:0; background:transparent; color:var(--muted); font-size:24px; }
+    .context { margin:16px 0; padding:13px; color:var(--muted); background:#f3f7f8; border-radius:11px; font-size:11px; line-height:1.6; }
+    .context strong { color:var(--ink); }
+    .form { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    label { color:var(--muted); font-size:9px; font-weight:850; }
+    label input { width:100%; height:43px; margin-top:6px; padding:0 11px; border:1px solid var(--line); border-radius:9px; color:var(--ink); }
+    .dialog-actions { margin-top:20px; display:flex; justify-content:flex-end; gap:8px; }
+    @media (max-width:1120px) {
+      .brand { min-width:auto; }
+      .brand div,.manager { display:none; }
+      .nav { overflow-x:auto; }
+      .nav button { white-space:nowrap; }
+      .future-grid { grid-template-columns:repeat(3,1fr); }
+    }
+    @media (max-width:760px) {
+      .topbar { padding:10px 14px; gap:10px; align-items:flex-start; flex-wrap:wrap; }
+      .brand img { width:38px; height:38px; }
+      .user-zone { margin-left:auto; }
+      .fresh { display:none; }
+      .nav { order:3; width:100%; }
+      .nav button { flex:0 0 auto; }
+      .prototype { padding-inline:15px; }
+      main { padding:22px 15px 45px; }
+      .page-head { align-items:stretch; flex-direction:column; }
+      .actions { overflow-x:auto; }
+      .hero { grid-template-columns:1fr; padding:24px; }
+      .hero-time { margin-top:22px; padding:18px 0 0; border-left:0; border-top:1px solid rgba(255,255,255,.18); }
+      .metrics,.lines,.gold-summary,.future-grid { grid-template-columns:1fr; }
+      .gold-summary .kpi { border-left:0; border-top:1px solid rgba(255,255,255,.16); }
+      .list-head { display:none; }
+      .list-row { grid-template-columns:1fr auto; }
+      .list-row > :nth-child(2),.list-row > :nth-child(3) { display:none; }
+      .form { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="../../apps/desktop/src/IndustriasDoradas.Desktop/Assets/logo-industrias-doradas.png" alt=""><div><strong>INDUSTRIAS DORADAS</strong><small>Portal gerencial</small></div></div>
+    <nav class="nav">
+      <button class="active" data-view="resumen">⌂ INICIO</button>
+      <button data-view="operacion">▣ OPERACIÓN</button>
+      <button data-view="oro">◆ ORO</button>
+      <button data-view="cargamentos">▤ CARGAMENTOS</button>
+      <button data-view="auditoria">◷ AUDITORÍA</button>
+    </nav>
+    <div class="user-zone"><span class="fresh"><i class="dot"></i>ACTUALIZADO AHORA</span><div class="avatar">LG</div><div class="manager"><strong>Lucía</strong><small>Gerente</small></div></div>
+  </header>
+  <div class="prototype">PROTOTIPO WEB · VARIANTE VISUAL INSPIRADA EN DESKTOP · DATOS FICTICIOS</div>
+
+  <main>
+    <section class="view active" id="resumen">
+      <div class="hero"><div><div class="eyebrow" style="color:#ffd477">PLANTA CONECTADA</div><h1>Buenos días, Lucía.</h1><p>Revise el estado de la operación, los cargamentos cerrados y los registros gerenciales desde una vista familiar a la aplicación de planta.</p></div><div class="hero-time"><strong>10:42 a. m.</strong><span>Jueves, 8 de octubre · Costa Rica</span></div></div>
+      <div class="metrics">
+        <article class="card metric"><div class="metric-head"><span>LÍNEAS ACTIVAS</span><i class="icon">▣</i></div><strong>3 de 4</strong><small>Operación estable</small></article>
+        <article class="card metric"><div class="metric-head"><span>CAJUELAS HOY</span><i class="icon">＋</i></div><strong>791</strong><small>1.284 esta semana</small></article>
+        <article class="card metric"><div class="metric-head"><span>CARGAMENTOS CERRADOS</span><i class="icon">✓</i></div><strong>3</strong><small>2 pendientes de oro</small></article>
+        <article class="card metric"><div class="metric-head"><span>ORO REGISTRADO</span><i class="icon">◆</i></div><strong>81,19 g</strong><small>Resultado gerencial</small></article>
+      </div>
+      <article class="card panel"><div class="panel-head"><div><h2>Líneas de esta planta</h2><small>El mismo código de color utilizado en desktop</small></div><button class="btn" data-jump="operacion">VER OPERACIÓN →</button></div><div class="lines" data-lines></div></article>
+      <article class="card panel"><div class="panel-head"><div><h2>Módulos futuros</h2><small>Visibles para orientar la evolución, sin funciones falsas</small></div></div><div class="future-grid">
+        <div class="card future"><span class="soon">PRÓX.</span><i class="icon">⌁</i><strong>Estadísticas</strong><small>Rendimiento por proveedor y línea.</small></div>
+        <div class="card future"><span class="soon">PRÓX.</span><i class="icon">♙</i><strong>Trabajadores</strong><small>Asistencia, jornadas y horas.</small></div>
+        <div class="card future"><span class="soon">PRÓX.</span><i class="icon">⇩</i><strong>Reportes</strong><small>Exportaciones Excel por período.</small></div>
+        <div class="card future"><span class="soon">PRÓX.</span><i class="icon">□</i><strong>Inventario</strong><small>Herramientas y mantenimiento.</small></div>
+        <div class="card future"><span class="soon">PRÓX.</span><i class="icon">⚙</i><strong>Configuración</strong><small>Líneas y catálogos autoservicio.</small></div>
+      </div></article>
+    </section>
+
+    <section class="view" id="operacion">
+      <div class="page-head"><div><div class="eyebrow">SEGUIMIENTO REMOTO</div><h1>Operación</h1><p class="sub">La lectura web conserva las tarjetas, colores y jerarquía visual del modo operación.</p></div><div class="actions"><select class="control"><option>Todas las estaciones</option></select><button class="btn primary">↻ ACTUALIZAR</button></div></div>
+      <article class="card panel"><div class="panel-head"><div><h2>Líneas de producción</h2><small>Cargamento, responsable, cajuelas y próximas referencias</small></div><span class="fresh"><i class="dot"></i>3 ACTIVAS</span></div><div class="lines" data-lines></div></article>
+    </section>
+
+    <section class="view" id="oro">
+      <div class="page-head"><div><div class="eyebrow">REGISTRO EXCLUSIVO DE GERENCIA</div><h1>Oro por cargamento</h1><p class="sub">Un único resultado total después de cerrar el cargamento; desktop nunca muestra estas cantidades.</p></div><div class="actions"><select class="control"><option>Esta semana</option><option>Semana anterior</option></select><button class="btn primary" data-gold>＋ REGISTRAR ORO</button></div></div>
+      <article class="card gold-summary"><div><h2>Resumen de oro</h2><p>Los datos se relacionan con el cargamento, su proveedor, línea, barridas y cajuelas.</p></div><div class="kpi"><span>SEMANA</span><strong>81,19 g</strong></div><div class="kpi"><span>PENDIENTE</span><strong>2 cargamentos</strong></div><div class="kpi"><span>EQUIVALENCIA</span><strong>811,9 palos</strong></div></article>
+      <article class="card list"><div class="list-head"><span>CARGAMENTO</span><span>MERCURIO</span><span>ORO TOTAL</span><span>ACCIÓN</span></div>
+        <div class="list-row"><div><strong>#1048 · Línea 1 · Morada</strong><small>Jesús · 280 cajuelas · 2 barridas</small></div><span>Completo</span><span class="pill">PENDIENTE</span><button class="btn" data-gold>REGISTRAR</button></div>
+        <div class="list-row"><div><strong>#1047 · Línea 2 · Celeste</strong><small>Francisco · 112 cajuelas · 1 barrida</small></div><span>Completo</span><span class="pill">PENDIENTE</span><button class="btn" data-gold>REGISTRAR</button></div>
+        <div class="list-row"><div><strong>#1046 · Línea 3 · Rosada</strong><small>Lucía · 234 cajuelas · 1 barrida</small></div><span>Completo</span><strong>36,74 g</strong><button class="btn" data-gold>VER</button></div>
+      </article>
+    </section>
+
+    <section class="view" id="cargamentos">
+      <div class="page-head"><div><div class="eyebrow">HISTORIAL CONSOLIDADO</div><h1>Cargamentos</h1><p class="sub">La semana actual aparece primero; también puede elegirse otro período o una fecha específica.</p></div><div class="actions"><select class="control"><option>Esta semana · 5–11 oct.</option><option>Semana anterior</option><option>Fecha específica</option></select><select class="control"><option>Todas las líneas</option></select></div></div>
+      <article class="card table-wrap"><table><thead><tr><th>CIERRE</th><th>LÍNEA</th><th>PROVEEDOR</th><th>CAJUELAS</th><th>BARRIDAS</th><th>MERCURIO</th><th>ORO</th><th></th></tr></thead><tbody>
+        <tr><td>8 oct. · 14:20</td><td>Línea 1 · Morada</td><td>Jesús</td><td>280</td><td>2</td><td>Completo</td><td><span class="pill">Pendiente</span></td><td><button class="btn">ABRIR</button></td></tr>
+        <tr><td>7 oct. · 17:48</td><td>Línea 3 · Rosada</td><td>Francisco</td><td>234</td><td>1</td><td>Completo</td><td>36,74 g</td><td><button class="btn">ABRIR</button></td></tr>
+        <tr><td>6 oct. · 15:12</td><td>Línea 2 · Celeste</td><td>Lucía</td><td>200</td><td>1</td><td>1 pendiente</td><td>44,45 g</td><td><button class="btn">ABRIR</button></td></tr>
+      </tbody></table></article>
+    </section>
+
+    <section class="view" id="auditoria"><article class="card empty"><i class="icon">◷</i><h2>Auditoría agrupada por cargamento</h2><p>La vista final mostrará operaciones y correcciones de forma legible: quién hizo el cambio, qué cambió, cuándo y por qué, manteniendo los códigos técnicos fuera del flujo gerencial.</p><button class="btn primary" style="margin-top:18px" data-jump="cargamentos">VER CARGAMENTOS</button></article></section>
+  </main>
+
+  <div class="modal" id="gold-modal" role="dialog" aria-modal="true" aria-labelledby="gold-title"><div class="dialog">
+    <div class="dialog-head"><div><div class="eyebrow">RESULTADO GERENCIAL</div><h2 id="gold-title" style="margin-top:5px">Registrar oro del cargamento</h2></div><button class="close" data-close>×</button></div>
+    <div class="context"><strong>Cargamento #1048 · Línea 1 · Morada</strong><br>Proveedor Jesús · 280 cajuelas · 2 barridas · cerrado hoy a las 11:42<br>Mercurio de las tres rastras: registrado</div>
+    <div class="form"><label>ORO TOTAL OBTENIDO (g)<input id="grams" inputmode="decimal" placeholder="Ej. 36,74"></label><label>EQUIVALENCIA VISUAL<input id="sticks" value="— palos" readonly></label></div>
+    <label style="display:block;margin-top:12px">NOTA OPCIONAL<input placeholder="Observación relevante"></label>
+    <div class="dialog-actions"><button class="btn" data-close>CANCELAR</button><button class="btn primary" data-close>GUARDAR REGISTRO</button></div>
+  </div></div>
+
+  <script>
+    const lineMarkup = `
+      <div class="line-card" style="--accent:var(--purple);--p:72%"><div class="line-top"><h3>Línea 1 · Morada</h3><span class="status">ACTIVA</span></div><div class="line-meta">Proveedor Jesús · Responsable Carlos</div><div class="count-row"><div><strong>430</strong><small> cajuelas</small></div><div class="alerts"><b>Mercurio en 20</b><span>Barrida en 80</span></div></div><div class="progress"><i></i></div></div>
+      <div class="line-card" style="--accent:var(--cyan);--p:44%"><div class="line-top"><h3>Línea 2 · Celeste</h3><span class="status">ACTIVA</span></div><div class="line-meta">Proveedor Francisco · Responsable Operario 2</div><div class="count-row"><div><strong>112</strong><small> cajuelas</small></div><div class="alerts"><b>Mercurio en 38</b><span>Barrida en 138</span></div></div><div class="progress"><i></i></div></div>
+      <div class="line-card" style="--accent:var(--pink);--p:98%"><div class="line-top"><h3>Línea 3 · Rosada</h3><span class="status">ACTIVA</span></div><div class="line-meta">Proveedor Lucía · Responsable Operario 3</div><div class="count-row"><div><strong>249</strong><small> cajuelas</small></div><div class="alerts"><b>Mercurio en 1</b><span>Barrida en 1</span></div></div><div class="progress"><i></i></div></div>
+      <div class="line-card" style="--accent:var(--orange);--p:0%"><div class="line-top"><h3>Línea 4 · Naranja</h3><span class="status" style="color:#71848e;background:#edf2f4">DISPONIBLE</span></div><div class="line-meta">Sin cargamento activo</div><div class="count-row"><div><strong>0</strong><small> cajuelas</small></div><div class="alerts"><b>Lista para preparar</b><span>—</span></div></div><div class="progress"><i></i></div></div>`;
+    document.querySelectorAll('[data-lines]').forEach(container => container.innerHTML = lineMarkup);
+    const nav = [...document.querySelectorAll('[data-view]')];
+    const views = [...document.querySelectorAll('.view')];
+    function show(id) { views.forEach(v => v.classList.toggle('active', v.id === id)); nav.forEach(b => b.classList.toggle('active', b.dataset.view === id)); scrollTo({top:0,behavior:'smooth'}); }
+    nav.forEach(button => button.addEventListener('click', () => show(button.dataset.view)));
+    document.querySelectorAll('[data-jump]').forEach(button => button.addEventListener('click', () => show(button.dataset.jump)));
+    const modal = document.getElementById('gold-modal');
+    document.querySelectorAll('[data-gold]').forEach(button => button.addEventListener('click', () => modal.classList.add('open')));
+    document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => modal.classList.remove('open')));
+    modal.addEventListener('click', event => { if (event.target === modal) modal.classList.remove('open'); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') modal.classList.remove('open'); });
+    document.getElementById('grams').addEventListener('input', event => { const grams = Number(event.target.value.replace(',','.')); document.getElementById('sticks').value = Number.isFinite(grams) && grams >= 0 ? `${(grams/.1).toFixed(1)} palos` : '— palos'; });
+  </script>
+</body>
+</html>

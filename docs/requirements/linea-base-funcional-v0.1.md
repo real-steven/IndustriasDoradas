@@ -54,25 +54,22 @@ Los valores ficticios nunca se convierten en reglas. Las decisiones que afecten 
 
 ## 4. Actores y autorización granular
 
-Existen tres roles autenticados y un modo operativo compartido. `JEFE_EMPRESA` es la cuenta de máxima autoridad: combina consulta gerencial y superadministración sin una segunda cuenta. `ADMINISTRADOR` no recibe acceso total por pertenecer al rol; sus capacidades se seleccionan individualmente y pueden cambiarse o revocarse.
+En el alcance funcional vigente existen dos roles autenticados y un modo operativo compartido. `JEFE_EMPRESA` es la única cuenta web del MVP y `JEFE_PLANTA` abre y administra la estación desktop. Las estructuras técnicas legadas de `ADMINISTRADOR` pueden conservarse para compatibilidad, pero no forman parte de la navegación ni de la aceptación actual.
 
 | Rol | Canal | Facultades confirmadas |
 |---|---|---|
-| Jefe de empresa | Web | Superadministrador permanente: consulta toda la operación, estadísticas, notificaciones, auditoría y reportes; puede ejecutar los casos de uso administrativos y operativos de todos los módulos, crear administradores, seleccionar/editar sus permisos y suspenderlos. Siempre posee el control completo del oro y puede delegar capacidades específicas a administradores de confianza. La interfaz prioriza datos y separa las ediciones en un módulo de Administración dentro de la misma sesión. |
-| Administrador | Web | Cuenta de privilegio mínimo. Solo consulta o modifica los módulos concedidos individualmente. Puede llegar a tener acceso amplio si un jefe de empresa lo decide. Solo crea administradores, gobierna sus estados o asigna permisos cuando recibe cada capacidad específica. |
+| Jefe de empresa | Web | Única usuaria web del MVP: consulta toda la operación, estadísticas, notificaciones, auditoría y reportes; registra y corrige el oro total por cargamento cerrado. La configuración autoservicio de líneas y catálogos se incorporará después del primer entregable. |
 | Jefe de planta | Desktop | Inicia y habilita la estación; solicita trabajadores; gestiona proveedores e inventario; asigna responsables; registra por barrida la entrada y el saldo final de mercurio en cada rastra; revisa asistencia pendiente reciente y corrige durante el ciclo abierto. No consulta ni registra cantidades de oro. Eleva temporalmente permisos mediante su PIN individual. |
 | Modo Operación | Desktop compartido | No es una cuenta ni un rol de Supabase. Mantiene el flujo continuo, registra/revierte cajuelas y permite check-in/out; no accede a administración, inventario, certificaciones ni correcciones profundas. |
 
 Reglas de acceso:
 
 - El gerente usa una única cuenta `JEFE_EMPRESA`; no necesita cerrar sesión ni mantener una cuenta administrativa paralela.
-- Las cantidades de oro se gestionan únicamente en web. `JEFE_EMPRESA` siempre tiene acceso y puede conceder o revocar capacidades específicas de consulta, registro, corrección, custodia o entrega a administradores de confianza. Desktop no muestra esos valores al jefe de planta ni al Modo Operación.
-- Un administrador que también es jefe de planta puede acceder a ambos sistemas con sus credenciales correspondientes.
-- Jefe de empresa crea la cuenta administrativa y elige sus permisos iniciales. Puede añadirlos, retirarlos, suspenderla o reactivarla después.
-- Un administrador solo crea otra cuenta administrativa con `administrators.create`; solo cambia permisos con `administrators.permissions.manage`, y nunca puede conceder o retirar una capacidad que él mismo no posea. No puede modificar sus propios permisos.
+- Las cantidades de oro se gestionan únicamente en web por `JEFE_EMPRESA`. Desktop no muestra esos valores al jefe de planta ni al Modo Operación.
+- No existe un flujo funcional vigente para crear administradores, delegar permisos o usar un modo gerencial con permisos de empleado.
 - Ningún perfil puede alterar o borrar auditoría ni desactivar la última cuenta gerencial activa. Los datos históricos se corrigen o desactivan, no se eliminan físicamente.
-- El administrador crea, suspende o revoca cuentas de jefe de planta y administra sus PIN individuales.
-- Los trabajadores regulares no tienen cuenta de acceso. El jefe de planta crea una solicitud y el administrador aprueba, rechaza, reasigna o fusiona el perfil.
+- La gestión web futura de cuentas de jefe de planta y PIN queda fuera del primer entregable y requiere validación específica.
+- Los trabajadores regulares no tienen cuenta de acceso. El flujo definitivo de aprobación, reasignación o fusión de perfiles queda pendiente del módulo de trabajadores.
 - Tras la autenticación del jefe de planta, la estación permanece normalmente en Modo Operación y renueva de forma segura la sesión de Supabase mientras exista uso. Cierra la sesión local después de una hora de inactividad total y exige autenticación completa para volver a abrirla.
 - Al iniciar desktop, el login muestra el estado de comprobación de la sesión: amarillo mientras busca, verde cuando encuentra una sesión protegida vigente y rojo cuando no existe, fue finalizada o venció. Una sesión restaurable requiere únicamente que el usuario pulse `Abrir sesión`; correo y contraseña se habilitan solo cuando hace falta autenticar de nuevo.
 - El Modo Jefe de Planta exige el PIN personal, ofrece salida explícita y vuelve al modo restringido después de cinco minutos de inactividad total, con aviso previo. Un bloqueo conserva formularios no enviados para reanudarlos tras reautenticación.
@@ -164,22 +161,17 @@ Reglas de acceso:
 
 ### Oro gestionado en web
 
-- La cantidad de oro solo se consulta, registra y corrige desde la web. `JEFE_EMPRESA` siempre tiene acceso; un `ADMINISTRADOR` accede únicamente a las acciones de oro que gerencia le haya concedido explícitamente. No se muestra en desktop al jefe de planta ni al Modo Operación.
-- El resultado de oro se registra en gramos y se vincula con la barrida, línea y cargamento correspondientes. Puede quedar pendiente sin detener ni cerrar la operación.
-- El resultado definitivo del cargamento es la suma automática de los resultados registrados por gerencia para sus barridas en la única línea asignada.
-- Los totales gerenciales se consultan por barrida, línea, jornada, día, cargamento y proveedor. El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
-- Vacío significa pendiente; `0,00` significa medido con resultado cero. Cada corrección conserva autora, momento, valor anterior y nuevo valor; la auditoría no se edita.
+- La cantidad de oro solo se consulta, registra y corrige desde la web por `JEFE_EMPRESA`. No se muestra en desktop al jefe de planta ni al Modo Operación.
+- Lucía consolida sus apuntes físicos y puede registrar en gramos un único resultado total después de cerrar el cargamento. El dato es opcional y no se capturan parciales por barrida.
+- El resultado se vincula con el cargamento cerrado y, por esa relación, con su única línea, proveedor, responsables, barridas y cajuelas. Puede quedar pendiente sin bloquear la operación.
+- Los totales gerenciales se consultan por línea, período, cargamento y proveedor. El corte diario es medianoche en `America/Costa_Rica`; los datos se almacenan en UTC.
+- Vacío significa no registrado y no se interpreta como cero ni como una deuda operativa; `0,00` significa medido con resultado cero. Cada corrección conserva autora, momento, valor anterior y nuevo valor; la auditoría no se edita.
 - El oro acepta enteros o hasta dos decimales y usa gramos como unidad canónica. La conversión visual aprobada es `1 palo = 0,10 g`; no se sustituye ni redondea el valor canónico almacenado.
+- No se cargarán resultados anteriores a la puesta en marcha. Las comparaciones de proveedores usan solo cargamentos con resultado registrado y muestran cobertura (`registrados / cargamentos cerrados`) para evitar conclusiones engañosas.
 
-### Custodia y entrega de oro
+### Custodia y entrega de oro fuera de alcance
 
-1. El sistema deriva en web el oro producido y el oro aún bajo custodia en planta para `JEFE_EMPRESA` y administradores expresamente autorizados.
-2. La gerente o un administrador con la capacidad correspondiente registra y gestiona solicitudes o entregas en gramos desde la web; desktop no revela cantidades ni permite iniciar este flujo.
-3. Tras la verificación física, una cuenta web autorizada confirma o rechaza la cantidad.
-4. Una discrepancia conserva cantidad solicitada, cantidad recibida, motivo, participantes y fechas.
-5. No se modelan transporte, venta, contabilidad ni destino posterior del oro.
-
-El umbral para avisar que ya conviene recoger oro queda pendiente y será configurable.
+No se modelan existencia acumulada, custodia, entrega, transporte, venta, gasto ni destino posterior del oro. Lucía es la única responsable y el objetivo del dato es exclusivamente comparar el rendimiento de los proveedores. Las estructuras técnicas legadas de custodia pueden conservarse temporalmente por compatibilidad, pero no forman parte de la navegación, API pública ni aceptación del MVP.
 
 ## 8. Jornadas y asistencia
 
@@ -269,14 +261,14 @@ Reportes iniciales:
 
 | ID | Requerimiento |
 |---|---|
-| RF-01 | Autenticar y autorizar `JEFE_EMPRESA`, `ADMINISTRADOR` y `JEFE_PLANTA`; usar una cuenta gerencial superadministradora, permisos individuales revocables para administradores y Modo Operación sin cuenta compartida. |
+| RF-01 | Autenticar y autorizar `JEFE_EMPRESA` y `JEFE_PLANTA`; usar una única cuenta web gerencial y Modo Operación desktop sin cuenta compartida. Las estructuras legadas de `ADMINISTRADOR` no forman parte del MVP vigente. |
 | RF-02 | Administrar planta, líneas, rastras, estaciones, solicitudes/estados de trabajadores, proveedores y cargamentos. |
 | RF-03 | Asignar un responsable principal y cargamento antes de alimentar una línea. |
 | RF-04 | Registrar y revertir cajuelas localmente mediante eventos inmutables. |
 | RF-05 | Operar hasta 24 horas offline desde la última validación y sincronizar sin pérdida o duplicación. |
 | RF-06 | Alertar en cada múltiplo configurable de 50 sin bloquear producción. |
-| RF-07 | Registrar barridas reales y movimientos de mercurio por rastra desde desktop; registrar oro parcial/definitivo únicamente desde web con autoridad gerencial o permiso administrativo explícito, todo con trazabilidad al cargamento. |
-| RF-08 | Permitir a `JEFE_EMPRESA` y administradores expresamente autorizados registrar y resolver entregas de oro bajo custodia desde web. |
+| RF-07 | Registrar barridas reales y entrada/saldo final de mercurio por rastra desde desktop; registrar un único total de oro por cargamento cerrado únicamente desde web con `JEFE_EMPRESA`, todo con trazabilidad al cargamento. |
+| RF-08 | Comparar rendimiento de proveedores usando únicamente cargamentos con resultado de oro registrado y mostrando la cobertura de datos. |
 | RF-09 | Consultar operación central desde web responsive en español e inglés. |
 | RF-10 | Registrar check-in/out con fotografía pendiente, trabajadores provisionales y vencidos, aprobación/reasignación auditable y horas revisables sin bloqueo. |
 | RF-11 | Gestionar inventario básico sin existencias negativas y registrar revisiones. |
@@ -303,9 +295,9 @@ Reportes iniciales:
 
 - Un trabajador que deja la empresa se desactiva y conserva su historial para auditoría y posible recontratación.
 - No existe eliminación automática por antigüedad en esta línea base.
-- Un administrador puede iniciar una eliminación manual bajo protocolo, siempre que no rompa referencias legales u operativas.
+- La gerente puede iniciar una eliminación manual bajo protocolo únicamente cuando no rompa referencias legales u operativas; para catálogos y líneas se prefiere desactivar y conservar historial.
 - La fotografía/plantilla biométrica tiene ciclo de vida separado del historial laboral.
-- Administrador accede a evidencias privadas desde funciones protegidas de la web, no directamente a la base de datos.
+- El acceso futuro a evidencias privadas debe realizarse desde funciones protegidas de la web, nunca directamente a la base de datos.
 - Jefe de planta accede únicamente a fotografías pendientes o recientes necesarias para resolver intentos durante las primeras 24 horas.
 - Por ahora las fotografías no tienen eliminación automática y se conservan indefinidamente como evidencia vinculada a auditoría, hasta que Sprint 6 apruebe una política definitiva. Deben monitorearse volumen y costo; conservar no significa hacerlas públicas ni permitir acceso irrestricto.
 - La fotografía vive en almacenamiento privado; la auditoría guarda identificador, ruta lógica, checksum, actor, motivo y fechas, no el binario de la imagen ni una URL permanente.
@@ -319,7 +311,7 @@ Reportes iniciales:
 - Roles, auditoría y catálogos.
 - Líneas, responsables, proveedores y cargamentos.
 - Cajuelas, correcciones, SQLite y sincronización.
-- Alertas, barridas, mercurio, oro y custodia/entrega.
+- Alertas, barridas, mercurio y resultado opcional de oro por cargamento.
 - Web informativa y Excel.
 
 ### Posterior dentro del plan

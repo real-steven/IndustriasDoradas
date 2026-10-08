@@ -224,30 +224,24 @@ en
 
 ### 10. Roles autenticados y gobierno gerencial
 
-- **Decisión confirmada:** las identidades son `JEFE_EMPRESA`,
-  `ADMINISTRADOR` y `JEFE_PLANTA`. Los trabajadores no tienen cuenta.
-- **Cuenta gerencial unificada:** `JEFE_EMPRESA` es superadministrador y recibe
-  todos los permisos activos desde una sola cuenta. La experiencia web presenta
-  primero datos/reportes y mantiene las ediciones en un módulo separado dentro
-  de la misma sesión.
-- **Oro restringido al canal web:** `JEFE_EMPRESA` siempre controla cantidades,
-  correcciones, custodia y entregas de oro, y puede delegar capacidades
-  específicas a `ADMINISTRADOR`. La autorización se evalúa por acción y puede
-  revocarse; ninguna cantidad de oro se replica en vistas o SQLite de desktop.
+- **Decisión vigente:** las identidades funcionales del MVP son `JEFE_EMPRESA`
+  y `JEFE_PLANTA`. Los trabajadores no tienen cuenta y el flujo web de
+  `ADMINISTRADOR` queda fuera del alcance aunque sobrevivan estructuras técnicas
+  por compatibilidad.
+- **Cuenta gerencial única:** `JEFE_EMPRESA` es la única cuenta web funcional.
+  La experiencia presenta primero datos y reportes; no incluye gobierno de
+  administradores ni delegación de permisos.
+- **Oro restringido al canal web:** `JEFE_EMPRESA` puede registrar y corregir un
+  único resultado total opcional por cargamento cerrado desde la puesta en
+  marcha. No se modelan custodia, entrega ni existencia acumulada, y ninguna
+  cantidad de oro se replica en vistas o SQLite de desktop.
 - **Mercurio operativo por rastra:** desktop registra por cada barrida cuánto
   mercurio entró y cuánto quedó al final en Rastra 1, Rastra 2 y Rastra 3. No
   registra recargas intermedias. Rastra es equipo físico y no equivale a barrida;
   las correcciones crean nuevas versiones auditadas.
-- **Administración granular:** `ADMINISTRADOR` combina permisos base mínimos con
-  concesiones individuales vigentes. Jefe de empresa crea la cuenta y selecciona
-  sus permisos; una revocación se consulta en cada solicitud y surte efecto sin
-  esperar a que expire el JWT.
-- **Delegación acotada:** `administrators.create`,
-  `administrators.permissions.manage` y `administrators.govern` son capacidades
-  distintas. Un administrador autorizado nunca concede ni retira permisos que
-  él mismo no posee y no modifica sus propios privilegios.
-- **Restricciones:** nadie altera auditoría o borra historial; no se desactiva la
-  última cuenta gerencial activa.
+- **Configuración futura:** la gerente podrá agregar, renombrar, colorear y
+  desactivar líneas/catálogos. Desactivar conserva historial y se bloquea con
+  operación activa; no se permite borrar auditoría.
 
 ### 11. Trabajador provisional y evidencia de asistencia
 
@@ -292,6 +286,12 @@ en
 - **Pull:** usa cursor opaco y aplica cada página junto con el nuevo cursor en
   una transacción SQLite. SSE solo avisa que puede haber cambios y siempre se
   respalda con polling incremental a NestJS.
+- **Alcance operativo entre estaciones:** la señal SSE puede llegar en pocos
+  segundos, pero no equivale a una proyección completa. Antes de habilitar
+  operación compartida, Sprint 4.11 debe publicar y aplicar cargamentos,
+  responsables, cajuelas, barridas y mercurio con alcance de planta. No se
+  amplía solamente el filtro de estación porque produciría vistas parciales o
+  conteos en cero en los demás equipos.
 - **Seguridad:** los clientes no acceden directamente a tablas de producción,
   recibos, feed ni Supabase Realtime. NestJS valida JWT, cuenta, organización,
   estación, versión y permisos en cada solicitud.

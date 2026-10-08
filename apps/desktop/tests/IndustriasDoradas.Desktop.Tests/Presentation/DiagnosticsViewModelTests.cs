@@ -200,6 +200,30 @@ public sealed class DiagnosticsViewModelTests
         Assert.AreEqual(3, audit.CompletedShipments.Count);
     }
 
+    [TestMethod]
+    public async Task OpeningAuditAlwaysReloadsTheLatestLocalData()
+    {
+        DiagnosticsViewModel diagnostics = new(
+            new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
+            new StubLocalDiagnostics(Healthy()));
+        var repository = new StubAuditRepository([]);
+        AuditViewModel audit = new(diagnostics, null, repository);
+        var notifier = new SyncStatusNotifier();
+        using MainWindowViewModel shell = new(
+            new HomeViewModel(), diagnostics, null, null, audit, null, notifier);
+
+        await audit.InitializeAsync();
+        await shell.ShowAuditCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(2, repository.CompletedShipmentReads);
+        Assert.IsTrue(shell.IsAuditPage);
+
+        notifier.Notify(new SyncStatusNotification(false, true));
+        await WaitUntilAsync(() => repository.CompletedShipmentReads >= 3);
+
+        Assert.AreEqual(3, repository.CompletedShipmentReads);
+    }
+
     private static LocalCompletedShipmentAudit Shipment(
         Guid lineId,
         string lineName,
@@ -219,6 +243,16 @@ public sealed class DiagnosticsViewModelTests
             0,
             0,
             []);
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        DateTimeOffset limit = DateTimeOffset.UtcNow.AddSeconds(2);
+        while (!condition() && DateTimeOffset.UtcNow < limit)
+        {
+            await Task.Delay(10);
+        }
+        Assert.IsTrue(condition());
+    }
 
     private static LocalDatabaseHealth Healthy() => new(
         LocalDatabaseHealthState.Healthy,
@@ -250,8 +284,14 @@ public sealed class DiagnosticsViewModelTests
     private sealed class StubAuditRepository(
         IReadOnlyList<LocalCompletedShipmentAudit> shipments) : ILocalAuditRepository
     {
+        public int CompletedShipmentReads { get; private set; }
+
         public Task<IReadOnlyList<LocalCompletedShipmentAudit>> ListCompletedShipmentsAsync(
-            CancellationToken cancellationToken = default) => Task.FromResult(shipments);
+            CancellationToken cancellationToken = default)
+        {
+            CompletedShipmentReads++;
+            return Task.FromResult(shipments);
+        }
 
         public Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
             CancellationToken cancellationToken = default) =>
