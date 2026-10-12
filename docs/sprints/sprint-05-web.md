@@ -9,7 +9,7 @@
 - Sprint 4.11 ya centraliza cargamentos, responsables, cajuelas, correcciones,
   barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
   segundo protocolo de sincronización.
-- 5.1 y 5.2 están cerrados. El siguiente paso ejecutable es 5.3.
+- 5.1, 5.2 y 5.3 están cerrados. El siguiente paso ejecutable es 5.4.
 - El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
   por cargamento y 5.6 construirá su API e interfaz. El modelo legado por
   barrida no se reutiliza.
@@ -32,7 +32,7 @@
 1. ~~Cerrar Sprint 4.11: sincronización central de cargamentos, responsables, cajuelas, barridas y mercurio entre estaciones.~~ Cerrado técnica y manualmente el 2026-10-08.
 2. ~~Confirmar wireframes y las preguntas gerenciales del MVP.~~ Cerrado el 2026-10-08 con el concepto aprobado y el recorrido documentado.
 3. ~~Crear read models y definiciones únicas de totales.~~ Cerrado el 2026-10-08 con vistas centrales y pruebas SQL reproducibles.
-4. Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento sobre los read models de 5.2.
+4. ~~Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento sobre los read models de 5.2.~~ Cerrado técnica y manualmente el 2026-10-12.
 5. Implementar resumen y operación de solo lectura con frescura visible.
 6. Implementar historial/detalle y auditoría agrupada por cargamento.
 7. Implementar registro y corrección del oro total opcional por cargamento cerrado.
@@ -71,6 +71,18 @@ después, cero versus ausente y correcciones append-only sin doble conteo.
 **Pausa:** cinco escenarios manuales producen totales esperados y explicables.
 
 ### 5.3 API de consulta
+
+**Estado:** cerrado técnica y manualmente el 2026-10-12. `pnpm run verify` y la
+pausa manual en Swagger fueron aprobados por Henry. El API expone líneas
+activas, cargamentos cerrados, detalle de cargamento y barridas/mercurio bajo
+`/api/v1/organizations/{organizationId}/management`. Todas las listas usan
+páginas de máximo 100 elementos y desempate estable por identificadores.
+
+Los filtros `fromUtc` inclusivo y `toUtc` exclusivo se pueden combinar con
+planta, línea, proveedor, responsable y cargamento. Las consultas reutilizan
+las vistas privadas e índices parciales medidos en 5.2, filtran nuevamente por
+organización en el backend y exigen el rol `JEFE_EMPRESA`; no se expone acceso
+directo a Supabase ni se adelantan las mutaciones de oro de 5.6.
 
 **Prompt:** Implementa endpoints paginados/filtrables por fechas, planta, línea, proveedor, responsable y cargamento. Usa DTO estables, límites máximos, orden determinista e índices medidos. Autoriza únicamente `JEFE_EMPRESA` en el alcance actual y añade pruebas contra un dataset conocido.
 

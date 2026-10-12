@@ -38,6 +38,10 @@ import {
   type StationRepository,
 } from "../src/station/station.contracts";
 import {
+  MANAGEMENT_QUERY_REPOSITORY,
+  type ManagementQueryRepository,
+} from "../src/management/management.contracts";
+import {
   SYNC_REPOSITORY,
   type SyncRepository,
 } from "../src/sync/sync.contracts";
@@ -88,6 +92,7 @@ describe("API smoke (e2e)", () => {
   let workers: jest.Mocked<WorkersRepository>;
   let accounts: jest.Mocked<AccountsRepository>;
   let stations: jest.Mocked<StationRepository>;
+  let management: jest.Mocked<ManagementQueryRepository>;
   let sync: jest.Mocked<SyncRepository>;
 
   beforeAll(async () => {
@@ -159,6 +164,30 @@ describe("API smoke (e2e)", () => {
       setPinVerifier: jest.fn(),
       resetPinBlocks: jest.fn(),
     };
+    management = {
+      listOperationLines: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
+      listShipments: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
+      findShipment: jest.fn(),
+      listShipmentSweeps: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
+    };
     sync = {
       findPushStationScope: jest.fn(),
       findActivePullScope: jest.fn(),
@@ -184,6 +213,8 @@ describe("API smoke (e2e)", () => {
       .useValue(accounts)
       .overrideProvider(STATION_REPOSITORY)
       .useValue(stations)
+      .overrideProvider(MANAGEMENT_QUERY_REPOSITORY)
+      .useValue(management)
       .overrideProvider(SYNC_REPOSITORY)
       .useValue(sync)
       .compile();
@@ -202,6 +233,10 @@ describe("API smoke (e2e)", () => {
     accounts.find.mockResolvedValue(null);
     accounts.createAdministrator.mockClear();
     accounts.replaceAdministratorPermissions.mockClear();
+    management.listOperationLines.mockClear();
+    management.listShipments.mockClear();
+    management.findShipment.mockClear();
+    management.listShipmentSweeps.mockClear();
     sync.findPushStationScope.mockReset();
     sync.findActivePullScope.mockReset();
     sync.listChanges.mockReset();
@@ -264,6 +299,10 @@ describe("API smoke (e2e)", () => {
     ]);
     expect(body.components.schemas).toHaveProperty("ErrorResponse");
     expect(body.components.schemas).toHaveProperty("PageCatalog");
+    expect(body.components.schemas).toHaveProperty("PageManagementShipment");
+    expect(body.paths).toHaveProperty(
+      "/api/v1/organizations/{organizationId}/management/shipments",
+    );
   });
 
   it("excludes query credentials from error bodies", async () => {
@@ -605,6 +644,98 @@ describe("API smoke (e2e)", () => {
       totalPages: 0,
     });
     expect(JSON.stringify(response.body)).not.toContain("authUserId");
+  });
+
+  it("combines management filters for the company manager", async () => {
+    management.listShipments.mockResolvedValueOnce({
+      items: [],
+      page: 2,
+      pageSize: 10,
+      total: 14,
+      totalPages: 2,
+    });
+
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments`,
+      )
+      .query({
+        page: 2,
+        pageSize: 10,
+        fromUtc: "2026-10-01T00:00:00.000Z",
+        toUtc: "2026-10-08T00:00:00.000Z",
+        plantId: "31000000-0000-4000-8000-000000000001",
+        productionLineId: "32000000-0000-4000-8000-000000000001",
+        supplierId: "35000000-0000-4000-8000-000000000001",
+        responsibleWorkerId: "b1000000-0000-4000-8000-000000000001",
+        shipmentId: "42000000-0000-4000-8000-000000000001",
+      })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200)
+      .expect({ items: [], page: 2, pageSize: 10, total: 14, totalPages: 2 });
+
+    expect(management.listShipments.mock.calls).toContainEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({
+        page: 2,
+        pageSize: 10,
+        plantId: "31000000-0000-4000-8000-000000000001",
+        productionLineId: "32000000-0000-4000-8000-000000000001",
+        supplierId: "35000000-0000-4000-8000-000000000001",
+        responsibleWorkerId: "b1000000-0000-4000-8000-000000000001",
+        shipmentId: "42000000-0000-4000-8000-000000000001",
+      }),
+    ]);
+  });
+
+  it("reserves management queries exclusively for JEFE_EMPRESA", async () => {
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/operation-lines`,
+      )
+      .expect(401);
+
+    profiles.findByAuthUserId.mockResolvedValueOnce({
+      ...ACTIVE_PROFILE,
+      role: { ...ACTIVE_PROFILE.role, code: "ADMINISTRADOR" },
+      permissions: ["reports.read"],
+    });
+
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/operation-lines`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .expect(403);
+
+    expect(management.listOperationLines.mock.calls).toHaveLength(0);
+  });
+
+  it("rejects invalid management ranges and page limits", async () => {
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments`,
+      )
+      .query({
+        pageSize: 101,
+        fromUtc: "2026-10-08T00:00:00.000Z",
+        toUtc: "2026-10-01T00:00:00.000Z",
+      })
+      .set("Authorization", "Bearer valid-token")
+      .expect(400);
+
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments`,
+      )
+      .query({
+        fromUtc: "2026-10-08T00:00:00.000Z",
+        toUtc: "2026-10-01T00:00:00.000Z",
+      })
+      .set("Authorization", "Bearer valid-token")
+      .expect(400);
+
+    expect(management.listShipments.mock.calls).toHaveLength(0);
   });
 
   it("accepts a versioned sync batch for an assigned plant manager", async () => {

@@ -11,6 +11,7 @@ import { CatalogsModule } from "./catalogs/catalogs.module";
 import { AllExceptionsFilter } from "./common/http/all-exceptions.filter";
 import { validateEnvironment } from "./config/environment";
 import { HealthModule } from "./health/health.module";
+import { ManagementModule } from "./management/management.module";
 import { StationModule } from "./station/station.module";
 import { SyncModule } from "./sync/sync.module";
 import { WorkersModule } from "./workers/workers.module";
@@ -38,6 +39,7 @@ const environmentFiles = nodeEnvironment
     AuthModule,
     CatalogsModule,
     HealthModule,
+    ManagementModule,
     StationModule,
     SyncModule,
     WorkersModule,

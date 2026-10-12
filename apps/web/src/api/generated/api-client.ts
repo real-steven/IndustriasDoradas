@@ -26,6 +26,86 @@ export interface PageCatalog {
   total: number;
   totalPages: number;
 }
+export interface ManagementFilters {
+  page?: number;
+  pageSize?: number;
+  fromUtc?: string;
+  toUtc?: string;
+  plantId?: string;
+  productionLineId?: string;
+  supplierId?: string;
+  responsibleWorkerId?: string;
+  shipmentId?: string;
+}
+export interface ManagementOperationLine {
+  organizationId: string;
+  plantId: string;
+  stationId: string;
+  stationName: string;
+  shipmentId: string;
+  feedCycleId: string;
+  productionLineId: string;
+  productionLineName: string;
+  productionLineOrder: number;
+  supplierId: string;
+  supplierName: string;
+  responsibleWorkerId: string | null;
+  responsibleWorkerName: string | null;
+  startedAtUtc: string;
+  cajuelaTotal: number;
+  sweepCount: number;
+  sweptCajuelas: number;
+  cajuelasSinceLastSweep: number;
+  nextSweepAt: number;
+  sweepPending: boolean;
+  lastActivityAtUtc: string;
+}
+export interface ManagementShipment extends ManagementOperationLine {
+  status: "COMPLETED";
+  completedAtUtc: string;
+  goldResultId: string | null;
+  goldAmountGrams: number | null;
+  goldUnitCode: "g" | null;
+  goldRecordedAtUtc: string | null;
+  goldRecordedByProfileId: string | null;
+  goldRevisionCount: number | null;
+  hasGoldResult: boolean;
+}
+export interface ManagementSweepMercury {
+  organizationId: string;
+  shipmentId: string;
+  sweepId: string;
+  sweptAtUtc: string;
+  cajuelaCount: number;
+  lineComponentId: string;
+  lineComponentName: string;
+  lineComponentOrder: number;
+  inputGrams: number | null;
+  remainderGrams: number | null;
+  hasInputRecord: boolean;
+  hasRemainderRecord: boolean;
+}
+export interface PageManagementOperationLine {
+  items: ManagementOperationLine[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+export interface PageManagementShipment {
+  items: ManagementShipment[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+export interface PageManagementSweepMercury {
+  items: ManagementSweepMercury[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
 export interface ApiError {
   statusCode: number;
   code: string;
@@ -57,6 +137,71 @@ export class ApiClient {
       `/api/v1/organizations/${encodeURIComponent(organizationId)}/plants?${query}`,
       signal,
     );
+  }
+  listManagementOperationLines(
+    organizationId: string,
+    filters: ManagementFilters = {},
+    signal?: AbortSignal,
+  ): Promise<PageManagementOperationLine> {
+    return this.request<PageManagementOperationLine>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/operation-lines?${this.managementQuery(filters)}`,
+      signal,
+    );
+  }
+  listManagementShipments(
+    organizationId: string,
+    filters: ManagementFilters = {},
+    signal?: AbortSignal,
+  ): Promise<PageManagementShipment> {
+    return this.request<PageManagementShipment>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments?${this.managementQuery(filters)}`,
+      signal,
+    );
+  }
+  getManagementShipment(
+    organizationId: string,
+    shipmentId: string,
+    signal?: AbortSignal,
+  ): Promise<ManagementShipment> {
+    return this.request<ManagementShipment>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}`,
+      signal,
+    );
+  }
+  listManagementShipmentSweeps(
+    organizationId: string,
+    shipmentId: string,
+    page = 1,
+    pageSize = 20,
+    signal?: AbortSignal,
+  ): Promise<PageManagementSweepMercury> {
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    return this.request<PageManagementSweepMercury>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/sweeps?${query}`,
+      signal,
+    );
+  }
+  private managementQuery(filters: ManagementFilters): URLSearchParams {
+    const query = new URLSearchParams({
+      page: String(filters.page ?? 1),
+      pageSize: String(filters.pageSize ?? 20),
+    });
+    for (const key of [
+      "fromUtc",
+      "toUtc",
+      "plantId",
+      "productionLineId",
+      "supplierId",
+      "responsibleWorkerId",
+      "shipmentId",
+    ] as const) {
+      const value = filters[key];
+      if (value !== undefined) query.set(key, value);
+    }
+    return query;
   }
   private async request<T>(path: string, signal?: AbortSignal): Promise<T> {
     const token = this.accessToken();

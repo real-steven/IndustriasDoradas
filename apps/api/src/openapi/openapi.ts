@@ -192,9 +192,132 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         assigned: { type: "boolean" },
       },
     },
+    ManagementOperationLine: {
+      type: "object",
+      required: [
+        "organizationId",
+        "plantId",
+        "stationId",
+        "stationName",
+        "shipmentId",
+        "feedCycleId",
+        "productionLineId",
+        "productionLineName",
+        "productionLineOrder",
+        "supplierId",
+        "supplierName",
+        "responsibleWorkerId",
+        "responsibleWorkerName",
+        "startedAtUtc",
+        "cajuelaTotal",
+        "sweepCount",
+        "sweptCajuelas",
+        "cajuelasSinceLastSweep",
+        "nextSweepAt",
+        "sweepPending",
+        "lastActivityAtUtc",
+      ],
+      properties: {
+        organizationId: UUID,
+        plantId: UUID,
+        stationId: UUID,
+        stationName: { type: "string" },
+        shipmentId: UUID,
+        feedCycleId: UUID,
+        productionLineId: UUID,
+        productionLineName: { type: "string" },
+        productionLineOrder: { type: "integer" },
+        supplierId: UUID,
+        supplierName: { type: "string" },
+        responsibleWorkerId: { ...UUID, nullable: true },
+        responsibleWorkerName: { type: "string", nullable: true },
+        startedAtUtc: DATE_TIME,
+        cajuelaTotal: { type: "integer" },
+        sweepCount: { type: "integer" },
+        sweptCajuelas: { type: "integer" },
+        cajuelasSinceLastSweep: { type: "integer" },
+        nextSweepAt: { type: "integer" },
+        sweepPending: { type: "boolean" },
+        lastActivityAtUtc: DATE_TIME,
+      },
+    },
+    ManagementShipment: {
+      allOf: [
+        { $ref: "#/components/schemas/ManagementOperationLine" },
+        {
+          type: "object",
+          required: [
+            "status",
+            "completedAtUtc",
+            "goldResultId",
+            "goldAmountGrams",
+            "goldUnitCode",
+            "goldRecordedAtUtc",
+            "goldRecordedByProfileId",
+            "goldRevisionCount",
+            "hasGoldResult",
+          ],
+          properties: {
+            status: { type: "string", enum: ["COMPLETED"] },
+            completedAtUtc: DATE_TIME,
+            goldResultId: { ...UUID, nullable: true },
+            goldAmountGrams: {
+              type: "number",
+              format: "double",
+              minimum: 0,
+              nullable: true,
+            },
+            goldUnitCode: { type: "string", enum: ["g"], nullable: true },
+            goldRecordedAtUtc: { ...DATE_TIME, nullable: true },
+            goldRecordedByProfileId: { ...UUID, nullable: true },
+            goldRevisionCount: {
+              type: "integer",
+              minimum: 1,
+              nullable: true,
+            },
+            hasGoldResult: { type: "boolean" },
+          },
+        },
+      ],
+    },
+    ManagementSweepMercury: {
+      type: "object",
+      required: [
+        "organizationId",
+        "shipmentId",
+        "sweepId",
+        "sweptAtUtc",
+        "cajuelaCount",
+        "lineComponentId",
+        "lineComponentName",
+        "lineComponentOrder",
+        "inputGrams",
+        "remainderGrams",
+        "hasInputRecord",
+        "hasRemainderRecord",
+      ],
+      additionalProperties: false,
+      properties: {
+        organizationId: UUID,
+        shipmentId: UUID,
+        sweepId: UUID,
+        sweptAtUtc: DATE_TIME,
+        cajuelaCount: { type: "integer", minimum: 1 },
+        lineComponentId: UUID,
+        lineComponentName: { type: "string" },
+        lineComponentOrder: { type: "integer" },
+        inputGrams: { type: "number", format: "double", nullable: true },
+        remainderGrams: { type: "number", format: "double", nullable: true },
+        hasInputRecord: { type: "boolean" },
+        hasRemainderRecord: { type: "boolean" },
+      },
+    },
     PageCatalog: pageSchema("CatalogItem"),
     PageWorker: pageSchema("Worker"),
     PageAccount: pageSchema("Account"),
+    PageManagementOperationLine: pageSchema("ManagementOperationLine"),
+    PageManagementShipment: pageSchema("ManagementShipment"),
+    PageManagementSweepMercury: pageSchema("ManagementSweepMercury"),
   };
 
   for (const [path, pathItem] of Object.entries(document.paths)) {
@@ -206,6 +329,16 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       for (const status of ["400", "401", "403", "409", "422", "500", "503"]) {
         operation.responses[status] ??= {
           description: "Error estable",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ErrorResponse" },
+            },
+          },
+        };
+      }
+      if (path.includes("/management/shipments/{shipmentId}")) {
+        operation.responses["404"] ??= {
+          description: "Cargamento gerencial no encontrado",
           content: {
             "application/json": {
               schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -261,6 +394,14 @@ function responseSchema(
 ): Record<string, unknown> {
   if (path.endsWith("/auth/session"))
     return { $ref: "#/components/schemas/Session" };
+  if (path.endsWith("/management/operation-lines"))
+    return { $ref: "#/components/schemas/PageManagementOperationLine" };
+  if (path.endsWith("/management/shipments"))
+    return { $ref: "#/components/schemas/PageManagementShipment" };
+  if (path.endsWith("/sweeps") && path.includes("/management/shipments/"))
+    return { $ref: "#/components/schemas/PageManagementSweepMercury" };
+  if (path.includes("/management/shipments/"))
+    return { $ref: "#/components/schemas/ManagementShipment" };
   if (operationId.includes("list") && path.includes("/accounts"))
     return { $ref: "#/components/schemas/PageAccount" };
   if (operationId.includes("list") && path.endsWith("/workers"))
