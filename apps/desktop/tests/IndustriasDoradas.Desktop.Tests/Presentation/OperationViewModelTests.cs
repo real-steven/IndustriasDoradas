@@ -55,7 +55,7 @@ public sealed class OperationViewModelTests
         Assert.AreEqual(1, cajuelas.RegisterCalls);
         Assert.AreEqual(8, viewModel.Line.Total);
         StringAssert.Contains(viewModel.LastResult, "guardada localmente");
-        Assert.AreEqual("2 pendientes · 0 requieren revisión · 0 sincronizados", viewModel.PendingStatus);
+        Assert.AreEqual("2 pendientes · 0 sincronizados", viewModel.PendingStatus);
         Assert.AreEqual(OperationFeedbackKind.Success, feedback.LastKind);
     }
 
@@ -90,7 +90,7 @@ public sealed class OperationViewModelTests
 
         Assert.AreEqual(0, collectionChanges);
         Assert.AreEqual(7, viewModel.Line.Total);
-        Assert.AreEqual("2 pendientes · 0 requieren revisión · 0 sincronizados", viewModel.PendingStatus);
+        Assert.AreEqual("2 pendientes · 0 sincronizados", viewModel.PendingStatus);
     }
 
     [TestMethod]
@@ -384,6 +384,48 @@ public sealed class OperationViewModelTests
     }
 
     [TestMethod]
+    public async Task OlderCorrectionWaitsForManagerModeAndReasonWithoutClosingTheForm()
+    {
+        var dashboard = new QueueDashboardRepository(
+            ReadySnapshot(total: 1),
+            ReadySnapshot(total: 0, pending: 2));
+        var cajuelas = new StubCajuelaRepository(
+            total: 1,
+            recordedAt: Now.AddMinutes(-6));
+        var managerMode = new PlantManagerModeState();
+        OperationViewModel viewModel = Create(
+            dashboard,
+            cajuelas,
+            managerMode: managerMode);
+        await viewModel.InitializeAsync();
+        await viewModel.PrepareCorrectionCommand.ExecuteAsync(null);
+
+        await viewModel.ConfirmCorrectionCommand.ExecuteAsync(null);
+
+        Assert.IsTrue(viewModel.IsCorrectionPending);
+        Assert.AreEqual(0, cajuelas.ReverseCalls);
+        StringAssert.Contains(viewModel.LastResult, "Active el Modo Jefe de Planta");
+
+        managerMode.SetActive(true);
+        await viewModel.ConfirmCorrectionCommand.ExecuteAsync(null);
+
+        Assert.IsTrue(viewModel.IsCorrectionPending);
+        Assert.AreEqual(0, cajuelas.ReverseCalls);
+        StringAssert.Contains(viewModel.LastResult, "Escriba el motivo");
+
+        viewModel.CorrectionReason = "Conteo físico verificado por el jefe de planta";
+        await viewModel.ConfirmCorrectionCommand.ExecuteAsync(null);
+
+        Assert.IsFalse(viewModel.IsCorrectionPending);
+        Assert.AreEqual(1, cajuelas.ReverseCalls);
+        Assert.AreEqual(0, viewModel.Line.Total);
+        Assert.AreEqual("JEFE_PLANTA", cajuelas.LastReverseMutation!.CorrectionActorKind);
+        Assert.AreEqual(
+            "Conteo físico verificado por el jefe de planta",
+            cajuelas.LastReverseMutation.ReasonDetail);
+    }
+
+    [TestMethod]
     public async Task LineWithoutActiveContextKeepsRegistrationDisabled()
     {
         var dashboard = new QueueDashboardRepository(new LocalOperationDashboardSnapshot(
@@ -589,15 +631,21 @@ public sealed class OperationViewModelTests
         RecordingMetrics? metrics = null,
         RecordingFeedback? feedback = null,
         OperationSafetyOptions? safetyOptions = null,
-        StubSweepRepository? sweeps = null)
+        StubSweepRepository? sweeps = null,
+        PlantManagerModeState? managerMode = null)
     {
         time ??= new FixedTimeProvider(Now);
         var safety = Options.Create(safetyOptions ?? new OperationSafetyOptions());
         sweeps ??= new StubSweepRepository(1);
+        managerMode ??= new PlantManagerModeState();
         return new OperationViewModel(
             dashboard,
             new RegisterCajuelaHandler(cajuelas, time),
-            new RevertLastCajuelaHandler(cajuelas, time),
+            new RevertLastCajuelaHandler(
+                cajuelas,
+                time,
+                new MemoryStationStore(State()),
+                managerMode),
             new RecordProductionSweepHandler(sweeps, new MemoryStationStore(State()), time),
             new StubInputCommandSource(),
             new OperationInputGuard(safety, time),
@@ -606,7 +654,8 @@ public sealed class OperationViewModelTests
             new ProductionMilestoneService(),
             safety,
             Options.Create(new StationOptions { Id = StationId }),
-            time);
+            time,
+            managerMode);
     }
 
     private static LocalOperationDashboardSnapshot ReadySnapshot(
@@ -710,9 +759,15 @@ public sealed class OperationViewModelTests
             CancellationToken cancellationToken = default) => Task.FromResult(snapshots);
     }
 
-    private sealed class StubCajuelaRepository(int total, bool rejectReversal = false) : ILocalCajuelaRepository
+    private sealed class StubCajuelaRepository(
+        int total,
+        bool rejectReversal = false,
+        DateTimeOffset? recordedAt = null) : ILocalCajuelaRepository
     {
-        private readonly ProductionEvent target = Added(Guid.Parse("50000000-0000-4000-8000-000000000001"), 1);
+        private readonly ProductionEvent target = Added(
+            Guid.Parse("50000000-0000-4000-8000-000000000001"),
+            1,
+            recordedAt ?? Now);
 
         public int RegisterCalls { get; private set; }
         public int ReverseCalls { get; private set; }
@@ -780,8 +835,19 @@ public sealed class OperationViewModelTests
                 false));
         }
 
-        private static ProductionEvent Added(Guid id, long sequence) =>
-            ProductionEvent.CajuelaAdded(id, Context(), sequence, Now, Now);
+        private static ProductionEvent Added(
+            Guid id,
+            long sequence,
+            DateTimeOffset? recordedAt = null)
+        {
+            DateTimeOffset timestamp = recordedAt ?? Now;
+            return ProductionEvent.CajuelaAdded(
+                id,
+                Context(),
+                sequence,
+                timestamp,
+                timestamp);
+        }
 
         private static ProductionEventContext Context() =>
             ProductionEventContext.Create(

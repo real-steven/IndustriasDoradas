@@ -37,6 +37,7 @@ public sealed class OperationViewModel : ObservableObject
     private readonly IOperationFeedbackPlayer feedbackPlayer;
     private readonly ProductionMilestoneService milestones;
     private readonly OperationSafetyOptions safetyOptions;
+    private readonly IPlantManagerModeAccessor? managerMode;
     private readonly Guid stationId;
     private OperationLinePanelViewModel line = new();
     private IReadOnlyList<LocalOperationDashboardSnapshot> appliedDashboardSnapshots = [];
@@ -68,7 +69,8 @@ public sealed class OperationViewModel : ObservableObject
         ProductionMilestoneService milestones,
         IOptions<OperationSafetyOptions> safetyOptions,
         IOptions<StationOptions> stationOptions,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IPlantManagerModeAccessor? managerMode = null)
     {
         this.dashboard = dashboard;
         this.registerHandler = registerHandler;
@@ -81,6 +83,7 @@ public sealed class OperationViewModel : ObservableObject
         this.milestones = milestones;
         this.safetyOptions = safetyOptions.Value;
         this.timeProvider = timeProvider;
+        this.managerMode = managerMode;
         stationId = stationOptions.Value.Id;
         RegisterCajuelaCommand = new AsyncRelayCommand(RegisterCajuelaAsync, CanRegisterCajuela);
         PrepareCorrectionCommand = new AsyncRelayCommand(PrepareCorrectionAsync, CanPrepareCorrection);
@@ -586,7 +589,7 @@ public sealed class OperationViewModel : ObservableObject
             CorrectionSummary = preparedReversal.RequiresPlantManager
                 ? $"La última cajuela tiene más de cinco minutos. El total cambiará de " +
                   $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}; " +
-                  "active Modo Jefe de Planta e indique el motivo."
+                  "active el Modo Jefe de Planta e indique el motivo."
                 : $"Corrección rápida de la última cajuela. El total cambiará de " +
                   $"{preparedReversal.TotalBeforeCorrection} a {preparedReversal.TotalBeforeCorrection - 1}.";
             IsCorrectionPending = true;
@@ -601,6 +604,22 @@ public sealed class OperationViewModel : ObservableObject
         PreparedCajuelaReversal? prepared = preparedReversal;
         if (prepared is null)
         {
+            return;
+        }
+
+        if (prepared.RequiresPlantManager && managerMode?.IsActive != true)
+        {
+            ShowFeedback(
+                OperationFeedbackKind.Warning,
+                "Active el Modo Jefe de Planta desde la barra superior antes de confirmar.");
+            return;
+        }
+
+        if (prepared.RequiresPlantManager && string.IsNullOrWhiteSpace(CorrectionReason))
+        {
+            ShowFeedback(
+                OperationFeedbackKind.Warning,
+                "Escriba el motivo del cambio antes de confirmar la corrección.");
             return;
         }
 
@@ -795,8 +814,7 @@ public sealed class OperationViewModel : ObservableObject
 
     private static string FormatOutboxStatus(LocalOperationDashboardSnapshot? snapshot) => snapshot is null
         ? "Sin líneas disponibles"
-        : $"{snapshot.PendingOutboxCount} pendientes · " +
-          $"{snapshot.FailedReviewOutboxCount} requieren revisión · " +
+        : $"{checked(snapshot.PendingOutboxCount + snapshot.FailedReviewOutboxCount)} pendientes · " +
           $"{snapshot.SyncedOutboxCount} sincronizados";
 
     private static LocalOperationDashboardSnapshot WithoutOutboxCounts(

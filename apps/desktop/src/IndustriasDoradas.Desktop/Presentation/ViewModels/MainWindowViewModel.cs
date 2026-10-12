@@ -15,6 +15,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IUiDispatcher uiDispatcher;
     private bool isRefreshingAfterSync;
     private bool isRefreshRequestedAfterSync;
+    private string? dismissedCorrectionNotificationKey;
 
     public MainWindowViewModel(HomeViewModel home, DiagnosticsViewModel diagnostics)
         : this(home, diagnostics, null, null, null, null, null)
@@ -79,7 +80,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         AuditViewModel? audit,
         SettingsViewModel? settings,
         ISyncStatusNotifier? syncStatusNotifier,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        AttendancePreviewViewModel? attendance = null)
     {
         Home = home;
         Diagnostics = diagnostics;
@@ -87,6 +89,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Operation = operation;
         Audit = audit;
         Settings = settings;
+        Attendance = attendance;
         this.syncStatusNotifier = syncStatusNotifier;
         this.uiDispatcher = uiDispatcher;
         currentPage = operation ?? (object?)station ?? home;
@@ -100,9 +103,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ShowAuditCorrectionsCommand = new AsyncRelayCommand(
             ShowAuditCorrectionsAsync,
             CanShowAuditCorrections);
+        DismissCorrectionNotificationCommand = new RelayCommand(
+            DismissCorrectionNotification,
+            () => Diagnostics.HasCorrections);
         ShowSettingsCommand = new RelayCommand(
             () => CurrentPage = Settings!,
             CanShowSettings);
+        ShowAttendanceCommand = new RelayCommand(
+            () => CurrentPage = Attendance!,
+            () => Attendance is not null);
         ShowStationCommand = new RelayCommand(
             () => CurrentPage = Station!,
             () => Station is not null);
@@ -124,6 +133,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public OperationViewModel? Operation { get; }
     public AuditViewModel? Audit { get; }
     public SettingsViewModel? Settings { get; }
+    public AttendancePreviewViewModel? Attendance { get; }
 
     public object CurrentPage
     {
@@ -137,6 +147,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsAuditPage));
             OnPropertyChanged(nameof(IsDiagnosticsPage));
             OnPropertyChanged(nameof(IsSettingsPage));
+            OnPropertyChanged(nameof(IsAttendancePage));
             OnPropertyChanged(nameof(CurrentPageTitle));
         }
     }
@@ -150,11 +161,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsAuditPage => ReferenceEquals(CurrentPage, Audit);
     public bool IsDiagnosticsPage => ReferenceEquals(CurrentPage, Diagnostics);
     public bool IsSettingsPage => ReferenceEquals(CurrentPage, Settings);
+    public bool IsAttendancePage => ReferenceEquals(CurrentPage, Attendance);
     public string CurrentPageTitle => CurrentPage switch
     {
         OperationViewModel => "Modo Operación",
         StationViewModel => "Estación",
         AuditViewModel => "Auditoría",
+        AttendancePreviewViewModel => "Asistencia",
         SettingsViewModel => "Configuración",
         DiagnosticsViewModel => "Diagnóstico",
         _ => "Inicio",
@@ -165,11 +178,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public IRelayCommand ShowDiagnosticsCommand { get; }
     public IAsyncRelayCommand ShowAuditCommand { get; }
     public IAsyncRelayCommand ShowAuditCorrectionsCommand { get; }
+    public IRelayCommand DismissCorrectionNotificationCommand { get; }
     public IRelayCommand ShowSettingsCommand { get; }
+    public IRelayCommand ShowAttendanceCommand { get; }
     public IRelayCommand ShowStationCommand { get; }
     public IRelayCommand ShowOperationCommand { get; }
     public bool HasCorrectionNotification => Diagnostics.HasCorrections &&
-        (Station is null || Station.IsPlantManager);
+        (Station is null || Station.IsPlantManager) &&
+        !string.Equals(
+            dismissedCorrectionNotificationKey,
+            CurrentCorrectionNotificationKey(),
+            StringComparison.Ordinal);
     public string CorrectionNotification => Diagnostics.CorrectionNotification;
 
     public async Task InitializeAsync()
@@ -228,8 +247,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (Audit is null) return;
         await Audit.RefreshAsync();
         Audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
+        DismissCorrectionNotification();
         CurrentPage = Audit;
     }
+
+    private void DismissCorrectionNotification()
+    {
+        dismissedCorrectionNotificationKey = CurrentCorrectionNotificationKey();
+        OnPropertyChanged(nameof(HasCorrectionNotification));
+        DismissCorrectionNotificationCommand.NotifyCanExecuteChanged();
+    }
+
+    private string CurrentCorrectionNotificationKey() => string.Join(
+        '|',
+        Diagnostics.Corrections.Select(item =>
+            $"{item.OccurredAt.ToUniversalTime().Ticks}:{item.Action}:{item.EntityType}:{item.Reason}"));
 
     private void OnStationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -274,6 +306,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             nameof(DiagnosticsViewModel.CorrectionNotification))) return;
         OnPropertyChanged(nameof(HasCorrectionNotification));
         OnPropertyChanged(nameof(CorrectionNotification));
+        DismissCorrectionNotificationCommand.NotifyCanExecuteChanged();
     }
 
     private void OnSyncStatusChanged(object? sender, SyncStatusNotification notification)

@@ -20,28 +20,29 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private readonly SynchronizationContext? uiContext;
     private HealthState state = HealthState.NotChecked;
     private string statusTitle = "Sin comprobar";
-    private string statusMessage = "Ejecuta la comprobación para consultar la API.";
+    private string statusMessage = "Compruebe la conexión con el sistema central.";
     private string service = "—";
     private string lastChecked = "—";
     private LocalDatabaseHealthState localState = LocalDatabaseHealthState.Unavailable;
     private string localStatusTitle = "Sin comprobar";
-    private string localStatusMessage = "Comprueba el almacenamiento local antes de operar.";
+    private string localStatusMessage = "Compruebe los datos guardados en este equipo antes de operar.";
     private string localRecoveryInstruction = "—";
     private string pendingOperations = "—";
     private string availableSpace = "—";
     private string localLastChecked = "—";
-    private string recoveryCopyStatus = "No se ha creado una copia de recuperación.";
+    private string recoveryCopyStatus = "No se ha creado un respaldo de la estación.";
     private string networkStatus = "Sin comprobar";
     private string lastSynchronization = "—";
     private string clockDeviation = "—";
-    private string diagnosticReportStatus = "No se ha exportado un diagnóstico.";
+    private string diagnosticReportStatus = "No se ha generado un informe para soporte.";
     private IReadOnlyList<SyncFailureDiagnostic> failures = [];
     private IReadOnlyList<AdministrativeCorrectionDiagnostic> corrections = [];
     private int failedReviewCount;
     private int pullReviewCount;
     private bool isCreatingCopy;
     private bool isExportingReport;
-    private readonly string station;
+    private readonly string stationCode;
+    private readonly string stationName;
     private readonly StationViewModel? stationViewModel;
     private readonly string applicationVersion = DesktopApplicationInfo.Version;
 
@@ -65,7 +66,13 @@ public sealed class DiagnosticsViewModel : ObservableObject
         this.localDiagnostics = localDiagnostics;
         uiContext = SynchronizationContext.Current;
         this.stationViewModel = stationViewModel;
-        station = stationOptions.Value.Id == Guid.Empty ? "No configurada" : stationOptions.Value.Id.ToString("D");
+        StationOptions configuredStation = stationOptions.Value;
+        stationCode = configuredStation.Id == Guid.Empty
+            ? "No configurado"
+            : configuredStation.Id.ToString("D");
+        stationName = string.IsNullOrWhiteSpace(configuredStation.Name)
+            ? "Estación Avangares"
+            : configuredStation.Name.Trim();
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         CreateRecoveryCopyCommand = new AsyncRelayCommand(
             CreateRecoveryCopyAsync,
@@ -127,7 +134,9 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public IAsyncRelayCommand RefreshCommand { get; }
     public IAsyncRelayCommand CreateRecoveryCopyCommand { get; }
     public IAsyncRelayCommand ExportDiagnosticReportCommand { get; }
-    public string Station => station;
+    public string Station => stationCode;
+    public string StationCode => stationCode;
+    public string StationName => stationName;
     public string ApplicationVersion => applicationVersion;
     public string NetworkStatus { get => networkStatus; private set => SetProperty(ref networkStatus, value); }
     public string LastSynchronization { get => lastSynchronization; private set => SetProperty(ref lastSynchronization, value); }
@@ -155,7 +164,9 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public bool HasCorrections => Corrections.Count > 0;
     public bool CanUseProtectedActions => stationViewModel?.IsPlantManager ?? true;
     public string CorrectionNotification => HasCorrections
-        ? $"{Corrections.Count} corrección(es) administrativa(s) recibida(s). Abrir auditoría."
+        ? Corrections.Count == 1
+            ? "1 corrección administrativa recibida."
+            : $"{Corrections.Count} correcciones administrativas recibidas."
         : string.Empty;
     public LocalDatabaseHealthState LocalState
     {
@@ -193,7 +204,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     {
         State = HealthState.Checking;
         StatusTitle = "Comprobando conexión";
-        StatusMessage = "Consultando el endpoint técnico de la API.";
+        StatusMessage = "Buscando conexión con el sistema central.";
 
         Task<SystemHealth> apiTask = healthService.CheckAsync(cancellationToken);
         Task<LocalDatabaseHealth> localTask = localDiagnostics.InspectAsync(cancellationToken);
@@ -202,11 +213,15 @@ public sealed class DiagnosticsViewModel : ObservableObject
 
         State = result.State;
         StatusTitle = result.State == HealthState.Available
-            ? "API disponible"
-            : "API no disponible";
-        StatusMessage = result.Detail;
+            ? "Conectado y disponible"
+            : "Sin conexión con el sistema central";
+        StatusMessage = result.State == HealthState.Available
+            ? "El sistema central respondió correctamente."
+            : "No se pudo conectar con el sistema central. Puede continuar con los datos guardados en este equipo.";
         Service = result.Service;
-        NetworkStatus = result.State == HealthState.Available ? "Conexión disponible" : "Sin conexión con la API";
+        NetworkStatus = result.State == HealthState.Available
+            ? "Sistema central disponible"
+            : "Sin conexión con el sistema central";
         LastChecked = result.CheckedAt?.ToLocalTime().ToString(
             "g",
             CultureInfo.CurrentCulture) ?? "—";
@@ -215,14 +230,20 @@ public sealed class DiagnosticsViewModel : ObservableObject
         LocalState = local.State;
         LocalStatusTitle = local.State switch
         {
-            LocalDatabaseHealthState.Healthy => "Guardado local disponible",
-            LocalDatabaseHealthState.Attention => "Guardado local requiere atención",
-            _ => "Guardado local no disponible",
+            LocalDatabaseHealthState.Healthy => "Datos disponibles en este equipo",
+            LocalDatabaseHealthState.Attention => "Los datos requieren atención",
+            _ => "Datos del equipo no disponibles",
         };
-        LocalStatusMessage = local.Summary;
-        LocalRecoveryInstruction = local.RecoveryInstruction;
-        PendingOperations = $"{local.PendingOutboxCount} pendientes · " +
-            $"{local.FailedReviewOutboxCount} requieren revisión · " +
+        LocalStatusMessage = local.State == LocalDatabaseHealthState.Healthy
+            ? "Los datos están guardados y disponibles en este equipo."
+            : local.Summary;
+        int pendingSynchronization = checked(local.PendingOutboxCount + local.FailedReviewOutboxCount);
+        LocalRecoveryInstruction = local.State == LocalDatabaseHealthState.Healthy
+            ? pendingSynchronization == 0
+                ? "Todos los datos de este equipo están sincronizados."
+                : "Los datos pendientes están guardados y se enviarán automáticamente al recuperar la conexión."
+            : local.RecoveryInstruction;
+        PendingOperations = $"{pendingSynchronization} pendientes · " +
             $"{local.SyncedOutboxCount} sincronizados";
         AvailableSpace = local.AvailableFreeBytes < 0
             ? "No disponible"
@@ -230,10 +251,10 @@ public sealed class DiagnosticsViewModel : ObservableObject
         LocalLastChecked = local.CheckedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
         NetworkStatus = local.SyncNetworkState switch
         {
-            "AVAILABLE" => "Nube disponible",
-            "UNAVAILABLE" => $"Sin sincronización · {local.LastSyncErrorCode ?? "ERROR_DE_RED"}",
-            _ when result.State == HealthState.Available => "API local disponible · nube aún no comprobada",
-            _ => "Sin conexión de sincronización",
+            "AVAILABLE" => "Sistema central disponible",
+            "UNAVAILABLE" => "Sin conexión con el sistema central",
+            _ when result.State == HealthState.Available => "Conexión disponible · sincronización aún no comprobada",
+            _ => "Sin conexión con el sistema central",
         };
         LastSynchronization = local.LastSynchronizationAt?.ToLocalTime().ToString(
             "g", CultureInfo.CurrentCulture) ?? "Aún no registrada";
@@ -255,11 +276,15 @@ public sealed class DiagnosticsViewModel : ObservableObject
                 "Diagnostico");
             Directory.CreateDirectory(directory);
             string path = Path.Combine(directory,
-                $"diagnostico-sprint-3-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.json");
+                $"informe-soporte-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.json");
             var report = new
             {
                 generatedAtUtc = DateTimeOffset.UtcNow,
-                station = Station,
+                station = new
+                {
+                    name = StationName,
+                    code = StationCode,
+                },
                 applicationVersion = ApplicationVersion,
                 network = NetworkStatus,
                 lastSynchronization = LastSynchronization,
@@ -289,11 +314,11 @@ public sealed class DiagnosticsViewModel : ObservableObject
             };
             await File.WriteAllTextAsync(path, JsonSerializer.Serialize(report, DiagnosticJsonOptions))
                 .ConfigureAwait(true);
-            DiagnosticReportStatus = $"Diagnóstico sin secretos exportado: {path}";
+            DiagnosticReportStatus = $"Informe para soporte generado: {path}";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            DiagnosticReportStatus = "No se pudo exportar el diagnóstico en Documentos.";
+            DiagnosticReportStatus = "No se pudo generar el informe para soporte en Documentos.";
         }
         finally
         {
@@ -343,11 +368,11 @@ public sealed class DiagnosticsViewModel : ObservableObject
             string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             string directory = Path.Combine(documents, "IndustriasDoradas", "Recuperacion");
             string path = await localDiagnostics.CreateConsistentCopyAsync(directory).ConfigureAwait(true);
-            RecoveryCopyStatus = $"Copia consistente creada: {path}";
+            RecoveryCopyStatus = $"Respaldo de la estación creado: {path}";
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException)
         {
-            RecoveryCopyStatus = "No se pudo crear la copia. Conserve la base actual y solicite diagnóstico.";
+            RecoveryCopyStatus = "No se pudo crear el respaldo. Conserve los datos actuales y solicite soporte.";
         }
         finally
         {

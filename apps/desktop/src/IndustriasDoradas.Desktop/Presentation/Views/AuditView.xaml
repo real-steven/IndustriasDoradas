@@ -146,7 +146,7 @@
                            Text="{Binding Status}" TextWrapping="Wrap" />
             </Border>
 
-            <UniformGrid Margin="-6,12,-6,0" Columns="4">
+            <UniformGrid Margin="-6,12,-6,0" Columns="5">
                 <Button Style="{StaticResource AuditCategoryButton}"
                         Command="{Binding SelectCategoryCommand}"
                         CommandParameter="{x:Static viewModels:AuditCategory.Operation}">
@@ -165,12 +165,25 @@
                         CommandParameter="{x:Static viewModels:AuditCategory.Corrections}">
                     <StackPanel>
                         <TextBlock FontFamily="Segoe UI Emoji" FontSize="28" Text="↶" />
-                        <TextBlock Margin="0,10,0,0" FontSize="17" FontWeight="Bold" Text="Correcciones y revisiones" />
+                        <TextBlock Margin="0,10,0,0" FontSize="17" FontWeight="Bold" Text="Correcciones de planta" />
                         <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
                                    FontWeight="Normal" TextWrapping="Wrap"
-                                   Text="Correcciones administrativas y eventos que requieren revisión." />
+                                   Text="Cambios autorizados con Modo Jefe de Planta, con responsable y motivo." />
                         <TextBlock Margin="0,10,0,0" Foreground="#8A5A00" FontSize="10"
                                    FontWeight="Bold" Text="🔒  REQUIERE MODO JEFE" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AuditCategoryButton}"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="{x:Static viewModels:AuditCategory.Attendance}">
+                    <StackPanel>
+                        <TextBlock FontFamily="Segoe UI Emoji" FontSize="28" Text="◷" />
+                        <TextBlock Margin="0,10,0,0" FontSize="17" FontWeight="Bold" Text="Asistencia y horas" />
+                        <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
+                                   FontWeight="Normal" TextWrapping="Wrap"
+                                   Text="Entradas, salidas, horas e incidencias del personal." />
+                        <TextBlock Margin="0,10,0,0" Foreground="#8A5A00" FontSize="10"
+                                   FontWeight="Bold" Text="🔒  PRÓXIMAMENTE" />
                     </StackPanel>
                 </Button>
                 <Button Style="{StaticResource AuditCategoryButton}"
@@ -178,10 +191,10 @@
                         CommandParameter="{x:Static viewModels:AuditCategory.Access}">
                     <StackPanel>
                         <TextBlock FontFamily="Segoe UI Emoji" FontSize="28" Text="🔐" />
-                        <TextBlock Margin="0,10,0,0" FontSize="17" FontWeight="Bold" Text="Accesos y seguridad" />
+                        <TextBlock Margin="0,10,0,0" FontSize="17" FontWeight="Bold" Text="Seguridad del sistema" />
                         <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
                                    FontWeight="Normal" TextWrapping="Wrap"
-                                   Text="Aperturas, elevaciones, PIN y sesiones protegidas." />
+                                   Text="Sesiones, elevaciones, PIN y accesos protegidos." />
                         <TextBlock Margin="0,10,0,0" Foreground="#8A5A00" FontSize="10"
                                    FontWeight="Bold" Text="🔒  REQUIERE MODO JEFE" />
                     </StackPanel>
@@ -451,7 +464,7 @@
                     <StackPanel>
                         <TextBlock FontSize="19" FontWeight="Bold" Text="Correcciones realizadas" />
                         <TextBlock Margin="0,5,0,12" Foreground="{StaticResource MutedBrush}"
-                                   Text="Los rechazos técnicos de sincronización permanecen en Diagnóstico; aquí se muestra la actividad autorizada de planta." />
+                                   Text="Aquí se conserva la actividad autorizada de planta; no necesita una aprobación posterior." />
                         <ItemsControl ItemsSource="{Binding CajuelaCorrections}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -476,9 +489,37 @@
             </StackPanel>
 
             <Border Margin="0,18,0,0" Padding="24" Style="{StaticResource SurfaceCardStyle}"
+                    Visibility="{Binding IsAttendanceCategory, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontSize="20" FontWeight="Bold" Text="Asistencia y horas" />
+                        <Border Margin="12,0,0,0" Padding="10,4" Background="#FFF5D7"
+                                BorderBrush="#E6C665" BorderThickness="1" CornerRadius="10">
+                            <TextBlock Foreground="#815D17" FontSize="10" FontWeight="Bold"
+                                       Text="PRÓXIMAMENTE" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Margin="0,9,0,0" Foreground="{StaticResource MutedBrush}"
+                               Text="Aquí el jefe de planta podrá consultar entradas, salidas, horas derivadas, marcas abiertas y correcciones con motivo. Esta maqueta no consulta ni modifica datos todavía."
+                               TextWrapping="Wrap" />
+                    <UniformGrid Margin="-5,15,-5,0" Columns="3">
+                        <Border Margin="5" Padding="15" Background="#F7F9FA" CornerRadius="11">
+                            <StackPanel><TextBlock FontWeight="Bold" Text="PERSONAL EN PLANTA" /><TextBlock Margin="0,7,0,0" FontSize="24" FontWeight="Bold" Text="—" /></StackPanel>
+                        </Border>
+                        <Border Margin="5" Padding="15" Background="#F7F9FA" CornerRadius="11">
+                            <StackPanel><TextBlock FontWeight="Bold" Text="HORAS DE HOY" /><TextBlock Margin="0,7,0,0" FontSize="24" FontWeight="Bold" Text="—" /></StackPanel>
+                        </Border>
+                        <Border Margin="5" Padding="15" Background="#FFF8E9" CornerRadius="11">
+                            <StackPanel><TextBlock FontWeight="Bold" Text="INCIDENCIAS" /><TextBlock Margin="0,7,0,0" Foreground="#8A5A00" FontSize="24" FontWeight="Bold" Text="—" /></StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <Border Margin="0,18,0,0" Padding="24" Style="{StaticResource SurfaceCardStyle}"
                     Visibility="{Binding IsAccessCategory, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
-                    <TextBlock FontSize="20" FontWeight="Bold" Text="Accesos y seguridad" />
+                    <TextBlock FontSize="20" FontWeight="Bold" Text="Seguridad del sistema" />
                     <TextBlock Margin="0,7,0,16" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
                                Text="Mostrará aperturas de estación, elevaciones, validaciones de PIN y sesiones restauradas." />
                     <Button HorizontalAlignment="Left" Command="{Binding ShowComingSoonCommand}"

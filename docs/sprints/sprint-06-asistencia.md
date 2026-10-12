@@ -60,6 +60,13 @@ mismo total central y los datos incompletos permanecen pendientes, nunca cero.
 
 ## Mini pasos, pausas y prompts
 
+**Referencia visual preparatoria — 2026-10-12:** Desktop incluye una maqueta
+navegable `Asistencia · Próximamente` y una categoría conceptual `Asistencia y
+horas` en Auditoría. Solo comunican el flujo previsto de identificación,
+entrada/salida, guardado local, horas e incidencias. Sus controles no escriben
+SQLite, no llaman al API, no capturan fotografías y no constituyen evidencia de
+implementación de los pasos 6.3–6.9.
+
 ### 6.1 Flujo real y responsabilidades
 
 **Prompt:** Contrasta con la empresa cómo se marca entrada/salida, quién corrige

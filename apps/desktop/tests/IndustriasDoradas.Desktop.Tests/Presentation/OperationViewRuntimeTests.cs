@@ -77,6 +77,7 @@ public sealed class OperationViewRuntimeTests
         AssertCanRender(new AuditView { DataContext = AuditViewSmokeContext.Operation() });
         AssertCanRender(new AuditView { DataContext = AuditViewSmokeContext.Corrections() });
         AssertCanRender(new SettingsView());
+        AssertCanRender(new AttendancePreviewView { DataContext = new AttendancePreviewViewModel() });
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Guid organizationId = Guid.NewGuid();
         var selectedLine = new CachedProductionLine(
@@ -223,6 +224,7 @@ public sealed class OperationViewRuntimeTests
             ];
             IsOperationCategory = !showCorrections;
             IsCorrectionsCategory = showCorrections;
+            IsAttendanceCategory = false;
             IsAccessCategory = false;
             IsAdministrationCategory = false;
             HasCompletedShipments = true;
@@ -236,6 +238,7 @@ public sealed class OperationViewRuntimeTests
         public static AuditViewSmokeContext Corrections() => new(true);
         public bool IsOperationCategory { get; }
         public bool IsCorrectionsCategory { get; }
+        public bool IsAttendanceCategory { get; }
         public bool IsAccessCategory { get; }
         public bool IsAdministrationCategory { get; }
         public bool HasCompletedShipments { get; }

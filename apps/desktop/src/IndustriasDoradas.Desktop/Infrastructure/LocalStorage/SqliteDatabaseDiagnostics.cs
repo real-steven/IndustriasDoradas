@@ -160,7 +160,7 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
         Directory.CreateDirectory(resolvedDirectory);
         string destinationPath = Path.Combine(
             resolvedDirectory,
-            $"operation-diagnostic-{DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}-{Guid.NewGuid():N}.sqlite3");
+            $"respaldo-estacion-{DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}-{Guid.NewGuid():N}.sqlite3");
 
         try
         {

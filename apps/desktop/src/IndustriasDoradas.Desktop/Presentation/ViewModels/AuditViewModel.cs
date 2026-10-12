@@ -72,6 +72,7 @@ public enum AuditCategory
 {
     Operation,
     Corrections,
+    Attendance,
     Access,
     Administration,
 }
@@ -175,9 +176,9 @@ public sealed class AuditViewModel : ObservableObject
     public int FailedReviewCount => diagnostics.FailedReviewCount;
     public int PullReviewCount => diagnostics.PullReviewCount;
     public string LocalReviewCountDescription => FailedReviewCount == 0
-        ? "No hay eventos locales rechazados pendientes de revisión."
-        : $"{FailedReviewCount} evento(s) local(es) requieren revisión. " +
-          $"Se muestran los {ReviewEvents.Count} más recientes.";
+        ? "No hay problemas locales de sincronización."
+        : $"{FailedReviewCount} evento(s) local(es) no pudieron sincronizarse. " +
+          $"Se muestran los {ReviewEvents.Count} más recientes para soporte.";
     public bool CanViewSensitiveAudit => station?.IsPlantManager ?? true;
     public IReadOnlyList<AuditPeriodOption> PeriodOptions => periodOptions;
     public AuditPeriodOption SelectedPeriodOption
@@ -308,12 +309,14 @@ public sealed class AuditViewModel : ObservableObject
             if (!SetProperty(ref selectedCategory, value)) return;
             OnPropertyChanged(nameof(IsOperationCategory));
             OnPropertyChanged(nameof(IsCorrectionsCategory));
+            OnPropertyChanged(nameof(IsAttendanceCategory));
             OnPropertyChanged(nameof(IsAccessCategory));
             OnPropertyChanged(nameof(IsAdministrationCategory));
         }
     }
     public bool IsOperationCategory => SelectedCategory == AuditCategory.Operation;
     public bool IsCorrectionsCategory => SelectedCategory == AuditCategory.Corrections;
+    public bool IsAttendanceCategory => SelectedCategory == AuditCategory.Attendance;
     public bool IsAccessCategory => SelectedCategory == AuditCategory.Access;
     public bool IsAdministrationCategory => SelectedCategory == AuditCategory.Administration;
     public string CorrectionCountDescription => Corrections.Count > 0
@@ -536,8 +539,10 @@ public sealed class AuditViewModel : ObservableObject
                 $"{FilteredShipmentCountDescription} en {PeriodDescription.ToLowerInvariant()}.",
             AuditCategory.Corrections =>
                 $"{CajuelaCorrections.Count} corrección(es) locales con trazabilidad.",
+            AuditCategory.Attendance =>
+                "Asistencia, horas e incidencias estarán disponibles próximamente.",
             AuditCategory.Access =>
-                "Accesos y validaciones de seguridad estarán disponibles próximamente.",
+                "Sesiones y validaciones de seguridad del sistema estarán disponibles próximamente.",
             _ => "Cambios administrativos estarán disponibles próximamente.",
         };
     }

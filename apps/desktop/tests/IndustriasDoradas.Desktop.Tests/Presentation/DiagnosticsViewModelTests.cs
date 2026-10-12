@@ -12,6 +12,20 @@ namespace IndustriasDoradas.Desktop.Tests.Presentation;
 public sealed class DiagnosticsViewModelTests
 {
     [TestMethod]
+    public void ConfiguredStationExposesFriendlyNameAndTechnicalCode()
+    {
+        Guid stationId = Guid.Parse("34000000-0000-4000-8000-000000000001");
+        DiagnosticsViewModel viewModel = new(
+            new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
+            new StubLocalDiagnostics(Healthy()),
+            Options.Create(new StationOptions { Id = stationId, Name = "Estación Avangares" }),
+            new SyncStatusNotifier());
+
+        Assert.AreEqual("Estación Avangares", viewModel.StationName);
+        Assert.AreEqual(stationId.ToString("D"), viewModel.StationCode);
+    }
+
+    [TestMethod]
     public async Task RefreshAsyncExposesDetailsWhenApiIsAvailable()
     {
         DateTimeOffset checkedAt = new(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
@@ -22,7 +36,7 @@ public sealed class DiagnosticsViewModelTests
         await viewModel.RefreshAsync();
 
         Assert.AreEqual(HealthState.Available, viewModel.State);
-        Assert.AreEqual("API disponible", viewModel.StatusTitle);
+        Assert.AreEqual("Conectado y disponible", viewModel.StatusTitle);
         Assert.AreEqual("industrias-doradas-api", viewModel.Service);
         Assert.AreNotEqual("—", viewModel.LastChecked);
     }
@@ -38,8 +52,8 @@ public sealed class DiagnosticsViewModelTests
         await viewModel.RefreshAsync();
 
         Assert.AreEqual(HealthState.Unavailable, viewModel.State);
-        Assert.AreEqual("API no disponible", viewModel.StatusTitle);
-        StringAssert.Contains(viewModel.StatusMessage, "conexión");
+        Assert.AreEqual("Sin conexión con el sistema central", viewModel.StatusTitle);
+        StringAssert.Contains(viewModel.StatusMessage, "sistema central");
         Assert.AreEqual("No disponible", viewModel.Service);
     }
 
@@ -78,12 +92,12 @@ public sealed class DiagnosticsViewModelTests
 
         Assert.AreEqual(LocalDatabaseHealthState.Attention, viewModel.LocalState);
         Assert.AreEqual(
-            "7 pendientes · 3 requieren revisión · 11 sincronizados",
+            "10 pendientes · 11 sincronizados",
             viewModel.PendingOperations);
         Assert.AreEqual("90 MB libres", viewModel.AvailableSpace);
         StringAssert.Contains(viewModel.LocalRecoveryInstruction, "Libere espacio");
-        Assert.AreEqual("API no disponible", viewModel.StatusTitle);
-        Assert.AreEqual("Sin sincronización · NETWORK_UNAVAILABLE", viewModel.NetworkStatus);
+        Assert.AreEqual("Sin conexión con el sistema central", viewModel.StatusTitle);
+        Assert.AreEqual("Sin conexión con el sistema central", viewModel.NetworkStatus);
         Assert.AreEqual(1, viewModel.Failures.Count);
         Assert.AreEqual(3, viewModel.FailedReviewCount);
         Assert.AreEqual("Registro o corrección de cajuela", viewModel.Failures[0].OperationDescription);
@@ -156,6 +170,20 @@ public sealed class DiagnosticsViewModelTests
 
         Assert.IsTrue(audit.HasSelectedShipment);
         Assert.AreEqual(firstLineId, audit.SelectedShipment!.Source.LineId);
+    }
+
+    [TestMethod]
+    public void AttendanceAuditCategoryIsAnExplicitComingSoonPreview()
+    {
+        DiagnosticsViewModel diagnostics = new(
+            new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
+            new StubLocalDiagnostics(Healthy()));
+        var audit = new AuditViewModel(diagnostics);
+
+        audit.SelectCategoryCommand.Execute(AuditCategory.Attendance);
+
+        Assert.IsTrue(audit.IsAttendanceCategory);
+        StringAssert.Contains(audit.Status, "próximamente");
     }
 
     [TestMethod]
