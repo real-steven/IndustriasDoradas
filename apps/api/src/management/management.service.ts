@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import {
   MANAGEMENT_QUERY_REPOSITORY,
+  type ManagementFreshness,
   type ManagementFilters,
   type ManagementPageQuery,
   type ManagementQueryRepository,
@@ -14,6 +15,23 @@ export class ManagementService {
     @Inject(MANAGEMENT_QUERY_REPOSITORY)
     private readonly repository: ManagementQueryRepository,
   ) {}
+
+  async freshness(
+    organizationId: string,
+    cursor?: string,
+  ): Promise<ManagementFreshness> {
+    const requestedSequence = this.decodeCursor(cursor);
+    const latest = await this.repository.findLatestChange(organizationId);
+    const latestSequence = BigInt(latest?.serverSequence ?? "0");
+    return {
+      cursor: this.encodeCursor(latestSequence),
+      hasChanges:
+        requestedSequence !== null && latestSequence > requestedSequence,
+      effectiveAtUtc: latest?.changedAtUtc ?? null,
+      serverTimeUtc: new Date().toISOString(),
+      pollAfterSeconds: 30,
+    };
+  }
 
   listOperationLines(organizationId: string, query: ManagementFilters) {
     this.validateDateRange(query);
@@ -65,5 +83,25 @@ export class ManagementService {
         "fromUtc must be earlier than toUtc",
       );
     }
+  }
+
+  private decodeCursor(cursor: string | undefined): bigint | null {
+    if (cursor === undefined) return null;
+    try {
+      const decoded = Buffer.from(cursor, "base64url").toString("utf8");
+      const match = /^v1:(\d+)$/u.exec(decoded);
+      if (match?.[1] === undefined) throw new Error();
+      return BigInt(match[1]);
+    } catch {
+      throw new ApplicationError(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        "INVALID_MANAGEMENT_CURSOR",
+        "Management freshness cursor is invalid",
+      );
+    }
+  }
+
+  private encodeCursor(sequence: bigint): string {
+    return Buffer.from(`v1:${sequence}`, "utf8").toString("base64url");
   }
 }

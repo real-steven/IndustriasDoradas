@@ -93,6 +93,7 @@ export interface Session { userId: string; sessionId: string; profileId: string;
 export interface CatalogItem { id: string; organizationId: string; code?: string; name: string; isActive: boolean; deactivatedAt: string | null; createdAt: string; updatedAt: string }
 export interface PageCatalog { items: CatalogItem[]; page: number; pageSize: number; total: number; totalPages: number }
 export interface ManagementFilters { page?: number; pageSize?: number; fromUtc?: string; toUtc?: string; plantId?: string; productionLineId?: string; supplierId?: string; responsibleWorkerId?: string; shipmentId?: string }
+export interface ManagementFreshness { cursor: string; hasChanges: boolean; effectiveAtUtc: string | null; serverTimeUtc: string; pollAfterSeconds: number }
 export interface ManagementOperationLine { organizationId: string; plantId: string; stationId: string; stationName: string; shipmentId: string; feedCycleId: string; productionLineId: string; productionLineName: string; productionLineOrder: number; supplierId: string; supplierName: string; responsibleWorkerId: string | null; responsibleWorkerName: string | null; startedAtUtc: string; cajuelaTotal: number; sweepCount: number; sweptCajuelas: number; cajuelasSinceLastSweep: number; nextSweepAt: number; sweepPending: boolean; lastActivityAtUtc: string }
 export interface ManagementShipment extends ManagementOperationLine { status: "COMPLETED"; completedAtUtc: string; goldResultId: string | null; goldAmountGrams: number | null; goldUnitCode: "g" | null; goldRecordedAtUtc: string | null; goldRecordedByProfileId: string | null; goldRevisionCount: number | null; hasGoldResult: boolean }
 export interface ManagementSweepMercury { organizationId: string; shipmentId: string; sweepId: string; sweptAtUtc: string; cajuelaCount: number; lineComponentId: string; lineComponentName: string; lineComponentOrder: number; inputGrams: number | null; remainderGrams: number | null; hasInputRecord: boolean; hasRemainderRecord: boolean }
@@ -113,6 +114,12 @@ export class ApiClient {
   }
   listManagementOperationLines(organizationId: string, filters: ManagementFilters = {}, signal?: AbortSignal): Promise<PageManagementOperationLine> {
     return this.request<PageManagementOperationLine>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/operation-lines?\${this.managementQuery(filters)}\`, signal);
+  }
+  getManagementFreshness(organizationId: string, cursor?: string, signal?: AbortSignal): Promise<ManagementFreshness> {
+    const query = new URLSearchParams();
+    if (cursor !== undefined) query.set("cursor", cursor);
+    const suffix = query.size === 0 ? "" : \`?\${query}\`;
+    return this.request<ManagementFreshness>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/freshness\${suffix}\`, signal);
   }
   listManagementShipments(organizationId: string, filters: ManagementFilters = {}, signal?: AbortSignal): Promise<PageManagementShipment> {
     return this.request<PageManagementShipment>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/shipments?\${this.managementQuery(filters)}\`, signal);

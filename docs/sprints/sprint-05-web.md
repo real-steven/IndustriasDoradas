@@ -9,8 +9,7 @@
 - Sprint 4.11 ya centraliza cargamentos, responsables, cajuelas, correcciones,
   barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
   segundo protocolo de sincronización.
-- 5.1, 5.2, 5.3, 5.4, 5.5, 5.6 y 5.7 están cerrados. El siguiente paso
-  ejecutable es 5.8.
+- 5.1 a 5.9 están cerrados. El siguiente paso ejecutable es 5.10.
 - El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
   por cargamento y 5.6 construirá su API e interfaz. El modelo legado por
   barrida no se reutiliza.
@@ -171,6 +170,15 @@ estado y se actualiza al volver la red. La matriz está en
 **Pausa:** cerrar y reabrir sesión produce cero fuga de caché.
 
 ### 5.9 Rendimiento y frescura
+
+**Estado:** cerrado el 2026-10-13. Henry aprobó `pnpm run verify`, REN-01 a
+REN-05 y el benchmark anual de 1.460 cargamentos y 36.500 eventos. La señal
+gerencial consulta el feed incremental de 4.11 mediante el índice existente,
+sondea cada 30 segundos solo con la pestaña visible, invalida las proyecciones
+cuando avanza el cursor y mantiene actualización manual. Primera y última
+página midieron aproximadamente 69 ms, sin degradación que justificara índices,
+caché o una paginación distinta. La evidencia está en
+`docs/testing/sprint-05-9-rendimiento-frescura.md`.
 
 **Prompt:** Genera volumen de un año, mide endpoints/render y agrega solo índices, caché o paginación justificados. Consume la señal de cambios respaldada por pull incremental, muestra la fecha efectiva de actualización y conserva un botón manual. Evita polling agresivo.
 

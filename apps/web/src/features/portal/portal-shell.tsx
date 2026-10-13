@@ -3,6 +3,10 @@ import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth, type RoleCode } from "../../auth/auth-context";
 import { useOnlineStatus } from "../../app/connectivity";
+import {
+  useManagementFreshness,
+  type ManagementFreshnessQuery,
+} from "../management/management-operation-data";
 
 const primaryNavigation = [
   { to: "/gerencia", label: "Resumen", icon: "⌂", end: true },
@@ -53,6 +57,7 @@ export function PortalLayout() {
   const auth = useAuth();
   const location = useLocation();
   const online = useOnlineStatus();
+  const freshness = useManagementFreshness();
 
   useEffect(() => {
     document.getElementById("contenido-gerencial")?.focus();
@@ -149,11 +154,15 @@ export function PortalLayout() {
           className="manager-content"
           tabIndex={-1}
         >
-          <Outlet />
+          <Outlet context={{ freshness } satisfies PortalOutletContext} />
         </main>
       </div>
     </div>
   );
+}
+
+interface PortalOutletContext {
+  freshness: ManagementFreshnessQuery;
 }
 
 function PortalNavLink({

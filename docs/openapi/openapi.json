@@ -315,6 +315,31 @@
         ],
         "type": "object"
       },
+      "ManagementFreshness": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "description": "Cursor incremental opaco",
+            "type": "string"
+          },
+          "effectiveAtUtc": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "hasChanges": { "type": "boolean" },
+          "pollAfterSeconds": { "minimum": 30, "type": "integer" },
+          "serverTimeUtc": { "format": "date-time", "type": "string" }
+        },
+        "required": [
+          "cursor",
+          "hasChanges",
+          "effectiveAtUtc",
+          "serverTimeUtc",
+          "pollAfterSeconds"
+        ],
+        "type": "object"
+      },
       "ManagementOperationLine": {
         "properties": {
           "cajuelaTotal": { "type": "integer" },
@@ -2656,6 +2681,94 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Catalogs"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/freshness": {
+      "get": {
+        "operationId": "ManagementController_freshness",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "description": "Cursor opaco devuelto por la consulta anterior",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": { "maxLength": 128, "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ManagementFreshness" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Management"]
       }
     },
     "/api/v1/organizations/{organizationId}/management/gold-summary": {

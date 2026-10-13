@@ -70,7 +70,23 @@ export interface ManagementSweepMercury {
   hasRemainderRecord: boolean;
 }
 
+export interface ManagementLatestChange {
+  serverSequence: string;
+  changedAtUtc: string;
+}
+
+export interface ManagementFreshness {
+  cursor: string;
+  hasChanges: boolean;
+  effectiveAtUtc: string | null;
+  serverTimeUtc: string;
+  pollAfterSeconds: number;
+}
+
 export interface ManagementQueryRepository {
+  findLatestChange(
+    organizationId: string,
+  ): Promise<ManagementLatestChange | null>;
   listOperationLines(
     organizationId: string,
     query: ManagementFilters,

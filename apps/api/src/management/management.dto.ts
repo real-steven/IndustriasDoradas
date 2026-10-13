@@ -4,10 +4,23 @@ import {
   IsInt,
   IsISO8601,
   IsOptional,
+  IsString,
   IsUUID,
+  MaxLength,
   Max,
   Min,
 } from "class-validator";
+
+export class ManagementFreshnessQueryDto {
+  @ApiPropertyOptional({
+    description: "Cursor opaco devuelto por la consulta anterior",
+    maxLength: 128,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  cursor?: string;
+}
 
 export class ManagementPageQueryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1, type: Number })

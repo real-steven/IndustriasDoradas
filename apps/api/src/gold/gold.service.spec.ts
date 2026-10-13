@@ -23,6 +23,7 @@ describe("GoldService", () => {
       createResult: jest.fn(),
     };
     management = {
+      findLatestChange: jest.fn(),
       listOperationLines: jest.fn(),
       listShipments: jest.fn(),
       findShipment: jest.fn(),

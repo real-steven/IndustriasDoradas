@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import type { ManagementOperationLine } from "../../api/generated/api-client";
 import { requestErrorMessage } from "../../api/http";
 import {
+  effectiveManagementTime,
   formatCostaRicaDateTime,
+  type ManagementFreshnessQuery,
   type ManagementOperationQuery,
 } from "./management-operation-data";
 
@@ -34,39 +36,50 @@ export function OperationLinesPanel({
 
 export function OperationRefreshButton({
   query,
+  freshness,
 }: {
   query: ManagementOperationQuery;
+  freshness: ManagementFreshnessQuery;
 }) {
+  const refreshing = query.isFetching || freshness.isFetching;
   return (
     <button
       type="button"
       className="secondary"
-      disabled={query.isFetching}
-      onClick={() => void query.refetch()}
+      disabled={refreshing}
+      onClick={() => void Promise.all([query.refetch(), freshness.refetch()])}
     >
-      {query.isFetching ? "Actualizando…" : "Actualizar datos"}
+      {refreshing ? "Actualizando…" : "Actualizar datos"}
     </button>
   );
 }
 
 export function OperationFreshness({
   query,
+  freshness,
 }: {
   query: ManagementOperationQuery;
+  freshness: ManagementFreshnessQuery;
 }) {
   if (query.isPending) return <span>Consultando datos centrales…</span>;
   if (query.data === undefined)
     return <span>No fue posible confirmar la operación</span>;
+  const effectiveAtUtc = effectiveManagementTime(query, freshness);
   if (query.isError)
     return (
       <span>
-        Datos desactualizados · última consulta válida{" "}
-        {formatCostaRicaDateTime(query.dataUpdatedAt)}
+        Datos desactualizados
+        {effectiveAtUtc === null
+          ? ""
+          : ` · última actividad central ${formatCostaRicaDateTime(effectiveAtUtc)}`}
       </span>
     );
+  if (effectiveAtUtc === null)
+    return <span>Fuente central confirmada · sin cambios registrados</span>;
   return (
     <span>
-      Consulta actualizada {formatCostaRicaDateTime(query.dataUpdatedAt)}
+      Datos centrales al {formatCostaRicaDateTime(effectiveAtUtc)}
+      {freshness.isError ? " · actualización automática no disponible" : ""}
     </span>
   );
 }

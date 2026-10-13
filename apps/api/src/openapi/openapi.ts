@@ -241,6 +241,24 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         lastActivityAtUtc: DATE_TIME,
       },
     },
+    ManagementFreshness: {
+      type: "object",
+      required: [
+        "cursor",
+        "hasChanges",
+        "effectiveAtUtc",
+        "serverTimeUtc",
+        "pollAfterSeconds",
+      ],
+      additionalProperties: false,
+      properties: {
+        cursor: { type: "string", description: "Cursor incremental opaco" },
+        hasChanges: { type: "boolean" },
+        effectiveAtUtc: { ...DATE_TIME, nullable: true },
+        serverTimeUtc: DATE_TIME,
+        pollAfterSeconds: { type: "integer", minimum: 30 },
+      },
+    },
     ManagementShipment: {
       allOf: [
         { $ref: "#/components/schemas/ManagementOperationLine" },
@@ -496,6 +514,8 @@ function responseSchema(
     return { $ref: "#/components/schemas/Session" };
   if (path.endsWith("/management/operation-lines"))
     return { $ref: "#/components/schemas/PageManagementOperationLine" };
+  if (path.endsWith("/management/freshness"))
+    return { $ref: "#/components/schemas/ManagementFreshness" };
   if (path.endsWith("/management/gold-summary"))
     return { $ref: "#/components/schemas/GoldSummary" };
   if (path.endsWith("/gold-results"))

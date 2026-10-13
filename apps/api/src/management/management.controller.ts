@@ -1,7 +1,11 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 
-import { ManagementPageQueryDto, ManagementQueryDto } from "./management.dto";
+import {
+  ManagementFreshnessQueryDto,
+  ManagementPageQueryDto,
+  ManagementQueryDto,
+} from "./management.dto";
 import { ManagementService } from "./management.service";
 import { RequireOrganizationParam, RequireRoles } from "../auth/auth.metadata";
 
@@ -14,6 +18,14 @@ import { RequireOrganizationParam, RequireRoles } from "../auth/auth.metadata";
 @ApiTags("Management")
 export class ManagementController {
   constructor(private readonly management: ManagementService) {}
+
+  @Get("freshness")
+  freshness(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Query() query: ManagementFreshnessQueryDto,
+  ) {
+    return this.management.freshness(organizationId, query.cursor);
+  }
 
   @Get("operation-lines")
   listOperationLines(

@@ -177,6 +177,10 @@ describe("API smoke (e2e)", () => {
       resetPinBlocks: jest.fn(),
     };
     management = {
+      findLatestChange: jest.fn().mockResolvedValue({
+        serverSequence: "42",
+        changedAtUtc: "2026-10-13T06:00:00.000Z",
+      }),
       listOperationLines: jest.fn().mockResolvedValue({
         items: [],
         page: 1,
@@ -251,6 +255,7 @@ describe("API smoke (e2e)", () => {
     gold.listResults.mockClear();
     gold.createResult.mockReset();
     management.listOperationLines.mockClear();
+    management.findLatestChange.mockClear();
     management.listShipments.mockClear();
     management.findShipment.mockClear();
     management.listShipmentSweeps.mockClear();
@@ -734,6 +739,42 @@ describe("API smoke (e2e)", () => {
       .expect(403);
 
     expect(management.listOperationLines.mock.calls).toHaveLength(0);
+  });
+
+  it("returns an opaque management freshness cursor and detects advancement", async () => {
+    const first = await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/freshness`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+    const firstBody = first.body as {
+      cursor: string;
+      hasChanges: boolean;
+      effectiveAtUtc: string | null;
+      pollAfterSeconds: number;
+    };
+
+    expect(firstBody).toMatchObject({
+      hasChanges: false,
+      effectiveAtUtc: "2026-10-13T06:00:00.000Z",
+      pollAfterSeconds: 30,
+    });
+    const previousCursor = Buffer.from("v1:41", "utf8").toString("base64url");
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/freshness`,
+      )
+      .query({ cursor: previousCursor })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as Record<string, unknown>;
+        expect(body).toMatchObject({
+          cursor: firstBody.cursor,
+          hasChanges: true,
+        });
+      });
   });
 
   it("rejects invalid management ranges and page limits", async () => {

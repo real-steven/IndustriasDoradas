@@ -24,7 +24,11 @@ describe("portal gerencial", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>(() => Promise.resolve(managementPage())),
+      vi.fn<typeof fetch>((input) =>
+        Promise.resolve(
+          isFreshnessRequest(input) ? freshnessResponse() : managementPage(),
+        ),
+      ),
     );
   });
 
@@ -67,8 +71,12 @@ describe("portal gerencial", () => {
   });
 
   it("presenta el resumen con los valores entregados por la API gerencial", async () => {
+    const operationRequests: string[] = [];
     const transport = vi.fn<typeof fetch>((input, init) => {
       const url = requestUrl(input);
+      if (isFreshnessRequest(input))
+        return Promise.resolve(freshnessResponse());
+      operationRequests.push(url);
       expect(url).toContain("/management/operation-lines?page=1&pageSize=100");
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer fictitious-token",
@@ -96,7 +104,7 @@ describe("portal gerencial", () => {
     expect(within(card).getByText("Cargamento")).toBeInTheDocument();
     expect(within(card).getByText("510 cajuelas")).toBeInTheDocument();
     expect(within(card).getByText("ACTIVA")).toBeInTheDocument();
-    expect(transport).toHaveBeenCalledOnce();
+    expect(operationRequests).toHaveLength(1);
     expect(
       screen.queryByRole("link", { name: /Administración/u }),
     ).not.toBeInTheDocument();
@@ -141,10 +149,15 @@ describe("portal gerencial", () => {
 
   it("conserva la ultima respuesta y marca las estaciones como desactualizadas", async () => {
     const user = userEvent.setup();
-    const transport = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(managementPage())
-      .mockResolvedValueOnce(errorResponse());
+    let operationRequests = 0;
+    const transport = vi.fn<typeof fetch>((input) => {
+      if (isFreshnessRequest(input))
+        return Promise.resolve(freshnessResponse());
+      operationRequests += 1;
+      return Promise.resolve(
+        operationRequests === 1 ? managementPage() : errorResponse(),
+      );
+    });
     vi.stubGlobal("fetch", transport);
 
     renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
@@ -165,10 +178,15 @@ describe("portal gerencial", () => {
 
   it("permite reintentar una consulta inicial fallida", async () => {
     const user = userEvent.setup();
-    const transport = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(errorResponse())
-      .mockResolvedValueOnce(managementPage());
+    let operationRequests = 0;
+    const transport = vi.fn<typeof fetch>((input) => {
+      if (isFreshnessRequest(input))
+        return Promise.resolve(freshnessResponse());
+      operationRequests += 1;
+      return Promise.resolve(
+        operationRequests === 1 ? errorResponse() : managementPage(),
+      );
+    });
     vi.stubGlobal("fetch", transport);
 
     renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
@@ -181,7 +199,7 @@ describe("portal gerencial", () => {
     expect(
       await screen.findByRole("heading", { name: "Línea 1" }),
     ).toBeInTheDocument();
-    expect(transport).toHaveBeenCalledTimes(2);
+    expect(operationRequests).toBe(2);
   });
 
   it("no agrega controles fisicos de produccion al portal", async () => {
@@ -241,13 +259,12 @@ describe("portal gerencial", () => {
   });
 
   it("conserva la consulta real de auditoria en la nueva estructura", async () => {
+    const dataRequests: string[] = [];
     const transport = vi.fn<typeof fetch>((input, init) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.href
-            : input.url;
+      const url = requestUrl(input);
+      if (isFreshnessRequest(input))
+        return Promise.resolve(freshnessResponse());
+      dataRequests.push(url);
       expect(
         url.includes("/audit-events") ||
           url.includes("/management/shipments?page=1&pageSize=100"),
@@ -264,7 +281,7 @@ describe("portal gerencial", () => {
     expect(
       await screen.findByText("Aún no hay movimientos de cargamentos"),
     ).toBeInTheDocument();
-    expect(transport).toHaveBeenCalledTimes(2);
+    expect(dataRequests).toHaveLength(2);
   });
 
   it("permite cerrar la sesion desde el menu gerencial", async () => {
@@ -392,6 +409,26 @@ function errorResponse(): Response {
       headers: { "Content-Type": "application/json" },
     },
   );
+}
+
+function freshnessResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      cursor: "djE6NDI=",
+      hasChanges: false,
+      effectiveAtUtc: "2026-10-12T15:30:00.000Z",
+      serverTimeUtc: "2026-10-12T15:30:01.000Z",
+      pollAfterSeconds: 30,
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
+function isFreshnessRequest(input: RequestInfo | URL): boolean {
+  return requestUrl(input).includes("/management/freshness");
 }
 
 function requestUrl(input: RequestInfo | URL): string {

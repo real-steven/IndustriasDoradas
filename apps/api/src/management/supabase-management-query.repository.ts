@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 
 import type {
   ManagementFilters,
+  ManagementLatestChange,
   ManagementOperationLine,
   ManagementPageQuery,
   ManagementQueryRepository,
@@ -75,6 +76,26 @@ export class SupabaseManagementQueryRepository implements ManagementQueryReposit
   constructor(config: ConfigService<EnvironmentVariables, true>) {
     this.restUrl = `${config.get("SUPABASE_URL", { infer: true })}/rest/v1`;
     this.secret = config.get("SUPABASE_SECRET_KEY", { infer: true });
+  }
+
+  async findLatestChange(
+    organizationId: string,
+  ): Promise<ManagementLatestChange | null> {
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${organizationId}`,
+      order: "server_sequence.desc",
+      limit: "1",
+      select: "server_sequence,changed_at_utc",
+    });
+    const response = await this.request(`sync_changes?${parameters}`);
+    const rows = (await response.json()) as Row[];
+    const row = rows[0];
+    return row === undefined
+      ? null
+      : {
+          serverSequence: this.integerString(row, "server_sequence"),
+          changedAtUtc: this.string(row, "changed_at_utc"),
+        };
   }
 
   async listOperationLines(
@@ -332,6 +353,16 @@ export class SupabaseManagementQueryRepository implements ManagementQueryReposit
     if (typeof parsed !== "number" || !Number.isFinite(parsed))
       throw new SupabaseDataError("INVALID_ROW", key);
     return parsed;
+  }
+
+  private integerString(row: Row, key: string): string {
+    const value = row[key];
+    if (typeof value === "number" && !Number.isSafeInteger(value))
+      throw new SupabaseDataError("INVALID_ROW", key);
+    const normalized = typeof value === "number" ? String(value) : value;
+    if (typeof normalized !== "string" || !/^\d+$/u.test(normalized))
+      throw new SupabaseDataError("INVALID_ROW", key);
+    return normalized;
   }
 
   private nullableNumber(row: Row, key: string): number | null {

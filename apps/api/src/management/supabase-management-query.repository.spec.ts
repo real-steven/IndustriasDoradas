@@ -17,6 +17,32 @@ describe("SupabaseManagementQueryRepository", () => {
     jest.restoreAllMocks();
   });
 
+  it("reads only the latest organization change through the pull index", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+      json([
+        {
+          server_sequence: "9007199254740993",
+          changed_at_utc: "2026-10-13T06:00:00.000Z",
+        },
+      ]),
+    );
+    const repository = new SupabaseManagementQueryRepository(createConfig());
+
+    await expect(repository.findLatestChange(ORGANIZATION_ID)).resolves.toEqual(
+      {
+        serverSequence: "9007199254740993",
+        changedAtUtc: "2026-10-13T06:00:00.000Z",
+      },
+    );
+    const url = requestedUrl(fetchMock);
+    expect(url.pathname).toBe("/rest/v1/sync_changes");
+    expect(url.searchParams.get("organization_id")).toBe(
+      `eq.${ORGANIZATION_ID}`,
+    );
+    expect(url.searchParams.get("order")).toBe("server_sequence.desc");
+    expect(url.searchParams.get("limit")).toBe("1");
+  });
+
   it("combines filters, bounds the page and keeps a deterministic shipment order", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
       json([shipmentRow()], {

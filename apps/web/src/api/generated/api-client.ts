@@ -37,6 +37,13 @@ export interface ManagementFilters {
   responsibleWorkerId?: string;
   shipmentId?: string;
 }
+export interface ManagementFreshness {
+  cursor: string;
+  hasChanges: boolean;
+  effectiveAtUtc: string | null;
+  serverTimeUtc: string;
+  pollAfterSeconds: number;
+}
 export interface ManagementOperationLine {
   organizationId: string;
   plantId: string;
@@ -182,6 +189,19 @@ export class ApiClient {
   ): Promise<PageManagementOperationLine> {
     return this.request<PageManagementOperationLine>(
       `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/operation-lines?${this.managementQuery(filters)}`,
+      signal,
+    );
+  }
+  getManagementFreshness(
+    organizationId: string,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<ManagementFreshness> {
+    const query = new URLSearchParams();
+    if (cursor !== undefined) query.set("cursor", cursor);
+    const suffix = query.size === 0 ? "" : `?${query}`;
+    return this.request<ManagementFreshness>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/freshness${suffix}`,
       signal,
     );
   }

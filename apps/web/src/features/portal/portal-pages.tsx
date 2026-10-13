@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useOutletContext } from "react-router-dom";
 
 import { GoldFeature } from "../gold/gold";
 import {
@@ -9,6 +9,7 @@ import {
 } from "../management/management-operation";
 import {
   operationHeadline,
+  type ManagementFreshnessQuery,
   useManagementOperation,
 } from "../management/management-operation-data";
 import {
@@ -25,8 +26,13 @@ const futureModules = [
   ["⚙", "Configuración", "Líneas y catálogos administrables por Lucía."],
 ] as const;
 
+function usePortalFreshness(): ManagementFreshnessQuery {
+  return useOutletContext<{ freshness: ManagementFreshnessQuery }>().freshness;
+}
+
 export function DashboardPage() {
   const operation = useManagementOperation();
+  const freshness = usePortalFreshness();
 
   return (
     <div className="portal-view">
@@ -41,7 +47,7 @@ export function DashboardPage() {
         </div>
         <div className="hero-status">
           <strong>{operationHeadline(operation)}</strong>
-          <OperationFreshness query={operation} />
+          <OperationFreshness query={operation} freshness={freshness} />
         </div>
       </section>
 
@@ -49,7 +55,7 @@ export function DashboardPage() {
         query={operation}
         action={
           <div className="panel-actions">
-            <OperationRefreshButton query={operation} />
+            <OperationRefreshButton query={operation} freshness={freshness} />
             <NavLink className="secondary-link" to="/gerencia/operacion">
               VER OPERACIÓN →
             </NavLink>
@@ -80,18 +86,21 @@ export function DashboardPage() {
 
 export function OperationPage() {
   const operation = useManagementOperation();
+  const freshness = usePortalFreshness();
 
   return (
     <PortalPage
       title="Operación"
       eyebrow="SEGUIMIENTO REMOTO"
       description="Consulta la proyección central consolidada; los controles físicos permanecen exclusivamente en desktop."
-      actions={<OperationRefreshButton query={operation} />}
+      actions={
+        <OperationRefreshButton query={operation} freshness={freshness} />
+      }
     >
       <div
         className={`operation-freshness${operation.isError && operation.data !== undefined ? " stale" : ""}`}
       >
-        <OperationFreshness query={operation} />
+        <OperationFreshness query={operation} freshness={freshness} />
       </div>
       <OperationLinesPanel query={operation} />
       <Panel title="Operarios y horas" subtitle="Control de trabajadores">
