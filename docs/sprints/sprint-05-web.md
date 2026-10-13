@@ -9,9 +9,9 @@
 - Sprint 4.11 ya centraliza cargamentos, responsables, cajuelas, correcciones,
   barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
   segundo protocolo de sincronización.
-- 5.1 a 5.9 están cerrados. El siguiente paso ejecutable es 5.10.
+- 5.1 a 5.10 están cerrados técnica y manualmente.
 - El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
-  por cargamento y 5.6 construirá su API e interfaz. El modelo legado por
+  por cargamento y 5.6 construyó su API e interfaz. El modelo legado por
   barrida no se reutiliza.
 - La web actual pertenece a `JEFE_EMPRESA`. `ADMINISTRADOR` permanece solo como
   compatibilidad histórica y no forma parte de navegación, aceptación ni
@@ -34,10 +34,10 @@
 3. ~~Crear read models y definiciones únicas de totales.~~ Cerrado el 2026-10-08 con vistas centrales y pruebas SQL reproducibles.
 4. ~~Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento sobre los read models de 5.2.~~ Cerrado técnica y manualmente el 2026-10-12.
 5. ~~Implementar resumen y operación de solo lectura con frescura visible.~~ Cerrado técnica y manualmente el 2026-10-12.
-6. Implementar historial/detalle y auditoría agrupada por cargamento.
-7. Implementar registro y corrección del oro total opcional por cargamento cerrado.
-8. Validar responsive, accesibilidad, sesión, errores y rendimiento.
-9. Dejar módulos futuros visibles como `Próximamente`, sin construir su lógica todavía.
+6. ~~Implementar historial/detalle y auditoría agrupada por cargamento.~~ Cerrado técnica y manualmente el 2026-10-12.
+7. ~~Implementar registro y corrección del oro total opcional por cargamento cerrado.~~ Cerrado técnica y manualmente el 2026-10-12.
+8. ~~Validar responsive, accesibilidad, sesión, errores y rendimiento.~~ Cerrado técnica y manualmente el 2026-10-13, con las verificaciones menores de dispositivos físicos y lector de pantalla documentadas en 5.7.
+9. ~~Dejar módulos futuros visibles como `Próximamente`, sin construir su lógica todavía.~~ Cerrado técnica y manualmente el 2026-10-13.
 
 **Pruebas:** filtros y totales SQL conocidos; rutas de `JEFE_EMPRESA`; E2E login → resumen → línea → cargamento cerrado → oro total → auditoría; ausencia de oro en desktop; actualización web basada en la verdad central aprobada en 4.11.
 
@@ -185,6 +185,16 @@ caché o una paginación distinta. La evidencia está en
 **Pausa:** objetivos acordados se cumplen en móvil/red lenta sin degradar la sincronización de desktop.
 
 ### 5.10 E2E y aceptación gerencial
+
+**Estado:** cerrado técnica y manualmente el 2026-10-13. Henry confirmó
+`pnpm run verify` y aprobó MAN-01 a MAN-10 con el recorrido real documentado en
+capturas. La prueba integrada
+`apps/web/src/features/portal/manager-journey.test.tsx` recorre autenticación,
+resumen, operación, filtro y detalle de cargamento, registro explícito de cero,
+corrección append-only, auditoría, módulos futuros y cierre local con limpieza
+de caché. La ausencia de oro en desktop permanece cubierta en las fronteras
+SQL y .NET existentes. La matriz automatizada y manual está en
+`docs/testing/sprint-05-10-e2e-aceptacion-gerencial.md`.
 
 **Prompt:** Automatiza E2E: login gerencial → resumen → operación → cargamento → registro/corrección de oro total → auditoría → cierre de sesión. Comprueba filtros, totales, pendientes, cero válido, ausencia de oro en desktop y módulos futuros sin acciones falsas.
 
