@@ -9,7 +9,7 @@
 - Sprint 4.11 ya centraliza cargamentos, responsables, cajuelas, correcciones,
   barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
   segundo protocolo de sincronización.
-- 5.1, 5.2 y 5.3 están cerrados. El siguiente paso ejecutable es 5.4.
+- 5.1, 5.2, 5.3 y 5.4 están cerrados. El siguiente paso ejecutable es 5.5.
 - El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
   por cargamento y 5.6 construirá su API e interfaz. El modelo legado por
   barrida no se reutiliza.
@@ -33,7 +33,7 @@
 2. ~~Confirmar wireframes y las preguntas gerenciales del MVP.~~ Cerrado el 2026-10-08 con el concepto aprobado y el recorrido documentado.
 3. ~~Crear read models y definiciones únicas de totales.~~ Cerrado el 2026-10-08 con vistas centrales y pruebas SQL reproducibles.
 4. ~~Implementar API paginada con fecha, planta, línea, proveedor, responsable y cargamento sobre los read models de 5.2.~~ Cerrado técnica y manualmente el 2026-10-12.
-5. Implementar resumen y operación de solo lectura con frescura visible.
+5. ~~Implementar resumen y operación de solo lectura con frescura visible.~~ Cerrado técnica y manualmente el 2026-10-12.
 6. Implementar historial/detalle y auditoría agrupada por cargamento.
 7. Implementar registro y corrección del oro total opcional por cargamento cerrado.
 8. Validar responsive, accesibilidad, sesión, errores y rendimiento.
@@ -89,6 +89,14 @@ directo a Supabase ni se adelantan las mutaciones de oro de 5.6.
 **Pausa:** Swagger devuelve páginas estables, filtros combinados y 401/403 correctos.
 
 ### 5.4 Resumen y operación web
+
+**Estado:** cerrado técnica y manualmente el 2026-10-12. `pnpm run verify`
+terminó correctamente y el recorrido Swagger → web → desktop confirmó los
+mismos cargamentos y totales después de sincronizar una operación real. El
+portal consume `management/operation-lines` sin recalcular cifras, presenta la
+actividad efectiva de cada estación y conserva la última respuesta marcada
+como desactualizada cuando una actualización falla. La matriz de aceptación
+está en `docs/testing/sprint-05-4-resumen-operacion-web.md`.
 
 **Prompt:** Implementa dashboard con líneas activas, cajuelas, próxima referencia de barrida, cantidad de barridas, cargamento, proveedor, responsable y última actividad. Muestra frescura por estación y estado desactualizado. Consume únicamente la proyección central de 4.11 y los read models de 5.2; no recalcules totales en React ni agregues controles físicos de desktop.
 

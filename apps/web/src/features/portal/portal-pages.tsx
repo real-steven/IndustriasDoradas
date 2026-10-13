@@ -4,6 +4,15 @@ import { NavLink } from "react-router-dom";
 
 import { apiRequest } from "../../api/http";
 import { useAuth } from "../../auth/auth-context";
+import {
+  OperationFreshness,
+  OperationLinesPanel,
+  OperationRefreshButton,
+} from "../management/management-operation";
+import {
+  operationHeadline,
+  useManagementOperation,
+} from "../management/management-operation-data";
 
 interface Page<T> {
   items: T[];
@@ -22,13 +31,6 @@ interface AuditEvent {
   occurredAt: string;
 }
 
-const lines = [
-  { name: "Línea 1 · Morada", color: "purple" },
-  { name: "Línea 2 · Celeste", color: "cyan" },
-  { name: "Línea 3 · Rosada", color: "pink" },
-  { name: "Línea 4 · Naranja", color: "orange" },
-] as const;
-
 const futureModules = [
   ["⌁", "Estadísticas", "Rendimiento por proveedor, línea y período."],
   ["♙", "Trabajadores", "Operarios, jefes de planta, asistencia y horas."],
@@ -38,65 +40,36 @@ const futureModules = [
 ] as const;
 
 export function DashboardPage() {
+  const operation = useManagementOperation();
+
   return (
     <div className="portal-view">
       <section className="manager-hero">
         <div>
-          <p className="eyebrow light">PORTAL GERENCIAL EN PREPARACIÓN</p>
+          <p className="eyebrow light">CONTROL DE PLANTA</p>
           <h1>Buenos días, Lucía.</h1>
           <p>
-            La nueva estructura está lista. Los datos aparecerán aquí cuando
-            finalice la proyección central de la operación.
+            Consulte la operación consolidada por las estaciones sin intervenir
+            los controles físicos de producción.
           </p>
         </div>
         <div className="hero-status">
-          <strong>Sin datos en vivo</strong>
-          <span>No se muestran cifras ficticias</span>
+          <strong>{operationHeadline(operation)}</strong>
+          <OperationFreshness query={operation} />
         </div>
       </section>
 
-      <div className="metric-grid" aria-label="Resumen pendiente de conectar">
-        <Metric
-          label="Líneas activas"
-          value="—"
-          detail="Pendiente de sincronización"
-          icon="◫"
-        />
-        <Metric
-          label="Cajuelas del período"
-          value="—"
-          detail="Pendiente de sincronización"
-          icon="＋"
-        />
-        <Metric
-          label="Cargamentos cerrados"
-          value="—"
-          detail="Pendiente de sincronización"
-          icon="✓"
-        />
-        <Metric
-          label="Oro registrado"
-          value="—"
-          detail="Dato opcional de gerencia"
-          icon="◆"
-        />
-      </div>
-
-      <Panel
-        title="Operación en vivo"
-        subtitle="Estructura preparada para las líneas de esta planta"
+      <OperationLinesPanel
+        query={operation}
         action={
-          <NavLink className="secondary-link" to="/gerencia/operacion">
-            VER OPERACIÓN →
-          </NavLink>
+          <div className="panel-actions">
+            <OperationRefreshButton query={operation} />
+            <NavLink className="secondary-link" to="/gerencia/operacion">
+              VER OPERACIÓN →
+            </NavLink>
+          </div>
         }
-      >
-        <div className="line-grid">
-          {lines.map((line) => (
-            <DisconnectedLine key={line.name} {...line} />
-          ))}
-        </div>
-      </Panel>
+      />
 
       <Panel
         title="Módulos futuros"
@@ -120,22 +93,21 @@ export function DashboardPage() {
 }
 
 export function OperationPage() {
+  const operation = useManagementOperation();
+
   return (
     <PortalPage
       title="Operación"
       eyebrow="SEGUIMIENTO REMOTO"
-      description="Las tarjetas se conectarán con la proyección central completa; los controles físicos permanecen en desktop."
+      description="Consulta la proyección central consolidada; los controles físicos permanecen exclusivamente en desktop."
+      actions={<OperationRefreshButton query={operation} />}
     >
-      <Panel
-        title="Líneas de producción"
-        subtitle="Estado, cargamento, responsable y próximas referencias"
+      <div
+        className={`operation-freshness${operation.isError && operation.data !== undefined ? " stale" : ""}`}
       >
-        <div className="line-grid">
-          {lines.map((line) => (
-            <DisconnectedLine key={line.name} {...line} />
-          ))}
-        </div>
-      </Panel>
+        <OperationFreshness query={operation} />
+      </div>
+      <OperationLinesPanel query={operation} />
       <Panel title="Operarios y horas" subtitle="Control de trabajadores">
         <UpcomingState>
           La creación de operarios y jefes de planta, asistencia y horas se
@@ -330,29 +302,6 @@ function PortalPage({
   );
 }
 
-function Metric({
-  label,
-  value,
-  detail,
-  icon,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: string;
-}) {
-  return (
-    <article className="metric-card">
-      <div>
-        <span>{label}</span>
-        <i aria-hidden="true">{icon}</i>
-      </div>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  );
-}
-
 function Panel({
   title,
   subtitle,
@@ -370,23 +319,6 @@ function Panel({
       </header>
       {children}
     </section>
-  );
-}
-
-function DisconnectedLine({ name, color }: { name: string; color: string }) {
-  return (
-    <article className={`line-card ${color}`}>
-      <div>
-        <h3>{name}</h3>
-        <span className="line-status neutral">SIN DATOS</span>
-      </div>
-      <p>Esperando proyección central de la operación</p>
-      <strong>—</strong>
-      <small>cajuelas</small>
-      <div className="progress-track" aria-hidden="true">
-        <i />
-      </div>
-    </article>
   );
 }
 

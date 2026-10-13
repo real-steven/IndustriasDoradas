@@ -1,11 +1,12 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../app/app";
+import type { ManagementOperationLine } from "../../api/generated/api-client";
 import { QueryProvider } from "../../app/query-provider";
 import {
   AuthContext,
@@ -14,6 +15,13 @@ import {
 } from "../../auth/auth-context";
 
 describe("portal gerencial", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(() => Promise.resolve(managementPage())),
+    );
+  });
+
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -27,15 +35,135 @@ describe("portal gerencial", () => {
     ).toBeInTheDocument();
   });
 
-  it("presenta el nuevo resumen sin inventar datos operativos", () => {
+  it("presenta el resumen con los valores entregados por la API gerencial", async () => {
+    const transport = vi.fn<typeof fetch>((input, init) => {
+      const url = requestUrl(input);
+      expect(url).toContain("/management/operation-lines?page=1&pageSize=100");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer fictitious-token",
+      );
+      return Promise.resolve(managementPage());
+    });
+    vi.stubGlobal("fetch", transport);
+
     renderPortal("JEFE_EMPRESA", "/gerencia");
 
     expect(
       screen.getByRole("heading", { name: "Buenos días, Lucía." }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Sin datos en vivo")).toBeInTheDocument();
+    expect(await screen.findByText("1 línea activa")).toBeInTheDocument();
+    const card = screen
+      .getByRole("heading", { name: "Línea 1" })
+      .closest("article");
+    expect(card).not.toBeNull();
+    if (card === null) throw new Error("Expected operation line card");
+    expect(within(card).getByText("260")).toBeInTheDocument();
+    expect(within(card).getByText("Proveedor Norte")).toBeInTheDocument();
+    expect(within(card).getByText("Responsable Uno")).toBeInTheDocument();
+    expect(within(card).getByText("Barridas")).toBeInTheDocument();
+    expect(within(card).getByText("1")).toBeInTheDocument();
+    expect(within(card).getByText("Cargamento")).toBeInTheDocument();
+    expect(within(card).getByText("510 cajuelas")).toBeInTheDocument();
+    expect(within(card).getByText("ACTIVA")).toBeInTheDocument();
+    expect(transport).toHaveBeenCalledOnce();
     expect(
       screen.queryByRole("link", { name: /Administración/u }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("distingue una operacion vacia de una falla de conexion", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(() => Promise.resolve(emptyPage())),
+    );
+
+    renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
+
+    expect(
+      await screen.findByRole("heading", { name: "No hay líneas activas" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/La consulta central respondió correctamente/u),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No se pudo consultar la operación/u),
+    ).not.toBeInTheDocument();
+  });
+
+  it("presenta una barrida pendiente con la referencia entregada por la API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(() =>
+        Promise.resolve(
+          managementPage({ sweepPending: true, nextSweepAt: 500 }),
+        ),
+      ),
+    );
+
+    renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
+
+    expect(
+      await screen.findByText("Barrida pendiente desde"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("500 cajuelas")).toBeInTheDocument();
+  });
+
+  it("conserva la ultima respuesta y marca las estaciones como desactualizadas", async () => {
+    const user = userEvent.setup();
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(managementPage())
+      .mockResolvedValueOnce(errorResponse());
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
+    expect(
+      await screen.findByRole("heading", { name: "Línea 1" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Actualizar datos" }));
+
+    expect(
+      await screen.findByText("Datos desactualizados."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("DATO DESACTUALIZADO")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Línea 1" }),
+    ).toBeInTheDocument();
+  });
+
+  it("permite reintentar una consulta inicial fallida", async () => {
+    const user = userEvent.setup();
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(errorResponse())
+      .mockResolvedValueOnce(managementPage());
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
+    expect(
+      await screen.findByText(/No se pudo consultar la operación/u),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Actualizar datos" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Línea 1" }),
+    ).toBeInTheDocument();
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("no agrega controles fisicos de produccion al portal", async () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
+
+    expect(
+      await screen.findByRole("heading", { name: "Línea 1" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Registrar cajuela/u }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Registrar barrida/u }),
     ).not.toBeInTheDocument();
   });
 
@@ -166,7 +294,7 @@ function emptyPage(): Response {
     JSON.stringify({
       items: [],
       page: 1,
-      pageSize: 25,
+      pageSize: 100,
       total: 0,
       totalPages: 0,
     }),
@@ -175,4 +303,69 @@ function emptyPage(): Response {
       headers: { "Content-Type": "application/json" },
     },
   );
+}
+
+function managementPage(
+  overrides: Partial<ManagementOperationLine> = {},
+): Response {
+  return new Response(
+    JSON.stringify({
+      items: [
+        {
+          organizationId: "30000000-0000-4000-8000-000000000001",
+          plantId: "40000000-0000-4000-8000-000000000001",
+          stationId: "50000000-0000-4000-8000-000000000001",
+          stationName: "Estación Central",
+          shipmentId: "60000000-0000-4000-8000-000000000001",
+          feedCycleId: "70000000-0000-4000-8000-000000000001",
+          productionLineId: "80000000-0000-4000-8000-000000000001",
+          productionLineName: "Línea 1",
+          productionLineOrder: 1,
+          supplierId: "90000000-0000-4000-8000-000000000001",
+          supplierName: "Proveedor Norte",
+          responsibleWorkerId: "a0000000-0000-4000-8000-000000000001",
+          responsibleWorkerName: "Responsable Uno",
+          startedAtUtc: "2026-10-12T14:00:00.000Z",
+          cajuelaTotal: 260,
+          sweepCount: 1,
+          sweptCajuelas: 250,
+          cajuelasSinceLastSweep: 10,
+          nextSweepAt: 510,
+          sweepPending: false,
+          lastActivityAtUtc: "2026-10-12T15:30:00.000Z",
+          ...overrides,
+        },
+      ],
+      page: 1,
+      pageSize: 100,
+      total: 1,
+      totalPages: 1,
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
+function errorResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      statusCode: 503,
+      code: "SERVICE_UNAVAILABLE",
+      message: "Servicio temporalmente no disponible.",
+    }),
+    {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input.url;
 }

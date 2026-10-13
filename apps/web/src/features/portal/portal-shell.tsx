@@ -110,7 +110,7 @@ export function PortalLayout() {
           <div className="topbar-actions">
             <span className="freshness neutral">
               <i />
-              Datos pendientes de conectar
+              Datos centrales protegidos
             </span>
             <NavLink
               className="icon-button"
@@ -121,10 +121,6 @@ export function PortalLayout() {
             </NavLink>
           </div>
         </header>
-        <div className="implementation-note">
-          NUEVA ESTRUCTURA WEB · LOS DATOS OPERATIVOS SE CONECTARÁN DESPUÉS DE
-          CERRAR LA SINCRONIZACIÓN
-        </div>
         <main
           id="contenido-gerencial"
           className="manager-content"
