@@ -155,6 +155,17 @@ texto. La matriz está en
 
 ### 5.8 Sesión, privacidad y errores
 
+**Estado:** completado y aprobado por Henry el 2026-10-13 con `pnpm run verify`
+y recorrido manual SES-01 a SES-10. La entrega real del correo de recuperación
+queda como prueba menor no bloqueante. La web revalida el perfil cuando Supabase
+renueva el token, restaura la sesión después de recargar, cierra únicamente la
+sesión del dispositivo actual y vacía toda la caché privada al salir, vencer la
+sesión o cambiar de identidad. Los 401 terminan la sesión, los 403 se presentan
+sin diagnósticos internos y el reintento automático queda limitado a una falla
+transitoria. El modo offline conserva la última respuesta visible, anuncia su
+estado y se actualiza al volver la red. La matriz está en
+`docs/testing/sprint-05-8-sesion-privacidad-errores.md`.
+
 **Prompt:** Endurece renovación y cierre de sesión, 401/403, caché por usuario, estados vacío/carga/error/offline y reintento controlado. Evita que datos de una sesión queden visibles después de salir y no expongas tokens, fotos ni diagnósticos técnicos.
 
 **Pausa:** cerrar y reabrir sesión produce cero fuga de caché.

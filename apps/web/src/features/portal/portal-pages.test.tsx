@@ -30,6 +30,7 @@ describe("portal gerencial", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -53,6 +54,16 @@ describe("portal gerencial", () => {
       await screen.findByRole("heading", { name: "Operación" }),
     ).toBeInTheDocument();
     await waitFor(() => expect(main).toHaveFocus());
+  });
+
+  it("announces offline mode without exposing technical diagnostics", () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    renderPortal("JEFE_EMPRESA", "/gerencia");
+
+    expect(
+      screen.getByText(/Puede consultar los últimos datos disponibles/u),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/token|jwt|fetch/iu)).not.toBeInTheDocument();
   });
 
   it("presenta el resumen con los valores entregados por la API gerencial", async () => {
@@ -162,7 +173,7 @@ describe("portal gerencial", () => {
 
     renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
     expect(
-      await screen.findByText(/No se pudo consultar la operación/u),
+      await screen.findByText(/servicio no está disponible temporalmente/u),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Actualizar datos" }));

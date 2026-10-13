@@ -531,6 +531,19 @@ footer {
   font-weight: 850;
   letter-spacing: 0.04em;
 }
+.portal-alert {
+  padding: 10px max(32px, env(safe-area-inset-right)) 10px
+    max(32px, env(safe-area-inset-left));
+  border-bottom: 1px solid #efd9a8;
+  color: #684b0e;
+  background: var(--gold-soft);
+  font-size: 0.78rem;
+}
+.portal-alert.error {
+  border-color: #e9bfc2;
+  color: var(--red);
+  background: var(--red-soft);
+}
 .manager-content {
   max-width: 1480px;
   margin: 0 auto;
@@ -1667,6 +1680,10 @@ td {
   }
   .implementation-note {
     padding-inline: 15px;
+  }
+  .portal-alert {
+    padding-right: max(15px, env(safe-area-inset-right));
+    padding-left: max(15px, env(safe-area-inset-left));
   }
   .manager-content {
     padding: 21px max(15px, env(safe-area-inset-right))

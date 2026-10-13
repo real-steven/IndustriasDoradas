@@ -2,6 +2,7 @@ import { useEffect, type PropsWithChildren } from "react";
 import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth, type RoleCode } from "../../auth/auth-context";
+import { useOnlineStatus } from "../../app/connectivity";
 
 const primaryNavigation = [
   { to: "/gerencia", label: "Resumen", icon: "⌂", end: true },
@@ -51,6 +52,7 @@ export function ProtectedPortal({ roles }: { roles: RoleCode[] }) {
 export function PortalLayout() {
   const auth = useAuth();
   const location = useLocation();
+  const online = useOnlineStatus();
 
   useEffect(() => {
     document.getElementById("contenido-gerencial")?.focus();
@@ -131,6 +133,17 @@ export function PortalLayout() {
             </NavLink>
           </div>
         </header>
+        {!online && (
+          <div className="portal-alert offline" role="status">
+            <strong>Sin conexión.</strong> Puede consultar los últimos datos
+            disponibles; las actualizaciones se reanudarán al recuperar la red.
+          </div>
+        )}
+        {auth.error !== null && auth.profile !== null && (
+          <div className="portal-alert error" role="alert">
+            {auth.error}
+          </div>
+        )}
         <main
           id="contenido-gerencial"
           className="manager-content"

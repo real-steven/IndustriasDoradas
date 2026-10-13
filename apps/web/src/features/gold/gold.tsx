@@ -13,7 +13,11 @@ import {
   useGoldSummary,
   useRecordShipmentGold,
 } from "./gold-data";
-import { ApiRequestError } from "../../api/http";
+import {
+  ApiConnectionError,
+  ApiRequestError,
+  requestErrorMessage,
+} from "../../api/http";
 import {
   formatCostaRicaDateTime,
   parseShipmentFilters,
@@ -82,7 +86,7 @@ export function GoldFeature() {
           </GoldState>
         ) : shipments.isError || shipments.data === undefined ? (
           <GoldState title="No se pudieron consultar los cargamentos" error>
-            Revise la conexión e intente nuevamente.
+            {requestErrorMessage(shipments.error)}
           </GoldState>
         ) : shipments.data.items.length === 0 ? (
           <GoldState title="No hay cargamentos para estos filtros">
@@ -135,7 +139,10 @@ function GoldSummaryPanel({
   if (query.isError || query.data === undefined)
     return (
       <GoldState title="No se pudo calcular el resumen" error>
-        Los cargamentos permanecen disponibles; reintente la consulta central.
+        {requestErrorMessage(
+          query.error,
+          "Los cargamentos permanecen disponibles; reintente la consulta central.",
+        )}
       </GoldState>
     );
 
@@ -677,6 +684,7 @@ function formatNumber(value: number, maximumFractionDigits = 2): string {
 }
 
 function mutationMessage(error: Error): string {
+  if (error instanceof ApiConnectionError) return requestErrorMessage(error);
   if (error instanceof ApiRequestError) {
     if (error.code === "GOLD_RESULT_CONFLICT")
       return "El resultado cambió en otra sesión. Recargue antes de intentar nuevamente.";

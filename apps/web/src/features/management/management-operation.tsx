@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { ManagementOperationLine } from "../../api/generated/api-client";
+import { requestErrorMessage } from "../../api/http";
 import {
   formatCostaRicaDateTime,
   type ManagementOperationQuery,
@@ -81,8 +82,10 @@ function OperationQueryState({ query }: { query: ManagementOperationQuery }) {
   if (query.data === undefined)
     return (
       <div role="alert" className="query-message error">
-        No se pudo consultar la operación. Revise la conexión e inténtelo de
-        nuevo con Actualizar datos.
+        {requestErrorMessage(
+          query.error,
+          "No se pudo consultar la operación. Inténtelo de nuevo con Actualizar datos.",
+        )}
       </div>
     );
 
@@ -91,8 +94,11 @@ function OperationQueryState({ query }: { query: ManagementOperationQuery }) {
     <>
       {stale && (
         <div role="alert" className="stale-notice">
-          <strong>Datos desactualizados.</strong> Se conserva la última
-          respuesta válida mientras se recupera la conexión.
+          <strong>Datos desactualizados.</strong>{" "}
+          {requestErrorMessage(
+            query.error,
+            "Se conserva la última respuesta válida mientras se recupera el servicio.",
+          )}
         </div>
       )}
       {query.data.items.length === 0 ? (

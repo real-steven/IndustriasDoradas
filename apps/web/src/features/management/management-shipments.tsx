@@ -23,6 +23,7 @@ import {
   type AuditEvent,
   type ShipmentFilters,
 } from "./management-shipments-data";
+import { requestErrorMessage } from "../../api/http";
 
 export function ShipmentsFeature() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,7 +68,7 @@ export function ShipmentsFeature() {
           </ShipmentState>
         ) : shipments.isError || shipments.data === undefined ? (
           <ShipmentState title="No se pudo consultar el historial" error>
-            Revise la conexión e intente nuevamente.
+            {requestErrorMessage(shipments.error)}
           </ShipmentState>
         ) : shipments.data.items.length === 0 ? (
           <ShipmentState title="No hay cargamentos para estos filtros">
@@ -149,8 +150,10 @@ export function ShipmentDetailFeature() {
   if (shipment.isError || shipment.data === undefined)
     return (
       <ShipmentState title="No se pudo abrir el cargamento" error>
-        El cargamento no existe, no pertenece a esta organización o la consulta
-        central no está disponible.
+        {requestErrorMessage(
+          shipment.error,
+          "El cargamento no existe o la consulta central no está disponible.",
+        )}
       </ShipmentState>
     );
 
@@ -225,7 +228,10 @@ export function ShipmentDetailFeature() {
           </ShipmentState>
         ) : sweeps.isError ? (
           <ShipmentState title="No se pudieron consultar las barridas" error>
-            El resumen del cargamento permanece disponible.
+            {requestErrorMessage(
+              sweeps.error,
+              "El resumen del cargamento permanece disponible.",
+            )}
           </ShipmentState>
         ) : sweepGroups.length === 0 ? (
           <ShipmentState title="Sin barridas proyectadas">
@@ -273,7 +279,10 @@ export function ShipmentDetailFeature() {
           </ShipmentState>
         ) : audit.isError ? (
           <ShipmentState title="No se pudo consultar la auditoría" error>
-            El detalle operativo permanece disponible.
+            {requestErrorMessage(
+              audit.error,
+              "El detalle operativo permanece disponible.",
+            )}
           </ShipmentState>
         ) : events.length === 0 ? (
           <ShipmentState title="Sin cambios auditados para este cargamento">
@@ -305,7 +314,7 @@ export function ShipmentAuditFeature() {
   )
     return (
       <ShipmentState title="No se pudo consultar la auditoría" error>
-        Revise la conexión e intente nuevamente.
+        {requestErrorMessage(audit.error ?? shipments.error)}
       </ShipmentState>
     );
 
@@ -560,7 +569,10 @@ function ShipmentState({
   children: ReactNode;
 }) {
   return (
-    <div className={`shipment-state${error ? " error" : ""}`}>
+    <div
+      className={`shipment-state${error ? " error" : ""}`}
+      role={error ? "alert" : "status"}
+    >
       <strong>{title}</strong>
       <p>{children}</p>
     </div>
