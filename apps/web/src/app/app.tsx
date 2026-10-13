@@ -6,6 +6,7 @@ import {
   DashboardPage,
   GoldPage,
   OperationPage,
+  ShipmentDetailPage,
   ShipmentsPage,
   UpcomingPage,
 } from "../features/portal/portal-pages";
@@ -22,6 +23,10 @@ export function App() {
           <Route path="operacion" element={<OperationPage />} />
           <Route path="oro" element={<GoldPage />} />
           <Route path="cargamentos" element={<ShipmentsPage />} />
+          <Route
+            path="cargamentos/:shipmentId"
+            element={<ShipmentDetailPage />}
+          />
           <Route path="auditoria" element={<AuditPage />} />
           <Route
             path="estadisticas"

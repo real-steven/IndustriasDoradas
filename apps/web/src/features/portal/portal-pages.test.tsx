@@ -217,7 +217,10 @@ describe("portal gerencial", () => {
           : input instanceof URL
             ? input.href
             : input.url;
-      expect(url).toContain("/audit-events");
+      expect(
+        url.includes("/audit-events") ||
+          url.includes("/management/shipments?page=1&pageSize=100"),
+      ).toBe(true);
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer fictitious-token",
       );
@@ -228,11 +231,9 @@ describe("portal gerencial", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia/auditoria");
 
     expect(
-      await screen.findByRole("heading", {
-        name: "Aún no hay movimientos disponibles",
-      }),
+      await screen.findByText("Aún no hay movimientos de cargamentos"),
     ).toBeInTheDocument();
-    expect(transport).toHaveBeenCalledOnce();
+    expect(transport).toHaveBeenCalledTimes(2);
   });
 
   it("permite cerrar la sesion desde el menu gerencial", async () => {

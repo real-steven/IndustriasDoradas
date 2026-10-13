@@ -53,6 +53,12 @@ export function PortalLayout() {
   const location = useLocation();
   if (auth.profile === null || auth.session === null) return null;
 
+  const pageTitle =
+    pageTitles[location.pathname] ??
+    (location.pathname.startsWith("/gerencia/cargamentos/")
+      ? "Detalle de cargamento"
+      : "Portal");
+
   return (
     <div className="manager-shell">
       <a className="skip-link" href="#contenido-gerencial">
@@ -104,8 +110,7 @@ export function PortalLayout() {
       <div className="manager-workspace">
         <header className="manager-topbar">
           <p>
-            Planta principal /{" "}
-            <strong>{pageTitles[location.pathname] ?? "Portal"}</strong>
+            Planta principal / <strong>{pageTitle}</strong>
           </p>
           <div className="topbar-actions">
             <span className="freshness neutral">

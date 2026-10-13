@@ -1,9 +1,6 @@
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
-import { apiRequest } from "../../api/http";
-import { useAuth } from "../../auth/auth-context";
 import {
   OperationFreshness,
   OperationLinesPanel,
@@ -13,23 +10,11 @@ import {
   operationHeadline,
   useManagementOperation,
 } from "../management/management-operation-data";
-
-interface Page<T> {
-  items: T[];
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-}
-
-interface AuditEvent {
-  id: string;
-  actorDisplayName: string | null;
-  action: string;
-  entityType: string;
-  result: string;
-  occurredAt: string;
-}
+import {
+  ShipmentAuditFeature,
+  ShipmentDetailFeature,
+  ShipmentsFeature,
+} from "../management/management-shipments";
 
 const futureModules = [
   ["⌁", "Estadísticas", "Rendimiento por proveedor, línea y período."],
@@ -165,90 +150,40 @@ export function ShipmentsPage() {
       title="Cargamentos"
       eyebrow="CONSULTA CONSOLIDADA"
       description="Una entrada por cargamento cerrado, con cajuelas, barridas, mercurio y resultado opcional de oro."
-      actions={
-        <>
-          <label className="visually-hidden" htmlFor="shipment-period">
-            Período
-          </label>
-          <select id="shipment-period" defaultValue="current">
-            <option value="current">Esta semana</option>
-            <option value="previous">Semana anterior</option>
-            <option value="date">Fecha específica</option>
-          </select>
-        </>
-      }
     >
-      <Panel
-        title="Historial"
-        subtitle="Los filtros quedarán conectados a la API gerencial"
-      >
-        <EmptyState icon="▤" title="Aún no hay cargamentos proyectados">
-          Primero se completará la sincronización entre estaciones para evitar
-          historiales parciales.
-        </EmptyState>
-      </Panel>
+      <ShipmentsFeature />
+    </PortalPage>
+  );
+}
+
+export function ShipmentDetailPage() {
+  return (
+    <PortalPage
+      title="Detalle del cargamento"
+      eyebrow="TRAZABILIDAD CENTRAL"
+      description="Cajuelas, barridas, mercurio, responsable y confirmaciones centrales de un único cargamento."
+    >
+      <ShipmentDetailFeature />
     </PortalPage>
   );
 }
 
 export function AuditPage() {
-  const context = usePortalContext();
-  const audit = useQuery({
-    queryKey: ["audit", context.organizationId],
-    queryFn: () =>
-      apiRequest<Page<AuditEvent>>(
-        `/organizations/${context.organizationId}/audit-events`,
-        context.token,
-      ),
-  });
   return (
     <PortalPage
       title="Auditoría"
       eyebrow="HISTORIAL INMUTABLE"
-      description="Movimientos gerenciales y operativos con actor, momento, entidad y resultado."
+      description="Cambios operativos agrupados por cargamento, con ocurrencia y confirmación central diferenciadas."
     >
-      <Panel
-        title="Actividad registrada"
-        subtitle="Los detalles técnicos permanecen fuera de la lectura principal"
-      >
-        <QueryState query={audit}>
-          {(data) =>
-            data.items.length === 0 ? (
-              <EmptyState icon="◷" title="Aún no hay movimientos disponibles">
-                Los eventos aparecerán aquí cuando la API entregue el historial
-                gerencial.
-              </EmptyState>
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Momento</th>
-                      <th>Actor</th>
-                      <th>Acción</th>
-                      <th>Entidad</th>
-                      <th>Resultado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.items.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          {new Date(item.occurredAt).toLocaleString("es-CR")}
-                        </td>
-                        <td>{item.actorDisplayName ?? "Sistema"}</td>
-                        <td>{item.action}</td>
-                        <td>{item.entityType}</td>
-                        <td>{item.result}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
-          }
-        </QueryState>
-      </Panel>
+      <section className="portal-panel">
+        <header>
+          <div>
+            <h2>Actividad por cargamento</h2>
+            <p>Los códigos técnicos permanecen fuera de la lectura principal</p>
+          </div>
+        </header>
+        <ShipmentAuditFeature />
+      </section>
     </PortalPage>
   );
 }
@@ -343,36 +278,4 @@ function UpcomingState({ children }: PropsWithChildren) {
       <p>{children}</p>
     </div>
   );
-}
-
-function QueryState<T>({
-  query,
-  children,
-}: {
-  query: UseQueryResult<T, Error>;
-  children: (data: T) => ReactNode;
-}) {
-  if (query.isPending)
-    return (
-      <p role="status" className="query-message">
-        Cargando información…
-      </p>
-    );
-  if (query.isError)
-    return (
-      <p role="alert" className="query-message error">
-        No se pudo cargar la información. Puede intentarlo nuevamente más tarde.
-      </p>
-    );
-  return children(query.data);
-}
-
-function usePortalContext() {
-  const auth = useAuth();
-  if (auth.session === null || auth.profile === null)
-    throw new Error("Authenticated portal context required");
-  return {
-    token: auth.session.access_token,
-    organizationId: auth.profile.organizationId,
-  };
 }

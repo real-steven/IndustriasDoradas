@@ -9,7 +9,8 @@
 - Sprint 4.11 ya centraliza cargamentos, responsables, cajuelas, correcciones,
   barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
   segundo protocolo de sincronización.
-- 5.1, 5.2, 5.3 y 5.4 están cerrados. El siguiente paso ejecutable es 5.5.
+- 5.1, 5.2, 5.3, 5.4 y 5.5 están cerrados. El siguiente paso ejecutable es
+  5.6.
 - El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
   por cargamento y 5.6 construirá su API e interfaz. El modelo legado por
   barrida no se reutiliza.
@@ -103,6 +104,15 @@ está en `docs/testing/sprint-05-4-resumen-operacion-web.md`.
 **Pausa:** cada tarjeta coincide con API/desktop y distingue estación desactualizada.
 
 ### 5.5 Historial, detalle y auditoría
+
+**Estado:** cerrado el 2026-10-12 después de que Henry confirmó `pnpm run
+verify` y el recorrido manual. Cargamentos consulta únicamente la proyección
+central, conserva período, fecha, línea, proveedor, responsable y página en la
+URL, y abre una ficha trazable con cajuelas, barridas, mercurio, responsable al
+cierre y cambios auditados. La auditoría agrupa por cargamento y presenta por
+separado `occurredAt` y `recordedAt` como ocurrencia y confirmación central. La
+matriz de aceptación
+está en `docs/testing/sprint-05-5-historial-detalle-auditoria.md`.
 
 **Prompt:** Implementa cargamentos cerrados con semana actual, semana anterior, fecha específica, línea, proveedor y responsable. Conserva filtros en URL, pagina con orden determinista y abre detalle con cajuelas, barridas, mercurio, responsables y cambios auditados. Agrupa Auditoría por cargamento y diferencia hora de ocurrencia de hora de confirmación central.
 
