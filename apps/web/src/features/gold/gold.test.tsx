@@ -93,6 +93,59 @@ describe("oro por cargamento", () => {
       correctionReason: "Corrección de pesada",
     });
   });
+
+  it("exposes the gold editor as a modal and returns focus on Escape", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", transport({ amount: null, hasGold: false }));
+    renderGold();
+
+    const trigger = await screen.findByRole("button", {
+      name: "REGISTRAR ORO",
+    });
+    await user.click(trigger);
+
+    const dialog = screen.getByRole("dialog", {
+      name: /Cargamento 42000000/u,
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(
+      screen.getByRole("textbox", { name: "Oro total en gramos" }),
+    ).toHaveFocus();
+
+    const closeButton = screen.getByRole("button", {
+      name: "Cerrar registro de oro",
+    });
+    closeButton.focus();
+    await user.tab({ shift: true });
+    expect(
+      screen.getByRole("button", { name: "REGISTRAR RESULTADO" }),
+    ).toHaveFocus();
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("labels the supplier comparison for keyboard and screen reader users", async () => {
+    vi.stubGlobal("fetch", transport({ amount: 2.5, hasGold: true }));
+    renderGold();
+
+    const region = await screen.findByRole("region", {
+      name: "Comparación de oro por proveedor",
+    });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(
+      screen.getByRole("table", {
+        name: "Cobertura y resultados de oro agrupados por proveedor",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Cobertura" }),
+    ).toBeInTheDocument();
+  });
 });
 
 function renderGold(): void {

@@ -97,18 +97,20 @@ el motivo es obligatorio y el nuevo valor debe ser distinto del vigente.
 
 ## Regresión obligatoria
 
-- [ ] Cargamentos y detalle continúan mostrando sus proyecciones de 5.5.
-- [ ] Resumen y Operación no incorporan controles físicos nuevos.
-- [ ] El modelo legado `app.gold_result_entries` no recibe escrituras.
-- [ ] Custodia y entregas de oro continúan fuera de alcance.
-- [ ] Los archivos del Sprint 6 no fueron modificados.
-- [ ] `pnpm run verify` termina sin errores.
+- [x] Cargamentos y detalle continúan mostrando sus proyecciones de 5.5.
+- [x] Resumen y Operación no incorporan controles físicos nuevos.
+- [x] El modelo legado `app.gold_result_entries` no recibe escrituras.
+- [x] Custodia y entregas de oro continúan fuera de alcance.
+- [x] Los archivos del Sprint 6 no fueron modificados.
+- [x] `pnpm run verify` termina sin errores.
 
 Crítico = fuga de organización, permiso indebido, oro visible en desktop o
 pérdida/cambio de historial. Alto = vacío convertido en cero, doble conteo de
 revisiones, corrección sin motivo o cobertura incorrecta. El punto requiere cero
 defectos críticos o altos.
 
-**Decisión:** Pendiente de ejecución y confirmación de Henry.
+**Decisión:** aprobado por Henry el 2026-10-12 después de completar
+`pnpm run verify` y el recorrido manual. ORO-08 confirmó el rechazo del valor
+vigente sin crear una revisión y con mensaje explícito en la web.
 
-**Confirmación de Gerencia:** ________________________________
+**Confirmación de Gerencia:** Henry, 2026-10-12.

@@ -1,6 +1,12 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +39,20 @@ describe("portal gerencial", () => {
     expect(
       screen.getByRole("heading", { name: "Página no encontrada" }),
     ).toBeInTheDocument();
+  });
+
+  it("moves focus to the main content when the gerencial route changes", async () => {
+    const user = userEvent.setup();
+    renderPortal("JEFE_EMPRESA", "/gerencia");
+
+    const main = document.getElementById("contenido-gerencial");
+    expect(main).not.toBeNull();
+    await user.click(screen.getByRole("link", { name: "Operación" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Operación" }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(main).toHaveFocus());
   });
 
   it("presenta el resumen con los valores entregados por la API gerencial", async () => {

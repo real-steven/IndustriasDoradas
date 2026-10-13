@@ -1,4 +1,10 @@
-import { useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import type { ManagementShipment } from "../../api/generated/api-client";
 import { useSearchParams } from "react-router-dom";
 
@@ -26,7 +32,21 @@ export function GoldFeature() {
   const options = useManagementShipmentFilterOptions(filters);
   const summary = useGoldSummary(filters);
   const [selected, setSelected] = useState<ManagementShipment | null>(null);
+  const editorTrigger = useRef<HTMLButtonElement | null>(null);
   const items = options.data?.items ?? shipments.data?.items ?? [];
+
+  const openEditor = (
+    shipment: ManagementShipment,
+    trigger: HTMLButtonElement,
+  ) => {
+    editorTrigger.current = trigger;
+    setSelected(shipment);
+  };
+
+  const closeEditor = () => {
+    setSelected(null);
+    editorTrigger.current?.focus();
+  };
 
   const update = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -76,7 +96,7 @@ export function GoldFeature() {
                 <GoldShipmentRow
                   key={shipment.shipmentId}
                   shipment={shipment}
-                  open={() => setSelected(shipment)}
+                  open={(trigger) => openEditor(shipment, trigger)}
                 />
               ))}
             </div>
@@ -90,7 +110,9 @@ export function GoldFeature() {
         )}
       </section>
       {selected !== null && (
-        <GoldEditor shipment={selected} close={() => setSelected(null)} />
+        <div className="gold-dialog-layer">
+          <GoldEditor shipment={selected} close={closeEditor} />
+        </div>
       )}
     </div>
   );
@@ -157,28 +179,38 @@ function GoldSummaryPanel({
             Cambie el período para ampliar la consulta.
           </GoldState>
         ) : (
-          <div className="table-scroll">
+          <div
+            className="table-scroll"
+            role="region"
+            aria-label="Comparación de oro por proveedor"
+            tabIndex={0}
+          >
             <table>
+              <caption className="visually-hidden">
+                Cobertura y resultados de oro agrupados por proveedor
+              </caption>
               <thead>
                 <tr>
-                  <th>Proveedor</th>
-                  <th>Cobertura</th>
-                  <th>Excluidos</th>
-                  <th>Oro</th>
-                  <th>g / cajuela</th>
+                  <th scope="col">Proveedor</th>
+                  <th scope="col">Cobertura</th>
+                  <th scope="col">Excluidos</th>
+                  <th scope="col">Oro</th>
+                  <th scope="col">g / cajuela</th>
                 </tr>
               </thead>
               <tbody>
                 {query.data.suppliers.map((supplier) => (
                   <tr key={supplier.supplierId}>
                     <th scope="row">{supplier.supplierName}</th>
-                    <td>
+                    <td data-label="Cobertura">
                       {supplier.registeredShipments}/{supplier.totalShipments} (
                       {formatNumber(supplier.coveragePercentage)} %)
                     </td>
-                    <td>{supplier.excludedShipments}</td>
-                    <td>{formatGrams(supplier.totalGoldGrams)} g</td>
-                    <td>
+                    <td data-label="Excluidos">{supplier.excludedShipments}</td>
+                    <td data-label="Oro">
+                      {formatGrams(supplier.totalGoldGrams)} g
+                    </td>
+                    <td data-label="g / cajuela">
                       {supplier.gramsPerCajuela === null
                         ? "Sin datos"
                         : formatNumber(supplier.gramsPerCajuela, 4)}
@@ -283,7 +315,7 @@ function GoldShipmentRow({
   open,
 }: {
   shipment: ManagementShipment;
-  open(this: void): void;
+  open(this: void, trigger: HTMLButtonElement): void;
 }) {
   return (
     <article className="gold-shipment-row">
@@ -318,7 +350,11 @@ function GoldShipmentRow({
           <dd>{shipment.goldRevisionCount ?? 0}</dd>
         </div>
       </dl>
-      <button type="button" className="primary-button" onClick={open}>
+      <button
+        type="button"
+        className="primary-button"
+        onClick={(event) => open(event.currentTarget)}
+      >
         {shipment.hasGoldResult ? "CORREGIR RESULTADO" : "REGISTRAR ORO"}
       </button>
     </article>
@@ -342,6 +378,40 @@ function GoldEditor({
   const [saved, setSaved] = useState<string | null>(null);
   const parsed = parseAmount(amount);
   const correction = shipment.hasGoldResult || mutation.data !== undefined;
+  const formError =
+    validation ?? (mutation.isError ? mutationMessage(mutation.error) : null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (first === undefined || last === undefined) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -378,14 +448,21 @@ function GoldEditor({
   };
 
   return (
-    <section className="gold-editor" aria-labelledby="gold-editor-title">
+    <section
+      className="gold-editor"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="gold-editor-title"
+      aria-describedby="gold-editor-description"
+      onKeyDown={handleDialogKeyDown}
+    >
       <header>
         <div>
           <p className="eyebrow">RESULTADO TOTAL</p>
           <h2 id="gold-editor-title">
             Cargamento {shortShipmentId(shipment.shipmentId)}
           </h2>
-          <p>
+          <p id="gold-editor-description">
             {shipment.productionLineName} · {shipment.supplierName}
           </p>
         </div>
@@ -404,7 +481,8 @@ function GoldEditor({
             placeholder="Ej. 12,50"
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
-            aria-describedby="gold-equivalence"
+            aria-describedby={`gold-equivalence${formError !== null ? " gold-form-error" : ""}`}
+            aria-invalid={formError !== null}
           />
         </label>
         <p id="gold-equivalence" className="gold-equivalence">
@@ -423,11 +501,16 @@ function GoldEditor({
             />
           </label>
         )}
-        {validation !== null && <p className="form-error">{validation}</p>}
-        {mutation.isError && (
-          <p className="form-error">{mutationMessage(mutation.error)}</p>
+        {formError !== null && (
+          <p id="gold-form-error" className="form-error" role="alert">
+            {formError}
+          </p>
         )}
-        {saved !== null && <p className="form-success">{saved}</p>}
+        {saved !== null && (
+          <p className="form-success" role="status">
+            {saved}
+          </p>
+        )}
         <div className="gold-editor-actions">
           <button type="button" className="secondary" onClick={close}>
             CANCELAR
@@ -506,7 +589,10 @@ function GoldState({
   error?: boolean;
 }) {
   return (
-    <div className={`gold-state${error ? " error" : ""}`} role="status">
+    <div
+      className={`gold-state${error ? " error" : ""}`}
+      role={error ? "alert" : "status"}
+    >
       <strong>{title}</strong>
       <p>{children}</p>
     </div>

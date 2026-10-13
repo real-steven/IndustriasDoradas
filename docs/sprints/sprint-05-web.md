@@ -9,8 +9,8 @@
 - Sprint 4.11 ya centraliza cargamentos, responsables, cajuelas, correcciones,
   barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
   segundo protocolo de sincronización.
-- 5.1, 5.2, 5.3, 5.4 y 5.5 están cerrados. El siguiente paso ejecutable es
-  5.6.
+- 5.1, 5.2, 5.3, 5.4, 5.5, 5.6 y 5.7 están cerrados. El siguiente paso
+  ejecutable es 5.8.
 - El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
   por cargamento y 5.6 construirá su API e interfaz. El modelo legado por
   barrida no se reutiliza.
@@ -120,13 +120,14 @@ está en `docs/testing/sprint-05-5-historial-detalle-auditoria.md`.
 
 ### 5.6 Oro total por cargamento
 
-**Estado:** implementación y pruebas preparadas el 2026-10-12; pendientes de
-`pnpm run verify` y recorrido manual por Henry antes del cierre. La API registra
-entradas append-only únicamente para cargamentos cerrados, exige motivo al
-corregir y conserva cero como valor registrado. La web mantiene período, línea,
-proveedor y página en la URL, muestra equivalencia visual en palos e informa
-cobertura registrada/excluida por proveedor sin sumar revisiones históricas. No
-se agregó oro al contrato desktop. La matriz de aceptación está en
+**Estado:** cerrado técnica y manualmente el 2026-10-12. Henry confirmó
+`pnpm run verify`, el recorrido completo y ORO-08 con rechazo explícito cuando
+la corrección repite el valor vigente. La API registra entradas append-only
+únicamente para cargamentos cerrados, exige motivo al corregir y conserva cero
+como valor registrado. La web mantiene período, línea, proveedor y página en la
+URL, muestra equivalencia visual en palos e informa cobertura
+registrada/excluida por proveedor sin sumar revisiones históricas. No se agregó
+oro al contrato desktop. La matriz de aceptación está en
 `docs/testing/sprint-05-6-oro-cargamento.md`.
 
 **Prompt:** Sobre `app.shipment_gold_result_entries`, permite a `JEFE_EMPRESA` registrar o corregir opcionalmente un único total de oro en gramos para un cargamento cerrado. Acepta entero o hasta dos decimales, vacío no registrado y cero válido; muestra palos solo como equivalencia `1 palo = 0,10 g`. Conserva autora, fecha, valor anterior, nuevo valor y motivo mediante entradas append-only. No uses `gold_result_entries` legado, no crees resultados parciales por barrida, no cargues datos históricos previos a la puesta en marcha ni sincronices oro a desktop. Las comparaciones por proveedor muestran cobertura de cargamentos registrados y excluidos.
@@ -134,6 +135,19 @@ se agregó oro al contrato desktop. La matriz de aceptación está en
 **Pausa:** el dataset manual coincide por cargamento, línea, proveedor y período, sin contar dos veces.
 
 ### 5.7 Responsive, accesibilidad y navegadores
+
+**Estado:** cerrado técnica y manualmente el 2026-10-12. Henry aprobó
+`pnpm run verify`, teclado, escritorio y emulación responsive de
+iPhone/Android en Edge. El lector de pantalla y la comprobación en dispositivos
+físicos quedan como verificaciones menores no bloqueantes para cuando exista un
+entorno accesible fuera de la máquina local. El portal permite reflujo desde
+320 px, respeta las áreas seguras del dispositivo, conserva objetivos táctiles,
+convierte la comparación de proveedores en tarjetas móviles y evita que textos
+largos ensanchen la página. El registro de oro expone un diálogo modal con foco
+inicial, ciclo de tabulación, cierre con Escape y devolución del foco. Se
+reforzaron nombres, avisos, encabezados de tabla, contraste y ampliación de
+texto. La matriz está en
+`docs/testing/sprint-05-7-responsive-accesibilidad.md`.
 
 **Prompt:** Refina layout mobile-first para iPhone Safari, Android Chrome y escritorio. Prueba textos largos, teclado, lector, contraste, objetivos táctiles, zoom, orientación y safe areas.
 

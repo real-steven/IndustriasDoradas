@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import { useEffect, type PropsWithChildren } from "react";
 import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth, type RoleCode } from "../../auth/auth-context";
@@ -51,13 +51,18 @@ export function ProtectedPortal({ roles }: { roles: RoleCode[] }) {
 export function PortalLayout() {
   const auth = useAuth();
   const location = useLocation();
-  if (auth.profile === null || auth.session === null) return null;
+
+  useEffect(() => {
+    document.getElementById("contenido-gerencial")?.focus();
+  }, [location.pathname]);
 
   const pageTitle =
     pageTitles[location.pathname] ??
     (location.pathname.startsWith("/gerencia/cargamentos/")
       ? "Detalle de cargamento"
       : "Portal");
+
+  if (auth.profile === null || auth.session === null) return null;
 
   return (
     <div className="manager-shell">
@@ -114,7 +119,7 @@ export function PortalLayout() {
           </p>
           <div className="topbar-actions">
             <span className="freshness neutral">
-              <i />
+              <i aria-hidden="true" />
               Datos centrales protegidos
             </span>
             <NavLink
