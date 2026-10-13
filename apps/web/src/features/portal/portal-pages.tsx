@@ -1,6 +1,7 @@
 import type { PropsWithChildren, ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
+import { GoldFeature } from "../gold/gold";
 import {
   OperationFreshness,
   OperationLinesPanel,
@@ -108,38 +109,13 @@ export function GoldPage() {
     <PortalPage
       title="Oro por cargamento"
       eyebrow="REGISTRO OPCIONAL DE GERENCIA"
-      description="Lucía podrá registrar un único total después de cerrar cada cargamento. Vacío significa no registrado y nunca se interpreta como cero."
+      description="Registre un único total después de cerrar cada cargamento. Vacío significa no registrado y nunca se interpreta como cero."
     >
-      <div className="gold-summary">
-        <div>
-          <h2>Uso del dato</h2>
-          <p>
-            Comparar el rendimiento de proveedores desde la puesta en marcha,
-            sin custodia ni existencia acumulada de oro.
-          </p>
-        </div>
-        <div>
-          <span>RESULTADOS</span>
-          <strong>—</strong>
-        </div>
-        <div>
-          <span>COBERTURA</span>
-          <strong>— / —</strong>
-        </div>
-        <div>
-          <span>INICIO</span>
-          <strong>Próximo</strong>
-        </div>
-      </div>
-      <Panel
-        title="Cargamentos cerrados"
-        subtitle="Solo aparecerán cargamentos posteriores a la puesta en marcha"
-      >
-        <EmptyState icon="◆" title="Aún no hay resultados de oro">
-          El registro y la comparación por proveedor se incorporarán sobre esta
-          estructura.
-        </EmptyState>
-      </Panel>
+      <p className="scope-note">
+        El dato se usa para comparar proveedores desde la puesta en marcha, sin
+        custodia ni existencia acumulada de oro.
+      </p>
+      <GoldFeature />
     </PortalPage>
   );
 }
@@ -254,20 +230,6 @@ function Panel({
       </header>
       {children}
     </section>
-  );
-}
-
-function EmptyState({
-  icon,
-  title,
-  children,
-}: PropsWithChildren<{ icon: string; title: string }>) {
-  return (
-    <div className="empty-state">
-      <span aria-hidden="true">{icon}</span>
-      <h3>{title}</h3>
-      <p>{children}</p>
-    </div>
   );
 }
 

@@ -120,6 +120,15 @@ está en `docs/testing/sprint-05-5-historial-detalle-auditoria.md`.
 
 ### 5.6 Oro total por cargamento
 
+**Estado:** implementación y pruebas preparadas el 2026-10-12; pendientes de
+`pnpm run verify` y recorrido manual por Henry antes del cierre. La API registra
+entradas append-only únicamente para cargamentos cerrados, exige motivo al
+corregir y conserva cero como valor registrado. La web mantiene período, línea,
+proveedor y página en la URL, muestra equivalencia visual en palos e informa
+cobertura registrada/excluida por proveedor sin sumar revisiones históricas. No
+se agregó oro al contrato desktop. La matriz de aceptación está en
+`docs/testing/sprint-05-6-oro-cargamento.md`.
+
 **Prompt:** Sobre `app.shipment_gold_result_entries`, permite a `JEFE_EMPRESA` registrar o corregir opcionalmente un único total de oro en gramos para un cargamento cerrado. Acepta entero o hasta dos decimales, vacío no registrado y cero válido; muestra palos solo como equivalencia `1 palo = 0,10 g`. Conserva autora, fecha, valor anterior, nuevo valor y motivo mediante entradas append-only. No uses `gold_result_entries` legado, no crees resultados parciales por barrida, no cargues datos históricos previos a la puesta en marcha ni sincronices oro a desktop. Las comparaciones por proveedor muestran cobertura de cargamentos registrados y excluidos.
 
 **Pausa:** el dataset manual coincide por cargamento, línea, proveedor y período, sin contar dos veces.

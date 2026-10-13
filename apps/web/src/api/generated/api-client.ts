@@ -85,6 +85,43 @@ export interface ManagementSweepMercury {
   hasInputRecord: boolean;
   hasRemainderRecord: boolean;
 }
+export interface GoldResultEntry {
+  id: string;
+  organizationId: string;
+  shipmentId: string;
+  amountGrams: number;
+  unitCode: "g";
+  recordedAtUtc: string;
+  recordedByProfileId: string;
+  recordedByDisplayName: string;
+  supersedesResultId: string | null;
+  correctionReason: string | null;
+}
+export interface GoldSupplierCoverage {
+  supplierId: string;
+  supplierName: string;
+  totalShipments: number;
+  registeredShipments: number;
+  excludedShipments: number;
+  coveragePercentage: number;
+  totalGoldGrams: number;
+  includedCajuelas: number;
+  gramsPerCajuela: number | null;
+}
+export interface GoldSummary {
+  totalShipments: number;
+  registeredShipments: number;
+  excludedShipments: number;
+  coveragePercentage: number;
+  totalGoldGrams: number;
+  includedCajuelas: number;
+  gramsPerCajuela: number | null;
+  suppliers: GoldSupplierCoverage[];
+}
+export interface RecordShipmentGoldInput {
+  amountGrams: number;
+  correctionReason?: string;
+}
 export interface PageManagementOperationLine {
   items: ManagementOperationLine[];
   page: number;
@@ -184,6 +221,42 @@ export class ApiClient {
       signal,
     );
   }
+  getManagementGoldSummary(
+    organizationId: string,
+    filters: Omit<ManagementFilters, "page" | "pageSize" | "shipmentId"> = {},
+    signal?: AbortSignal,
+  ): Promise<GoldSummary> {
+    return this.request<GoldSummary>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/gold-summary?${this.goldQuery(filters)}`,
+      signal,
+    );
+  }
+  listManagementShipmentGoldResults(
+    organizationId: string,
+    shipmentId: string,
+    signal?: AbortSignal,
+  ): Promise<GoldResultEntry[]> {
+    return this.request<GoldResultEntry[]>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/gold-results`,
+      signal,
+    );
+  }
+  recordManagementShipmentGold(
+    organizationId: string,
+    shipmentId: string,
+    input: RecordShipmentGoldInput,
+    signal?: AbortSignal,
+  ): Promise<GoldResultEntry> {
+    return this.request<GoldResultEntry>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/gold-results`,
+      signal,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  }
   private managementQuery(filters: ManagementFilters): URLSearchParams {
     const query = new URLSearchParams({
       page: String(filters.page ?? 1),
@@ -203,11 +276,39 @@ export class ApiClient {
     }
     return query;
   }
-  private async request<T>(path: string, signal?: AbortSignal): Promise<T> {
+  private goldQuery(
+    filters: Omit<ManagementFilters, "page" | "pageSize" | "shipmentId">,
+  ): URLSearchParams {
+    const query = new URLSearchParams();
+    for (const key of [
+      "fromUtc",
+      "toUtc",
+      "plantId",
+      "productionLineId",
+      "supplierId",
+      "responsibleWorkerId",
+    ] as const) {
+      const value = filters[key];
+      if (value !== undefined) query.set(key, value);
+    }
+    return query;
+  }
+  private async request<T>(
+    path: string,
+    signal?: AbortSignal,
+    init: RequestInit = {},
+  ): Promise<T> {
     const token = this.accessToken();
     const response = await this.transport(
       `${this.baseUrl.replace(/\/$/u, "")}${path}`,
-      { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal },
+      {
+        ...init,
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...init.headers,
+        },
+        signal,
+      },
     );
     if (!response.ok) {
       const error = (await response.json()) as ApiError;

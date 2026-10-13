@@ -30,6 +30,10 @@ import {
 } from "../src/catalogs/catalogs.contracts";
 import { SupabaseDataError } from "../src/catalogs/supabase-catalog.repository";
 import {
+  GOLD_REPOSITORY,
+  type GoldRepository,
+} from "../src/gold/gold.contracts";
+import {
   WORKERS_REPOSITORY,
   type WorkersRepository,
 } from "../src/workers/workers.contracts";
@@ -75,6 +79,8 @@ const ACTIVE_PROFILE: AuthorizedProfile = {
     "organization_catalogs.manage",
     "suppliers.manage",
     "workers.read",
+    "gold.read",
+    "gold.results.manage",
     "administrators.govern",
     "administrators.create",
     "administrators.permissions.manage",
@@ -91,6 +97,7 @@ describe("API smoke (e2e)", () => {
   let catalogs: jest.Mocked<CatalogRepository>;
   let workers: jest.Mocked<WorkersRepository>;
   let accounts: jest.Mocked<AccountsRepository>;
+  let gold: jest.Mocked<GoldRepository>;
   let stations: jest.Mocked<StationRepository>;
   let management: jest.Mocked<ManagementQueryRepository>;
   let sync: jest.Mocked<SyncRepository>;
@@ -158,6 +165,11 @@ describe("API smoke (e2e)", () => {
       listAdministratorPermissions: jest.fn().mockResolvedValue([]),
       replaceAdministratorPermissions: jest.fn().mockResolvedValue(undefined),
     };
+    gold = {
+      listShipmentFacts: jest.fn().mockResolvedValue([]),
+      listResults: jest.fn().mockResolvedValue([]),
+      createResult: jest.fn(),
+    };
     stations = {
       getSnapshot: jest.fn(),
       recordPinAttempt: jest.fn(),
@@ -211,6 +223,8 @@ describe("API smoke (e2e)", () => {
       .useValue(workers)
       .overrideProvider(ACCOUNTS_REPOSITORY)
       .useValue(accounts)
+      .overrideProvider(GOLD_REPOSITORY)
+      .useValue(gold)
       .overrideProvider(STATION_REPOSITORY)
       .useValue(stations)
       .overrideProvider(MANAGEMENT_QUERY_REPOSITORY)
@@ -233,6 +247,9 @@ describe("API smoke (e2e)", () => {
     accounts.find.mockResolvedValue(null);
     accounts.createAdministrator.mockClear();
     accounts.replaceAdministratorPermissions.mockClear();
+    gold.listShipmentFacts.mockClear();
+    gold.listResults.mockClear();
+    gold.createResult.mockReset();
     management.listOperationLines.mockClear();
     management.listShipments.mockClear();
     management.findShipment.mockClear();
@@ -300,8 +317,16 @@ describe("API smoke (e2e)", () => {
     expect(body.components.schemas).toHaveProperty("ErrorResponse");
     expect(body.components.schemas).toHaveProperty("PageCatalog");
     expect(body.components.schemas).toHaveProperty("PageManagementShipment");
+    expect(body.components.schemas).toHaveProperty("GoldResultEntry");
+    expect(body.components.schemas).toHaveProperty("GoldSummary");
     expect(body.paths).toHaveProperty(
       "/api/v1/organizations/{organizationId}/management/shipments",
+    );
+    expect(body.paths).toHaveProperty(
+      "/api/v1/organizations/{organizationId}/management/gold-summary",
+    );
+    expect(body.paths).toHaveProperty(
+      "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/gold-results",
     );
   });
 
@@ -738,6 +763,93 @@ describe("API smoke (e2e)", () => {
     expect(management.listShipments.mock.calls).toHaveLength(0);
   });
 
+  it("reports gold coverage without excluding a recorded zero", async () => {
+    gold.listShipmentFacts.mockResolvedValueOnce([
+      {
+        shipmentId: "42000000-0000-4000-8000-000000000001",
+        supplierId: "35000000-0000-4000-8000-000000000001",
+        supplierName: "Proveedor ficticio",
+        cajuelaTotal: 100,
+        hasGoldResult: true,
+        goldAmountGrams: 0,
+      },
+      {
+        shipmentId: "42000000-0000-4000-8000-000000000002",
+        supplierId: "35000000-0000-4000-8000-000000000001",
+        supplierName: "Proveedor ficticio",
+        cajuelaTotal: 150,
+        hasGoldResult: false,
+        goldAmountGrams: null,
+      },
+    ]);
+
+    const response = await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/gold-summary`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      totalShipments: 2,
+      registeredShipments: 1,
+      excludedShipments: 1,
+      totalGoldGrams: 0,
+    });
+  });
+
+  it("records an initial shipment gold total and audits the mutation", async () => {
+    management.findShipment.mockResolvedValueOnce(managementShipment());
+    gold.createResult.mockImplementationOnce((input) =>
+      Promise.resolve({
+        id: input.id,
+        organizationId: input.organizationId,
+        shipmentId: input.shipmentId,
+        amountGrams: input.amountGrams,
+        unitCode: "g",
+        recordedAtUtc: input.recordedAtUtc,
+        recordedByProfileId: input.recordedByProfileId,
+        recordedByDisplayName: input.recordedByDisplayName,
+        supersedesResultId: input.supersedesResultId,
+        correctionReason: input.correctionReason,
+      }),
+    );
+
+    const response = await request(httpServer)
+      .post(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments/42000000-0000-4000-8000-000000000001/gold-results`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .send({ amountGrams: 0 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({ amountGrams: 0, unitCode: "g" });
+    expect(gold.createResult.mock.calls[0]?.[0]).toMatchObject({
+      amountGrams: 0,
+      supersedesResultId: null,
+      recordedByProfileId: ACTIVE_PROFILE.id,
+    });
+    expect(
+      auditEvents.insert.mock.calls.some(
+        ([event]) =>
+          event.action === "business.mutation" &&
+          event.entityId === "42000000-0000-4000-8000-000000000001",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not turn an empty gold amount into zero", async () => {
+    await request(httpServer)
+      .post(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments/42000000-0000-4000-8000-000000000001/gold-results`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .send({ amountGrams: "" })
+      .expect(400);
+
+    expect(gold.createResult.mock.calls).toHaveLength(0);
+  });
+
   it("accepts a versioned sync batch for an assigned plant manager", async () => {
     profiles.findByAuthUserId.mockResolvedValueOnce({
       ...ACTIVE_PROFILE,
@@ -783,6 +895,41 @@ function administratorAccount() {
     isActive: true,
     createdAt: "2026-08-20T00:00:00.000Z",
     updatedAt: "2026-08-20T00:00:00.000Z",
+  };
+}
+
+function managementShipment() {
+  return {
+    organizationId: ACTIVE_PROFILE.organizationId,
+    plantId: "31000000-0000-4000-8000-000000000001",
+    stationId: "34000000-0000-4000-8000-000000000001",
+    stationName: "Estación ficticia",
+    shipmentId: "42000000-0000-4000-8000-000000000001",
+    feedCycleId: "41000000-0000-4000-8000-000000000001",
+    productionLineId: "32000000-0000-4000-8000-000000000001",
+    productionLineName: "Línea 1",
+    productionLineOrder: 1,
+    supplierId: "35000000-0000-4000-8000-000000000001",
+    supplierName: "Proveedor ficticio",
+    responsibleWorkerId: null,
+    responsibleWorkerName: null,
+    startedAtUtc: "2026-10-01T12:00:00.000Z",
+    cajuelaTotal: 100,
+    sweepCount: 1,
+    sweptCajuelas: 100,
+    cajuelasSinceLastSweep: 0,
+    nextSweepAt: 350,
+    sweepPending: false,
+    lastActivityAtUtc: "2026-10-01T18:00:00.000Z",
+    status: "COMPLETED" as const,
+    completedAtUtc: "2026-10-01T18:00:00.000Z",
+    goldResultId: null,
+    goldAmountGrams: null,
+    goldUnitCode: null,
+    goldRecordedAtUtc: null,
+    goldRecordedByProfileId: null,
+    goldRevisionCount: null,
+    hasGoldResult: false,
   };
 }
 

@@ -312,6 +312,106 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         hasRemainderRecord: { type: "boolean" },
       },
     },
+    GoldResultEntry: {
+      type: "object",
+      required: [
+        "id",
+        "organizationId",
+        "shipmentId",
+        "amountGrams",
+        "unitCode",
+        "recordedAtUtc",
+        "recordedByProfileId",
+        "recordedByDisplayName",
+        "supersedesResultId",
+        "correctionReason",
+      ],
+      additionalProperties: false,
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        shipmentId: UUID,
+        amountGrams: {
+          type: "number",
+          format: "double",
+          minimum: 0,
+          multipleOf: 0.01,
+        },
+        unitCode: { type: "string", enum: ["g"] },
+        recordedAtUtc: DATE_TIME,
+        recordedByProfileId: UUID,
+        recordedByDisplayName: { type: "string" },
+        supersedesResultId: { ...UUID, nullable: true },
+        correctionReason: { type: "string", nullable: true },
+      },
+    },
+    GoldSupplierCoverage: {
+      type: "object",
+      required: [
+        "supplierId",
+        "supplierName",
+        "totalShipments",
+        "registeredShipments",
+        "excludedShipments",
+        "coveragePercentage",
+        "totalGoldGrams",
+        "includedCajuelas",
+        "gramsPerCajuela",
+      ],
+      additionalProperties: false,
+      properties: {
+        supplierId: UUID,
+        supplierName: { type: "string" },
+        totalShipments: { type: "integer", minimum: 0 },
+        registeredShipments: { type: "integer", minimum: 0 },
+        excludedShipments: { type: "integer", minimum: 0 },
+        coveragePercentage: { type: "number", minimum: 0, maximum: 100 },
+        totalGoldGrams: { type: "number", minimum: 0 },
+        includedCajuelas: { type: "integer", minimum: 0 },
+        gramsPerCajuela: { type: "number", minimum: 0, nullable: true },
+      },
+    },
+    GoldSummary: {
+      type: "object",
+      required: [
+        "totalShipments",
+        "registeredShipments",
+        "excludedShipments",
+        "coveragePercentage",
+        "totalGoldGrams",
+        "includedCajuelas",
+        "gramsPerCajuela",
+        "suppliers",
+      ],
+      additionalProperties: false,
+      properties: {
+        totalShipments: { type: "integer", minimum: 0 },
+        registeredShipments: { type: "integer", minimum: 0 },
+        excludedShipments: { type: "integer", minimum: 0 },
+        coveragePercentage: { type: "number", minimum: 0, maximum: 100 },
+        totalGoldGrams: { type: "number", minimum: 0 },
+        includedCajuelas: { type: "integer", minimum: 0 },
+        gramsPerCajuela: { type: "number", minimum: 0, nullable: true },
+        suppliers: {
+          type: "array",
+          items: { $ref: "#/components/schemas/GoldSupplierCoverage" },
+        },
+      },
+    },
+    RecordShipmentGoldDto: {
+      type: "object",
+      required: ["amountGrams"],
+      additionalProperties: false,
+      properties: {
+        amountGrams: {
+          type: "number",
+          format: "double",
+          minimum: 0,
+          multipleOf: 0.01,
+        },
+        correctionReason: { type: "string", minLength: 1, maxLength: 500 },
+      },
+    },
     PageCatalog: pageSchema("CatalogItem"),
     PageWorker: pageSchema("Worker"),
     PageAccount: pageSchema("Account"),
@@ -396,6 +496,15 @@ function responseSchema(
     return { $ref: "#/components/schemas/Session" };
   if (path.endsWith("/management/operation-lines"))
     return { $ref: "#/components/schemas/PageManagementOperationLine" };
+  if (path.endsWith("/management/gold-summary"))
+    return { $ref: "#/components/schemas/GoldSummary" };
+  if (path.endsWith("/gold-results"))
+    return operationId.includes("history")
+      ? {
+          type: "array",
+          items: { $ref: "#/components/schemas/GoldResultEntry" },
+        }
+      : { $ref: "#/components/schemas/GoldResultEntry" };
   if (path.endsWith("/management/shipments"))
     return { $ref: "#/components/schemas/PageManagementShipment" };
   if (path.endsWith("/sweeps") && path.includes("/management/shipments/"))
