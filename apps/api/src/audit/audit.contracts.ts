@@ -95,6 +95,7 @@ export interface AuditListItem {
   changedFields: readonly string[];
   changes: Readonly<Record<string, AuditFieldChange>>;
   occurredAt: string;
+  recordedAt: string;
 }
 
 export interface AuditQueryRepository {

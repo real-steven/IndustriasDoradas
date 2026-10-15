@@ -209,6 +209,285 @@
         ],
         "type": "object"
       },
+      "GoldResultEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "amountGrams": {
+            "format": "double",
+            "minimum": 0,
+            "multipleOf": 0.01,
+            "type": "number"
+          },
+          "correctionReason": { "nullable": true, "type": "string" },
+          "id": { "format": "uuid", "type": "string" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "recordedAtUtc": { "format": "date-time", "type": "string" },
+          "recordedByDisplayName": { "type": "string" },
+          "recordedByProfileId": { "format": "uuid", "type": "string" },
+          "shipmentId": { "format": "uuid", "type": "string" },
+          "supersedesResultId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "unitCode": { "enum": ["g"], "type": "string" }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "shipmentId",
+          "amountGrams",
+          "unitCode",
+          "recordedAtUtc",
+          "recordedByProfileId",
+          "recordedByDisplayName",
+          "supersedesResultId",
+          "correctionReason"
+        ],
+        "type": "object"
+      },
+      "GoldSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "coveragePercentage": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "excludedShipments": { "minimum": 0, "type": "integer" },
+          "gramsPerCajuela": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "includedCajuelas": { "minimum": 0, "type": "integer" },
+          "registeredShipments": { "minimum": 0, "type": "integer" },
+          "suppliers": {
+            "items": { "$ref": "#/components/schemas/GoldSupplierCoverage" },
+            "type": "array"
+          },
+          "totalGoldGrams": { "minimum": 0, "type": "number" },
+          "totalShipments": { "minimum": 0, "type": "integer" }
+        },
+        "required": [
+          "totalShipments",
+          "registeredShipments",
+          "excludedShipments",
+          "coveragePercentage",
+          "totalGoldGrams",
+          "includedCajuelas",
+          "gramsPerCajuela",
+          "suppliers"
+        ],
+        "type": "object"
+      },
+      "GoldSupplierCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "coveragePercentage": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "excludedShipments": { "minimum": 0, "type": "integer" },
+          "gramsPerCajuela": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "includedCajuelas": { "minimum": 0, "type": "integer" },
+          "registeredShipments": { "minimum": 0, "type": "integer" },
+          "supplierId": { "format": "uuid", "type": "string" },
+          "supplierName": { "type": "string" },
+          "totalGoldGrams": { "minimum": 0, "type": "number" },
+          "totalShipments": { "minimum": 0, "type": "integer" }
+        },
+        "required": [
+          "supplierId",
+          "supplierName",
+          "totalShipments",
+          "registeredShipments",
+          "excludedShipments",
+          "coveragePercentage",
+          "totalGoldGrams",
+          "includedCajuelas",
+          "gramsPerCajuela"
+        ],
+        "type": "object"
+      },
+      "ManagementFreshness": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "description": "Cursor incremental opaco",
+            "type": "string"
+          },
+          "effectiveAtUtc": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "hasChanges": { "type": "boolean" },
+          "pollAfterSeconds": { "minimum": 30, "type": "integer" },
+          "serverTimeUtc": { "format": "date-time", "type": "string" }
+        },
+        "required": [
+          "cursor",
+          "hasChanges",
+          "effectiveAtUtc",
+          "serverTimeUtc",
+          "pollAfterSeconds"
+        ],
+        "type": "object"
+      },
+      "ManagementOperationLine": {
+        "properties": {
+          "cajuelaTotal": { "type": "integer" },
+          "cajuelasSinceLastSweep": { "type": "integer" },
+          "feedCycleId": { "format": "uuid", "type": "string" },
+          "lastActivityAtUtc": { "format": "date-time", "type": "string" },
+          "nextSweepAt": { "type": "integer" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "plantId": { "format": "uuid", "type": "string" },
+          "productionLineId": { "format": "uuid", "type": "string" },
+          "productionLineName": { "type": "string" },
+          "productionLineOrder": { "type": "integer" },
+          "responsibleWorkerId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "responsibleWorkerName": { "nullable": true, "type": "string" },
+          "shipmentId": { "format": "uuid", "type": "string" },
+          "startedAtUtc": { "format": "date-time", "type": "string" },
+          "stationId": { "format": "uuid", "type": "string" },
+          "stationName": { "type": "string" },
+          "supplierId": { "format": "uuid", "type": "string" },
+          "supplierName": { "type": "string" },
+          "sweepCount": { "type": "integer" },
+          "sweepPending": { "type": "boolean" },
+          "sweptCajuelas": { "type": "integer" }
+        },
+        "required": [
+          "organizationId",
+          "plantId",
+          "stationId",
+          "stationName",
+          "shipmentId",
+          "feedCycleId",
+          "productionLineId",
+          "productionLineName",
+          "productionLineOrder",
+          "supplierId",
+          "supplierName",
+          "responsibleWorkerId",
+          "responsibleWorkerName",
+          "startedAtUtc",
+          "cajuelaTotal",
+          "sweepCount",
+          "sweptCajuelas",
+          "cajuelasSinceLastSweep",
+          "nextSweepAt",
+          "sweepPending",
+          "lastActivityAtUtc"
+        ],
+        "type": "object"
+      },
+      "ManagementShipment": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ManagementOperationLine" },
+          {
+            "properties": {
+              "completedAtUtc": { "format": "date-time", "type": "string" },
+              "goldAmountGrams": {
+                "format": "double",
+                "minimum": 0,
+                "nullable": true,
+                "type": "number"
+              },
+              "goldRecordedAtUtc": {
+                "format": "date-time",
+                "nullable": true,
+                "type": "string"
+              },
+              "goldRecordedByProfileId": {
+                "format": "uuid",
+                "nullable": true,
+                "type": "string"
+              },
+              "goldResultId": {
+                "format": "uuid",
+                "nullable": true,
+                "type": "string"
+              },
+              "goldRevisionCount": {
+                "minimum": 1,
+                "nullable": true,
+                "type": "integer"
+              },
+              "goldUnitCode": {
+                "enum": ["g"],
+                "nullable": true,
+                "type": "string"
+              },
+              "hasGoldResult": { "type": "boolean" },
+              "status": { "enum": ["COMPLETED"], "type": "string" }
+            },
+            "required": [
+              "status",
+              "completedAtUtc",
+              "goldResultId",
+              "goldAmountGrams",
+              "goldUnitCode",
+              "goldRecordedAtUtc",
+              "goldRecordedByProfileId",
+              "goldRevisionCount",
+              "hasGoldResult"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "ManagementSweepMercury": {
+        "additionalProperties": false,
+        "properties": {
+          "cajuelaCount": { "minimum": 1, "type": "integer" },
+          "hasInputRecord": { "type": "boolean" },
+          "hasRemainderRecord": { "type": "boolean" },
+          "inputGrams": {
+            "format": "double",
+            "nullable": true,
+            "type": "number"
+          },
+          "lineComponentId": { "format": "uuid", "type": "string" },
+          "lineComponentName": { "type": "string" },
+          "lineComponentOrder": { "type": "integer" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "remainderGrams": {
+            "format": "double",
+            "nullable": true,
+            "type": "number"
+          },
+          "shipmentId": { "format": "uuid", "type": "string" },
+          "sweepId": { "format": "uuid", "type": "string" },
+          "sweptAtUtc": { "format": "date-time", "type": "string" }
+        },
+        "required": [
+          "organizationId",
+          "shipmentId",
+          "sweepId",
+          "sweptAtUtc",
+          "cajuelaCount",
+          "lineComponentId",
+          "lineComponentName",
+          "lineComponentOrder",
+          "inputGrams",
+          "remainderGrams",
+          "hasInputRecord",
+          "hasRemainderRecord"
+        ],
+        "type": "object"
+      },
       "MergeWorkerRequestDto": {
         "properties": {
           "canonicalWorkerId": { "format": "uuid", "type": "string" },
@@ -236,6 +515,48 @@
         "properties": {
           "items": {
             "items": { "$ref": "#/components/schemas/CatalogItem" },
+            "type": "array"
+          },
+          "page": { "minimum": 1, "type": "integer" },
+          "pageSize": { "maximum": 100, "minimum": 1, "type": "integer" },
+          "total": { "minimum": 0, "type": "integer" },
+          "totalPages": { "minimum": 0, "type": "integer" }
+        },
+        "required": ["items", "page", "pageSize", "total", "totalPages"],
+        "type": "object"
+      },
+      "PageManagementOperationLine": {
+        "properties": {
+          "items": {
+            "items": { "$ref": "#/components/schemas/ManagementOperationLine" },
+            "type": "array"
+          },
+          "page": { "minimum": 1, "type": "integer" },
+          "pageSize": { "maximum": 100, "minimum": 1, "type": "integer" },
+          "total": { "minimum": 0, "type": "integer" },
+          "totalPages": { "minimum": 0, "type": "integer" }
+        },
+        "required": ["items", "page", "pageSize", "total", "totalPages"],
+        "type": "object"
+      },
+      "PageManagementShipment": {
+        "properties": {
+          "items": {
+            "items": { "$ref": "#/components/schemas/ManagementShipment" },
+            "type": "array"
+          },
+          "page": { "minimum": 1, "type": "integer" },
+          "pageSize": { "maximum": 100, "minimum": 1, "type": "integer" },
+          "total": { "minimum": 0, "type": "integer" },
+          "totalPages": { "minimum": 0, "type": "integer" }
+        },
+        "required": ["items", "page", "pageSize", "total", "totalPages"],
+        "type": "object"
+      },
+      "PageManagementSweepMercury": {
+        "properties": {
+          "items": {
+            "items": { "$ref": "#/components/schemas/ManagementSweepMercury" },
             "type": "array"
           },
           "page": { "minimum": 1, "type": "integer" },
@@ -282,6 +603,24 @@
           }
         },
         "required": ["pin"],
+        "type": "object"
+      },
+      "RecordShipmentGoldDto": {
+        "additionalProperties": false,
+        "properties": {
+          "amountGrams": {
+            "format": "double",
+            "minimum": 0,
+            "multipleOf": 0.01,
+            "type": "number"
+          },
+          "correctionReason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["amountGrams"],
         "type": "object"
       },
       "ResolveWorkerRequestDto": {
@@ -2342,6 +2681,903 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Catalogs"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/freshness": {
+      "get": {
+        "operationId": "ManagementController_freshness",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "description": "Cursor opaco devuelto por la consulta anterior",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": { "maxLength": 128, "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ManagementFreshness" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Management"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/gold-summary": {
+      "get": {
+        "operationId": "GoldController_summary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "responsibleWorkerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GoldSummary" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Gold"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/operation-lines": {
+      "get": {
+        "operationId": "ManagementController_listOperationLines",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": { "default": 1, "minimum": 1, "type": "number" }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "responsibleWorkerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "shipmentId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageManagementOperationLine"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Management"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/shipments": {
+      "get": {
+        "operationId": "ManagementController_listShipments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": { "default": 1, "minimum": 1, "type": "number" }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "responsibleWorkerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "shipmentId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageManagementShipment"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Management"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}": {
+      "get": {
+        "operationId": "ManagementController_findShipment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "shipmentId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ManagementShipment" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Cargamento gerencial no encontrado"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Management"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/gold-results": {
+      "get": {
+        "operationId": "GoldController_history",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "shipmentId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": { "$ref": "#/components/schemas/GoldResultEntry" },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Cargamento gerencial no encontrado"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Gold"]
+      },
+      "post": {
+        "operationId": "GoldController_record",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "shipmentId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RecordShipmentGoldDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GoldResultEntry" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Cargamento gerencial no encontrado"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Gold"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/sweeps": {
+      "get": {
+        "operationId": "ManagementController_listShipmentSweeps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "shipmentId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": { "default": 1, "minimum": 1, "type": "number" }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageManagementSweepMercury"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Cargamento gerencial no encontrado"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Management"]
       }
     },
     "/api/v1/organizations/{organizationId}/plants": {

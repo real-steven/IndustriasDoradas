@@ -192,9 +192,250 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         assigned: { type: "boolean" },
       },
     },
+    ManagementOperationLine: {
+      type: "object",
+      required: [
+        "organizationId",
+        "plantId",
+        "stationId",
+        "stationName",
+        "shipmentId",
+        "feedCycleId",
+        "productionLineId",
+        "productionLineName",
+        "productionLineOrder",
+        "supplierId",
+        "supplierName",
+        "responsibleWorkerId",
+        "responsibleWorkerName",
+        "startedAtUtc",
+        "cajuelaTotal",
+        "sweepCount",
+        "sweptCajuelas",
+        "cajuelasSinceLastSweep",
+        "nextSweepAt",
+        "sweepPending",
+        "lastActivityAtUtc",
+      ],
+      properties: {
+        organizationId: UUID,
+        plantId: UUID,
+        stationId: UUID,
+        stationName: { type: "string" },
+        shipmentId: UUID,
+        feedCycleId: UUID,
+        productionLineId: UUID,
+        productionLineName: { type: "string" },
+        productionLineOrder: { type: "integer" },
+        supplierId: UUID,
+        supplierName: { type: "string" },
+        responsibleWorkerId: { ...UUID, nullable: true },
+        responsibleWorkerName: { type: "string", nullable: true },
+        startedAtUtc: DATE_TIME,
+        cajuelaTotal: { type: "integer" },
+        sweepCount: { type: "integer" },
+        sweptCajuelas: { type: "integer" },
+        cajuelasSinceLastSweep: { type: "integer" },
+        nextSweepAt: { type: "integer" },
+        sweepPending: { type: "boolean" },
+        lastActivityAtUtc: DATE_TIME,
+      },
+    },
+    ManagementFreshness: {
+      type: "object",
+      required: [
+        "cursor",
+        "hasChanges",
+        "effectiveAtUtc",
+        "serverTimeUtc",
+        "pollAfterSeconds",
+      ],
+      additionalProperties: false,
+      properties: {
+        cursor: { type: "string", description: "Cursor incremental opaco" },
+        hasChanges: { type: "boolean" },
+        effectiveAtUtc: { ...DATE_TIME, nullable: true },
+        serverTimeUtc: DATE_TIME,
+        pollAfterSeconds: { type: "integer", minimum: 30 },
+      },
+    },
+    ManagementShipment: {
+      allOf: [
+        { $ref: "#/components/schemas/ManagementOperationLine" },
+        {
+          type: "object",
+          required: [
+            "status",
+            "completedAtUtc",
+            "goldResultId",
+            "goldAmountGrams",
+            "goldUnitCode",
+            "goldRecordedAtUtc",
+            "goldRecordedByProfileId",
+            "goldRevisionCount",
+            "hasGoldResult",
+          ],
+          properties: {
+            status: { type: "string", enum: ["COMPLETED"] },
+            completedAtUtc: DATE_TIME,
+            goldResultId: { ...UUID, nullable: true },
+            goldAmountGrams: {
+              type: "number",
+              format: "double",
+              minimum: 0,
+              nullable: true,
+            },
+            goldUnitCode: { type: "string", enum: ["g"], nullable: true },
+            goldRecordedAtUtc: { ...DATE_TIME, nullable: true },
+            goldRecordedByProfileId: { ...UUID, nullable: true },
+            goldRevisionCount: {
+              type: "integer",
+              minimum: 1,
+              nullable: true,
+            },
+            hasGoldResult: { type: "boolean" },
+          },
+        },
+      ],
+    },
+    ManagementSweepMercury: {
+      type: "object",
+      required: [
+        "organizationId",
+        "shipmentId",
+        "sweepId",
+        "sweptAtUtc",
+        "cajuelaCount",
+        "lineComponentId",
+        "lineComponentName",
+        "lineComponentOrder",
+        "inputGrams",
+        "remainderGrams",
+        "hasInputRecord",
+        "hasRemainderRecord",
+      ],
+      additionalProperties: false,
+      properties: {
+        organizationId: UUID,
+        shipmentId: UUID,
+        sweepId: UUID,
+        sweptAtUtc: DATE_TIME,
+        cajuelaCount: { type: "integer", minimum: 1 },
+        lineComponentId: UUID,
+        lineComponentName: { type: "string" },
+        lineComponentOrder: { type: "integer" },
+        inputGrams: { type: "number", format: "double", nullable: true },
+        remainderGrams: { type: "number", format: "double", nullable: true },
+        hasInputRecord: { type: "boolean" },
+        hasRemainderRecord: { type: "boolean" },
+      },
+    },
+    GoldResultEntry: {
+      type: "object",
+      required: [
+        "id",
+        "organizationId",
+        "shipmentId",
+        "amountGrams",
+        "unitCode",
+        "recordedAtUtc",
+        "recordedByProfileId",
+        "recordedByDisplayName",
+        "supersedesResultId",
+        "correctionReason",
+      ],
+      additionalProperties: false,
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        shipmentId: UUID,
+        amountGrams: {
+          type: "number",
+          format: "double",
+          minimum: 0,
+          multipleOf: 0.01,
+        },
+        unitCode: { type: "string", enum: ["g"] },
+        recordedAtUtc: DATE_TIME,
+        recordedByProfileId: UUID,
+        recordedByDisplayName: { type: "string" },
+        supersedesResultId: { ...UUID, nullable: true },
+        correctionReason: { type: "string", nullable: true },
+      },
+    },
+    GoldSupplierCoverage: {
+      type: "object",
+      required: [
+        "supplierId",
+        "supplierName",
+        "totalShipments",
+        "registeredShipments",
+        "excludedShipments",
+        "coveragePercentage",
+        "totalGoldGrams",
+        "includedCajuelas",
+        "gramsPerCajuela",
+      ],
+      additionalProperties: false,
+      properties: {
+        supplierId: UUID,
+        supplierName: { type: "string" },
+        totalShipments: { type: "integer", minimum: 0 },
+        registeredShipments: { type: "integer", minimum: 0 },
+        excludedShipments: { type: "integer", minimum: 0 },
+        coveragePercentage: { type: "number", minimum: 0, maximum: 100 },
+        totalGoldGrams: { type: "number", minimum: 0 },
+        includedCajuelas: { type: "integer", minimum: 0 },
+        gramsPerCajuela: { type: "number", minimum: 0, nullable: true },
+      },
+    },
+    GoldSummary: {
+      type: "object",
+      required: [
+        "totalShipments",
+        "registeredShipments",
+        "excludedShipments",
+        "coveragePercentage",
+        "totalGoldGrams",
+        "includedCajuelas",
+        "gramsPerCajuela",
+        "suppliers",
+      ],
+      additionalProperties: false,
+      properties: {
+        totalShipments: { type: "integer", minimum: 0 },
+        registeredShipments: { type: "integer", minimum: 0 },
+        excludedShipments: { type: "integer", minimum: 0 },
+        coveragePercentage: { type: "number", minimum: 0, maximum: 100 },
+        totalGoldGrams: { type: "number", minimum: 0 },
+        includedCajuelas: { type: "integer", minimum: 0 },
+        gramsPerCajuela: { type: "number", minimum: 0, nullable: true },
+        suppliers: {
+          type: "array",
+          items: { $ref: "#/components/schemas/GoldSupplierCoverage" },
+        },
+      },
+    },
+    RecordShipmentGoldDto: {
+      type: "object",
+      required: ["amountGrams"],
+      additionalProperties: false,
+      properties: {
+        amountGrams: {
+          type: "number",
+          format: "double",
+          minimum: 0,
+          multipleOf: 0.01,
+        },
+        correctionReason: { type: "string", minLength: 1, maxLength: 500 },
+      },
+    },
     PageCatalog: pageSchema("CatalogItem"),
     PageWorker: pageSchema("Worker"),
     PageAccount: pageSchema("Account"),
+    PageManagementOperationLine: pageSchema("ManagementOperationLine"),
+    PageManagementShipment: pageSchema("ManagementShipment"),
+    PageManagementSweepMercury: pageSchema("ManagementSweepMercury"),
   };
 
   for (const [path, pathItem] of Object.entries(document.paths)) {
@@ -206,6 +447,16 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       for (const status of ["400", "401", "403", "409", "422", "500", "503"]) {
         operation.responses[status] ??= {
           description: "Error estable",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ErrorResponse" },
+            },
+          },
+        };
+      }
+      if (path.includes("/management/shipments/{shipmentId}")) {
+        operation.responses["404"] ??= {
+          description: "Cargamento gerencial no encontrado",
           content: {
             "application/json": {
               schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -261,6 +512,25 @@ function responseSchema(
 ): Record<string, unknown> {
   if (path.endsWith("/auth/session"))
     return { $ref: "#/components/schemas/Session" };
+  if (path.endsWith("/management/operation-lines"))
+    return { $ref: "#/components/schemas/PageManagementOperationLine" };
+  if (path.endsWith("/management/freshness"))
+    return { $ref: "#/components/schemas/ManagementFreshness" };
+  if (path.endsWith("/management/gold-summary"))
+    return { $ref: "#/components/schemas/GoldSummary" };
+  if (path.endsWith("/gold-results"))
+    return operationId.includes("history")
+      ? {
+          type: "array",
+          items: { $ref: "#/components/schemas/GoldResultEntry" },
+        }
+      : { $ref: "#/components/schemas/GoldResultEntry" };
+  if (path.endsWith("/management/shipments"))
+    return { $ref: "#/components/schemas/PageManagementShipment" };
+  if (path.endsWith("/sweeps") && path.includes("/management/shipments/"))
+    return { $ref: "#/components/schemas/PageManagementSweepMercury" };
+  if (path.includes("/management/shipments/"))
+    return { $ref: "#/components/schemas/ManagementShipment" };
   if (operationId.includes("list") && path.includes("/accounts"))
     return { $ref: "#/components/schemas/PageAccount" };
   if (operationId.includes("list") && path.endsWith("/workers"))

@@ -33,7 +33,7 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       offset: String((query.page - 1) * query.pageSize),
       order: "occurred_at.desc,id.asc",
       select:
-        "id,correlation_id,organization_id,station_id,actor_display_name,actor_role_code,origin,action,entity_type,entity_id,result,reason_code,evidence_state,changed_fields,changes,occurred_at",
+        "id,correlation_id,organization_id,station_id,actor_display_name,actor_role_code,origin,action,entity_type,entity_id,result,reason_code,evidence_state,changed_fields,changes,occurred_at,recorded_at",
     });
     if (query.result !== undefined)
       parameters.set("result", `eq.${query.result}`);
@@ -97,6 +97,7 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
           ? (row.changes as AuditListItem["changes"])
           : {},
       occurredAt: this.string(row, "occurred_at"),
+      recordedAt: this.string(row, "recorded_at"),
     };
   }
   private string(row: Row, key: string): string {

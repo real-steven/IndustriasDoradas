@@ -1,7 +1,12 @@
-import type { PropsWithChildren } from "react";
+import { useEffect, type PropsWithChildren } from "react";
 import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth, type RoleCode } from "../../auth/auth-context";
+import { useOnlineStatus } from "../../app/connectivity";
+import {
+  useManagementFreshness,
+  type ManagementFreshnessQuery,
+} from "../management/management-operation-data";
 
 const primaryNavigation = [
   { to: "/gerencia", label: "Resumen", icon: "⌂", end: true },
@@ -51,6 +56,19 @@ export function ProtectedPortal({ roles }: { roles: RoleCode[] }) {
 export function PortalLayout() {
   const auth = useAuth();
   const location = useLocation();
+  const online = useOnlineStatus();
+  const freshness = useManagementFreshness();
+
+  useEffect(() => {
+    document.getElementById("contenido-gerencial")?.focus();
+  }, [location.pathname]);
+
+  const pageTitle =
+    pageTitles[location.pathname] ??
+    (location.pathname.startsWith("/gerencia/cargamentos/")
+      ? "Detalle de cargamento"
+      : "Portal");
+
   if (auth.profile === null || auth.session === null) return null;
 
   return (
@@ -104,13 +122,12 @@ export function PortalLayout() {
       <div className="manager-workspace">
         <header className="manager-topbar">
           <p>
-            Planta principal /{" "}
-            <strong>{pageTitles[location.pathname] ?? "Portal"}</strong>
+            Planta principal / <strong>{pageTitle}</strong>
           </p>
           <div className="topbar-actions">
             <span className="freshness neutral">
-              <i />
-              Datos pendientes de conectar
+              <i aria-hidden="true" />
+              Datos centrales protegidos
             </span>
             <NavLink
               className="icon-button"
@@ -121,20 +138,31 @@ export function PortalLayout() {
             </NavLink>
           </div>
         </header>
-        <div className="implementation-note">
-          NUEVA ESTRUCTURA WEB · LOS DATOS OPERATIVOS SE CONECTARÁN DESPUÉS DE
-          CERRAR LA SINCRONIZACIÓN
-        </div>
+        {!online && (
+          <div className="portal-alert offline" role="status">
+            <strong>Sin conexión.</strong> Puede consultar los últimos datos
+            disponibles; las actualizaciones se reanudarán al recuperar la red.
+          </div>
+        )}
+        {auth.error !== null && auth.profile !== null && (
+          <div className="portal-alert error" role="alert">
+            {auth.error}
+          </div>
+        )}
         <main
           id="contenido-gerencial"
           className="manager-content"
           tabIndex={-1}
         >
-          <Outlet />
+          <Outlet context={{ freshness } satisfies PortalOutletContext} />
         </main>
       </div>
     </div>
   );
+}
+
+interface PortalOutletContext {
+  freshness: ManagementFreshnessQuery;
 }
 
 function PortalNavLink({
