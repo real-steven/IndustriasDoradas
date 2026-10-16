@@ -166,6 +166,11 @@ textarea {
     max(clamp(1rem, 5vw, 4rem), env(safe-area-inset-left));
   background: rgb(255 255 255 / 92%);
 }
+.site-header nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
 .brand {
   display: flex;
   align-items: center;
@@ -202,6 +207,34 @@ textarea {
 .nav-link.active {
   color: var(--navy);
   background: #edf4f7;
+}
+.language-switcher {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+  border-color: var(--line);
+  padding: 0.45rem 0.7rem;
+  color: var(--navy);
+  background: white;
+  font-size: 0.72rem;
+}
+.language-switcher:hover {
+  border-color: #b7cbd3;
+  background: #edf4f7;
+}
+.language-switcher > span {
+  color: var(--blue);
+  font-size: 0.85rem;
+}
+.language-switcher small {
+  color: var(--muted);
+}
+.language-switcher.compact {
+  min-width: 44px;
+  min-height: 44px;
+  gap: 5px;
+  padding: 0.5rem;
 }
 .app-shell > main:not(.auth-page) {
   width: min(100% - 2rem, 74rem);
@@ -344,11 +377,17 @@ textarea {
   line-height: 1.35;
 }
 .auth-form-panel {
+  position: relative;
   display: flex;
   min-width: 0;
   flex-direction: column;
   justify-content: center;
   padding: 46px 50px;
+}
+.auth-language {
+  position: absolute;
+  top: 24px;
+  right: 24px;
 }
 .auth-form-panel header h1 {
   margin-bottom: 8px;
@@ -2135,7 +2174,11 @@ td {
     font-size: 0.7rem;
   }
   .auth-form-panel {
-    padding: 31px 24px;
+    padding: 76px 24px 31px;
+  }
+  .auth-language {
+    top: 20px;
+    right: 20px;
   }
   .auth-form-options {
     align-items: flex-start;

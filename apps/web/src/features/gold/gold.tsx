@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { ManagementShipment } from "../../api/generated/api-client";
 import { useSearchParams } from "react-router-dom";
+import { useLanguage } from "../../i18n/language-context";
 
 import {
   useGoldHistory,
@@ -30,6 +31,7 @@ import {
 const decimalPattern = /^\d+(?:[.,]\d{1,2})?$/u;
 
 export function GoldFeature() {
+  const { language, tr } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseShipmentFilters(searchParams);
   const shipments = useManagementShipments(filters);
@@ -70,28 +72,51 @@ export function GoldFeature() {
       <section className="portal-panel gold-shipments" aria-live="polite">
         <header>
           <div>
-            <h2>Cargamentos cerrados</h2>
-            <p>Un único resultado vigente por cargamento</p>
+            <h2>{tr("Cargamentos cerrados", "Closed shipments")}</h2>
+            <p>
+              {tr(
+                "Un único resultado vigente por cargamento",
+                "One current result per shipment",
+              )}
+            </p>
           </div>
           {shipments.data !== undefined && (
             <span className="history-total">
-              {shipments.data.total} cargamento
-              {shipments.data.total === 1 ? "" : "s"}
+              {shipments.data.total}{" "}
+              {shipments.data.total === 1
+                ? tr("cargamento", "shipment")
+                : tr("cargamentos", "shipments")}
             </span>
           )}
         </header>
         {shipments.isPending ? (
-          <GoldState title="Consultando cargamentos">
-            Espere mientras se carga la proyección central.
+          <GoldState title={tr("Consultando cargamentos", "Loading shipments")}>
+            {tr(
+              "Espere mientras se carga la proyección central.",
+              "Please wait while the central projection loads.",
+            )}
           </GoldState>
         ) : shipments.isError || shipments.data === undefined ? (
-          <GoldState title="No se pudieron consultar los cargamentos" error>
-            {requestErrorMessage(shipments.error)}
+          <GoldState
+            title={tr(
+              "No se pudieron consultar los cargamentos",
+              "Shipments could not be loaded",
+            )}
+            error
+          >
+            {requestErrorMessage(shipments.error, undefined, language)}
           </GoldState>
         ) : shipments.data.items.length === 0 ? (
-          <GoldState title="No hay cargamentos para estos filtros">
-            Vacío significa que no existe un cargamento cerrado en el período,
-            no que el resultado sea cero.
+          <GoldState
+            title={tr(
+              "No hay cargamentos para estos filtros",
+              "No shipments match these filters",
+            )}
+          >
+            {tr(
+              "Vacío significa que no existe un cargamento cerrado en el período, no que el resultado sea cero.",
+              "An empty result means there is no closed shipment in the period, not that the result is zero.",
+            )}
           </GoldState>
         ) : (
           <>
@@ -127,81 +152,124 @@ function GoldSummaryPanel({
 }: {
   query: ReturnType<typeof useGoldSummary>;
 }) {
+  const { language, locale, tr } = useLanguage();
+
   if (query.isPending)
     return (
-      <section className="gold-summary-grid" aria-label="Resumen de oro">
-        <GoldMetric label="Resultados" value="…" />
-        <GoldMetric label="Cobertura" value="…" />
-        <GoldMetric label="Total registrado" value="…" />
-        <GoldMetric label="Oro por cajuela" value="…" />
+      <section
+        className="gold-summary-grid"
+        aria-label={tr("Resumen de oro", "Gold summary")}
+      >
+        <GoldMetric label={tr("Resultados", "Results")} value="…" />
+        <GoldMetric label={tr("Cobertura", "Coverage")} value="…" />
+        <GoldMetric
+          label={tr("Total registrado", "Recorded total")}
+          value="…"
+        />
+        <GoldMetric
+          label={tr("Oro por cajuela", "Gold per cajuela")}
+          value="…"
+        />
       </section>
     );
   if (query.isError || query.data === undefined)
     return (
-      <GoldState title="No se pudo calcular el resumen" error>
+      <GoldState
+        title={tr(
+          "No se pudo calcular el resumen",
+          "Summary could not be calculated",
+        )}
+        error
+      >
         {requestErrorMessage(
           query.error,
-          "Los cargamentos permanecen disponibles; reintente la consulta central.",
+          tr(
+            "Los cargamentos permanecen disponibles; reintente la consulta central.",
+            "Shipments remain available; retry the central query.",
+          ),
+          language,
         )}
       </GoldState>
     );
 
   return (
     <>
-      <section className="gold-summary-grid" aria-label="Resumen de oro">
+      <section
+        className="gold-summary-grid"
+        aria-label={tr("Resumen de oro", "Gold summary")}
+      >
         <GoldMetric
-          label="Resultados"
+          label={tr("Resultados", "Results")}
           value={String(query.data.registeredShipments)}
-          detail={`${query.data.excludedShipments} excluidos sin registro`}
+          detail={`${query.data.excludedShipments} ${tr("excluidos sin registro", "excluded without a record")}`}
         />
         <GoldMetric
-          label="Cobertura"
-          value={`${formatNumber(query.data.coveragePercentage)} %`}
-          detail={`${query.data.registeredShipments} / ${query.data.totalShipments} cargamentos`}
+          label={tr("Cobertura", "Coverage")}
+          value={`${formatNumber(query.data.coveragePercentage, locale)} %`}
+          detail={`${query.data.registeredShipments} / ${query.data.totalShipments} ${tr("cargamentos", "shipments")}`}
         />
         <GoldMetric
-          label="Total registrado"
-          value={`${formatGrams(query.data.totalGoldGrams)} g`}
-          detail={`${formatPalos(query.data.totalGoldGrams)} palos equivalentes`}
+          label={tr("Total registrado", "Recorded total")}
+          value={`${formatGrams(query.data.totalGoldGrams, locale)} g`}
+          detail={`${formatPalos(query.data.totalGoldGrams, locale)} ${tr("palos equivalentes", "equivalent palos")}`}
         />
         <GoldMetric
-          label="Oro por cajuela"
+          label={tr("Oro por cajuela", "Gold per cajuela")}
           value={
             query.data.gramsPerCajuela === null
-              ? "Sin datos"
-              : `${formatNumber(query.data.gramsPerCajuela, 4)} g`
+              ? tr("Sin datos", "No data")
+              : `${formatNumber(query.data.gramsPerCajuela, locale, 4)} g`
           }
-          detail={`${query.data.includedCajuelas} cajuelas incluidas`}
+          detail={`${query.data.includedCajuelas} ${tr("cajuelas incluidas", "included cajuelas")}`}
         />
       </section>
       <section className="portal-panel supplier-coverage">
         <header>
           <div>
-            <h2>Comparación por proveedor</h2>
-            <p>Solo los cargamentos registrados aportan oro y cajuelas</p>
+            <h2>{tr("Comparación por proveedor", "Supplier comparison")}</h2>
+            <p>
+              {tr(
+                "Solo los cargamentos registrados aportan oro y cajuelas",
+                "Only recorded shipments contribute gold and cajuelas",
+              )}
+            </p>
           </div>
         </header>
         {query.data.suppliers.length === 0 ? (
-          <GoldState title="Sin proveedores para comparar">
-            Cambie el período para ampliar la consulta.
+          <GoldState
+            title={tr(
+              "Sin proveedores para comparar",
+              "No suppliers to compare",
+            )}
+          >
+            {tr(
+              "Cambie el período para ampliar la consulta.",
+              "Change the period to broaden the query.",
+            )}
           </GoldState>
         ) : (
           <div
             className="table-scroll"
             role="region"
-            aria-label="Comparación de oro por proveedor"
+            aria-label={tr(
+              "Comparación de oro por proveedor",
+              "Gold comparison by supplier",
+            )}
             tabIndex={0}
           >
             <table>
               <caption className="visually-hidden">
-                Cobertura y resultados de oro agrupados por proveedor
+                {tr(
+                  "Cobertura y resultados de oro agrupados por proveedor",
+                  "Gold coverage and results grouped by supplier",
+                )}
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">Proveedor</th>
-                  <th scope="col">Cobertura</th>
-                  <th scope="col">Excluidos</th>
-                  <th scope="col">Oro</th>
+                  <th scope="col">{tr("Proveedor", "Supplier")}</th>
+                  <th scope="col">{tr("Cobertura", "Coverage")}</th>
+                  <th scope="col">{tr("Excluidos", "Excluded")}</th>
+                  <th scope="col">{tr("Oro", "Gold")}</th>
                   <th scope="col">g / cajuela</th>
                 </tr>
               </thead>
@@ -209,18 +277,20 @@ function GoldSummaryPanel({
                 {query.data.suppliers.map((supplier) => (
                   <tr key={supplier.supplierId}>
                     <th scope="row">{supplier.supplierName}</th>
-                    <td data-label="Cobertura">
+                    <td data-label={tr("Cobertura", "Coverage")}>
                       {supplier.registeredShipments}/{supplier.totalShipments} (
-                      {formatNumber(supplier.coveragePercentage)} %)
+                      {formatNumber(supplier.coveragePercentage, locale)} %)
                     </td>
-                    <td data-label="Excluidos">{supplier.excludedShipments}</td>
-                    <td data-label="Oro">
-                      {formatGrams(supplier.totalGoldGrams)} g
+                    <td data-label={tr("Excluidos", "Excluded")}>
+                      {supplier.excludedShipments}
+                    </td>
+                    <td data-label={tr("Oro", "Gold")}>
+                      {formatGrams(supplier.totalGoldGrams, locale)} g
                     </td>
                     <td data-label="g / cajuela">
                       {supplier.gramsPerCajuela === null
-                        ? "Sin datos"
-                        : formatNumber(supplier.gramsPerCajuela, 4)}
+                        ? tr("Sin datos", "No data")
+                        : formatNumber(supplier.gramsPerCajuela, locale, 4)}
                     </td>
                   </tr>
                 ))}
@@ -242,23 +312,29 @@ function GoldFiltersPanel({
   items: readonly ManagementShipment[];
   update(this: void, key: string, value: string): void;
 }) {
+  const { tr } = useLanguage();
+
   return (
     <section className="portal-panel gold-filters">
       <div className="gold-filter-grid">
         <label>
-          <span>Período</span>
+          <span>{tr("Período", "Period")}</span>
           <select
             value={filters.period}
             onChange={(event) => update("period", event.target.value)}
           >
-            <option value="current">Esta semana</option>
-            <option value="previous">Semana anterior</option>
-            <option value="date">Fecha específica</option>
+            <option value="current">{tr("Esta semana", "This week")}</option>
+            <option value="previous">
+              {tr("Semana anterior", "Previous week")}
+            </option>
+            <option value="date">
+              {tr("Fecha específica", "Specific date")}
+            </option>
           </select>
         </label>
         {filters.period === "date" && (
           <label>
-            <span>Fecha</span>
+            <span>{tr("Fecha", "Date")}</span>
             <input
               type="date"
               value={filters.date}
@@ -267,7 +343,7 @@ function GoldFiltersPanel({
           </label>
         )}
         <FilterSelect
-          label="Línea"
+          label={tr("Línea", "Line")}
           value={filters.productionLineId ?? ""}
           values={uniqueOptions(
             items,
@@ -277,7 +353,7 @@ function GoldFiltersPanel({
           onChange={(value) => update("line", value)}
         />
         <FilterSelect
-          label="Proveedor"
+          label={tr("Proveedor", "Supplier")}
           value={filters.supplierId ?? ""}
           values={uniqueOptions(
             items,
@@ -302,11 +378,13 @@ function FilterSelect({
   values: readonly { value: string; label: string }[];
   onChange(this: void, value: string): void;
 }) {
+  const { tr } = useLanguage();
+
   return (
     <label>
       <span>{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Todos</option>
+        <option value="">{tr("Todos", "All")}</option>
         {values.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -324,36 +402,43 @@ function GoldShipmentRow({
   shipment: ManagementShipment;
   open(this: void, trigger: HTMLButtonElement): void;
 }) {
+  const { language, locale, tr } = useLanguage();
+
   return (
     <article className="gold-shipment-row">
       <div>
-        <span>CARGAMENTO {shortShipmentId(shipment.shipmentId)}</span>
+        <span>
+          {tr("CARGAMENTO", "SHIPMENT")} {shortShipmentId(shipment.shipmentId)}
+        </span>
         <h3>{shipment.productionLineName}</h3>
         <p>
-          {shipment.supplierName} · Cerrado{" "}
-          {formatCostaRicaDateTime(shipment.completedAtUtc)}
+          {shipment.supplierName} · {tr("Cerrado", "Closed")}{" "}
+          {formatCostaRicaDateTime(shipment.completedAtUtc, language)}
         </p>
       </div>
       <div className="gold-current-value">
         {shipment.hasGoldResult && shipment.goldAmountGrams !== null ? (
           <>
-            <strong>{formatGrams(shipment.goldAmountGrams)} g</strong>
-            <small>{formatPalos(shipment.goldAmountGrams)} palos</small>
+            <strong>{formatGrams(shipment.goldAmountGrams, locale)} g</strong>
+            <small>
+              {formatPalos(shipment.goldAmountGrams, locale)}{" "}
+              {tr("palos", "palos")}
+            </small>
           </>
         ) : (
           <>
-            <strong>Pendiente</strong>
-            <small>No registrado</small>
+            <strong>{tr("Pendiente", "Pending")}</strong>
+            <small>{tr("No registrado", "Not recorded")}</small>
           </>
         )}
       </div>
       <dl>
         <div>
-          <dt>Cajuelas</dt>
+          <dt>{tr("Cajuelas", "Cajuelas")}</dt>
           <dd>{shipment.cajuelaTotal}</dd>
         </div>
         <div>
-          <dt>Revisiones</dt>
+          <dt>{tr("Revisiones", "Revisions")}</dt>
           <dd>{shipment.goldRevisionCount ?? 0}</dd>
         </div>
       </dl>
@@ -362,7 +447,9 @@ function GoldShipmentRow({
         className="primary-button"
         onClick={(event) => open(event.currentTarget)}
       >
-        {shipment.hasGoldResult ? "CORREGIR RESULTADO" : "REGISTRAR ORO"}
+        {shipment.hasGoldResult
+          ? tr("CORREGIR RESULTADO", "CORRECT RESULT")
+          : tr("REGISTRAR ORO", "RECORD GOLD")}
       </button>
     </article>
   );
@@ -375,6 +462,7 @@ function GoldEditor({
   shipment: ManagementShipment;
   close(this: void): void;
 }) {
+  const { language, locale, tr } = useLanguage();
   const history = useGoldHistory(shipment.shipmentId);
   const mutation = useRecordShipmentGold(shipment.shipmentId);
   const [amount, setAmount] = useState(
@@ -386,7 +474,8 @@ function GoldEditor({
   const parsed = parseAmount(amount);
   const correction = shipment.hasGoldResult || mutation.data !== undefined;
   const formError =
-    validation ?? (mutation.isError ? mutationMessage(mutation.error) : null);
+    validation ??
+    (mutation.isError ? mutationMessage(mutation.error, language) : null);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -425,16 +514,29 @@ function GoldEditor({
     setSaved(null);
     if (amount.trim().length === 0) {
       setValidation(
-        "Vacío conserva el cargamento como no registrado; ingrese un valor para guardar.",
+        tr(
+          "Vacío conserva el cargamento como no registrado; ingrese un valor para guardar.",
+          "An empty value keeps the shipment unrecorded; enter a value to save.",
+        ),
       );
       return;
     }
     if (parsed === null) {
-      setValidation("Use un entero o un número con máximo dos decimales.");
+      setValidation(
+        tr(
+          "Use un entero o un número con máximo dos decimales.",
+          "Use an integer or a number with up to two decimal places.",
+        ),
+      );
       return;
     }
     if (correction && reason.trim().length === 0) {
-      setValidation("Indique el motivo de la corrección.");
+      setValidation(
+        tr(
+          "Indique el motivo de la corrección.",
+          "Enter the reason for the correction.",
+        ),
+      );
       return;
     }
     setValidation(null);
@@ -445,8 +547,14 @@ function GoldEditor({
       });
       setSaved(
         correction
-          ? "Corrección registrada como una nueva entrada."
-          : "Resultado registrado correctamente.",
+          ? tr(
+              "Corrección registrada como una nueva entrada.",
+              "Correction recorded as a new entry.",
+            )
+          : tr(
+              "Resultado registrado correctamente.",
+              "Result recorded successfully.",
+            ),
       );
       setReason("");
     } catch {
@@ -465,9 +573,10 @@ function GoldEditor({
     >
       <header>
         <div>
-          <p className="eyebrow">RESULTADO TOTAL</p>
+          <p className="eyebrow">{tr("RESULTADO TOTAL", "TOTAL RESULT")}</p>
           <h2 id="gold-editor-title">
-            Cargamento {shortShipmentId(shipment.shipmentId)}
+            {tr("Cargamento", "Shipment")}{" "}
+            {shortShipmentId(shipment.shipmentId)}
           </h2>
           <p id="gold-editor-description">
             {shipment.productionLineName} · {shipment.supplierName}
@@ -475,17 +584,19 @@ function GoldEditor({
         </div>
         <button type="button" className="icon-button" onClick={close}>
           <span aria-hidden="true">×</span>
-          <span className="visually-hidden">Cerrar registro de oro</span>
+          <span className="visually-hidden">
+            {tr("Cerrar registro de oro", "Close gold record")}
+          </span>
         </button>
       </header>
 
       <form onSubmit={(event) => void submit(event)}>
         <label>
-          <span>Oro total en gramos</span>
+          <span>{tr("Oro total en gramos", "Total gold in grams")}</span>
           <input
             autoFocus
             inputMode="decimal"
-            placeholder="Ej. 12,50"
+            placeholder={tr("Ej. 12,50", "E.g. 12.50")}
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             aria-describedby={`gold-equivalence${formError !== null ? " gold-form-error" : ""}`}
@@ -494,12 +605,17 @@ function GoldEditor({
         </label>
         <p id="gold-equivalence" className="gold-equivalence">
           {parsed === null
-            ? "1 palo = 0,10 g · equivalencia únicamente visual"
-            : `${formatPalos(parsed)} palos equivalentes · 1 palo = 0,10 g`}
+            ? tr(
+                "1 palo = 0,10 g · equivalencia únicamente visual",
+                "1 palo = 0.10 g · visual equivalence only",
+              )
+            : `${formatPalos(parsed, locale)} ${tr("palos equivalentes", "equivalent palos")} · ${tr("1 palo = 0,10 g", "1 palo = 0.10 g")}`}
         </p>
         {correction && (
           <label>
-            <span>Motivo de la corrección</span>
+            <span>
+              {tr("Motivo de la corrección", "Reason for correction")}
+            </span>
             <textarea
               maxLength={500}
               rows={3}
@@ -520,7 +636,7 @@ function GoldEditor({
         )}
         <div className="gold-editor-actions">
           <button type="button" className="secondary" onClick={close}>
-            CANCELAR
+            {tr("CANCELAR", "CANCEL")}
           </button>
           <button
             type="submit"
@@ -528,36 +644,48 @@ function GoldEditor({
             disabled={mutation.isPending}
           >
             {mutation.isPending
-              ? "GUARDANDO…"
+              ? tr("GUARDANDO…", "SAVING…")
               : correction
-                ? "GUARDAR CORRECCIÓN"
-                : "REGISTRAR RESULTADO"}
+                ? tr("GUARDAR CORRECCIÓN", "SAVE CORRECTION")
+                : tr("REGISTRAR RESULTADO", "RECORD RESULT")}
           </button>
         </div>
       </form>
 
       <div className="gold-history">
-        <h3>Historial append-only</h3>
+        <h3>{tr("Historial append-only", "Append-only history")}</h3>
         {history.isPending ? (
-          <p>Cargando historial…</p>
+          <p>{tr("Cargando historial…", "Loading history…")}</p>
         ) : history.isError || history.data === undefined ? (
-          <p className="form-error">No se pudo consultar el historial.</p>
+          <p className="form-error">
+            {tr(
+              "No se pudo consultar el historial.",
+              "History could not be loaded.",
+            )}
+          </p>
         ) : history.data.length === 0 ? (
-          <p>Aún no existe una entrada para este cargamento.</p>
+          <p>
+            {tr(
+              "Aún no existe una entrada para este cargamento.",
+              "There is no entry for this shipment yet.",
+            )}
+          </p>
         ) : (
           <ol>
             {history.data.map((entry, index) => (
               <li key={entry.id}>
                 <div>
-                  <strong>{formatGrams(entry.amountGrams)} g</strong>
-                  {index === 0 && <span>VIGENTE</span>}
+                  <strong>{formatGrams(entry.amountGrams, locale)} g</strong>
+                  {index === 0 && <span>{tr("VIGENTE", "CURRENT")}</span>}
                 </div>
                 <p>
                   {entry.recordedByDisplayName} ·{" "}
-                  {formatCostaRicaDateTime(entry.recordedAtUtc)}
+                  {formatCostaRicaDateTime(entry.recordedAtUtc, language)}
                 </p>
                 {entry.correctionReason !== null && (
-                  <p>Motivo: {entry.correctionReason}</p>
+                  <p>
+                    {tr("Motivo", "Reason")}: {entry.correctionReason}
+                  </p>
                 )}
               </li>
             ))}
@@ -617,6 +745,7 @@ function GoldPagination({
   searchParams: URLSearchParams;
   setSearchParams(this: void, params: URLSearchParams): void;
 }) {
+  const { tr } = useLanguage();
   const go = (nextPage: number) => {
     const next = new URLSearchParams(searchParams);
     if (nextPage === 1) next.delete("page");
@@ -624,17 +753,20 @@ function GoldPagination({
     setSearchParams(next);
   };
   return (
-    <nav className="history-pagination" aria-label="Páginas de oro">
+    <nav
+      className="history-pagination"
+      aria-label={tr("Páginas de oro", "Gold pages")}
+    >
       <button
         type="button"
         className="secondary"
         disabled={page <= 1}
         onClick={() => go(page - 1)}
       >
-        ← ANTERIOR
+        {tr("← ANTERIOR", "← PREVIOUS")}
       </button>
       <span>
-        Página {page} de {Math.max(totalPages, 1)}
+        {tr("Página", "Page")} {page} {tr("de", "of")} {Math.max(totalPages, 1)}
       </span>
       <button
         type="button"
@@ -642,7 +774,7 @@ function GoldPagination({
         disabled={totalPages === 0 || page >= totalPages}
         onClick={() => go(page + 1)}
       >
-        SIGUIENTE →
+        {tr("SIGUIENTE →", "NEXT →")}
       </button>
     </nav>
   );
@@ -668,30 +800,43 @@ function parseAmount(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatGrams(value: number): string {
-  return formatNumber(value, 2);
+function formatGrams(value: number, locale: string): string {
+  return formatNumber(value, locale, 2);
 }
 
-function formatPalos(grams: number): string {
-  return formatNumber(grams * 10, 2);
+function formatPalos(grams: number, locale: string): string {
+  return formatNumber(grams * 10, locale, 2);
 }
 
-function formatNumber(value: number, maximumFractionDigits = 2): string {
-  return new Intl.NumberFormat("es-CR", {
+function formatNumber(
+  value: number,
+  locale: string,
+  maximumFractionDigits = 2,
+): string {
+  return new Intl.NumberFormat(locale, {
     maximumFractionDigits,
     minimumFractionDigits: 0,
   }).format(value);
 }
 
-function mutationMessage(error: Error): string {
-  if (error instanceof ApiConnectionError) return requestErrorMessage(error);
+function mutationMessage(error: Error, language: "es" | "en"): string {
+  if (error instanceof ApiConnectionError)
+    return requestErrorMessage(error, undefined, language);
   if (error instanceof ApiRequestError) {
     if (error.code === "GOLD_RESULT_CONFLICT")
-      return "El resultado cambió en otra sesión. Recargue antes de intentar nuevamente.";
+      return language === "es"
+        ? "El resultado cambió en otra sesión. Recargue antes de intentar nuevamente."
+        : "The result changed in another session. Refresh before trying again.";
     if (error.code === "GOLD_AMOUNT_UNCHANGED")
-      return "El valor corregido debe ser diferente del resultado vigente.";
+      return language === "es"
+        ? "El valor corregido debe ser diferente del resultado vigente."
+        : "The corrected value must differ from the current result.";
     if (error.code === "GOLD_CORRECTION_REASON_REQUIRED")
-      return "La corrección necesita un motivo.";
+      return language === "es"
+        ? "La corrección necesita un motivo."
+        : "The correction requires a reason.";
   }
-  return "No se pudo guardar el resultado. Revise la conexión e intente nuevamente.";
+  return language === "es"
+    ? "No se pudo guardar el resultado. Revise la conexión e intente nuevamente."
+    : "The result could not be saved. Check the connection and try again.";
 }

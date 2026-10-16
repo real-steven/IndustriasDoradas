@@ -11,12 +11,7 @@ import type {
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
 import { useAuth } from "../../auth/auth-context";
-
-const costaRicaDateTime = new Intl.DateTimeFormat("es-CR", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "America/Costa_Rica",
-});
+import type { Language } from "../../i18n/language-context";
 
 export type ManagementOperationQuery = UseQueryResult<
   PageManagementOperationLine,
@@ -100,17 +95,34 @@ export function useManagementFreshness(): ManagementFreshnessQuery {
   return query;
 }
 
-export function operationHeadline(query: ManagementOperationQuery): string {
-  if (query.isPending) return "Consultando operación";
-  if (query.data === undefined) return "Consulta no disponible";
-  if (query.data.total === 0) return "Sin líneas activas";
+export function operationHeadline(
+  query: ManagementOperationQuery,
+  language: Language = "es",
+): string {
+  if (query.isPending)
+    return language === "es" ? "Consultando operación" : "Loading operations";
+  if (query.data === undefined)
+    return language === "es" ? "Consulta no disponible" : "Data unavailable";
+  if (query.data.total === 0)
+    return language === "es" ? "Sin líneas activas" : "No active lines";
   return query.data.total === 1
-    ? "1 línea activa"
-    : `${query.data.total} líneas activas`;
+    ? language === "es"
+      ? "1 línea activa"
+      : "1 active line"
+    : language === "es"
+      ? `${query.data.total} líneas activas`
+      : `${query.data.total} active lines`;
 }
 
-export function formatCostaRicaDateTime(value: string | number): string {
-  return costaRicaDateTime.format(new Date(value));
+export function formatCostaRicaDateTime(
+  value: string | number,
+  language: Language = "es",
+): string {
+  return new Intl.DateTimeFormat(language === "es" ? "es-CR" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "America/Costa_Rica",
+  }).format(new Date(value));
 }
 
 export function effectiveManagementTime(

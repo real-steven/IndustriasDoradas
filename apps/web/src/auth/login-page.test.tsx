@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { LanguageProvider } from "../i18n/language-provider";
 import { AuthContext, type AuthState } from "./auth-context";
 import { LoginPage } from "./login-page";
 
@@ -81,10 +82,48 @@ describe("LoginPage", () => {
     );
     expect(JSON.stringify(window.localStorage)).not.toContain("clave-privada");
   });
+
+  it("translates the complete login without reloading", async () => {
+    const user = userEvent.setup();
+    const auth = createAuth();
+
+    render(
+      <LanguageProvider>
+        <AuthContext.Provider value={auth}>
+          <MemoryRouter>
+            <LoginPage />
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </LanguageProvider>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Cambiar idioma a inglés" }),
+    );
+
+    expect(screen.getByRole("heading", { name: "Welcome" })).toBeVisible();
+    expect(screen.getByLabelText("EMAIL")).toBeVisible();
+    expect(screen.getByLabelText("PASSWORD")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "ENTER PORTAL →" }),
+    ).toBeVisible();
+  });
 });
 
 function renderLogin(overrides: Partial<AuthState> = {}) {
-  const auth: AuthState = {
+  const auth = createAuth(overrides);
+
+  return render(
+    <AuthContext.Provider value={auth}>
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    </AuthContext.Provider>,
+  );
+}
+
+function createAuth(overrides: Partial<AuthState> = {}): AuthState {
+  return {
     session: null,
     profile: null,
     loading: false,
@@ -94,12 +133,4 @@ function renderLogin(overrides: Partial<AuthState> = {}) {
     signOut: vi.fn(() => Promise.resolve()),
     ...overrides,
   };
-
-  return render(
-    <AuthContext.Provider value={auth}>
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>
-    </AuthContext.Provider>,
-  );
 }

@@ -12,8 +12,12 @@ import {
 } from "../features/portal/portal-pages";
 import { PortalLayout, ProtectedPortal } from "../features/portal/portal-shell";
 import { StatusPage } from "../features/system-status/status-page";
+import { useLanguage } from "../i18n/language-context";
+import { LanguageSwitcher } from "../i18n/language-switcher";
 
 export function App() {
+  const { tr } = useLanguage();
+
   return (
     <Routes>
       <Route path="login" element={<LoginPage />} />
@@ -32,8 +36,11 @@ export function App() {
             path="estadisticas"
             element={
               <UpcomingPage
-                title="Estadísticas"
-                description="Comparación de proveedores, líneas y períodos con cobertura de datos visible."
+                title={tr("Estadísticas", "Statistics")}
+                description={tr(
+                  "Comparación de proveedores, líneas y períodos con cobertura de datos visible.",
+                  "Comparison of suppliers, lines, and periods with visible data coverage.",
+                )}
               />
             }
           />
@@ -41,8 +48,11 @@ export function App() {
             path="trabajadores"
             element={
               <UpcomingPage
-                title="Trabajadores"
-                description="Creación futura de operarios y jefes de planta, asistencia y horas."
+                title={tr("Trabajadores", "Workers")}
+                description={tr(
+                  "Creación futura de operarios y jefes de planta, asistencia y horas.",
+                  "Future creation of operators and plant managers, attendance, and hours.",
+                )}
               />
             }
           />
@@ -50,8 +60,11 @@ export function App() {
             path="reportes"
             element={
               <UpcomingPage
-                title="Reportes"
-                description="Generación futura de archivos Excel gerenciales."
+                title={tr("Reportes", "Reports")}
+                description={tr(
+                  "Generación futura de archivos Excel gerenciales.",
+                  "Future generation of management Excel files.",
+                )}
               />
             }
           />
@@ -59,8 +72,11 @@ export function App() {
             path="inventario"
             element={
               <UpcomingPage
-                title="Inventario"
-                description="Trazabilidad futura de herramientas, componentes y mantenimiento."
+                title={tr("Inventario", "Inventory")}
+                description={tr(
+                  "Trazabilidad futura de herramientas, componentes y mantenimiento.",
+                  "Future traceability of tools, components, and maintenance.",
+                )}
               />
             }
           />
@@ -68,8 +84,11 @@ export function App() {
             path="configuracion"
             element={
               <UpcomingPage
-                title="Configuración"
-                description="Administración futura de líneas y catálogos sin eliminar historial."
+                title={tr("Configuración", "Settings")}
+                description={tr(
+                  "Administración futura de líneas y catálogos sin eliminar historial.",
+                  "Future management of lines and catalogs without deleting history.",
+                )}
               />
             }
           />
@@ -85,10 +104,12 @@ export function App() {
 }
 
 function PublicLayout() {
+  const { tr } = useLanguage();
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#contenido-principal">
-        Saltar al contenido principal
+        {tr("Saltar al contenido principal", "Skip to main content")}
       </a>
       <header className="site-header">
         <div className="brand" aria-label="Industrias Doradas">
@@ -97,16 +118,17 @@ function PublicLayout() {
           </span>
           <span>
             <strong>Industrias Doradas</strong>
-            <small>Portal de gestión</small>
+            <small>{tr("Portal de gestión", "Management portal")}</small>
           </span>
         </div>
-        <nav aria-label="Navegación principal">
+        <nav aria-label={tr("Navegación principal", "Main navigation")}>
           <NavLink className="nav-link" to="/login">
-            Ingresar
+            {tr("Ingresar", "Sign in")}
           </NavLink>
           <NavLink className="nav-link" to="/estado">
-            Estado del sistema
+            {tr("Estado del sistema", "System status")}
           </NavLink>
+          <LanguageSwitcher compact />
         </nav>
       </header>
       <main id="contenido-principal" tabIndex={-1}>
@@ -114,20 +136,29 @@ function PublicLayout() {
       </main>
       <footer>
         <span>Industrias Doradas</span>
-        <span>Identidad y catálogos · Sprint 1</span>
+        <span>
+          {tr("Identidad y catálogos", "Identity and catalogs")} · Sprint 1
+        </span>
       </footer>
     </div>
   );
 }
 
 function NotFoundPage() {
+  const { tr } = useLanguage();
+
   return (
     <section className="page-card compact-card">
       <p className="eyebrow">Error 404</p>
-      <h1>Página no encontrada</h1>
-      <p>La dirección solicitada no existe en este portal.</p>
+      <h1>{tr("Página no encontrada", "Page not found")}</h1>
+      <p>
+        {tr(
+          "La dirección solicitada no existe en este portal.",
+          "The requested address does not exist in this portal.",
+        )}
+      </p>
       <NavLink className="button-link" to="/login">
-        Volver al acceso
+        {tr("Volver al acceso", "Back to sign in")}
       </NavLink>
     </section>
   );

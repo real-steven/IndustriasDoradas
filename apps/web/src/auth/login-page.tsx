@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 
+import { translateKnownMessage, useLanguage } from "../i18n/language-context";
+import { LanguageSwitcher } from "../i18n/language-switcher";
 import { useAuth } from "./auth-context";
 
 const rememberedEmailKey = "industrias-doradas:recent-email";
 
 export function LoginPage() {
   const auth = useAuth();
+  const { language, tr } = useLanguage();
   const [rememberedEmail] = useState(loadRememberedEmail);
   const [email, setEmail] = useState(rememberedEmail);
   const [rememberEmail, setRememberEmail] = useState(
@@ -34,7 +37,9 @@ export function LoginPage() {
       setFeedback({
         kind: "error",
         text:
-          error instanceof Error ? error.message : "No se pudo iniciar sesión.",
+          error instanceof Error
+            ? error.message
+            : tr("No se pudo iniciar sesión.", "Could not sign in."),
       });
     } finally {
       setBusy(false);
@@ -46,7 +51,10 @@ export function LoginPage() {
     if (normalizedEmail.length === 0) {
       setFeedback({
         kind: "error",
-        text: "Ingrese su correo antes de solicitar la recuperación.",
+        text: tr(
+          "Ingrese su correo antes de solicitar la recuperación.",
+          "Enter your email before requesting password recovery.",
+        ),
       });
       return;
     }
@@ -56,7 +64,10 @@ export function LoginPage() {
       await auth.recover(normalizedEmail);
       setFeedback({
         kind: "status",
-        text: "Si la cuenta existe, se enviaron instrucciones al correo.",
+        text: tr(
+          "Si la cuenta existe, se enviaron instrucciones al correo.",
+          "If the account exists, instructions have been sent by email.",
+        ),
       });
     } catch (error) {
       setFeedback({
@@ -64,7 +75,10 @@ export function LoginPage() {
         text:
           error instanceof Error
             ? error.message
-            : "No se pudo solicitar recuperación.",
+            : tr(
+                "No se pudo solicitar recuperación.",
+                "Password recovery could not be requested.",
+              ),
       });
     } finally {
       setBusy(false);
@@ -80,40 +94,63 @@ export function LoginPage() {
             <span>
               <strong>INDUSTRIAS</strong>
               <strong>DORADAS</strong>
-              <small>Portal gerencial</small>
+              <small>{tr("Portal gerencial", "Management portal")}</small>
             </span>
           </div>
 
           <div className="auth-brand-copy">
-            <p className="eyebrow light">CONTROL GERENCIAL</p>
-            <h2>La planta, lista para consultarse.</h2>
+            <p className="eyebrow light">
+              {tr("CONTROL GERENCIAL", "MANAGEMENT CONTROL")}
+            </p>
+            <h2>
+              {tr(
+                "La planta, lista para consultarse.",
+                "The plant, ready for review.",
+              )}
+            </h2>
             <p>
-              Un único acceso protege la información consolidada y mantiene la
-              gestión separada de los controles físicos de producción.
+              {tr(
+                "Un único acceso protege la información consolidada y mantiene la gestión separada de los controles físicos de producción.",
+                "A single access point protects consolidated information and keeps management separate from physical production controls.",
+              )}
             </p>
           </div>
 
           <div className="auth-protection-status">
             <span aria-hidden="true" />
             <div>
-              <strong>Datos centrales protegidos</strong>
-              <small>Acceso exclusivo para la cuenta gerencial</small>
+              <strong>
+                {tr("Datos centrales protegidos", "Protected central data")}
+              </strong>
+              <small>
+                {tr(
+                  "Acceso exclusivo para la cuenta gerencial",
+                  "Exclusive access for the management account",
+                )}
+              </small>
             </div>
           </div>
         </aside>
 
         <section className="auth-form-panel">
+          <div className="auth-language">
+            <LanguageSwitcher compact />
+          </div>
           <header>
-            <p className="eyebrow">ACCESO PROTEGIDO</p>
-            <h1 id="login-title">Bienvenido</h1>
+            <p className="eyebrow">
+              {tr("ACCESO PROTEGIDO", "PROTECTED ACCESS")}
+            </p>
+            <h1 id="login-title">{tr("Bienvenido", "Welcome")}</h1>
             <p>
-              Ingrese sus credenciales gerenciales para consultar la operación
-              de la planta.
+              {tr(
+                "Ingrese sus credenciales gerenciales para consultar la operación de la planta.",
+                "Enter your management credentials to review plant operations.",
+              )}
             </p>
           </header>
 
           <form onSubmit={(event) => void submit(event)} className="auth-form">
-            <label htmlFor="email">CORREO</label>
+            <label htmlFor="email">{tr("CORREO", "EMAIL")}</label>
             <input
               id="email"
               name="email"
@@ -125,7 +162,7 @@ export function LoginPage() {
               required
             />
 
-            <label htmlFor="password">CONTRASEÑA</label>
+            <label htmlFor="password">{tr("CONTRASEÑA", "PASSWORD")}</label>
             <input
               id="password"
               name="password"
@@ -143,7 +180,7 @@ export function LoginPage() {
                   onChange={(event) => setRememberEmail(event.target.checked)}
                   disabled={busy}
                 />
-                <span>Recordar correo</span>
+                <span>{tr("Recordar correo", "Remember email")}</span>
               </label>
               <button
                 type="button"
@@ -151,7 +188,7 @@ export function LoginPage() {
                 disabled={busy}
                 onClick={() => void recover()}
               >
-                ¿Olvidó su contraseña?
+                {tr("¿Olvidó su contraseña?", "Forgot your password?")}
               </button>
             </div>
 
@@ -164,17 +201,26 @@ export function LoginPage() {
                 }
                 className={`auth-feedback${auth.error !== null || feedback?.kind === "error" ? " error" : ""}`}
               >
-                {auth.error ?? feedback?.text}
+                {translateKnownMessage(
+                  auth.error ?? feedback?.text ?? "",
+                  language,
+                )}
               </p>
             )}
 
             <button className="auth-submit" disabled={busy} type="submit">
-              {busy ? "INGRESANDO…" : "INGRESAR AL PORTAL →"}
+              {busy
+                ? tr("INGRESANDO…", "SIGNING IN…")
+                : tr("INGRESAR AL PORTAL →", "ENTER PORTAL →")}
             </button>
           </form>
 
           <p className="auth-secure-note">
-            <span aria-hidden="true">🔒</span> Sesión protegida y auditable
+            <span aria-hidden="true">🔒</span>{" "}
+            {tr(
+              "Sesión protegida y auditable",
+              "Protected and auditable session",
+            )}
           </p>
         </section>
       </section>
