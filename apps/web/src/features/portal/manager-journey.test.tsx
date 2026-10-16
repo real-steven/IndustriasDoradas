@@ -52,7 +52,7 @@ describe("recorrido gerencial de aceptación", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Portal de gestión" }),
+      await screen.findByRole("heading", { name: "Bienvenido" }),
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText("Correo"), "lucia@example.test");
     await user.type(screen.getByLabelText("Contraseña"), "clave-ficticia");
@@ -158,7 +158,7 @@ describe("recorrido gerencial de aceptación", () => {
 
     await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
     expect(
-      await screen.findByRole("heading", { name: "Portal de gestión" }),
+      await screen.findByRole("heading", { name: "Bienvenido" }),
     ).toBeInTheDocument();
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
