@@ -54,8 +54,11 @@ describe("recorrido gerencial de aceptación", () => {
     expect(
       await screen.findByRole("heading", { name: "Bienvenido" }),
     ).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/correo/iu), "lucia@example.test");
-    await user.type(screen.getByLabelText(/contraseña/iu), "clave-ficticia");
+    await user.type(
+      screen.getByRole("textbox", { name: /^correo$/iu }),
+      "lucia@example.test",
+    );
+    await user.type(screen.getByLabelText(/^contraseña$/iu), "clave-ficticia");
     await user.click(
       screen.getByRole("button", { name: "INGRESAR AL PORTAL →" }),
     );
