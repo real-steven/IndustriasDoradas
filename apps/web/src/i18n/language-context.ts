@@ -5,9 +5,9 @@ export type Language = "es" | "en";
 export interface LanguageContextValue {
   language: Language;
   locale: "es-CR" | "en-US";
-  setLanguage(language: Language): void;
-  toggleLanguage(): void;
-  tr(spanish: string, english: string): string;
+  setLanguage: (language: Language) => void;
+  toggleLanguage: () => void;
+  tr: (spanish: string, english: string) => string;
 }
 
 const spanishFallback: LanguageContextValue = {
