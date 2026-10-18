@@ -31,8 +31,8 @@ const futureModules = [
     "♙",
     "Trabajadores",
     "Workers",
-    "Operarios, jefes de planta, asistencia y horas.",
-    "Operators, plant managers, attendance, and hours.",
+    "Operarios, asistencia y horas.",
+    "Operators, attendance, and hours.",
   ],
   [
     "⇩",
@@ -156,8 +156,8 @@ export function OperationPage() {
       >
         <UpcomingState>
           {tr(
-            "La creación de operarios y jefes de planta, asistencia y horas se implementará en una etapa posterior.",
-            "The creation of operators and plant managers, attendance, and hours will be implemented at a later stage.",
+            "La creación de operarios, asistencia y horas se implementará en una etapa posterior.",
+            "The creation of operators, attendance, and hours will be implemented at a later stage.",
           )}
         </UpcomingState>
       </Panel>

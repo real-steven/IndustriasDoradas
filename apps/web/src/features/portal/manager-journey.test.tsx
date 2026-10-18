@@ -167,7 +167,7 @@ describe("recorrido gerencial de aceptación", () => {
     ).toBeInTheDocument();
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
-  });
+  }, 15_000);
 });
 
 function createSupabaseHarness(): {

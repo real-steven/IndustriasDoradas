@@ -13,6 +13,6 @@ import { SupabaseStationRepository } from "./supabase-station.repository";
     PinVerifierService,
     { provide: STATION_REPOSITORY, useClass: SupabaseStationRepository },
   ],
-  exports: [StationService, STATION_REPOSITORY],
+  exports: [StationService, PinVerifierService, STATION_REPOSITORY],
 })
 export class StationModule {}

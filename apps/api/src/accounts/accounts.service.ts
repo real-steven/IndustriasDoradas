@@ -12,6 +12,7 @@ import type {
   AccountGovernanceDto,
   AccountQueryDto,
   CreateAdministratorDto,
+  CreatePlantManagerDto,
   PermissionSelectionDto,
 } from "./accounts.dto";
 import { AUDIT_ACTIONS, type AuditActor } from "../audit/audit.contracts";
@@ -24,6 +25,7 @@ import type {
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
 import type { PageResponse } from "../common/dto/page-query.dto";
 import { ApplicationError } from "../common/errors/application-error";
+import { PinVerifierService } from "../station/pin-verifier.service";
 
 export interface AccountMutationContext {
   auth: AuthenticatedContext;
@@ -36,6 +38,7 @@ export class AccountsService {
     @Inject(ACCOUNTS_REPOSITORY)
     private readonly repository: AccountsRepository,
     private readonly auditTrail: AuditTrailService,
+    private readonly pinVerifier: PinVerifierService,
   ) {}
 
   async list(
@@ -94,6 +97,62 @@ export class AccountsService {
             permissionCodes: selected,
             occurredAt: new Date().toISOString(),
             grantIds: selected.map(() => randomUUID()),
+          });
+        } catch (error) {
+          this.storageError(error);
+        }
+      },
+    );
+  }
+
+  async createPlantManager(
+    organizationId: string,
+    body: CreatePlantManagerDto,
+    context: AccountMutationContext,
+  ): Promise<AccountItem> {
+    const profileId = randomUUID();
+    const occurredAt = new Date().toISOString();
+    const verifier = await this.pinVerifier.create(body.pin);
+    return this.auditTrail.execute(
+      {
+        correlationId: context.correlationId,
+        organizationId,
+        actor: this.actor(context.auth),
+        origin: "API",
+        action: AUDIT_ACTIONS.ACCOUNT_PROVISION,
+        entityType: "user_profile",
+        entityId: profileId,
+        failureResult: "FAILED",
+        failureReasonCode: "PLANT_MANAGER_PROVISION_FAILED",
+        allowedChangeFields: [
+          "role_code",
+          "plant_id",
+          "station_count",
+          "provisioning_method",
+        ],
+        changes: {
+          role_code: { before: null, after: "JEFE_PLANTA" },
+          plant_id: { before: null, after: body.plantId },
+          station_count: { before: 0, after: body.stationIds.length },
+          provisioning_method: { before: null, after: "DIRECT" },
+        },
+      },
+      async () => {
+        try {
+          return await this.repository.createPlantManager({
+            id: profileId,
+            organizationId,
+            email: body.email.toLowerCase(),
+            password: body.password,
+            displayName: body.displayName,
+            preferredLocale: body.preferredLocale,
+            creatorProfileId: context.auth.profile.id,
+            plantId: body.plantId,
+            stationIds: body.stationIds,
+            stationAuthorizationIds: body.stationIds.map(() => randomUUID()),
+            pinCredentialId: randomUUID(),
+            pinVerifier: verifier,
+            occurredAt,
           });
         } catch (error) {
           this.storageError(error);
@@ -439,7 +498,10 @@ export class AccountsService {
   private storageError(error: unknown): never {
     if (error instanceof ApplicationError) throw error;
     if (error instanceof SupabaseDataError) {
-      if (error.databaseCode === "email_exists") {
+      if (
+        error.databaseCode === "email_exists" ||
+        error.databaseCode === "user_already_exists"
+      ) {
         throw new ApplicationError(
           HttpStatus.CONFLICT,
           "ACCOUNT_EMAIL_ALREADY_REGISTERED",

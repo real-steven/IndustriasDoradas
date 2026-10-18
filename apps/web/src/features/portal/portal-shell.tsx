@@ -40,6 +40,12 @@ const primaryNavigation = [
     labelEn: "Audit",
     icon: "◷",
   },
+  {
+    to: "/gerencia/usuarios",
+    label: "Usuarios",
+    labelEn: "Users",
+    icon: "♙",
+  },
 ] as const;
 
 const futureNavigation = [
@@ -81,6 +87,7 @@ const pageTitles: Record<string, readonly [string, string]> = {
   "/gerencia/oro": ["Oro", "Gold"],
   "/gerencia/cargamentos": ["Cargamentos", "Shipments"],
   "/gerencia/auditoria": ["Auditoría", "Audit"],
+  "/gerencia/usuarios": ["Usuarios", "Users"],
   "/gerencia/estadisticas": ["Estadísticas", "Statistics"],
   "/gerencia/trabajadores": ["Trabajadores", "Workers"],
   "/gerencia/reportes": ["Reportes", "Reports"],

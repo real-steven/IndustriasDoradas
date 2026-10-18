@@ -9,6 +9,7 @@ import {
   type AccountGovernanceAction,
   type AdministratorPermissionItem,
   type CreateAdministratorInput,
+  type CreatePlantManagerInput,
 } from "./accounts.contracts";
 import type { PreferredLocale, RoleCode } from "../auth/auth.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
@@ -180,6 +181,7 @@ export class SupabaseAccountsRepository implements AccountsRepository {
           display_name: input.displayName,
           preferred_locale: input.preferredLocale,
           account_status: "ACTIVE",
+          provisioning_method: "EMAIL_INVITATION",
           approved_by_profile_id: input.creatorProfileId,
           approved_at: input.occurredAt,
         }),
@@ -222,6 +224,50 @@ export class SupabaseAccountsRepository implements AccountsRepository {
       }
       throw error;
     }
+  }
+
+  async createPlantManager(
+    input: CreatePlantManagerInput,
+  ): Promise<AccountItem> {
+    const created = await this.authClient.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+    });
+    if (created.error !== null || created.data.user === null) {
+      throw new SupabaseDataError(
+        created.error?.code ?? "AUTH_CREATE_FAILED",
+        "auth.users",
+      );
+    }
+    const authUserId = created.data.user.id;
+    try {
+      await this.request("rpc/provision_plant_manager", {
+        body: JSON.stringify({
+          target_organization_id: input.organizationId,
+          target_profile_id: input.id,
+          target_auth_user_id: authUserId,
+          creator_profile_id: input.creatorProfileId,
+          target_display_name: input.displayName,
+          target_preferred_locale: input.preferredLocale,
+          target_plant_id: input.plantId,
+          target_station_ids: input.stationIds,
+          target_authorization_ids: input.stationAuthorizationIds,
+          target_pin_credential_id: input.pinCredentialId,
+          target_pin_verifier: input.pinVerifier,
+          provisioning_moment: input.occurredAt,
+        }),
+        method: "POST",
+      });
+    } catch (error) {
+      await this.authClient.auth.admin.deleteUser(authUserId).catch(() => null);
+      throw error;
+    }
+    const item = await this.find(input.organizationId, input.id);
+    if (item === null) {
+      throw new SupabaseDataError("EMPTY_RESPONSE", "provision_plant_manager");
+    }
+    return item;
   }
 
   async listAdministratorPermissions(
@@ -342,6 +388,10 @@ export class SupabaseAccountsRepository implements AccountsRepository {
         "account_status",
       ) as AccountItem["accountStatus"],
       roleCode,
+      provisioningMethod: this.string(
+        row,
+        "provisioning_method",
+      ) as AccountItem["provisioningMethod"],
       statusReason: this.nullableString(row, "status_reason"),
       isActive: this.boolean(row, "is_active"),
       createdAt: this.string(row, "created_at"),

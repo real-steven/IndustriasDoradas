@@ -1,6 +1,7 @@
 import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 
 import { LoginPage } from "../auth/login-page";
+import { PlantManagerPage } from "../features/accounts/plant-manager-page";
 import {
   AuditPage,
   DashboardPage,
@@ -32,6 +33,7 @@ export function App() {
             element={<ShipmentDetailPage />}
           />
           <Route path="auditoria" element={<AuditPage />} />
+          <Route path="usuarios" element={<PlantManagerPage />} />
           <Route
             path="estadisticas"
             element={
@@ -50,8 +52,8 @@ export function App() {
               <UpcomingPage
                 title={tr("Trabajadores", "Workers")}
                 description={tr(
-                  "Creación futura de operarios y jefes de planta, asistencia y horas.",
-                  "Future creation of operators and plant managers, attendance, and hours.",
+                  "Gestión futura de operarios, asistencia y horas.",
+                  "Future management of operators, attendance, and hours.",
                 )}
               />
             }

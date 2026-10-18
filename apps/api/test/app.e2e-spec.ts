@@ -84,6 +84,7 @@ const ACTIVE_PROFILE: AuthorizedProfile = {
     "administrators.govern",
     "administrators.create",
     "administrators.permissions.manage",
+    "plant_managers.manage",
   ],
 };
 
@@ -162,6 +163,7 @@ describe("API smoke (e2e)", () => {
       govern: jest.fn(),
       updateLocale: jest.fn(),
       createAdministrator: jest.fn(),
+      createPlantManager: jest.fn(),
       listAdministratorPermissions: jest.fn().mockResolvedValue([]),
       replaceAdministratorPermissions: jest.fn().mockResolvedValue(undefined),
     };
@@ -250,6 +252,7 @@ describe("API smoke (e2e)", () => {
     accounts.find.mockClear();
     accounts.find.mockResolvedValue(null);
     accounts.createAdministrator.mockClear();
+    accounts.createPlantManager.mockClear();
     accounts.replaceAdministratorPermissions.mockClear();
     gold.listShipmentFacts.mockClear();
     gold.listResults.mockClear();
@@ -568,6 +571,72 @@ describe("API smoke (e2e)", () => {
     expect(response.body).toMatchObject({
       code: "ACCOUNT_EMAIL_ALREADY_REGISTERED",
     });
+  });
+
+  it("provisions a complete pending plant manager without exposing the PIN", async () => {
+    accounts.createPlantManager.mockResolvedValueOnce(plantManagerAccount());
+
+    const response = await request(httpServer)
+      .post(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/accounts/plant-managers`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        displayName: "Jefe de planta nuevo",
+        email: "plant.manager@example.invalid",
+        password: "StrongPassword1!",
+        pin: "123456",
+        plantId: "31000000-0000-4000-8000-000000000001",
+        stationIds: ["34000000-0000-4000-8000-000000000001"],
+        preferredLocale: "es",
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      accountStatus: "PENDING_APPROVAL",
+      roleCode: "JEFE_PLANTA",
+      provisioningMethod: "DIRECT",
+    });
+    expect(accounts.createPlantManager.mock.calls).toHaveLength(1);
+    const provisionInput = accounts.createPlantManager.mock.calls[0]?.[0];
+    expect(provisionInput).toBeDefined();
+    if (provisionInput === undefined) {
+      throw new Error("Expected plant manager provisioning input");
+    }
+    expect(provisionInput).toMatchObject({
+      email: "plant.manager@example.invalid",
+      password: "StrongPassword1!",
+      creatorProfileId: ACTIVE_PROFILE.id,
+      plantId: "31000000-0000-4000-8000-000000000001",
+      stationIds: ["34000000-0000-4000-8000-000000000001"],
+    });
+    expect(provisionInput.pinVerifier).toMatch(/^pbkdf2-sha256\$/u);
+    expect(JSON.stringify(auditEvents.insert.mock.calls)).not.toContain(
+      "123456",
+    );
+    expect(JSON.stringify(auditEvents.insert.mock.calls)).not.toContain(
+      "StrongPassword1!",
+    );
+  });
+
+  it("rejects an invalid plant manager PIN before provisioning", async () => {
+    await request(httpServer)
+      .post(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/accounts/plant-managers`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        displayName: "Jefe de planta nuevo",
+        email: "plant.manager@example.invalid",
+        password: "StrongPassword1!",
+        pin: "12ab",
+        plantId: "31000000-0000-4000-8000-000000000001",
+        stationIds: ["34000000-0000-4000-8000-000000000001"],
+        preferredLocale: "es",
+      })
+      .expect(400);
+
+    expect(accounts.createPlantManager.mock.calls).toHaveLength(0);
   });
 
   it("prevents an administrator from delegating a permission it does not own", async () => {
@@ -932,10 +1001,27 @@ function administratorAccount() {
     preferredLocale: "es" as const,
     accountStatus: "ACTIVE" as const,
     roleCode: "ADMINISTRADOR" as const,
+    provisioningMethod: "EMAIL_INVITATION" as const,
     statusReason: null,
     isActive: true,
     createdAt: "2026-08-20T00:00:00.000Z",
     updatedAt: "2026-08-20T00:00:00.000Z",
+  };
+}
+
+function plantManagerAccount() {
+  return {
+    id: "a1000000-0000-4000-8000-000000000098",
+    organizationId: ACTIVE_PROFILE.organizationId,
+    displayName: "Jefe de planta nuevo",
+    preferredLocale: "es" as const,
+    accountStatus: "PENDING_APPROVAL" as const,
+    roleCode: "JEFE_PLANTA" as const,
+    provisioningMethod: "DIRECT" as const,
+    statusReason: null,
+    isActive: true,
+    createdAt: "2026-10-18T12:00:00.000Z",
+    updatedAt: "2026-10-18T12:00:00.000Z",
   };
 }
 

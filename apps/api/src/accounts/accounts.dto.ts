@@ -1,12 +1,15 @@
 import { Transform } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsEmail,
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
+  Matches,
   MaxLength,
   MinLength,
 } from "class-validator";
@@ -46,6 +49,48 @@ export class CreateAdministratorDto extends PermissionSelectionDto {
   @MinLength(1)
   @MaxLength(120)
   displayName!: string;
+
+  @IsIn(["es", "en"])
+  preferredLocale: PreferredLocale = "es";
+}
+
+export class CreatePlantManagerDto {
+  @Transform(trim)
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  displayName!: string;
+
+  @IsString()
+  @MinLength(12)
+  @MaxLength(128)
+  @Matches(/[a-z]/u)
+  @Matches(/[A-Z]/u)
+  @Matches(/[0-9]/u)
+  @Matches(/[^A-Za-z0-9\s]/u)
+  password!: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(6)
+  @MaxLength(12)
+  @Matches(/^\d+$/u)
+  pin!: string;
+
+  @IsUUID()
+  plantId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  stationIds!: string[];
 
   @IsIn(["es", "en"])
   preferredLocale: PreferredLocale = "es";

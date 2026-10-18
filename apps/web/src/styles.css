@@ -1813,6 +1813,223 @@ td {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* 5.11: aprovisionamiento gerencial de usuarios de planta */
+.account-success-toast {
+  position: fixed;
+  top: max(84px, calc(env(safe-area-inset-top) + 16px));
+  right: max(20px, env(safe-area-inset-right));
+  z-index: 80;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: min(430px, calc(100vw - 40px));
+  border: 1px solid #a9dfc6;
+  border-left: 4px solid #138a58;
+  border-radius: 12px;
+  padding: 12px 12px 12px 14px;
+  color: #075f3a;
+  background: #f2fbf6;
+  box-shadow: 0 16px 38px rgb(16 45 62 / 20%);
+}
+.account-success-toast-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  color: white;
+  background: #138a58;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+.account-success-toast p {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+.account-success-toast button {
+  width: 34px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  color: #075f3a;
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.account-success-toast button:hover {
+  background: #dff5e9;
+}
+.account-layout {
+  display: grid;
+  grid-template-columns: minmax(390px, 0.9fr) minmax(430px, 1.1fr);
+  align-items: start;
+  gap: 16px;
+}
+.account-create-panel {
+  position: sticky;
+  top: 86px;
+}
+.account-form {
+  display: grid;
+  gap: 13px;
+}
+.account-form label,
+.suspension-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+.account-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+.field-help {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.station-selection {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px;
+}
+.station-selection legend {
+  padding: 0 5px;
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+.station-selection label {
+  min-height: 42px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: #f5f8f9;
+}
+.station-selection input {
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
+}
+.station-selection p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+.credential-warning {
+  border-left: 4px solid var(--gold);
+  border-radius: 9px;
+  padding: 10px 12px;
+  color: #6c4b0f;
+  background: var(--gold-soft);
+  font-size: 0.66rem;
+}
+.credential-warning p {
+  margin: 3px 0 0;
+}
+.account-total {
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--muted);
+  background: #edf2f4;
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+.account-list {
+  display: grid;
+  gap: 10px;
+}
+.account-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 14px;
+  background: #fbfcfd;
+}
+.account-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.account-card h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.account-card header p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.account-status {
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #775816;
+  background: var(--gold-soft);
+  font-size: 0.52rem;
+  font-weight: 900;
+}
+.account-status.active {
+  color: #087647;
+  background: var(--green-soft);
+}
+.account-status.suspended {
+  color: var(--red);
+  background: var(--red-soft);
+}
+.account-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.account-card dt {
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.account-card dd {
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+.account-reason {
+  margin: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--red);
+  background: var(--red-soft);
+  font-size: 0.65rem;
+}
+.account-actions,
+.suspension-form > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.account-actions button,
+.suspension-form button {
+  font-size: 0.65rem;
+}
+.suspension-form {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
 /* 5.7: reflujo, lectura ampliada y navegacion tactil */
 .portal-page-head,
 .manager-hero,
@@ -1910,7 +2127,9 @@ td {
     display: none;
   }
   .manager-sidebar > .manager-nav:first-of-type {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, minmax(62px, 1fr));
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
   }
   .manager-nav-link {
     min-height: 52px;
@@ -1976,8 +2195,12 @@ td {
   .future-grid,
   .gold-summary,
   .gold-summary-grid,
-  .gold-filter-grid {
+  .gold-filter-grid,
+  .account-layout {
     grid-template-columns: 1fr;
+  }
+  .account-create-panel {
+    position: static;
   }
   .gold-summary > div:not(:first-child) {
     border-left: 0;
@@ -2008,8 +2231,18 @@ td {
   .detail-times,
   .mercury-grid,
   .audit-timeline li,
-  .audit-timeline dl {
+  .audit-timeline dl,
+  .account-form-grid {
     grid-template-columns: 1fr;
+  }
+  .account-actions,
+  .suspension-form > div {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+  .account-actions button,
+  .suspension-form button {
+    width: 100%;
   }
   .history-pagination,
   .sweep-card > header,
@@ -2126,6 +2359,12 @@ td {
 }
 
 @media (max-width: 760px) {
+  .account-success-toast {
+    top: max(72px, calc(env(safe-area-inset-top) + 12px));
+    right: max(12px, env(safe-area-inset-right));
+    left: max(12px, env(safe-area-inset-left));
+    width: auto;
+  }
   .auth-page {
     place-items: start center;
   }

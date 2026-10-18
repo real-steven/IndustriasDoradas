@@ -69,15 +69,21 @@ y obligan a establecer contraseña propia.
 - Administrador no se autoaprueba, no altera su auditoría y no desactiva la
   última cuenta gerencial activa.
 - Jefe de empresa puede suspender una cuenta administrativa ante una emergencia.
+- La mejora técnica 5.11 limita el flujo funcional visible de jefes de planta a
+  la única cuenta `JEFE_EMPRESA`: crea el acceso directo, configura planta y
+  estaciones, y lo activa por separado. Las estructuras administrativas
+  legadas no se exponen en la navegación.
 
 ### 3.3 Contraseña y PIN
 
 - Toda cuenta autenticada tiene correo válido de recuperación.
 - Supabase Auth gestiona contraseña, enlace de recuperación y sesión.
 - El PIN no sustituye el login inicial: solo eleva una estación ya habilitada.
-- Cada jefe define un PIN individual; nunca existe PIN general de planta.
-- El PIN nunca se envía por correo, se muestra a administradores ni se guarda en
-  texto claro.
+- Cada jefe posee un PIN individual; nunca existe PIN general de planta.
+- En el aprovisionamiento directo 5.11, gerencia establece y entrega una sola
+  vez el PIN. El backend conserva únicamente su verificador y el portal nunca
+  lo devuelve, recupera ni vuelve a mostrar. En el futuro
+  `EMAIL_INVITATION`, el propio jefe lo establecerá al confirmar su perfil.
 - Administrador inicia un restablecimiento; el jefe establece un PIN nuevo
   después de autenticarse con contraseña completa.
 
