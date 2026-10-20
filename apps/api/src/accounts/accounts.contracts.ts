@@ -8,6 +8,7 @@ import type { PageResponse } from "../common/dto/page-query.dto";
 export const ACCOUNTS_REPOSITORY = Symbol("ACCOUNTS_REPOSITORY");
 
 export type AccountGovernanceAction = "APPROVE" | "SUSPEND" | "REACTIVATE";
+export type AccountProvisioningMethod = "DIRECT" | "EMAIL_INVITATION";
 
 export interface AccountItem {
   id: string;
@@ -16,6 +17,7 @@ export interface AccountItem {
   preferredLocale: PreferredLocale;
   accountStatus: AccountStatus;
   roleCode: RoleCode;
+  provisioningMethod: AccountProvisioningMethod;
   statusReason: string | null;
   isActive: boolean;
   createdAt: string;
@@ -48,6 +50,22 @@ export interface CreateAdministratorInput {
   grantIds: readonly string[];
 }
 
+export interface CreatePlantManagerInput {
+  id: string;
+  organizationId: string;
+  email: string;
+  password: string;
+  displayName: string;
+  preferredLocale: PreferredLocale;
+  creatorProfileId: string;
+  plantId: string;
+  stationIds: readonly string[];
+  stationAuthorizationIds: readonly string[];
+  pinCredentialId: string;
+  pinVerifier: string;
+  occurredAt: string;
+}
+
 export interface AccountsRepository {
   list(
     organizationId: string,
@@ -68,6 +86,7 @@ export interface AccountsRepository {
     locale: PreferredLocale,
   ): Promise<AccountItem | null>;
   createAdministrator(input: CreateAdministratorInput): Promise<AccountItem>;
+  createPlantManager(input: CreatePlantManagerInput): Promise<AccountItem>;
   listAdministratorPermissions(
     organizationId: string,
     profileId: string,

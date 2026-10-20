@@ -7,6 +7,7 @@ import type {
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
 import { useAuth } from "../../auth/auth-context";
+import type { Language } from "../../i18n/language-context";
 
 export type ShipmentPeriod = "current" | "previous" | "date";
 
@@ -40,12 +41,6 @@ export interface Page<T> {
 }
 
 export type ShipmentListQuery = UseQueryResult<PageManagementShipment, Error>;
-
-const costaRicaDateTime = new Intl.DateTimeFormat("es-CR", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "America/Costa_Rica",
-});
 
 const costaRicaDateParts = new Intl.DateTimeFormat("en-CA", {
   year: "numeric",
@@ -217,8 +212,15 @@ export function shipmentDateRange(
   return range(start, calendarDate(endCalendar));
 }
 
-export function formatCostaRicaDateTime(value: string): string {
-  return costaRicaDateTime.format(new Date(value));
+export function formatCostaRicaDateTime(
+  value: string,
+  language: Language = "es",
+): string {
+  return new Intl.DateTimeFormat(language === "es" ? "es-CR" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "America/Costa_Rica",
+  }).format(new Date(value));
 }
 
 export function shortShipmentId(value: string): string {

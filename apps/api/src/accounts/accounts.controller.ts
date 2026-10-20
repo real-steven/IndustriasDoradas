@@ -15,6 +15,7 @@ import {
   AccountGovernanceDto,
   AccountQueryDto,
   CreateAdministratorDto,
+  CreatePlantManagerDto,
   PermissionSelectionDto,
   UpdateLocaleDto,
 } from "./accounts.dto";
@@ -24,6 +25,7 @@ import { CurrentAuth } from "../auth/current-auth.decorator";
 import {
   RequireOrganizationParam,
   RequirePermissions,
+  RequireRoles,
 } from "../auth/auth.metadata";
 import type { AuthenticatedRequest } from "../auth/authenticated-request";
 import type { AuthenticatedContext } from "../auth/auth.contracts";
@@ -50,6 +52,21 @@ export class AccountsController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.accounts.createAdministrator(
+      organizationId,
+      body,
+      this.context(request),
+    );
+  }
+
+  @Post("plant-managers")
+  @RequireRoles("JEFE_EMPRESA")
+  @RequirePermissions("plant_managers.manage")
+  createPlantManager(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Body() body: CreatePlantManagerDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.accounts.createPlantManager(
       organizationId,
       body,
       this.context(request),

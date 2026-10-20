@@ -1,4 +1,5 @@
 import { readWebEnvironment } from "../config/environment";
+import type { Language } from "../i18n/language-context";
 
 export const unauthorizedEventName = "industrias-doradas:unauthorized";
 export const apiRequestTimeoutMs = 15_000;
@@ -87,22 +88,38 @@ export async function apiRequest<T>(
 
 export function requestErrorMessage(
   error: unknown,
-  fallback = "No se pudo completar la consulta. Intente nuevamente.",
+  fallback: string | undefined = undefined,
+  language: Language = "es",
 ): string {
   if (error instanceof ApiConnectionError) {
-    return error.code === "OFFLINE"
-      ? "Sin conexión. Se conservarán los últimos datos disponibles."
-      : "No fue posible conectar con el servicio. Intente nuevamente.";
+    if (error.code === "OFFLINE")
+      return language === "es"
+        ? "Sin conexión. Se conservarán los últimos datos disponibles."
+        : "Offline. The latest available data will be preserved.";
+    return language === "es"
+      ? "No fue posible conectar con el servicio. Intente nuevamente."
+      : "Could not connect to the service. Please try again.";
   }
   if (error instanceof ApiRequestError) {
     if (error.status === 401)
-      return "La sesión venció. Inicie sesión nuevamente.";
+      return language === "es"
+        ? "La sesión venció. Inicie sesión nuevamente."
+        : "Your session expired. Please sign in again.";
     if (error.status === 403)
-      return "La cuenta no tiene permiso para consultar esta información.";
+      return language === "es"
+        ? "La cuenta no tiene permiso para consultar esta información."
+        : "This account is not allowed to view this information.";
     if (error.status >= 500)
-      return "El servicio no está disponible temporalmente. Intente nuevamente.";
+      return language === "es"
+        ? "El servicio no está disponible temporalmente. Intente nuevamente."
+        : "The service is temporarily unavailable. Please try again.";
   }
-  return fallback;
+  return (
+    fallback ??
+    (language === "es"
+      ? "No se pudo completar la consulta. Intente nuevamente."
+      : "The request could not be completed. Please try again.")
+  );
 }
 
 function safeApiMessage(status: number, serverMessage: string): string {

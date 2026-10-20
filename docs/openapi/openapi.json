@@ -13,6 +13,10 @@
           "isActive": { "type": "boolean" },
           "organizationId": { "format": "uuid", "type": "string" },
           "preferredLocale": { "enum": ["es", "en"], "type": "string" },
+          "provisioningMethod": {
+            "enum": ["DIRECT", "EMAIL_INVITATION"],
+            "type": "string"
+          },
           "roleCode": {
             "enum": ["JEFE_EMPRESA", "ADMINISTRADOR", "JEFE_PLANTA"],
             "type": "string"
@@ -27,6 +31,7 @@
           "preferredLocale",
           "accountStatus",
           "roleCode",
+          "provisioningMethod",
           "isActive"
         ],
         "type": "object"
@@ -135,6 +140,47 @@
           }
         },
         "required": ["code", "name", "timezone"],
+        "type": "object"
+      },
+      "CreatePlantManagerDto": {
+        "properties": {
+          "displayName": { "maxLength": 120, "minLength": 1, "type": "string" },
+          "email": { "format": "email", "maxLength": 254, "type": "string" },
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "pattern": "[a-z]",
+            "type": "string"
+          },
+          "pin": {
+            "maxLength": 12,
+            "minLength": 6,
+            "pattern": "^\\d+$",
+            "type": "string"
+          },
+          "plantId": { "format": "uuid", "type": "string" },
+          "preferredLocale": {
+            "default": "es",
+            "enum": ["es", "en"],
+            "type": "string"
+          },
+          "stationIds": {
+            "items": { "format": "uuid", "type": "string" },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "email",
+          "displayName",
+          "password",
+          "pin",
+          "plantId",
+          "stationIds",
+          "preferredLocale"
+        ],
         "type": "object"
       },
       "CreateProductionLineDto": {
@@ -1343,6 +1389,95 @@
               "schema": {
                 "$ref": "#/components/schemas/CreateAdministratorDto"
               }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Account" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Accounts"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/accounts/plant-managers": {
+      "post": {
+        "operationId": "AccountsController_createPlantManager",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePlantManagerDto" }
             }
           },
           "required": true

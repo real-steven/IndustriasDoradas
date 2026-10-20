@@ -10,6 +10,8 @@
   barridas y mercurio entre estaciones. Sprint 5 consume esa verdad; no crea un
   segundo protocolo de sincronización.
 - 5.1 a 5.10 están cerrados técnica y manualmente.
+- 5.11 es una mejora técnica posterior al cierre, acordada por el grupo. No
+  reabre la aceptación de 5.1–5.10 ni modifica desktop.
 - El paso 4.8 de oro quedó transferido al portal: 5.2 creó el modelo canónico
   por cargamento y 5.6 construyó su API e interfaz. El modelo legado por
   barrida no se reutiliza.
@@ -199,3 +201,45 @@ SQL y .NET existentes. La matriz automatizada y manual está en
 **Prompt:** Automatiza E2E: login gerencial → resumen → operación → cargamento → registro/corrección de oro total → auditoría → cierre de sesión. Comprueba filtros, totales, pendientes, cero válido, ausencia de oro en desktop y módulos futuros sin acciones falsas.
 
 **Pausa:** Lucía completa las tareas sin ayuda y aprueba la compuerta.
+
+### 5.11 Mejora técnica — usuarios de planta
+
+**Estado:** implementado el 2026-10-18 y pendiente de la validación automatizada
+y manual de Henry. Es una mejora acordada fuera del alcance cerrado de
+5.1–5.10.
+
+La cuenta única `JEFE_EMPRESA` puede crear desde web un `JEFE_PLANTA` para
+desktop mediante aprovisionamiento directo: nombre, correo, contraseña
+temporal, PIN individual, planta, estaciones e idioma. El perfil se prepara en
+`PENDING_APPROVAL`; no puede autenticarse contra el API hasta que gerencia lo
+active expresamente. La activación en PostgreSQL exige alcance de planta,
+autorización de estación y verificador PIN completos.
+
+Supabase Auth se administra únicamente desde NestJS con la clave secreta. La
+contraseña y el PIN nunca se incluyen en respuestas, logs ni auditoría; el PIN
+se transforma con el mismo verificador PBKDF2-SHA256 usado por desktop. La
+creación de perfil, alcance, estaciones y credencial PIN es una única
+transacción SQL. Si esa transacción falla, el API elimina compensatoriamente el
+usuario recién creado en Auth.
+
+`user_profiles.provisioning_method` diferencia `DIRECT` del futuro
+`EMAIL_INVITATION`. Esta entrega implementa solo `DIRECT`. Una mejora posterior
+podrá enviar una invitación para que el jefe confirme el perfil y establezca su
+propia contraseña y PIN desde web, conservando intacto el contrato de desktop.
+
+**Prompt:** Implementa en web/API/PostgreSQL la creación directa y activación
+separada de `JEFE_PLANTA`. Limita la acción a la cuenta `JEFE_EMPRESA` con
+`plant_managers.manage`, exige una planta y al menos una estación activa, usa
+Supabase Auth solo desde backend y conserva secretos fuera de respuestas,
+logs y auditoría. No modifiques desktop. Deja explícita la estrategia de
+aprovisionamiento para admitir invitación por correo después de la entrega.
+
+**Pruebas:** `supabase/tests/018_sprint_5_11_plant_manager_provisioning.sql`,
+contrato/E2E del API y recorrido React cubren creación pendiente, validación de
+credenciales, ausencia de secretos en auditoría, compuerta de activación y
+activación explícita. La matriz manual está en
+`docs/testing/sprint-05-11-usuarios-planta.md`.
+
+**Pausa:** Henry crea una cuenta pendiente, comprueba que aún no abre desktop,
+la activa y confirma login, autorización de estación y elevación con el PIN
+entregado, sin cambios en el ejecutable WPF.

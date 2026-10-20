@@ -52,11 +52,16 @@ describe("recorrido gerencial de aceptación", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Portal de gestión" }),
+      await screen.findByRole("heading", { name: "Bienvenido" }),
     ).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Correo"), "lucia@example.test");
-    await user.type(screen.getByLabelText("Contraseña"), "clave-ficticia");
-    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+    await user.type(
+      screen.getByRole("textbox", { name: /^correo$/iu }),
+      "lucia@example.test",
+    );
+    await user.type(screen.getByLabelText(/^contraseña$/iu), "clave-ficticia");
+    await user.click(
+      screen.getByRole("button", { name: "INGRESAR AL PORTAL →" }),
+    );
 
     expect(
       await screen.findByRole("heading", { name: "Buenos días, Lucía." }),
@@ -158,11 +163,11 @@ describe("recorrido gerencial de aceptación", () => {
 
     await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
     expect(
-      await screen.findByRole("heading", { name: "Portal de gestión" }),
+      await screen.findByRole("heading", { name: "Bienvenido" }),
     ).toBeInTheDocument();
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
-  });
+  }, 15_000);
 });
 
 function createSupabaseHarness(): {

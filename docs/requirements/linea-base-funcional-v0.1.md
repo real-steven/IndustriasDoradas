@@ -68,7 +68,7 @@ Reglas de acceso:
 - Las cantidades de oro se gestionan únicamente en web por `JEFE_EMPRESA`. Desktop no muestra esos valores al jefe de planta ni al Modo Operación.
 - No existe un flujo funcional vigente para crear administradores, delegar permisos o usar un modo gerencial con permisos de empleado.
 - Ningún perfil puede alterar o borrar auditoría ni desactivar la última cuenta gerencial activa. Los datos históricos se corrigen o desactivan, no se eliminan físicamente.
-- La gestión web futura de cuentas de jefe de planta y PIN queda fuera del primer entregable y requiere validación específica.
+- La gestión web de cuentas de jefe de planta y PIN queda fuera del primer entregable cerrado; se incorpora después como mejora técnica 5.11, con validación específica y sin modificar desktop.
 - Los trabajadores regulares no tienen cuenta de acceso. El flujo definitivo de aprobación, reasignación o fusión de perfiles queda pendiente del módulo de trabajadores.
 - Tras la autenticación del jefe de planta, la estación permanece normalmente en Modo Operación y renueva de forma segura la sesión de Supabase mientras exista uso. Cierra la sesión local después de una hora de inactividad total y exige autenticación completa para volver a abrirla.
 - Al iniciar desktop, el login muestra el estado de comprobación de la sesión: amarillo mientras busca, verde cuando encuentra una sesión protegida vigente y rojo cuando no existe, fue finalizada o venció. Una sesión restaurable requiere únicamente que el usuario pulse `Abrir sesión`; correo y contraseña se habilitan solo cuando hace falta autenticar de nuevo.

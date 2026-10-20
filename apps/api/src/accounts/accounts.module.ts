@@ -7,8 +7,10 @@ import {
 import { ACCOUNTS_REPOSITORY } from "./accounts.contracts";
 import { AccountsService } from "./accounts.service";
 import { SupabaseAccountsRepository } from "./supabase-accounts.repository";
+import { StationModule } from "../station/station.module";
 
 @Module({
+  imports: [StationModule],
   controllers: [AccountsController, ProfilePreferencesController],
   providers: [
     AccountsService,

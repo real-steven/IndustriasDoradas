@@ -162,6 +162,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         "preferredLocale",
         "accountStatus",
         "roleCode",
+        "provisioningMethod",
         "isActive",
       ],
       properties: {
@@ -176,6 +177,10 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         roleCode: {
           type: "string",
           enum: ["JEFE_EMPRESA", "ADMINISTRADOR", "JEFE_PLANTA"],
+        },
+        provisioningMethod: {
+          type: "string",
+          enum: ["DIRECT", "EMAIL_INVITATION"],
         },
         statusReason: { type: "string", nullable: true },
         isActive: { type: "boolean" },

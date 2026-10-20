@@ -24,8 +24,10 @@ import {
   type ShipmentFilters,
 } from "./management-shipments-data";
 import { requestErrorMessage } from "../../api/http";
+import { useLanguage } from "../../i18n/language-context";
 
 export function ShipmentsFeature() {
+  const { language, tr } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseShipmentFilters(searchParams);
   const shipments = useManagementShipments(filters);
@@ -52,28 +54,53 @@ export function ShipmentsFeature() {
       <section className="portal-panel shipment-history" aria-live="polite">
         <header>
           <div>
-            <h2>Historial</h2>
-            <p>Cargamentos cerrados, ordenados por cierre más reciente</p>
+            <h2>{tr("Historial", "History")}</h2>
+            <p>
+              {tr(
+                "Cargamentos cerrados, ordenados por cierre más reciente",
+                "Closed shipments, ordered by most recent closing time",
+              )}
+            </p>
           </div>
           {shipments.data !== undefined && (
             <span className="history-total">
-              {shipments.data.total} resultado
-              {shipments.data.total === 1 ? "" : "s"}
+              {shipments.data.total}{" "}
+              {shipments.data.total === 1
+                ? tr("resultado", "result")
+                : tr("resultados", "results")}
             </span>
           )}
         </header>
         {shipments.isPending ? (
-          <ShipmentState title="Consultando cargamentos">
-            Espere mientras se carga la proyección central.
+          <ShipmentState
+            title={tr("Consultando cargamentos", "Loading shipments")}
+          >
+            {tr(
+              "Espere mientras se carga la proyección central.",
+              "Please wait while the central projection loads.",
+            )}
           </ShipmentState>
         ) : shipments.isError || shipments.data === undefined ? (
-          <ShipmentState title="No se pudo consultar el historial" error>
-            {requestErrorMessage(shipments.error)}
+          <ShipmentState
+            title={tr(
+              "No se pudo consultar el historial",
+              "History could not be loaded",
+            )}
+            error
+          >
+            {requestErrorMessage(shipments.error, undefined, language)}
           </ShipmentState>
         ) : shipments.data.items.length === 0 ? (
-          <ShipmentState title="No hay cargamentos para estos filtros">
-            La consulta central respondió correctamente. Cambie el período o
-            quite algún filtro para ampliar la búsqueda.
+          <ShipmentState
+            title={tr(
+              "No hay cargamentos para estos filtros",
+              "No shipments match these filters",
+            )}
+          >
+            {tr(
+              "La consulta central respondió correctamente. Cambie el período o quite algún filtro para ampliar la búsqueda.",
+              "The central query responded successfully. Change the period or remove a filter to broaden the search.",
+            )}
           </ShipmentState>
         ) : (
           <>
@@ -82,30 +109,38 @@ export function ShipmentsFeature() {
                 <article className="shipment-row" key={shipment.shipmentId}>
                   <div className="shipment-primary">
                     <span>
-                      CARGAMENTO {shortShipmentId(shipment.shipmentId)}
+                      {tr("CARGAMENTO", "SHIPMENT")}{" "}
+                      {shortShipmentId(shipment.shipmentId)}
                     </span>
                     <strong>{shipment.productionLineName}</strong>
                     <small>
-                      Cerrado {formatCostaRicaDateTime(shipment.completedAtUtc)}
+                      {tr("Cerrado", "Closed")}{" "}
+                      {formatCostaRicaDateTime(
+                        shipment.completedAtUtc,
+                        language,
+                      )}
                     </small>
                   </div>
                   <dl>
                     <div>
-                      <dt>Proveedor</dt>
+                      <dt>{tr("Proveedor", "Supplier")}</dt>
                       <dd>{shipment.supplierName}</dd>
                     </div>
                     <div>
-                      <dt>Responsable al cierre</dt>
+                      <dt>
+                        {tr("Responsable al cierre", "Responsible at closing")}
+                      </dt>
                       <dd>
-                        {shipment.responsibleWorkerName ?? "Sin asignación"}
+                        {shipment.responsibleWorkerName ??
+                          tr("Sin asignación", "Unassigned")}
                       </dd>
                     </div>
                     <div>
-                      <dt>Cajuelas</dt>
+                      <dt>{tr("Cajuelas", "Cajuelas")}</dt>
                       <dd>{shipment.cajuelaTotal}</dd>
                     </div>
                     <div>
-                      <dt>Barridas</dt>
+                      <dt>{tr("Barridas", "Sweeps")}</dt>
                       <dd>{shipment.sweepCount}</dd>
                     </div>
                   </dl>
@@ -116,7 +151,7 @@ export function ShipmentsFeature() {
                       search: searchParams.toString(),
                     }}
                   >
-                    ABRIR DETALLE →
+                    {tr("ABRIR DETALLE →", "OPEN DETAILS →")}
                   </Link>
                 </article>
               ))}
@@ -135,6 +170,7 @@ export function ShipmentsFeature() {
 }
 
 export function ShipmentDetailFeature() {
+  const { language, tr } = useLanguage();
   const { shipmentId = "" } = useParams();
   const location = useLocation();
   const shipment = useManagementShipment(shipmentId);
@@ -143,16 +179,29 @@ export function ShipmentDetailFeature() {
 
   if (shipment.isPending)
     return (
-      <ShipmentState title="Consultando detalle">
-        Espere mientras se reconstruye el cargamento.
+      <ShipmentState title={tr("Consultando detalle", "Loading details")}>
+        {tr(
+          "Espere mientras se reconstruye el cargamento.",
+          "Please wait while the shipment is reconstructed.",
+        )}
       </ShipmentState>
     );
   if (shipment.isError || shipment.data === undefined)
     return (
-      <ShipmentState title="No se pudo abrir el cargamento" error>
+      <ShipmentState
+        title={tr(
+          "No se pudo abrir el cargamento",
+          "Shipment could not be opened",
+        )}
+        error
+      >
         {requestErrorMessage(
           shipment.error,
-          "El cargamento no existe o la consulta central no está disponible.",
+          tr(
+            "El cargamento no existe o la consulta central no está disponible.",
+            "The shipment does not exist or the central query is unavailable.",
+          ),
+          language,
         )}
       </ShipmentState>
     );
@@ -168,49 +217,79 @@ export function ShipmentDetailFeature() {
         className="secondary-link back-link"
         to={{ pathname: "/gerencia/cargamentos", search: location.search }}
       >
-        ← VOLVER AL HISTORIAL
+        {tr("← VOLVER AL HISTORIAL", "← BACK TO HISTORY")}
       </Link>
 
       <section className="shipment-detail-hero">
         <div>
-          <p className="eyebrow light">CARGAMENTO CERRADO</p>
+          <p className="eyebrow light">
+            {tr("CARGAMENTO CERRADO", "CLOSED SHIPMENT")}
+          </p>
           <h2>{shortShipmentId(shipment.data.shipmentId)}</h2>
           <p>
             {shipment.data.productionLineName} · {shipment.data.supplierName}
           </p>
         </div>
-        <span className="line-status current">CONFIRMADO</span>
+        <span className="line-status current">
+          {tr("CONFIRMADO", "CONFIRMED")}
+        </span>
       </section>
 
       <div className="detail-metrics">
-        <DetailMetric label="Cajuelas" value={shipment.data.cajuelaTotal} />
-        <DetailMetric label="Barridas" value={shipment.data.sweepCount} />
         <DetailMetric
-          label="Responsable al cierre"
-          value={shipment.data.responsibleWorkerName ?? "Sin asignación"}
+          label={tr("Cajuelas", "Cajuelas")}
+          value={shipment.data.cajuelaTotal}
         />
-        <DetailMetric label="Estación" value={shipment.data.stationName} />
+        <DetailMetric
+          label={tr("Barridas", "Sweeps")}
+          value={shipment.data.sweepCount}
+        />
+        <DetailMetric
+          label={tr("Responsable al cierre", "Responsible at closing")}
+          value={
+            shipment.data.responsibleWorkerName ??
+            tr("Sin asignación", "Unassigned")
+          }
+        />
+        <DetailMetric
+          label={tr("Estación", "Station")}
+          value={shipment.data.stationName}
+        />
       </div>
 
       <section className="portal-panel detail-section">
         <header>
           <div>
-            <h2>Momentos del cargamento</h2>
-            <p>Horas operativas mostradas en Costa Rica</p>
+            <h2>{tr("Momentos del cargamento", "Shipment timeline")}</h2>
+            <p>
+              {tr(
+                "Horas operativas mostradas en Costa Rica",
+                "Operating times shown in Costa Rica time",
+              )}
+            </p>
           </div>
         </header>
         <dl className="detail-times">
           <div>
-            <dt>Inicio ocurrido</dt>
-            <dd>{formatCostaRicaDateTime(shipment.data.startedAtUtc)}</dd>
+            <dt>{tr("Inicio ocurrido", "Started at")}</dt>
+            <dd>
+              {formatCostaRicaDateTime(shipment.data.startedAtUtc, language)}
+            </dd>
           </div>
           <div>
-            <dt>Cierre ocurrido</dt>
-            <dd>{formatCostaRicaDateTime(shipment.data.completedAtUtc)}</dd>
+            <dt>{tr("Cierre ocurrido", "Closed at")}</dt>
+            <dd>
+              {formatCostaRicaDateTime(shipment.data.completedAtUtc, language)}
+            </dd>
           </div>
           <div>
-            <dt>Última actividad central</dt>
-            <dd>{formatCostaRicaDateTime(shipment.data.lastActivityAtUtc)}</dd>
+            <dt>{tr("Última actividad central", "Latest central activity")}</dt>
+            <dd>
+              {formatCostaRicaDateTime(
+                shipment.data.lastActivityAtUtc,
+                language,
+              )}
+            </dd>
           </div>
         </dl>
       </section>
@@ -218,25 +297,44 @@ export function ShipmentDetailFeature() {
       <section className="portal-panel detail-section">
         <header>
           <div>
-            <h2>Barridas y mercurio</h2>
-            <p>Medición vigente por barrida y rastra</p>
+            <h2>{tr("Barridas y mercurio", "Sweeps and mercury")}</h2>
+            <p>
+              {tr(
+                "Medición vigente por barrida y rastra",
+                "Current measurement by sweep and component",
+              )}
+            </p>
           </div>
         </header>
         {sweeps.isPending ? (
-          <ShipmentState title="Consultando barridas">
-            Espere un momento.
+          <ShipmentState title={tr("Consultando barridas", "Loading sweeps")}>
+            {tr("Espere un momento.", "Please wait.")}
           </ShipmentState>
         ) : sweeps.isError ? (
-          <ShipmentState title="No se pudieron consultar las barridas" error>
+          <ShipmentState
+            title={tr(
+              "No se pudieron consultar las barridas",
+              "Sweeps could not be loaded",
+            )}
+            error
+          >
             {requestErrorMessage(
               sweeps.error,
-              "El resumen del cargamento permanece disponible.",
+              tr(
+                "El resumen del cargamento permanece disponible.",
+                "The shipment summary remains available.",
+              ),
+              language,
             )}
           </ShipmentState>
         ) : sweepGroups.length === 0 ? (
-          <ShipmentState title="Sin barridas proyectadas">
-            Este cargamento no tiene barridas disponibles en la proyección
-            central.
+          <ShipmentState
+            title={tr("Sin barridas proyectadas", "No projected sweeps")}
+          >
+            {tr(
+              "Este cargamento no tiene barridas disponibles en la proyección central.",
+              "This shipment has no sweeps available in the central projection.",
+            )}
           </ShipmentState>
         ) : (
           <div className="sweep-list">
@@ -244,18 +342,28 @@ export function ShipmentDetailFeature() {
               <article className="sweep-card" key={group.sweepId}>
                 <header>
                   <div>
-                    <strong>Barrida {shortShipmentId(group.sweepId)}</strong>
-                    <small>{formatCostaRicaDateTime(group.sweptAtUtc)}</small>
+                    <strong>
+                      {tr("Barrida", "Sweep")} {shortShipmentId(group.sweepId)}
+                    </strong>
+                    <small>
+                      {formatCostaRicaDateTime(group.sweptAtUtc, language)}
+                    </small>
                   </div>
-                  <span>{group.cajuelaCount} cajuelas</span>
+                  <span>
+                    {group.cajuelaCount} {tr("cajuelas", "cajuelas")}
+                  </span>
                 </header>
                 <div className="mercury-grid">
                   {group.components.map((component) => (
                     <div key={component.lineComponentId}>
                       <strong>{component.lineComponentName}</strong>
-                      <span>Entrada: {mercuryValue(component.inputGrams)}</span>
                       <span>
-                        Remanente: {mercuryValue(component.remainderGrams)}
+                        {tr("Entrada", "Input")}:{" "}
+                        {mercuryValue(component.inputGrams, language)}
+                      </span>
+                      <span>
+                        {tr("Remanente", "Remainder")}:{" "}
+                        {mercuryValue(component.remainderGrams, language)}
                       </span>
                     </div>
                   ))}
@@ -269,24 +377,47 @@ export function ShipmentDetailFeature() {
       <section className="portal-panel detail-section">
         <header>
           <div>
-            <h2>Cambios auditados</h2>
-            <p>Ocurrencia y confirmación central se muestran por separado</p>
+            <h2>{tr("Cambios auditados", "Audited changes")}</h2>
+            <p>
+              {tr(
+                "Ocurrencia y confirmación central se muestran por separado",
+                "Occurrence and central confirmation are shown separately",
+              )}
+            </p>
           </div>
         </header>
         {audit.isPending ? (
-          <ShipmentState title="Consultando auditoría">
-            Espere un momento.
+          <ShipmentState title={tr("Consultando auditoría", "Loading audit")}>
+            {tr("Espere un momento.", "Please wait.")}
           </ShipmentState>
         ) : audit.isError ? (
-          <ShipmentState title="No se pudo consultar la auditoría" error>
+          <ShipmentState
+            title={tr(
+              "No se pudo consultar la auditoría",
+              "Audit could not be loaded",
+            )}
+            error
+          >
             {requestErrorMessage(
               audit.error,
-              "El detalle operativo permanece disponible.",
+              tr(
+                "El detalle operativo permanece disponible.",
+                "Operational details remain available.",
+              ),
+              language,
             )}
           </ShipmentState>
         ) : events.length === 0 ? (
-          <ShipmentState title="Sin cambios auditados para este cargamento">
-            No hay entradas visibles dentro de la página de auditoría actual.
+          <ShipmentState
+            title={tr(
+              "Sin cambios auditados para este cargamento",
+              "No audited changes for this shipment",
+            )}
+          >
+            {tr(
+              "No hay entradas visibles dentro de la página de auditoría actual.",
+              "There are no visible entries on the current audit page.",
+            )}
           </ShipmentState>
         ) : (
           <AuditEventList events={events} />
@@ -297,13 +428,17 @@ export function ShipmentDetailFeature() {
 }
 
 export function ShipmentAuditFeature() {
+  const { language, tr } = useLanguage();
   const audit = useShipmentAuditEvents();
   const shipments = useRecentManagementShipments();
 
   if (audit.isPending || shipments.isPending)
     return (
-      <ShipmentState title="Consultando auditoría">
-        Espere mientras se agrupan los movimientos.
+      <ShipmentState title={tr("Consultando auditoría", "Loading audit")}>
+        {tr(
+          "Espere mientras se agrupan los movimientos.",
+          "Please wait while changes are grouped.",
+        )}
       </ShipmentState>
     );
   if (
@@ -313,8 +448,18 @@ export function ShipmentAuditFeature() {
     shipments.data === undefined
   )
     return (
-      <ShipmentState title="No se pudo consultar la auditoría" error>
-        {requestErrorMessage(audit.error ?? shipments.error)}
+      <ShipmentState
+        title={tr(
+          "No se pudo consultar la auditoría",
+          "Audit could not be loaded",
+        )}
+        error
+      >
+        {requestErrorMessage(
+          audit.error ?? shipments.error,
+          undefined,
+          language,
+        )}
       </ShipmentState>
     );
 
@@ -325,9 +470,16 @@ export function ShipmentAuditFeature() {
 
   if (grouped.length === 0)
     return (
-      <ShipmentState title="Aún no hay movimientos de cargamentos">
-        La consulta central respondió correctamente, pero no devolvió cambios
-        auditados de cargamentos.
+      <ShipmentState
+        title={tr(
+          "Aún no hay movimientos de cargamentos",
+          "There are no shipment changes yet",
+        )}
+      >
+        {tr(
+          "La consulta central respondió correctamente, pero no devolvió cambios auditados de cargamentos.",
+          "The central query responded successfully, but returned no audited shipment changes.",
+        )}
       </ShipmentState>
     );
 
@@ -339,21 +491,27 @@ export function ShipmentAuditFeature() {
           <article className="audit-group" key={shipmentId}>
             <header>
               <div>
-                <span>CARGAMENTO {shortShipmentId(shipmentId)}</span>
+                <span>
+                  {tr("CARGAMENTO", "SHIPMENT")} {shortShipmentId(shipmentId)}
+                </span>
                 <h3>
-                  {shipment?.productionLineName ?? "Cargamento operativo"}
+                  {shipment?.productionLineName ??
+                    tr("Cargamento operativo", "Operational shipment")}
                 </h3>
                 <p>
                   {shipment === undefined
-                    ? "Detalle disponible desde la ficha trazable"
-                    : `${shipment.supplierName} · ${shipment.cajuelaTotal} cajuelas`}
+                    ? tr(
+                        "Detalle disponible desde la ficha trazable",
+                        "Details available from the traceability record",
+                      )
+                    : `${shipment.supplierName} · ${shipment.cajuelaTotal} ${tr("cajuelas", "cajuelas")}`}
                 </p>
               </div>
               <Link
                 className="secondary-link"
                 to={`/gerencia/cargamentos/${shipmentId}`}
               >
-                ABRIR CARGAMENTO →
+                {tr("ABRIR CARGAMENTO →", "OPEN SHIPMENT →")}
               </Link>
             </header>
             <AuditEventList events={events} />
@@ -373,6 +531,7 @@ function ShipmentFiltersPanel({
   items: ManagementShipment[];
   update(this: void, key: string, value: string): void;
 }) {
+  const { tr } = useLanguage();
   const lines = uniqueOptions(
     items.map((item) => [item.productionLineId, item.productionLineName]),
   );
@@ -386,28 +545,35 @@ function ShipmentFiltersPanel({
         : [
             [
               item.responsibleWorkerId,
-              item.responsibleWorkerName ?? "Sin nombre",
+              item.responsibleWorkerName ?? tr("Sin nombre", "No name"),
             ],
           ],
     ),
   );
 
   return (
-    <section className="shipment-filters" aria-label="Filtros de cargamentos">
+    <section
+      className="shipment-filters"
+      aria-label={tr("Filtros de cargamentos", "Shipment filters")}
+    >
       <label>
-        Período
+        {tr("Período", "Period")}
         <select
           value={filters.period}
           onChange={(event) => update("period", event.target.value)}
         >
-          <option value="current">Esta semana</option>
-          <option value="previous">Semana anterior</option>
-          <option value="date">Fecha específica</option>
+          <option value="current">{tr("Esta semana", "This week")}</option>
+          <option value="previous">
+            {tr("Semana anterior", "Previous week")}
+          </option>
+          <option value="date">
+            {tr("Fecha específica", "Specific date")}
+          </option>
         </select>
       </label>
       {filters.period === "date" && (
         <label>
-          Fecha en Costa Rica
+          {tr("Fecha en Costa Rica", "Date in Costa Rica")}
           <input
             type="date"
             value={filters.date}
@@ -416,27 +582,27 @@ function ShipmentFiltersPanel({
         </label>
       )}
       <FilterSelect
-        label="Línea"
+        label={tr("Línea", "Line")}
         name="line"
         value={filters.productionLineId ?? ""}
         options={lines}
-        all="Todas las líneas"
+        all={tr("Todas las líneas", "All lines")}
         update={update}
       />
       <FilterSelect
-        label="Proveedor"
+        label={tr("Proveedor", "Supplier")}
         name="supplier"
         value={filters.supplierId ?? ""}
         options={suppliers}
-        all="Todos los proveedores"
+        all={tr("Todos los proveedores", "All suppliers")}
         update={update}
       />
       <FilterSelect
-        label="Responsable"
+        label={tr("Responsable", "Responsible worker")}
         name="responsible"
         value={filters.responsibleWorkerId ?? ""}
         options={responsible}
-        all="Todos los responsables"
+        all={tr("Todos los responsables", "All responsible workers")}
         update={update}
       />
     </section>
@@ -458,6 +624,8 @@ function FilterSelect({
   all: string;
   update(this: void, key: string, value: string): void;
 }) {
+  const { tr } = useLanguage();
+
   return (
     <label>
       {label}
@@ -467,7 +635,9 @@ function FilterSelect({
       >
         <option value="">{all}</option>
         {value.length > 0 && !options.some(([id]) => id === value) && (
-          <option value={value}>Filtro seleccionado</option>
+          <option value={value}>
+            {tr("Filtro seleccionado", "Selected filter")}
+          </option>
         )}
         {options.map(([id, nameValue]) => (
           <option value={id} key={id}>
@@ -490,6 +660,7 @@ function Pagination({
   searchParams: URLSearchParams;
   setSearchParams(this: void, params: URLSearchParams): void;
 }) {
+  const { tr } = useLanguage();
   const go = (nextPage: number) => {
     const next = new URLSearchParams(searchParams);
     if (nextPage === 1) next.delete("page");
@@ -498,44 +669,49 @@ function Pagination({
   };
 
   return (
-    <nav className="history-pagination" aria-label="Páginas de cargamentos">
+    <nav
+      className="history-pagination"
+      aria-label={tr("Páginas de cargamentos", "Shipment pages")}
+    >
       <button type="button" disabled={page <= 1} onClick={() => go(page - 1)}>
-        ← Anterior
+        {tr("← Anterior", "← Previous")}
       </button>
       <span>
-        Página {page} de {Math.max(totalPages, 1)}
+        {tr("Página", "Page")} {page} {tr("de", "of")} {Math.max(totalPages, 1)}
       </span>
       <button
         type="button"
         disabled={page >= totalPages}
         onClick={() => go(page + 1)}
       >
-        Siguiente →
+        {tr("Siguiente →", "Next →")}
       </button>
     </nav>
   );
 }
 
 function AuditEventList({ events }: { events: AuditEvent[] }) {
+  const { language, tr } = useLanguage();
+
   return (
     <ol className="audit-timeline">
       {events.map((event) => (
         <li key={event.id}>
           <div>
-            <strong>{auditAction(event.action)}</strong>
+            <strong>{auditAction(event.action, language)}</strong>
             <span>
-              {event.actorDisplayName ?? "Sistema"} ·{" "}
-              {auditResult(event.result)}
+              {event.actorDisplayName ?? tr("Sistema", "System")} ·{" "}
+              {auditResult(event.result, language)}
             </span>
           </div>
           <dl>
             <div>
-              <dt>Ocurrió</dt>
-              <dd>{formatCostaRicaDateTime(event.occurredAt)}</dd>
+              <dt>{tr("Ocurrió", "Occurred")}</dt>
+              <dd>{formatCostaRicaDateTime(event.occurredAt, language)}</dd>
             </div>
             <div>
-              <dt>Confirmado en centro</dt>
-              <dd>{formatCostaRicaDateTime(event.recordedAt)}</dd>
+              <dt>{tr("Confirmado en centro", "Confirmed centrally")}</dt>
+              <dd>{formatCostaRicaDateTime(event.recordedAt, language)}</dd>
             </div>
           </dl>
         </li>
@@ -620,16 +796,28 @@ function uniqueOptions(items: [string, string][]): [string, string][] {
   );
 }
 
-function mercuryValue(value: number | null): string {
-  return value === null ? "Pendiente" : `${value.toLocaleString("es-CR")} g`;
+function mercuryValue(value: number | null, language: "es" | "en"): string {
+  return value === null
+    ? language === "es"
+      ? "Pendiente"
+      : "Pending"
+    : `${value.toLocaleString(language === "es" ? "es-CR" : "en-US")} g`;
 }
 
-function auditAction(value: string): string {
-  return value === "sync.ingest" ? "Cambio operativo recibido" : value;
+function auditAction(value: string, language: "es" | "en"): string {
+  return value === "sync.ingest"
+    ? language === "es"
+      ? "Cambio operativo recibido"
+      : "Operational change received"
+    : value;
 }
 
-function auditResult(value: AuditEvent["result"]): string {
-  if (value === "SUCCEEDED") return "Confirmado";
-  if (value === "REJECTED") return "Rechazado";
-  return "Falló";
+function auditResult(
+  value: AuditEvent["result"],
+  language: "es" | "en",
+): string {
+  if (value === "SUCCEEDED")
+    return language === "es" ? "Confirmado" : "Confirmed";
+  if (value === "REJECTED") return language === "es" ? "Rechazado" : "Rejected";
+  return language === "es" ? "Falló" : "Failed";
 }

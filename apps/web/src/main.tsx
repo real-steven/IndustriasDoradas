@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./app/app";
 import { QueryProvider } from "./app/query-provider";
 import { AuthProvider } from "./auth/auth-provider";
+import { LanguageProvider } from "./i18n/language-provider";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -15,12 +16,14 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </AuthProvider>
-    </QueryProvider>
+    <LanguageProvider>
+      <QueryProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </AuthProvider>
+      </QueryProvider>
+    </LanguageProvider>
   </StrictMode>,
 );
