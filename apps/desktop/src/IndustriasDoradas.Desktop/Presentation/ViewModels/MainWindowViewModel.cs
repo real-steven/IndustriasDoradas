@@ -209,6 +209,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 await Audit.InitializeAsync();
             }
+
+            if (Attendance is not null)
+            {
+                await Attendance.InitializeAsync();
+            }
         }
         catch (Exception exception) when (
             exception is IOException or SqliteException or InvalidOperationException)

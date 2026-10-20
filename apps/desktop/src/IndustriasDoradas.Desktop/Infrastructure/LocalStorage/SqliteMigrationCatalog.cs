@@ -28,6 +28,7 @@ public static class SqliteMigrationCatalog
         Read(13, "correction_audit_context", "013_correction_audit_context.sql"),
         Read(14, "line_component_projection", "014_line_component_projection.sql"),
         Read(15, "mercury_sweep_measurements", "015_mercury_sweep_measurements.sql"),
+        Read(16, "attendance_persistence", "016_attendance_persistence.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

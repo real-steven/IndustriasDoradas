@@ -10,7 +10,7 @@ Guía de ejecución del Sistema de Gestión de Producción Minera. Cubre 17 sema
 | 3 | [Sincronización](sprint-03-sincronizacion.md) | 2 | Varias estaciones sin pérdida/duplicación | 2 |
 | 4 | [Barridas y mercurio](sprint-04-barridas.md) | 2 | Alertas, barridas reales, mercurio por rastra y sincronización operacional completa | 3 |
 | 5 | [Web gerencial](sprint-05-web.md) | 2 | Portal de `JEFE_EMPRESA`, cargamentos, auditoría y oro total opcional por cargamento | 4.11 |
-| 6 | [Trabajadores y asistencia](sprint-06-asistencia.md) | 2 | Check-in/out local-first, incidencias y horas; fotografía condicionada | 1, 3, 5 |
+| 6 | [Trabajadores y asistencia](sprint-06-asistencia.md) | 2 | Check-in/out local-first, incidencias y horas; fotografía aplazada para el MVP | 1, 3, 5 |
 | 7 | [Inventario y mantenimiento básico](sprint-07-inventario.md) | 2 | Kardex, revisiones y vida útil de componentes sin inferir consumo de mercurio | 1, 3–5 |
 | 8 | [Indicadores, reportes y entrega](sprint-08-entrega.md) | 2 | Comparación de proveedores, Excel, despliegue y recuperación | 5; 6–7 solo si cerraron |
 

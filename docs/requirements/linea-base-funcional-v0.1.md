@@ -182,9 +182,8 @@ No se modelan existencia acumulada, custodia, entrega, transporte, venta, gasto 
 - La primera versión digital registra solo check-in y check-out; no descansos ni almuerzo.
 - El trabajador accede desde el Modo Operación, selecciona su perfil y crea una
   marca con su hora original. No necesita una cuenta ni contraseña.
-- La fotografía es condicionada: Sprint 6 debe aprobar finalidad,
-  consentimiento, acceso y retención antes de capturarla. Si se aplaza, la
-  asistencia funciona sin imagen.
+- La fotografía quedó aplazada en el paso 6.2. El MVP de asistencia funciona
+  sin imagen y no crea Storage, temporales ni plantillas biométricas.
 - El jefe de planta resuelve incidencias recientes desde su modo temporal.
   `JEFE_EMPRESA` consulta la consolidación y ejecuta únicamente correcciones
   centrales expresamente aprobadas, siempre mediante ajustes auditados.
@@ -195,8 +194,14 @@ No se modelan existencia acumulada, custodia, entrega, transporte, venta, gasto 
 - Si la solicitud se rechaza o era duplicada, las horas y evidencias se
   conservan. La resolución aprobada debe reasignar, fusionar o documentar el
   rechazo sin recuperar el rol legado `ADMINISTRADOR`.
-- La jornada habitual es hasta 8 horas y puede extenderse aproximadamente hasta 10; la regla exacta de horas extra/dobles queda pendiente.
-- El sistema calcula duración e incidencias, no salarios, impuestos ni deducciones.
+- La jornada habitual es de 8 horas. Una marca abierta que la supera genera una
+  incidencia, pero no se cierra ni se convierte en cero automáticamente.
+- La jornada no se divide al cruzar medianoche y conserva como referencia el día
+  local en que ocurrió el check-in.
+- El sistema calcula duración al minuto exacto e incidencias. Puede proyectar
+  una estimación bruta usando tarifa regular versionada por trabajador y franja
+  nocturna 18:00–06:00 con multiplicador inicial 1,5. No calcula impuestos,
+  deducciones, pago final ni comprobantes de nómina.
 - Olvidos o marcas históricas se corrigen mediante el caso de uso y actor
   aprobados en Sprint 6, nunca editando el evento original.
 - El escritorio debe soportar asistencia offline.
@@ -359,12 +364,12 @@ Reportes iniciales:
 | Política exacta de corrección administrativa y eliminación | Sprint 1 |
 | Matriz detallada de permisos, gobierno de cuentas, PIN y acceso offline de 24 horas | Aprobada al iniciar el prompt 1.2 el 2026-08-17 |
 | Cardinalidades y modelo relacional de identidad, organización y catálogos iniciales | Aprobados al iniciar el prompt 1.3 el 2026-08-17 |
-| Decisión de incluir fotografía y comportamiento cuando la cámara no está disponible | Sprint 6 |
-| Regla de horas extra/dobles; la clasificación operativa 06:00/18:00 ya fue confirmada | Sprint 6 |
-| Confirmación o sustitución de la retención indefinida provisional de fotografías; consentimiento, enrolamiento y precisión biométrica | Sprint 6 |
+| Decisión de incluir fotografía y comportamiento cuando la cámara no está disponible | Resuelta el 2026-10-15: fotografía aplazada; la cámara no participa en el MVP |
+| Regla de horas extra/dobles; la clasificación operativa 06:00/18:00 ya fue confirmada | Parcialmente resuelta el 2026-10-15: estimación nocturna 1,5 y tarifa regular configurable por trabajador; horas extra/feriados siguen pendientes |
+| Confirmación o sustitución de la retención indefinida provisional de fotografías; consentimiento, enrolamiento y precisión biométrica | Resuelta el 2026-10-15: no se capturan fotos ni biometría; cualquier versión futura requiere una política nueva |
 | Catálogo/unidades definitivas e intervalos de revisión de inventario | Sprint 7 |
 | Fórmulas e indicadores gerenciales | Sprint 8 |
-| Tarifa horaria y estimación de costo laboral, solo si se aprueban sin convertir el sistema en nómina | Sprint 6/8 |
+| Tarifa horaria y estimación de costo laboral, solo si se aprueban sin convertir el sistema en nómina | Aprobada como estimación bruta configurable por trabajador el 2026-10-15; persistencia y reporte en Sprint 6/8 |
 
 ## 17. Aprobación de la pausa 0.1
 
@@ -417,6 +422,13 @@ fotografía pendiente. También confirmó que las horas nunca se eliminan, que l
 operación continúa ante fallos técnicos y que sensor, reconocimiento facial y
 estimaciones de pago se incorporan únicamente después de estabilizar sus flujos
 base y aprobar sus políticas específicas.
+
+### 19.2 Decisión de fotografía del 2026-10-15
+
+La referencia histórica a una fotografía pendiente fue sustituida para el MVP:
+el check-in/out será manual y sin imagen. No se crean archivos, Storage ni
+plantillas biométricas. Cámara y reconocimiento facial permanecen en backlog y
+requieren una aprobación de privacidad independiente antes de implementarse.
 
 También confirmó que la planta actual tiene un solo jefe de planta, que todos
 los trabajadores registran horas independientemente de la línea y que solo el

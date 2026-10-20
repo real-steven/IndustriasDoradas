@@ -160,7 +160,7 @@
                             </Button.Style>
                         </Button>
                         <Button AutomationProperties.Name="Ir a asistencia" Command="{Binding ShowAttendanceCommand}"
-                                Content="◷  ASIST." ToolTip="Asistencia y horas · Próximamente">
+                                Content="◷  ASIST." ToolTip="Registrar entrada y salida">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
                                     <Style.Triggers>

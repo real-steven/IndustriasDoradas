@@ -169,6 +169,7 @@ public partial class MainWindow : Window
         if (viewModel.Station?.IsPlantManager == true)
         {
             viewModel.Station.ExitManagerModeCommand.Execute(null);
+            viewModel.Attendance?.RefreshManagerMode();
             return;
         }
 
@@ -185,6 +186,7 @@ public partial class MainWindow : Window
         if (viewModel.Station.IsPlantManager)
         {
             ElevationOverlay.Visibility = Visibility.Collapsed;
+            viewModel.Attendance?.RefreshManagerMode();
         }
     }
 

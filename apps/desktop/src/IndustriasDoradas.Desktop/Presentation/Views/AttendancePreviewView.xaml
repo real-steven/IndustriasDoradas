@@ -1,7 +1,109 @@
 <UserControl x:Class="IndustriasDoradas.Desktop.Presentation.Views.AttendancePreviewView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             AutomationProperties.Name="Vista conceptual de asistencia">
+             AutomationProperties.Name="Registro local de asistencia">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Style x:Key="AttendanceComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="Foreground" Value="{StaticResource Ink900Brush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="OptionChrome" Margin="4,2" Padding="{TemplateBinding Padding}"
+                                Background="Transparent" CornerRadius="7">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="OptionChrome" Property="Background" Value="#EAF3F7" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="OptionChrome" Property="Background" Value="#DDEEF5" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="Foreground" Value="{StaticResource NavyBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="AttendanceComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#C8D8DF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource Ink900Brush}" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource AttendanceComboBoxItemStyle}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid x:Name="InputRoot">
+                            <Border x:Name="InputChrome"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10">
+                                <Grid>
+                                    <ContentPresenter Margin="13,0,46,0"
+                                                      HorizontalAlignment="Left"
+                                                      VerticalAlignment="Center"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}"
+                                                      IsHitTestVisible="False" />
+                                    <Border Width="38" Margin="0,5,5,5" HorizontalAlignment="Right"
+                                            Background="#EDF4F7" CornerRadius="7">
+                                        <Path Width="10" Height="6" HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" Data="M 0 0 L 5 5 L 10 0"
+                                              Stroke="{StaticResource NavyBrush}" StrokeThickness="1.6"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+                            <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
+                                   PlacementTarget="{Binding ElementName=InputRoot}" PopupAnimation="Fade">
+                                <Border Width="{Binding ActualWidth, ElementName=InputRoot}" Margin="0,5,0,0"
+                                        Padding="4" Background="White" BorderBrush="#C8D8DF"
+                                        BorderThickness="1" CornerRadius="10">
+                                    <ScrollViewer MaxHeight="260" CanContentScroll="True"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="InputChrome" Property="BorderBrush" Value="#79A9BE" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="InputChrome" Property="BorderBrush" Value="#2F7EA4" />
+                                <Setter TargetName="InputChrome" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource SoftCanvasBrush}">
         <StackPanel Margin="34,26,34,42" MaxWidth="1380" HorizontalAlignment="Center">
             <Grid>
@@ -15,20 +117,43 @@
                     <TextBlock Margin="0,7,0,0" FontSize="28" FontWeight="Bold"
                                Text="Asistencia" />
                     <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
-                               Text="Ejemplo visual del futuro registro de entrada, salida y horas trabajadas." />
+                               Text="Entrada y salida local-first, incluso cuando no haya Internet." />
                 </StackPanel>
-                <Border Grid.Column="1" VerticalAlignment="Center" Padding="13,8"
-                        Background="#FFF5D7" BorderBrush="#E6C665" BorderThickness="1"
-                        CornerRadius="14">
-                    <TextBlock Foreground="#815D17" FontSize="11" FontWeight="Bold"
-                               Text="●  PRÓXIMAMENTE" />
-                </Border>
+                <Button Grid.Column="1" MinWidth="128" VerticalAlignment="Center"
+                        Command="{Binding RefreshCommand}" Content="↻  ACTUALIZAR" />
             </Grid>
 
-            <Border Margin="0,18,0,0" Style="{StaticResource WarningAlertStyle}">
+            <Border Margin="0,18,0,0" Style="{StaticResource InfoAlertStyle}">
                 <TextBlock AutomationProperties.LiveSetting="Polite" Text="{Binding Status}"
                            TextWrapping="Wrap" />
             </Border>
+
+            <UniformGrid Margin="-6,18,-6,0" Columns="3">
+                <Border Margin="6" Padding="18" Background="#EFFAF4" CornerRadius="14">
+                    <StackPanel>
+                        <TextBlock Foreground="#3D6B51" FontSize="11" FontWeight="Bold"
+                                   Text="EN PLANTA" />
+                        <TextBlock Margin="0,5,0,0" Foreground="#178449" FontSize="28"
+                                   FontWeight="Bold" Text="{Binding PresentCount}" />
+                    </StackPanel>
+                </Border>
+                <Border Margin="6" Padding="18" Background="#F2F7FA" CornerRadius="14">
+                    <StackPanel>
+                        <TextBlock Foreground="#526A78" FontSize="11" FontWeight="Bold"
+                                   Text="JORNADAS ABIERTAS" />
+                        <TextBlock Margin="0,5,0,0" FontSize="28" FontWeight="Bold"
+                                   Text="{Binding OpenShiftCount}" />
+                    </StackPanel>
+                </Border>
+                <Border Margin="6" Padding="18" Background="#FFF8E9" CornerRadius="14">
+                    <StackPanel>
+                        <TextBlock Foreground="#815D17" FontSize="11" FontWeight="Bold"
+                                   Text="INCIDENCIAS" />
+                        <TextBlock Margin="0,5,0,0" Foreground="#9A6500" FontSize="28"
+                                   FontWeight="Bold" Text="{Binding IncidentCount}" />
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
 
             <Grid Margin="0,18,0,0">
                 <Grid.ColumnDefinitions>
@@ -39,24 +164,23 @@
 
                 <Border Grid.Column="0" Padding="26" Style="{StaticResource SurfaceCardStyle}">
                     <StackPanel>
-                        <TextBlock FontSize="21" FontWeight="Bold" Text="Registrar asistencia" />
+                        <TextBlock FontSize="21" FontWeight="Bold" Text="Registrar mi asistencia" />
                         <TextBlock Margin="0,6,0,18" Foreground="{StaticResource MutedBrush}"
-                                   Text="El trabajador se identificará y elegirá si está entrando o saliendo."
+                                   Text="Seleccione su nombre. El sistema habilitará únicamente la acción válida."
                                    TextWrapping="Wrap" />
 
-                        <Border MinHeight="190" Padding="22" Background="#F3F7F9"
-                                BorderBrush="#CADCE4" BorderThickness="1" CornerRadius="16">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock HorizontalAlignment="Center" FontFamily="Segoe UI Emoji"
-                                           FontSize="48" Text="📷" />
-                                <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center"
-                                           FontSize="17" FontWeight="Bold"
-                                           Text="Esperando identificación" />
-                                <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center"
-                                           Foreground="{StaticResource MutedBrush}" TextAlignment="Center"
-                                           Text="Cámara, dispositivo local o selección manual futura"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
+                        <TextBlock Margin="0,0,0,7" FontSize="11" FontWeight="Bold"
+                                   Text="TRABAJADOR" />
+                        <ComboBox Style="{StaticResource AttendanceComboBoxStyle}"
+                                  ItemsSource="{Binding Workers}"
+                                  SelectedItem="{Binding SelectedWorker}"
+                                  DisplayMemberPath="Name"
+                                  AutomationProperties.Name="Seleccionar trabajador" />
+
+                        <Border Margin="0,14,0,0" Padding="15" Background="#F3F7F9"
+                                BorderBrush="#CADCE4" BorderThickness="1" CornerRadius="12">
+                            <TextBlock FontWeight="SemiBold" Text="{Binding SelectedWorkerSummary}"
+                                       TextWrapping="Wrap" />
                         </Border>
 
                         <Grid Margin="0,18,0,0">
@@ -65,95 +189,72 @@
                                 <ColumnDefinition Width="10" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" MinHeight="58"
-                                    Command="{Binding ShowComingSoonCommand}"
-                                    CommandParameter="registro de entrada"
+                            <Button Grid.Column="0" MinHeight="62" Background="#EAF8F0"
+                                    BorderBrush="#AAD8BC" Foreground="#147A42"
+                                    Command="{Binding CheckInCommand}"
                                     Content="→  REGISTRAR ENTRADA" />
-                            <Button Grid.Column="2" MinHeight="58"
-                                    Command="{Binding ShowComingSoonCommand}"
-                                    CommandParameter="registro de salida"
+                            <Button Grid.Column="2" MinHeight="62" Background="#F5F8FA"
+                                    BorderBrush="#BED0D9" Foreground="#244A5C"
+                                    Command="{Binding CheckOutCommand}"
                                     Content="←  REGISTRAR SALIDA" />
                         </Grid>
+
+                        <TextBlock Margin="0,15,0,0" Foreground="{StaticResource MutedBrush}"
+                                   FontSize="11" TextWrapping="Wrap"
+                                   Text="La marca se guarda primero en este equipo. Una pulsación repetida queda bloqueada mientras se procesa." />
                     </StackPanel>
                 </Border>
 
                 <StackPanel Grid.Column="2">
                     <Border Padding="22" Style="{StaticResource SurfaceCardStyle}" CornerRadius="16">
                         <StackPanel>
-                            <TextBlock FontSize="19" FontWeight="Bold" Text="Personal hoy" />
-                            <TextBlock Margin="0,5,0,15" Foreground="{StaticResource MutedBrush}"
-                                       Text="Resumen que podrá consultar el jefe de planta."
-                                       TextWrapping="Wrap" />
-                            <Border Padding="14" Background="#F3F8F5" CornerRadius="11">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock FontWeight="Bold" Text="Actualmente en planta" />
-                                    <TextBlock Grid.Column="1" Foreground="#207946" FontSize="20"
-                                               FontWeight="Bold" Text="—" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="0,9,0,0" Padding="14" Background="#F7F9FA" CornerRadius="11">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock FontWeight="Bold" Text="Marcas abiertas" />
-                                    <TextBlock Grid.Column="1" FontSize="20" FontWeight="Bold" Text="—" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="0,9,0,0" Padding="14" Background="#FFF8E9" CornerRadius="11">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock FontWeight="Bold" Text="Incidencias" />
-                                    <TextBlock Grid.Column="1" Foreground="#8A5A00" FontSize="20"
-                                               FontWeight="Bold" Text="—" />
-                                </Grid>
-                            </Border>
-                            <TextBlock Margin="0,14,0,0" Foreground="{StaticResource MutedBrush}"
-                                       FontSize="10"
-                                       Text="Los valores reales aparecerán cuando se implemente el Sprint 6."
-                                       TextWrapping="Wrap" />
+                            <TextBlock FontSize="19" FontWeight="Bold" Text="Estado del personal" />
+                            <TextBlock Margin="0,5,0,14" Foreground="{StaticResource MutedBrush}"
+                                       Text="Resumen local de cada trabajador." />
+                            <ItemsControl ItemsSource="{Binding Workers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,8" Padding="13" Background="#F7F9FA"
+                                                BorderBrush="#DCE6EA" BorderThickness="1" CornerRadius="11">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="Bold" Text="{Binding Name}" />
+                                                    <TextBlock Margin="0,3,0,0" Foreground="{StaticResource MutedBrush}"
+                                                               FontSize="11" Text="{Binding LastMark}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Margin="12,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{Binding StateColor}"
+                                                           FontWeight="Bold" Text="{Binding State}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
 
                     <Border Margin="0,14,0,0" Padding="22" Style="{StaticResource SurfaceCardStyle}"
                             CornerRadius="16">
                         <StackPanel>
-                            <TextBlock FontSize="19" FontWeight="Bold" Text="Identificación futura" />
-                            <TextBlock Margin="0,7,0,0" Foreground="{StaticResource MutedBrush}"
-                                       Text="La primera versión conservará una alternativa manual. Una cámara USB o un punto Raspberry podrán integrarse después sin bloquear la asistencia."
+                            <TextBlock FontSize="19" FontWeight="Bold" Text="Corregir salida olvidada" />
+                            <TextBlock Margin="0,6,0,12" Foreground="{StaticResource MutedBrush}"
+                                       Text="Disponible únicamente con Modo Jefe de Planta. La marca original no se edita."
                                        TextWrapping="Wrap" />
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="MOTIVO OBLIGATORIO" />
+                            <TextBox MinHeight="64" Margin="0,7,0,10" Padding="10"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     Text="{Binding CorrectionReason, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button MinHeight="46" Command="{Binding CorrectOpenShiftCommand}"
+                                    Content="CERRAR JORNADA CON CORRECCIÓN" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </Grid>
-
-            <Border Margin="0,18,0,0" Padding="22" Style="{StaticResource SurfaceCardStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="19" FontWeight="Bold" Text="Flujo previsto" />
-                    <UniformGrid Margin="-5,12,-5,0" Columns="4">
-                        <Border Margin="5" Padding="14" Background="#F7F9FA" CornerRadius="11">
-                            <StackPanel><TextBlock FontWeight="Bold" Text="1 · Identificar" /><TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}" Text="Cámara o selección manual." TextWrapping="Wrap" /></StackPanel>
-                        </Border>
-                        <Border Margin="5" Padding="14" Background="#F7F9FA" CornerRadius="11">
-                            <StackPanel><TextBlock FontWeight="Bold" Text="2 · Elegir" /><TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}" Text="Entrada o salida explícita." TextWrapping="Wrap" /></StackPanel>
-                        </Border>
-                        <Border Margin="5" Padding="14" Background="#F7F9FA" CornerRadius="11">
-                            <StackPanel><TextBlock FontWeight="Bold" Text="3 · Guardar" /><TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}" Text="Registro local aunque no haya Internet." TextWrapping="Wrap" /></StackPanel>
-                        </Border>
-                        <Border Margin="5" Padding="14" Background="#F7F9FA" CornerRadius="11">
-                            <StackPanel><TextBlock FontWeight="Bold" Text="4 · Consultar" /><TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}" Text="Horas e incidencias auditables." TextWrapping="Wrap" /></StackPanel>
-                        </Border>
-                    </UniformGrid>
-                </StackPanel>
-            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

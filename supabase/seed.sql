@@ -43,7 +43,11 @@ values
   ('10000000-0000-4000-8000-000000000024', 'workers.read', 'Consultar trabajadores y solicitudes de trabajadores.'),
   ('10000000-0000-4000-8000-000000000025', 'gold.read', 'Consultar resultados de oro por cargamento cerrado.'),
   ('10000000-0000-4000-8000-000000000026', 'gold.results.manage', 'Registrar o corregir el total de oro de un cargamento cerrado.'),
-  ('10000000-0000-4000-8000-000000000027', 'gold.deliveries.manage', 'Registrar solicitudes de entrega de oro.')
+  ('10000000-0000-4000-8000-000000000027', 'gold.deliveries.manage', 'Registrar solicitudes de entrega de oro.'),
+  ('10000000-0000-4000-8000-000000000028', 'attendance.read', 'Consultar asistencia, jornadas e incidencias.'),
+  ('10000000-0000-4000-8000-000000000029', 'attendance.record', 'Registrar entrada y salida desde una estación autorizada.'),
+  ('10000000-0000-4000-8000-000000000030', 'attendance.pay_rates.read', 'Consultar tarifas horarias versionadas.'),
+  ('10000000-0000-4000-8000-000000000031', 'attendance.pay_rates.manage', 'Configurar tarifas horarias por trabajador.')
 on conflict (id) do update
 set
   code = excluded.code,
@@ -56,6 +60,10 @@ with assignments (role_code, permission_code) as (
     ('JEFE_EMPRESA', 'audit.read_redacted'),
     ('JEFE_EMPRESA', 'administrators.govern'),
     ('JEFE_EMPRESA', 'organization_catalogs.read'),
+    ('JEFE_EMPRESA', 'workers.read'),
+    ('JEFE_EMPRESA', 'attendance.read'),
+    ('JEFE_EMPRESA', 'attendance.pay_rates.read'),
+    ('JEFE_EMPRESA', 'attendance.pay_rates.manage'),
     ('JEFE_EMPRESA', 'gold_deliveries.confirm'),
     ('JEFE_EMPRESA', 'profile.locale_update'),
     ('ADMINISTRADOR', 'profile.locale_update'),
@@ -67,6 +75,8 @@ with assignments (role_code, permission_code) as (
     ('JEFE_PLANTA', 'workers.read'),
     ('JEFE_PLANTA', 'cycles.correct_open'),
     ('JEFE_PLANTA', 'attendance.review_recent'),
+    ('JEFE_PLANTA', 'attendance.record'),
+    ('JEFE_PLANTA', 'attendance.correct'),
     ('JEFE_PLANTA', 'inventory.manage'),
     ('JEFE_PLANTA', 'profile.locale_update')
 )

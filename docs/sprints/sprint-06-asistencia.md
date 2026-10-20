@@ -21,8 +21,9 @@ reconocimiento facial queda fuera del criterio de cierre de este sprint.
    centrales expresamente definidas.
 5. `ADMINISTRADOR` no forma parte del alcance vigente. Las tablas o permisos
    históricos no justifican pantallas ni casos de uso nuevos.
-6. No hay descansos automáticos, salario, deducciones, pago final ni cálculo de
-   nómina.
+6. No hay descansos automáticos, deducciones, pago final ni cálculo de nómina.
+   Puede existir una estimación bruta derivada de minutos y tarifa versionada
+   por trabajador, claramente separada de un comprobante de pago.
 7. Ningún fallo de cámara, red, perfil provisional o reloj puede borrar una
    marca ya confirmada ni detener producción.
 
@@ -60,12 +61,16 @@ mismo total central y los datos incompletos permanecen pendientes, nunca cero.
 
 ## Mini pasos, pausas y prompts
 
-**Referencia visual preparatoria — 2026-10-12:** Desktop incluye una maqueta
-navegable `Asistencia · Próximamente` y una categoría conceptual `Asistencia y
-horas` en Auditoría. Solo comunican el flujo previsto de identificación,
-entrada/salida, guardado local, horas e incidencias. Sus controles no escriben
-SQLite, no llaman al API, no capturan fotografías y no constituyen evidencia de
-implementación de los pasos 6.3–6.9.
+**Referencia visual preparatoria — 2026-10-12:** la categoría `Asistencia y
+horas` de Auditoría permanece conceptual hasta 6.8. La pantalla navegable de
+Asistencia dejó de ser maqueta el 2026-10-17: desde 6.5 sus controles escriben
+marcas reales en SQLite y outbox. Sigue sin capturar fotografías y la consulta
+central aún depende de 6.7–6.9.
+
+**Estado revisado — 2026-10-15:** la maqueta no cierra por sí sola el paso 6.1.
+El paso 6.2 sí queda resuelto con fotografía aplazada para el MVP. La decisión
+completa está en
+[`../security/decision-fotografia-asistencia.md`](../security/decision-fotografia-asistencia.md).
 
 ### 6.1 Flujo real y responsabilidades
 
@@ -77,6 +82,26 @@ cuentas de operario ni recuperes el rol legado `ADMINISTRADOR`.
 
 **Pausa:** tabla de casos ambiguos aprobada y responsables definidos.
 
+**Revisión aprobada 2026-10-15 — paso 6.1 cerrado:**
+
+| Caso | Regla confirmada | Estado |
+|---|---|---|
+| Identificación | El trabajador selecciona su perfil desde Modo Operación; no tiene cuenta ni contraseña. | Confirmado |
+| Entrada y salida | El trabajador registra su propia entrada o salida; no se registran descansos ni almuerzo. | Confirmado |
+| Operación sin red | La hora original se conserva localmente y la sincronización posterior no puede borrar la marca. | Confirmado |
+| Revisión en planta | El jefe de planta atiende incidencias desde desktop mediante elevación temporal y motivo auditable. | Confirmado |
+| Consulta gerencial | `JEFE_EMPRESA` consulta horas e incidencias consolidadas desde web; no existe revisión por `ADMINISTRADOR`. | Confirmado |
+| Olvido de entrada o salida | El jefe de planta agrega un ajuste compensatorio con Modo Jefe y motivo obligatorio; nunca edita la marca original. | Confirmado |
+| Turno nocturno | Una jornada que cruza medianoche no se divide y conserva como fecha de referencia el día local de la entrada. | Confirmado |
+| Marca abierta | Check-in sin check-out permanece abierto, no vale cero y genera alerta al superar ocho horas; el jefe puede cerrarlo mediante ajuste motivado. | Confirmado |
+| Precisión | Horas y franjas se calculan al minuto exacto, sin redondeo de jornada. | Confirmado |
+| Responsabilidad futura | La aprobación gerencial y las notificaciones push quedan como evolución posible; no bloquean la corrección local del MVP. | Confirmado |
+
+La planta puede operar continuamente y el cambio de fecha no cierra jornadas.
+Por ahora el jefe de planta resuelve olvidos. Cambiar posteriormente la
+responsabilidad hacia `JEFE_EMPRESA` requerirá modificar el caso de uso y los
+permisos, no el historial de marcas.
+
 ### 6.2 Privacidad y decisión de fotografía
 
 **Prompt:** Decide explícitamente si el primer flujo requiere fotografía. Si la
@@ -87,6 +112,21 @@ registra la decisión; reconocimiento facial permanece en backlog.
 
 **Pausa:** política firmada o aplazamiento explícito antes de crear Storage.
 
+**Resultado 2026-10-15 — aplazamiento explícito aprobado:**
+
+- El primer flujo de asistencia funcionará sin fotografía.
+- No se solicita consentimiento fotográfico porque el MVP no captura imágenes.
+- No se crea bucket, carga, respaldo, caché ni política de retención de fotos.
+- No se genera ni almacena plantilla biométrica y no se realiza reconocimiento
+  facial.
+- Cámara USB, timbre o Raspberry quedan como integraciones futuras y no pueden
+  condicionar el check-in/out manual.
+- Activar fotografía en el futuro requiere una nueva aprobación explícita de
+  finalidad, acceso, retención, borrado, costo, contingencia e incidentes.
+
+La pausa 6.2 queda cerrada. El paso 6.6 se omite en este Sprint mientras esta
+decisión permanezca vigente.
+
 ### 6.3 Dominio de asistencia
 
 **Prompt:** Diseña `CHECK_IN`, `CHECK_OUT`, incidencia y ajuste compensatorio con
@@ -96,6 +136,31 @@ sincronización, motivo y actor. Conserva trabajadores
 Prueba entrada duplicada, salida huérfana, nocturno y corrección tardía.
 
 **Pausa:** dataset pequeño produce estados esperados sin editar eventos.
+
+**Avance 2026-10-15 — dominio inicial implementado:**
+
+- `CHECK_IN`, `CHECK_OUT`, `ADJUSTED_CHECK_IN` y `ADJUSTED_CHECK_OUT` son
+  eventos inmutables con UUID, secuencia de estación, trabajador, estación,
+  tiempos de ocurrencia/registro/confirmación y estado de sincronización.
+- Un ajuste exige perfil de jefe, motivo y referencia a la marca relacionada.
+- La proyección produce jornadas completas o abiertas e incidencias por entrada
+  duplicada, salida huérfana y jornada abierta de más de ocho horas.
+- Reintentar el mismo UUID es idempotente; reutilizarlo con otro contenido o
+  repetir una secuencia con otro evento se rechaza.
+- Medianoche no divide la jornada y la fecha visible corresponde al check-in en
+  `America/Costa_Rica`.
+- La tarifa regular y el multiplicador nocturno son versiones configurables por
+  trabajador. La referencia inicial es franja regular 06:00–18:00 y nocturna
+  18:00–06:00 con multiplicador 1,5; no se codifica una tarifa única global.
+- Jornadas abiertas no calculan pago. Las completas generan una estimación
+  bruta por minutos regulares/nocturnos, no nómina.
+
+La especificación está en
+[`../architecture/dominio-asistencia-sprint-06.md`](../architecture/dominio-asistencia-sprint-06.md).
+El dataset automatizado cubre cruce de medianoche, duplicado, salida huérfana,
+apertura mayor a ocho horas, corrección tardía, idempotencia y tarifa distinta
+por empleado. La persistencia queda resuelta en 6.4; la ingestión API y la
+convergencia multiestación continúan reservadas para 6.7.
 
 ### 6.4 Persistencia y permisos
 
@@ -108,6 +173,27 @@ en SQLite/PostgreSQL.
 **Pausa:** actualización desde Sprint 5 conserva todo el historial y bloquea
 acceso cruzado.
 
+**Resultado 2026-10-15 — capa de datos 6.4 cerrada:**
+
+- PostgreSQL agrega eventos de asistencia y tarifas versionadas por trabajador,
+  con FK compuestas por organización, checks, índices, RLS y privilegios
+  exclusivos del backend.
+- SQLite migra a versión 16 y conserva eventos de asistencia localmente sin
+  guardar tarifas gerenciales ni imágenes.
+- El repositorio desktop asigna la secuencia de estación y persiste marca +
+  outbox de manera atómica; un fallo en cualquiera revierte ambos.
+- Eventos y versiones de tarifa son append-only. Los olvidos se resuelven con
+  `ADJUSTED_CHECK_IN/OUT`, perfil de jefe, motivo y referencia a la marca.
+- `JEFE_PLANTA` recibe `attendance.record` y `attendance.correct`;
+  `JEFE_EMPRESA` recibe lectura gerencial y gestión de tarifas. Los clientes no
+  acceden directamente a las tablas privadas.
+- La actualización desde las 15 migraciones locales anteriores conserva los
+  datos; las pruebas validan idempotencia, rollback transaccional, secuencia,
+  aislamiento, privilegios e inmutabilidad.
+
+El contrato HTTP que ingiere el outbox y los read models autorizados se conecta
+en 6.7–6.9, sin abrir una vía paralela al sistema de sincronización existente.
+
 ### 6.5 Check-in/out local-first
 
 **Prompt:** Implementa una pantalla WPF accesible desde Modo Operación para
@@ -116,6 +202,27 @@ producción. Evita doble pulsación, muestra guardado local/frescura y permite a
 `JEFE_PLANTA` resolver incidencias mediante elevación y motivo.
 
 **Pausa:** marcar offline, reiniciar y comprobar un único evento pendiente.
+
+**Avance 2026-10-17 — implementación lista para prueba manual:**
+
+- La navegación `ASIST.` permite seleccionar un trabajador activo y registrar
+  explícitamente entrada o salida.
+- Solo se habilita la acción coherente con su jornada local: no permite otra
+  entrada mientras está dentro ni salida cuando está fuera.
+- La marca se guarda primero en SQLite y el comando se bloquea mientras procesa,
+  evitando doble pulsación desde la interfaz.
+- La vista muestra trabajadores en planta, jornadas abiertas, incidencias y la
+  última marca conocida por trabajador.
+- Tras reiniciar, la vista reconstruye el estado desde eventos locales; una
+  jornada abierta no se convierte en cero.
+- Con Modo Jefe de Planta se puede cerrar una salida olvidada con motivo
+  obligatorio mediante `ADJUSTED_CHECK_OUT`, conservando la entrada original.
+- No hay cámara, fotografía ni biometría.
+
+Las pruebas automatizadas cubren entrada, reinicio, salida y corrección
+auditada. La pausa manual debe ejecutarse sin Internet: la ingestión del outbox
+de asistencia al API se implementa en 6.7. Hasta entonces no debe evaluarse la
+convergencia entre dos computadoras como parte de 6.5.
 
 ### 6.6 Evidencia privada, si aplica
 

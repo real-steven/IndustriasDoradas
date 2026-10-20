@@ -249,17 +249,16 @@ en
   contacto opcional. El perfil puede registrar horas inmediatamente como
   `PROVISIONAL`; tras 72 horas sin resolución pasa a `PROVISIONAL_VENCIDO` sin
   bloquear ni perder marcas.
-- **Resolución:** administrador aprueba, rechaza, fusiona duplicados o reasigna
-  horas/evidencias. Ninguna resolución borra eventos ya confirmados.
-- **Asistencia inicial:** check-in/out crea fotografía pendiente y conserva hora
-  original. Jefe de planta revisa pendientes/recientes durante 24 horas;
-  administrador mantiene acceso posterior protegido y auditado.
-- **Retención provisional:** no hay borrado automático; las fotos se conservan
-  indefinidamente hasta aprobar una política definitiva en Sprint 6. El objeto
-  vive en Storage privado y la auditoría conserva referencia lógica, checksum y
-  contexto, nunca el binario ni una URL permanente.
-- **Biometría:** reconocimiento facial sigue condicionado a política,
-  consentimiento, retención, enrolamiento multiángulo y precisión medida.
+- **Resolución central:** `JEFE_EMPRESA` podrá aprobar, rechazar, fusionar
+  duplicados o reasignar horas cuando el flujo correspondiente se confirme.
+  Ninguna resolución borra eventos ya confirmados.
+- **Asistencia inicial:** check-in/out conserva la hora original y funciona sin
+  fotografía. El jefe de planta revisa incidencias desde desktop mediante
+  elevación temporal y motivo auditable.
+- **Privacidad vigente:** el paso 6.2 aplazó fotografía para el MVP. No se crean
+  temporales, referencias, checksums, buckets de Storage ni respaldos de imagen.
+- **Biometría:** reconocimiento facial, enrolamiento y plantillas biométricas
+  permanecen en backlog y requieren una política nueva y aprobación explícita.
 
 ### 12. Entrada manual antes de sensor
 

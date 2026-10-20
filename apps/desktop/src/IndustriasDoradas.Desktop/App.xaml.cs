@@ -206,6 +206,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalSyncChangeRepository, SqliteSyncChangeRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
+        builder.Services.AddSingleton<ILocalAttendanceRepository, SqliteAttendanceRepository>();
         builder.Services.AddSingleton<ILocalProductionSweepRepository, SqliteProductionSweepRepository>();
         builder.Services.AddSingleton<ILocalMercuryRepository, SqliteMercuryRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();

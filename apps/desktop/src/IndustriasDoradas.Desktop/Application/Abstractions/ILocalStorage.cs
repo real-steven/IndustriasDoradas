@@ -1,4 +1,5 @@
 using IndustriasDoradas.Desktop.Application;
+using IndustriasDoradas.Desktop.Domain.Attendance;
 using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Application.Abstractions;
@@ -121,6 +122,24 @@ public sealed record RegisterCajuelaMutation(
 public sealed record LocalCajuelaRegistration(
     ProductionEvent Event,
     int Total,
+    bool WasDuplicate);
+
+public sealed record RecordLocalAttendanceMutation(
+    Guid ClientEventId,
+    Guid OrganizationId,
+    Guid PlantId,
+    Guid StationId,
+    Guid WorkerId,
+    AttendanceEventType EventType,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset RecordedAt,
+    Guid? CorrectedByProfileId = null,
+    string? CorrectionReason = null,
+    Guid? RelatedEventId = null,
+    OutboxAuthorizationEvidence? Authorization = null);
+
+public sealed record LocalAttendanceRegistration(
+    AttendanceEvent Event,
     bool WasDuplicate);
 
 public sealed record LocalCajuelaCorrectionTarget(
@@ -394,6 +413,18 @@ public interface ILocalCajuelaRepository
 
     Task<LocalCajuelaReversal> ReverseAsync(
         ReverseCajuelaMutation mutation,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ILocalAttendanceRepository
+{
+    Task<LocalAttendanceRegistration> RecordAsync(
+        RecordLocalAttendanceMutation mutation,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AttendanceEvent>> ListForWorkerAsync(
+        Guid organizationId,
+        Guid workerId,
         CancellationToken cancellationToken = default);
 }
 

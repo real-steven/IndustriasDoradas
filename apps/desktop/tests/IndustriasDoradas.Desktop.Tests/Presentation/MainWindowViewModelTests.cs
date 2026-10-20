@@ -30,7 +30,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [TestMethod]
-    public void AttendancePreviewNavigationIsAvailableWithoutPersistingData()
+    public void AttendanceNavigationIsAvailable()
     {
         HomeViewModel home = new();
         DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
@@ -39,12 +39,11 @@ public sealed class MainWindowViewModelTests
             home, diagnostics, null, null, null, null, null, new WpfUiDispatcher(), attendance);
 
         viewModel.ShowAttendanceCommand.Execute(null);
-        attendance.ShowComingSoonCommand.Execute("registro de entrada");
 
         Assert.AreSame(attendance, viewModel.CurrentPage);
         Assert.IsTrue(viewModel.IsAttendancePage);
         Assert.AreEqual("Asistencia", viewModel.CurrentPageTitle);
-        StringAssert.Contains(attendance.Status, "No se registró ninguna marca");
+        StringAssert.Contains(attendance.Status, "asistencia");
     }
 
     [TestMethod]

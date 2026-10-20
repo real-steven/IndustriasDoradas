@@ -89,11 +89,27 @@ internal sealed record MercuryMovementOutboxPayload(
     Guid? SupersedesMovementId,
     string? Notes);
 
+internal sealed record AttendanceEventOutboxPayload(
+    int SchemaVersion,
+    Guid ClientEventId,
+    Guid OrganizationId,
+    Guid PlantId,
+    Guid StationId,
+    Guid WorkerId,
+    string EventType,
+    long ClientSequence,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset RecordedAtUtc,
+    Guid? CorrectedByProfileId,
+    string? CorrectionReason,
+    Guid? RelatedEventId);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ProductionEventOutboxPayload))]
 [JsonSerializable(typeof(ProductionEventReversalOutboxPayload))]
 [JsonSerializable(typeof(ProductionSweepOutboxPayload))]
 [JsonSerializable(typeof(MercuryMovementOutboxPayload))]
+[JsonSerializable(typeof(AttendanceEventOutboxPayload))]
 internal sealed partial class LocalStorageJsonSerializerContext : JsonSerializerContext
 {
 }

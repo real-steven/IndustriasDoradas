@@ -46,9 +46,9 @@ El MVP usa una computadora compartida, conservando el modelo para varias estacio
   compatibilidad, pero no aparecen en navegación, permisos ni criterios de
   aceptación vigentes.
 - Trabajador provisional registra horas desde el primer día; a las 72 horas pasa a vencido sin bloqueo ni pérdida y exige atención administrativa urgente.
-- Check-in/out inicial no depende de fotografía. Sprint 6 decide si incorpora
-  evidencia fotográfica después de aprobar finalidad, retención, acceso y
-  contingencia; reconocimiento facial y sensor automático permanecen en backlog.
+- Check-in/out inicial no depende de fotografía. El paso 6.2 aplazó la evidencia
+  fotográfica para el MVP; reconocimiento facial, cámara y sensor automático
+  permanecen en backlog y requieren una nueva aprobación de privacidad.
 
 ## Reglas contra código espagueti
 
