@@ -1,5 +1,23 @@
 -- Sprint 6.4: persistencia central append-only, aislamiento y tarifas versionadas.
 
+insert into auth.users (id, email)
+values ('a0000000-0000-4000-8000-000000000003', 'management-fixture@example.invalid');
+
+insert into app.user_profiles (
+  id, organization_id, auth_user_id, role_id, display_name,
+  preferred_locale, account_status
+)
+select
+  'a1000000-0000-4000-8000-000000000003',
+  '30000000-0000-4000-8000-000000000001',
+  'a0000000-0000-4000-8000-000000000003',
+  roles.id,
+  'Gerencia ficticia',
+  'es',
+  'ACTIVE'
+from app.roles
+where roles.code = 'JEFE_EMPRESA';
+
 insert into app.attendance_events (
   id, organization_id, plant_id, station_id, worker_id, client_sequence,
   event_type, occurred_at_utc, recorded_at_utc, confirmed_at_utc, sync_status
@@ -131,6 +149,75 @@ begin
       event_type, occurred_at_utc, recorded_at_utc, sync_status,
       corrected_by_profile_id, correction_reason, related_event_id
     ) values (
+      'f6100000-0000-4000-8000-000000000006',
+      '30000000-0000-4000-8000-000000000001',
+      '31000000-0000-4000-8000-000000000001',
+      '34000000-0000-4000-8000-000000000001',
+      'b1000000-0000-4000-8000-000000000001',
+      990006, 'ADJUSTED_CHECK_OUT',
+      '2026-10-15T19:00:00Z', '2026-10-16T12:00:00Z', 'PENDING',
+      'a1000000-0000-4000-8000-000000000003',
+      'Gerencia confirmó la hora real de salida.',
+      'f6100000-0000-4000-8000-000000000002'
+    );
+
+    if not exists (
+      select 1 from app.attendance_events
+      where id = 'f6100000-0000-4000-8000-000000000006'
+        and related_event_id = 'f6100000-0000-4000-8000-000000000002'
+    ) then
+      raise exception 'management correction must append a new auditable version';
+    end if;
+  end;
+
+  begin
+    insert into app.attendance_events (
+      id, organization_id, plant_id, station_id, worker_id, client_sequence,
+      event_type, occurred_at_utc, recorded_at_utc, sync_status,
+      corrected_by_profile_id, correction_reason, related_event_id
+    ) values (
+      'f6100000-0000-4000-8000-000000000007',
+      '30000000-0000-4000-8000-000000000001',
+      '31000000-0000-4000-8000-000000000001',
+      '34000000-0000-4000-8000-000000000001',
+      'b1000000-0000-4000-8000-000000000001',
+      990007, 'ADJUSTED_CHECK_OUT',
+      '2026-10-15T18:30:00Z', '2026-10-16T12:01:00Z', 'PENDING',
+      'a1000000-0000-4000-8000-000000000002',
+      'El jefe intentó modificar una corrección cerrada.',
+      'f6100000-0000-4000-8000-000000000002'
+    );
+    raise exception 'plant manager must not revise an existing correction';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    insert into app.attendance_events (
+      id, organization_id, plant_id, station_id, worker_id, client_sequence,
+      event_type, occurred_at_utc, recorded_at_utc, sync_status,
+      corrected_by_profile_id, correction_reason, related_event_id
+    ) values (
+      'f6100000-0000-4000-8000-000000000008',
+      '30000000-0000-4000-8000-000000000001',
+      '31000000-0000-4000-8000-000000000001',
+      '34000000-0000-4000-8000-000000000001',
+      'b1000000-0000-4000-8000-000000000001',
+      990008, 'ADJUSTED_CHECK_OUT',
+      '2026-10-15T20:00:00Z', '2026-10-16T12:02:00Z', 'PENDING',
+      'a1000000-0000-4000-8000-000000000002',
+      'Segundo cierre local no permitido.',
+      'f6100000-0000-4000-8000-000000000001'
+    );
+    raise exception 'plant manager omission correction must be unique';
+  exception when unique_violation then null;
+  end;
+
+  begin
+    insert into app.attendance_events (
+      id, organization_id, plant_id, station_id, worker_id, client_sequence,
+      event_type, occurred_at_utc, recorded_at_utc, sync_status,
+      corrected_by_profile_id, correction_reason, related_event_id
+    ) values (
       'f6100000-0000-4000-8000-000000000005',
       '30000000-0000-4000-8000-000000000001',
       '31000000-0000-4000-8000-000000000001',
@@ -142,7 +229,7 @@ begin
       'f6100000-0000-4000-8000-000000000001'
     );
     raise exception 'adjustment direction must be checked';
-  exception when check_violation then null;
+  exception when insufficient_privilege then null;
   end;
 
   if not exists (
@@ -186,6 +273,17 @@ begin
       and permissions.code = 'attendance.pay_rates.manage'
   ) then
     raise exception 'management pay-rate permission is missing';
+  end if;
+
+  if not exists (
+    select 1
+    from app.role_permissions
+    join app.roles on roles.id = role_permissions.role_id
+    join app.permissions on permissions.id = role_permissions.permission_id
+    where roles.code = 'JEFE_EMPRESA'
+      and permissions.code = 'attendance.correct'
+  ) then
+    raise exception 'management attendance correction permission is missing';
   end if;
 end;
 $$;

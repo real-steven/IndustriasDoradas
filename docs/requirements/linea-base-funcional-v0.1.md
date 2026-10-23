@@ -50,7 +50,7 @@ Los valores ficticios nunca se convierten en reglas. Las decisiones que afecten 
 | Outbox | Cola local de operaciones confirmadas en SQLite pendientes de aceptación central. |
 | Corrección compensatoria | Nuevo registro que revierte o ajusta el efecto de otro sin borrar el historial. |
 | Modo Operación | Estado restringido y compartido de la estación, sin cuenta de operario, desde el que se registran cajuelas y se accede al check-in/out. |
-| Trabajador provisional | Persona solicitada desde planta que puede registrar horas antes de la aprobación administrativa; a las 72 horas pasa a provisional vencido sin perder ni bloquear sus marcas. |
+| Trabajador provisional | Persona solicitada desde planta que puede registrar horas antes de la aprobación administrativa y permanece pendiente, sin vencimiento automático, hasta una decisión explícita de gerencia. |
 
 ## 4. Actores y autorización granular
 
@@ -188,8 +188,8 @@ No se modelan existencia acumulada, custodia, entrega, transporte, venta, gasto 
   `JEFE_EMPRESA` consulta la consolidación y ejecuta únicamente correcciones
   centrales expresamente aprobadas, siempre mediante ajustes auditados.
 - El jefe de planta solicita un trabajador con nombre como dato mínimo y correo opcional de contacto. El perfil nace `PROVISIONAL`, puede marcar y acumular horas inmediatamente y espera aprobación administrativa.
-- A las 72 horas sin resolución pasa a `PROVISIONAL_VENCIDO`: muestra aviso
-  visible para jefe de planta/gerencia, pero continúa registrando horas sin
+- Permanece `PROVISIONAL` sin vencimiento automático hasta que gerencia lo
+  apruebe, rechace o fusione. Mientras espera continúa registrando horas sin
   descartarlas ni bloquear la operación.
 - Si la solicitud se rechaza o era duplicada, las horas y evidencias se
   conservan. La resolución aprobada debe reasignar, fusionar o documentar el
@@ -203,7 +203,9 @@ No se modelan existencia acumulada, custodia, entrega, transporte, venta, gasto 
   nocturna 18:00–06:00 con multiplicador inicial 1,5. No calcula impuestos,
   deducciones, pago final ni comprobantes de nómina.
 - Olvidos o marcas históricas se corrigen mediante el caso de uso y actor
-  aprobados en Sprint 6, nunca editando el evento original.
+  aprobados en Sprint 6, nunca editando el evento original. El jefe de planta
+  completa una omisión una sola vez con hora real y motivo; gerencia puede
+  agregar una versión posterior, conservando toda la cadena en auditoría.
 - El escritorio debe soportar asistencia offline.
 
 ### Biometría posterior y condicionada

@@ -34,7 +34,10 @@ await app.close();
 
 if (
   !document.paths?.["/api/v1/auth/session"] ||
-  !document.paths?.["/api/v1/organizations/{organizationId}/plants"]
+  !document.paths?.["/api/v1/organizations/{organizationId}/plants"] ||
+  !document.paths?.[
+    "/api/v1/organizations/{organizationId}/management/attendance/hours"
+  ]
 ) {
   throw new Error(
     "El contrato no contiene los endpoints mínimos para los clientes",
@@ -99,6 +102,14 @@ export interface PageAccount { items: Account[]; page: number; pageSize: number;
 export interface CreatePlantManagerInput { displayName: string; email: string; password: string; pin: string; plantId: string; stationIds: string[]; preferredLocale: "es" | "en" }
 export interface ManagementFilters { page?: number; pageSize?: number; fromUtc?: string; toUtc?: string; plantId?: string; productionLineId?: string; supplierId?: string; responsibleWorkerId?: string; shipmentId?: string }
 export interface ManagementFreshness { cursor: string; hasChanges: boolean; effectiveAtUtc: string | null; serverTimeUtc: string; pollAfterSeconds: number }
+export interface Worker { id: string; organizationId: string; plantId: string; sourceRequestId: string; userProfileId: string | null; category: "OPERARIO" | "JEFE_PLANTA"; name: string; email: string | null; phone: string | null; status: "PROVISIONAL" | "PROVISIONAL_VENCIDO" | "ACTIVO" | "RECHAZADO"; statusChangedAt: string; isActive: boolean; deactivatedAt: string | null }
+export interface PageWorker { items: Worker[]; page: number; pageSize: number; total: number; totalPages: number }
+export interface AttendanceHoursFilters { fromDate: string; toDate: string; plantId?: string; workerId?: string }
+export interface AttendanceHoursShift { workerId: string; workerName: string; plantId: string; status: "COMPLETED" | "OPEN"; startedOn: string; checkInEventId: string; checkInAtUtc: string; checkOutEventId: string | null; checkOutAtUtc: string | null; durationMinutes: number | null; minutesInPeriod: number | null }
+export interface AttendanceHoursIncident { type: "DUPLICATE_CHECK_IN" | "CHECK_OUT_WITHOUT_CHECK_IN" | "OPEN_SHIFT_EXCEEDED"; workerId: string; workerName: string; eventId: string; detectedAtUtc: string; description: string }
+export interface AttendanceHoursAdjustment { eventId: string; eventType: "ADJUSTED_CHECK_IN" | "ADJUSTED_CHECK_OUT"; workerId: string; workerName: string; plantId: string; occurredAtUtc: string; recordedAtUtc: string; confirmedAtUtc: string; correctedByProfileId: string; correctedByDisplayName: string; correctionReason: string; relatedEventId: string }
+export interface AttendanceWorkerHours { workerId: string; workerName: string; confirmedMinutes: number; completedShiftCount: number; openShiftCount: number; incidentCount: number }
+export interface AttendanceHours { version: "attendance-hours-v1"; timezone: "America/Costa_Rica"; period: { fromDate: string; toDate: string; fromUtc: string; toUtc: string }; summary: { workerCount: number; confirmedShiftCount: number; openShiftCount: number; incidentCount: number; adjustmentCount: number; totalConfirmedMinutes: number }; workers: AttendanceWorkerHours[]; shifts: AttendanceHoursShift[]; incidents: AttendanceHoursIncident[]; adjustments: AttendanceHoursAdjustment[]; coverage: { status: "COMPLETE"; eventsRead: number; confirmedEventsUsed: number; excludedEvents: number; eventsInPeriod: number; firstEventAtUtc: string | null; lastEventAtUtc: string | null }; freshness: { generatedAtUtc: string; lastConfirmedAtUtc: string | null; lagSeconds: number | null } }
 export interface ManagementOperationLine { organizationId: string; plantId: string; stationId: string; stationName: string; shipmentId: string; feedCycleId: string; productionLineId: string; productionLineName: string; productionLineOrder: number; supplierId: string; supplierName: string; responsibleWorkerId: string | null; responsibleWorkerName: string | null; startedAtUtc: string; cajuelaTotal: number; sweepCount: number; sweptCajuelas: number; cajuelasSinceLastSweep: number; nextSweepAt: number; sweepPending: boolean; lastActivityAtUtc: string }
 export interface ManagementShipment extends ManagementOperationLine { status: "COMPLETED"; completedAtUtc: string; goldResultId: string | null; goldAmountGrams: number | null; goldUnitCode: "g" | null; goldRecordedAtUtc: string | null; goldRecordedByProfileId: string | null; goldRevisionCount: number | null; hasGoldResult: boolean }
 export interface ManagementSweepMercury { organizationId: string; shipmentId: string; sweepId: string; sweptAtUtc: string; cajuelaCount: number; lineComponentId: string; lineComponentName: string; lineComponentOrder: number; inputGrams: number | null; remainderGrams: number | null; hasInputRecord: boolean; hasRemainderRecord: boolean }
@@ -131,6 +142,9 @@ export class ApiClient {
   governPlantManager(organizationId: string, profileId: string, action: "approve" | "suspend" | "reactivate", reason?: string, signal?: AbortSignal): Promise<Account> {
     return this.request<Account>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/accounts/\${encodeURIComponent(profileId)}/\${action}\`, signal, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(reason === undefined ? {} : { reason }) });
   }
+  listWorkers(organizationId: string, signal?: AbortSignal): Promise<PageWorker> {
+    return this.request<PageWorker>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/workers?page=1&pageSize=100&state=all\`, signal);
+  }
   listManagementOperationLines(organizationId: string, filters: ManagementFilters = {}, signal?: AbortSignal): Promise<PageManagementOperationLine> {
     return this.request<PageManagementOperationLine>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/operation-lines?\${this.managementQuery(filters)}\`, signal);
   }
@@ -139,6 +153,12 @@ export class ApiClient {
     if (cursor !== undefined) query.set("cursor", cursor);
     const suffix = query.size === 0 ? "" : \`?\${query}\`;
     return this.request<ManagementFreshness>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/freshness\${suffix}\`, signal);
+  }
+  getManagementAttendanceHours(organizationId: string, filters: AttendanceHoursFilters, signal?: AbortSignal): Promise<AttendanceHours> {
+    const query = new URLSearchParams({ fromDate: filters.fromDate, toDate: filters.toDate });
+    if (filters.plantId !== undefined) query.set("plantId", filters.plantId);
+    if (filters.workerId !== undefined) query.set("workerId", filters.workerId);
+    return this.request<AttendanceHours>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/attendance/hours?\${query}\`, signal);
   }
   listManagementShipments(organizationId: string, filters: ManagementFilters = {}, signal?: AbortSignal): Promise<PageManagementShipment> {
     return this.request<PageManagementShipment>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/shipments?\${this.managementQuery(filters)}\`, signal);

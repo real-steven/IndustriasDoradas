@@ -9,6 +9,7 @@ import {
   OperationPage,
   ShipmentDetailPage,
   ShipmentsPage,
+  WorkersPage,
   UpcomingPage,
 } from "../features/portal/portal-pages";
 import { PortalLayout, ProtectedPortal } from "../features/portal/portal-shell";
@@ -46,18 +47,7 @@ export function App() {
               />
             }
           />
-          <Route
-            path="trabajadores"
-            element={
-              <UpcomingPage
-                title={tr("Trabajadores", "Workers")}
-                description={tr(
-                  "Gestión futura de operarios, asistencia y horas.",
-                  "Future management of operators, attendance, and hours.",
-                )}
-              />
-            }
-          />
+          <Route path="trabajadores" element={<WorkersPage />} />
           <Route
             path="reportes"
             element={

@@ -12,7 +12,7 @@
 4. Cuenta gerencial única con todos los permisos activos y administración web separada visualmente, no por sesión.
 5. Gobierno granular: jefe de empresa crea/suspende administradores y selecciona permisos; un administrador delegado solo gestiona capacidades que posee.
 6. Autorización API antes de mutaciones; PIN individual y auditoría de login/elevaciones/cambios.
-7. Solicitud de trabajador, estados `PROVISIONAL/PROVISIONAL_VENCIDO/ACTIVO/RECHAZADO`, aprobación, fusión/reasignación y desactivación sin borrar historial.
+7. Solicitud de trabajador, estados vigentes `PROVISIONAL/ACTIVO/RECHAZADO`, aprobación, fusión/reasignación y desactivación sin borrar historial. `PROVISIONAL_VENCIDO` queda únicamente como compatibilidad histórica y ya no se genera automáticamente.
 8. Catálogos, componentes de línea y desactivación en vez de borrado referenciado.
 9. Preferencia de idioma `es/en`; OpenAPI y clientes tipados.
 10. Desktop: login del jefe, estación, modos y catálogos operativos.

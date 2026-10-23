@@ -84,23 +84,23 @@ cuentas de operario ni recuperes el rol legado `ADMINISTRADOR`.
 
 **Revisión aprobada 2026-10-15 — paso 6.1 cerrado:**
 
-| Caso | Regla confirmada | Estado |
-|---|---|---|
-| Identificación | El trabajador selecciona su perfil desde Modo Operación; no tiene cuenta ni contraseña. | Confirmado |
-| Entrada y salida | El trabajador registra su propia entrada o salida; no se registran descansos ni almuerzo. | Confirmado |
-| Operación sin red | La hora original se conserva localmente y la sincronización posterior no puede borrar la marca. | Confirmado |
-| Revisión en planta | El jefe de planta atiende incidencias desde desktop mediante elevación temporal y motivo auditable. | Confirmado |
-| Consulta gerencial | `JEFE_EMPRESA` consulta horas e incidencias consolidadas desde web; no existe revisión por `ADMINISTRADOR`. | Confirmado |
-| Olvido de entrada o salida | El jefe de planta agrega un ajuste compensatorio con Modo Jefe y motivo obligatorio; nunca edita la marca original. | Confirmado |
-| Turno nocturno | Una jornada que cruza medianoche no se divide y conserva como fecha de referencia el día local de la entrada. | Confirmado |
-| Marca abierta | Check-in sin check-out permanece abierto, no vale cero y genera alerta al superar ocho horas; el jefe puede cerrarlo mediante ajuste motivado. | Confirmado |
-| Precisión | Horas y franjas se calculan al minuto exacto, sin redondeo de jornada. | Confirmado |
-| Responsabilidad futura | La aprobación gerencial y las notificaciones push quedan como evolución posible; no bloquean la corrección local del MVP. | Confirmado |
+| Caso                       | Regla confirmada                                                                                                                                                              | Estado     |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Identificación             | El trabajador selecciona su perfil desde Modo Operación; no tiene cuenta ni contraseña.                                                                                       | Confirmado |
+| Entrada y salida           | El trabajador registra su propia entrada o salida; no se registran descansos ni almuerzo.                                                                                     | Confirmado |
+| Operación sin red          | La hora original se conserva localmente y la sincronización posterior no puede borrar la marca.                                                                               | Confirmado |
+| Revisión en planta         | El jefe de planta atiende incidencias desde desktop mediante elevación temporal y motivo auditable.                                                                           | Confirmado |
+| Consulta gerencial         | `JEFE_EMPRESA` consulta horas e incidencias consolidadas desde web; no existe revisión por `ADMINISTRADOR`.                                                                   | Confirmado |
+| Olvido de entrada o salida | El jefe de planta agrega una sola corrección con fecha/hora real y motivo obligatorio; nunca edita la marca original. Gerencia puede agregar una versión posterior desde web. | Confirmado |
+| Turno nocturno             | Una jornada que cruza medianoche no se divide y conserva como fecha de referencia el día local de la entrada.                                                                 | Confirmado |
+| Marca abierta              | Check-in sin check-out permanece abierto, no vale cero y genera alerta al superar ocho horas; el jefe puede cerrarlo mediante ajuste motivado.                                | Confirmado |
+| Precisión                  | Horas y franjas se calculan al minuto exacto, sin redondeo de jornada.                                                                                                        | Confirmado |
+| Responsabilidad gerencial  | La corrección local no requiere aprobación. Queda visible en auditoría y gerencia puede agregar otra versión si detecta un error.                                             | Confirmado |
 
 La planta puede operar continuamente y el cambio de fecha no cierra jornadas.
-Por ahora el jefe de planta resuelve olvidos. Cambiar posteriormente la
-responsabilidad hacia `JEFE_EMPRESA` requerirá modificar el caso de uso y los
-permisos, no el historial de marcas.
+El jefe de planta resuelve el olvido inmediato una sola vez. Una modificación
+posterior corresponde a `JEFE_EMPRESA` y agrega otra versión auditable, nunca
+reescribe el historial.
 
 ### 6.2 Privacidad y decisión de fotografía
 
@@ -215,9 +215,20 @@ producción. Evita doble pulsación, muestra guardado local/frescura y permite a
   última marca conocida por trabajador.
 - Tras reiniciar, la vista reconstruye el estado desde eventos locales; una
   jornada abierta no se convierte en cero.
-- Con Modo Jefe de Planta se puede cerrar una salida olvidada con motivo
-  obligatorio mediante `ADJUSTED_CHECK_OUT`, conservando la entrada original.
+- Con Modo Jefe de Planta se puede cerrar una salida olvidada con motivo,
+  fecha y hora real obligatorios mediante `ADJUSTED_CHECK_OUT`, conservando la
+  entrada original. La hora debe ser posterior a la entrada y no futura.
+- La misma omisión solo admite una corrección del jefe. Una eventual corrección
+  gerencial se encadena como otra versión append-only, no como `UPDATE`.
+- Los eventos ya contienen trabajador y fechas indexadas para que la consulta
+  web de 6.9 filtre por persona y rango sin modificar el historial.
 - No hay cámara, fotografía ni biometría.
+- Operarios y jefes de planta usan la misma asistencia. Cada cuenta
+  `JEFE_PLANTA` crea o recupera una ficha laboral vinculada, visible en el mismo
+  selector con su categoría, mientras credenciales, PIN y permisos permanecen
+  separados.
+- Un operario provisional no vence automáticamente: permanece pendiente hasta
+  la decisión explícita de gerencia y conserva todas sus marcas.
 
 Las pruebas automatizadas cubren entrada, reinicio, salida y corrección
 auditada. La pausa manual debe ejecutarse sin Internet: la ingestión del outbox
@@ -234,6 +245,9 @@ sincronizado con archivo pendiente.
 
 **Pausa:** caída de red/cámara ensayada sin duplicar ni exponer archivos.
 
+**Decisión vigente — 2026-10-20:** omitido para el MVP. La fotografía y la
+biometría continúan aplazadas; no se crearon cámara, archivos ni Storage.
+
 ### 6.7 Sincronización de asistencia
 
 **Prompt:** Extiende el contrato incremental a asistencia respetando secuencia,
@@ -242,6 +256,15 @@ se proyecta en desktop sin reescribir historia. Añade prueba multiestación y d
 reintento tras 24 horas offline.
 
 **Pausa:** ambas estaciones convergen en eventos y estados explicables.
+
+**Estado — 2026-10-20:** completado localmente. `ATTENDANCE_EVENT_RECORDED`
+usa el mismo push incremental que producción, conserva `occurred_at_utc`, deja
+dependencias ausentes en `RETRY_LATER` sin consumir recibo y publica cada marca
+como `ATTENDANCE_EVENT` para toda la planta. El pull confirma una marca local o
+inserta una remota sin modificar sus hechos; una corrección se publica como
+`CORRECTION_APPENDED`. Las pruebas PostgreSQL/API/SQLite cubren replay
+idempotente, corrección adelantada, 24 horas offline y convergencia de dos
+estaciones.
 
 ### 6.8 Read models de horas
 
@@ -252,6 +275,16 @@ No conviertas incompletos en cero ni calcules dinero. Usa UTC para almacenar y
 
 **Pausa:** resultados coinciden al minuto con un cálculo manual aprobado.
 
+**Estado — 2026-10-20:** completado localmente. El endpoint gerencial
+`management/attendance/hours` publica `attendance-hours-v1`, recibe fechas
+inclusivas de Costa Rica y permite filtrar por planta o trabajador. La
+proyección sustituye únicamente versiones de corrección equivalentes, conserva
+omisiones completadas, separa jornadas abiertas e incidencias y recorta los
+minutos al período solicitado. También informa eventos confirmados/excluidos y
+la última confirmación; no convierte incompletos en cero ni consulta tarifas.
+Las pruebas comparan dos jornadas manuales, incluida una nocturna cortada por el
+fin del período, con un total controlado de 930 minutos.
+
 ### 6.9 Trabajadores y horas en web
 
 **Prompt:** Implementa el módulo `Trabajadores` de Sprint 5 para
@@ -261,6 +294,17 @@ central solo si el flujo fue confirmado; no agregues gobierno de usuarios.
 
 **Pausa:** la gerente distingue horas confirmadas, abiertas y excluidas.
 
+**Estado — 2026-10-20:** completado localmente. El módulo web
+`/gerencia/trabajadores` consume `attendance-hours-v1` y reúne operarios y
+jefes de planta en una consulta de solo lectura. Permite consultar semana
+actual, semana anterior o un día específico y filtrar por trabajador; los
+filtros permanecen en la URL. La vista separa minutos confirmados, jornadas
+abiertas, incidencias y marcas excluidas, y muestra el detalle de jornadas y el
+historial de ajustes con actor, motivo y momento de registro. No calcula pagos,
+no estima jornadas incompletas y no agrega creación o gobierno de usuarios.
+Las pruebas web verifican los cortes de lunes a domingo, los filtros enviados
+al API y la presentación legible de pendientes y correcciones.
+
 ### 6.10 Piloto y cierre
 
 **Prompt:** Ejecuta una jornada ficticia completa con offline, nocturno, olvido,
@@ -268,3 +312,17 @@ corrección, reinicio y consulta web. Si fotografía quedó aplazada, no la simu
 como implementada. Corrige críticos/altos, actualiza manuales y cierra Sprint 6.
 
 **Pausa:** cero pérdida de marcas, totales aprobados y política respetada.
+
+**Estado técnico — 2026-10-20:** piloto automatizado aprobado. El escenario
+controlado registra una entrada offline a las 17:30, conserva la jornada tras
+reiniciar, detecta que sigue abierta después de ocho horas y agrega una salida
+olvidada de las 07:15 mediante corrección motivada. Desktop y el read model
+central coinciden en 825 minutos; la sincronización converge entre estaciones
+sin duplicar y la web presenta horas, pendientes y ajustes auditables. La suite
+completa no detecta defectos críticos o altos. Fotografía y biometría no se
+simularon porque continúan aplazadas.
+
+La evidencia y el recorrido MAN-01–MAN-06 están en
+[`../testing/sprint-06-10-piloto-asistencia.md`](../testing/sprint-06-10-piloto-asistencia.md).
+El Sprint 6 queda listo para cierre, sujeto a esa revisión manual antes de
+iniciar Sprint 7.

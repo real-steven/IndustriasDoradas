@@ -116,6 +116,32 @@ public sealed class AttendanceDomainTests
     }
 
     [TestMethod]
+    public void ManagementCorrectionSupersedesPreviousExitWithoutDeletingAuditHistory()
+    {
+        AttendanceEvent checkIn = CheckIn(1, At(2026, 10, 12, 7, 0));
+        AttendanceEvent managerCorrection = AttendanceEvent.Adjustment(
+            EventId(2), OrganizationId, PlantId, StationId, WorkerId,
+            AttendanceEventType.AdjustedCheckOut, 2,
+            At(2026, 10, 12, 17, 0), At(2026, 10, 13, 8, 0),
+            PlantManagerId, "Olvidó marcar la salida.", checkIn.ClientEventId);
+        AttendanceEvent managementCorrection = AttendanceEvent.Adjustment(
+            EventId(3), OrganizationId, PlantId, StationId, WorkerId,
+            AttendanceEventType.AdjustedCheckOut, 3,
+            At(2026, 10, 12, 16, 0), At(2026, 10, 14, 8, 0),
+            Guid.Parse("52000000-0000-4000-8000-000000000002"),
+            "Gerencia confirmó la hora correcta.", managerCorrection.ClientEventId);
+
+        AttendanceProjection projection = AttendanceProjectionService.Project(
+            [checkIn, managerCorrection, managementCorrection],
+            At(2026, 10, 14, 8, 0));
+
+        Assert.HasCount(1, projection.Shifts);
+        Assert.AreEqual(managementCorrection.ClientEventId, projection.Shifts[0].CheckOut!.ClientEventId);
+        Assert.AreEqual(TimeSpan.FromHours(9), projection.Shifts[0].Duration);
+        Assert.IsEmpty(projection.Incidents);
+    }
+
+    [TestMethod]
     public void AdjustmentRequiresManagerReasonAndRelatedEvent()
     {
         Assert.ThrowsExactly<ArgumentException>(() => AttendanceEvent.Adjustment(

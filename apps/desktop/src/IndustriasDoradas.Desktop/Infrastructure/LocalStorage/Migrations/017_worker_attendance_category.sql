@@ -1,0 +1,3 @@
+ALTER TABLE cached_workers
+    ADD COLUMN category TEXT NOT NULL DEFAULT 'OPERARIO'
+    CHECK (category IN ('OPERARIO', 'JEFE_PLANTA'));

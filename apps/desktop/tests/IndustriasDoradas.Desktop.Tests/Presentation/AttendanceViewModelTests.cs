@@ -61,6 +61,8 @@ public sealed class AttendanceViewModelTests
         viewModel.SelectedWorker = viewModel.Workers.Single();
 
         Assert.IsFalse(viewModel.CorrectOpenShiftCommand.CanExecute(null));
+        viewModel.CorrectionDate = new DateTime(2026, 10, 17);
+        viewModel.CorrectionTime = "14:00";
         viewModel.CorrectionReason = "Olvidó registrar la salida al terminar.";
         Assert.IsTrue(viewModel.CorrectOpenShiftCommand.CanExecute(null));
 
@@ -72,7 +74,56 @@ public sealed class AttendanceViewModelTests
         Assert.AreEqual(AttendanceEventType.AdjustedCheckOut, correction.Type);
         Assert.AreEqual(ProfileId, correction.CorrectedByProfileId);
         Assert.AreEqual("Olvidó registrar la salida al terminar.", correction.CorrectionReason);
+        Assert.AreEqual(Now.AddHours(8), correction.OccurredAt);
+        Assert.AreEqual(Now.AddHours(9), correction.RecordedAt);
+        Assert.IsFalse(viewModel.CorrectOpenShiftCommand.CanExecute(null));
         StringAssert.Contains(viewModel.Status, "corrección auditada");
+    }
+
+    [TestMethod]
+    public async Task PlantManagerCannotCloseShiftBeforeEntryOrInTheFuture()
+    {
+        var repository = new MemoryAttendanceRepository();
+        await repository.RecordAsync(Mutation(Guid.NewGuid(), AttendanceEventType.CheckIn, Now));
+        var mode = new PlantManagerModeState();
+        mode.SetActive(true);
+        var viewModel = Create(repository, new MutableTimeProvider(Now.AddHours(9)), mode);
+        await viewModel.InitializeAsync();
+        viewModel.SelectedWorker = viewModel.Workers.Single();
+        viewModel.CorrectionReason = "Olvidó marcar su salida.";
+
+        viewModel.CorrectionDate = new DateTime(2026, 10, 17);
+        viewModel.CorrectionTime = "05:59";
+        Assert.IsFalse(viewModel.CorrectOpenShiftCommand.CanExecute(null));
+        StringAssert.Contains(viewModel.CorrectionValidationMessage, "posterior a la entrada");
+
+        viewModel.CorrectionTime = "15:01";
+        Assert.IsFalse(viewModel.CorrectOpenShiftCommand.CanExecute(null));
+        StringAssert.Contains(viewModel.CorrectionValidationMessage, "futuro");
+        Assert.HasCount(1, repository.Events);
+    }
+
+    [TestMethod]
+    public void PlantManagerWorkerKeepsAccessIdentitySeparateButShowsItsCategory()
+    {
+        var worker = new CachedWorker(
+            WorkerId,
+            OrganizationId,
+            "Jefe de planta de prueba",
+            true,
+            Now,
+            "JEFE_PLANTA");
+        var status = new AttendanceWorkerStatus(
+            worker,
+            false,
+            "Fuera de planta",
+            "Sin marcas",
+            0,
+            null,
+            null);
+
+        Assert.AreEqual("Jefe de planta", status.CategoryLabel);
+        Assert.AreEqual("Jefe de planta de prueba · Jefe de planta", status.DisplayName);
     }
 
     private static AttendancePreviewViewModel Create(

@@ -46,6 +46,12 @@ const primaryNavigation = [
     labelEn: "Users",
     icon: "♙",
   },
+  {
+    to: "/gerencia/trabajadores",
+    label: "Trabajadores",
+    labelEn: "Workers",
+    icon: "◷",
+  },
 ] as const;
 
 const futureNavigation = [
@@ -54,12 +60,6 @@ const futureNavigation = [
     label: "Estadísticas",
     labelEn: "Statistics",
     icon: "⌁",
-  },
-  {
-    to: "/gerencia/trabajadores",
-    label: "Trabajadores",
-    labelEn: "Workers",
-    icon: "♙",
   },
   {
     to: "/gerencia/reportes",

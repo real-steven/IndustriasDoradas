@@ -7,6 +7,7 @@ export const SYNC_OPERATION_TYPES = [
   "PRODUCTION_EVENT_CREATED",
   "PRODUCTION_SWEEP_RECORDED",
   "MERCURY_MOVEMENT_RECORDED",
+  "ATTENDANCE_EVENT_RECORDED",
 ] as const;
 
 export type SyncOperationType = (typeof SYNC_OPERATION_TYPES)[number];

@@ -5,6 +5,7 @@ export type WorkerRequestStatus =
 export type WorkerStatus =
   "PROVISIONAL" | "PROVISIONAL_VENCIDO" | "ACTIVO" | "RECHAZADO";
 export type WorkerResolution = "APPROVE" | "REJECT" | "MERGE";
+export type WorkerCategory = "OPERARIO" | "JEFE_PLANTA";
 
 export interface WorkerRequestItem {
   id: string;
@@ -28,6 +29,8 @@ export interface WorkerItem {
   organizationId: string;
   plantId: string;
   sourceRequestId: string;
+  userProfileId: string | null;
+  category: WorkerCategory;
   name: string;
   email: string | null;
   phone: string | null;
@@ -78,7 +81,6 @@ export interface ResolveWorkerRequest {
 }
 
 export interface WorkersRepository {
-  expire(organizationId: string, observedAt: string): Promise<number>;
   listRequests(
     organizationId: string,
     query: WorkerRequestListQuery,

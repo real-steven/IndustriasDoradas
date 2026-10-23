@@ -17,6 +17,10 @@ import {
   type AuditEventRecord,
 } from "../src/audit/audit.contracts";
 import {
+  ATTENDANCE_QUERY_REPOSITORY,
+  type AttendanceQueryRepository,
+} from "../src/attendance/attendance.contracts";
+import {
   ACCESS_TOKEN_VERIFIER,
   PROFILE_REPOSITORY,
   type AccessTokenVerifier,
@@ -79,6 +83,7 @@ const ACTIVE_PROFILE: AuthorizedProfile = {
     "organization_catalogs.manage",
     "suppliers.manage",
     "workers.read",
+    "attendance.read",
     "gold.read",
     "gold.results.manage",
     "administrators.govern",
@@ -97,6 +102,7 @@ describe("API smoke (e2e)", () => {
   let auditQuery: jest.Mocked<AuditQueryRepository>;
   let catalogs: jest.Mocked<CatalogRepository>;
   let workers: jest.Mocked<WorkersRepository>;
+  let attendance: jest.Mocked<AttendanceQueryRepository>;
   let accounts: jest.Mocked<AccountsRepository>;
   let gold: jest.Mocked<GoldRepository>;
   let stations: jest.Mocked<StationRepository>;
@@ -131,7 +137,6 @@ describe("API smoke (e2e)", () => {
       listComponentTypes: jest.fn().mockResolvedValue([]),
     };
     workers = {
-      expire: jest.fn().mockResolvedValue(0),
       listRequests: jest.fn().mockResolvedValue({
         items: [],
         page: 1,
@@ -150,6 +155,9 @@ describe("API smoke (e2e)", () => {
       resolveRequest: jest.fn(),
       findWorker: jest.fn(),
       setWorkerActive: jest.fn(),
+    };
+    attendance = {
+      listHistory: jest.fn().mockResolvedValue([]),
     };
     accounts = {
       list: jest.fn().mockResolvedValue({
@@ -227,6 +235,8 @@ describe("API smoke (e2e)", () => {
       .useValue(catalogs)
       .overrideProvider(WORKERS_REPOSITORY)
       .useValue(workers)
+      .overrideProvider(ATTENDANCE_QUERY_REPOSITORY)
+      .useValue(attendance)
       .overrideProvider(ACCOUNTS_REPOSITORY)
       .useValue(accounts)
       .overrideProvider(GOLD_REPOSITORY)
@@ -257,6 +267,7 @@ describe("API smoke (e2e)", () => {
     gold.listShipmentFacts.mockClear();
     gold.listResults.mockClear();
     gold.createResult.mockReset();
+    attendance.listHistory.mockClear();
     management.listOperationLines.mockClear();
     management.findLatestChange.mockClear();
     management.listShipments.mockClear();
@@ -871,6 +882,87 @@ describe("API smoke (e2e)", () => {
       .expect(400);
 
     expect(management.listShipments.mock.calls).toHaveLength(0);
+  });
+
+  it("returns versioned attendance hours with Costa Rica date boundaries", async () => {
+    attendance.listHistory.mockResolvedValueOnce([
+      {
+        id: "61000000-0000-4000-8000-000000000001",
+        organizationId: ACTIVE_PROFILE.organizationId,
+        plantId: "31000000-0000-4000-8000-000000000001",
+        stationId: "34000000-0000-4000-8000-000000000001",
+        workerId: "b1000000-0000-4000-8000-000000000001",
+        workerName: "Operario ficticio",
+        clientSequence: "1",
+        eventType: "CHECK_IN",
+        occurredAtUtc: "2026-10-20T12:00:00.000Z",
+        recordedAtUtc: "2026-10-20T12:00:00.000Z",
+        confirmedAtUtc: "2026-10-20T12:00:01.000Z",
+        syncStatus: "SYNCHRONIZED",
+        correctedByProfileId: null,
+        correctedByDisplayName: null,
+        correctionReason: null,
+        relatedEventId: null,
+      },
+      {
+        id: "61000000-0000-4000-8000-000000000002",
+        organizationId: ACTIVE_PROFILE.organizationId,
+        plantId: "31000000-0000-4000-8000-000000000001",
+        stationId: "34000000-0000-4000-8000-000000000001",
+        workerId: "b1000000-0000-4000-8000-000000000001",
+        workerName: "Operario ficticio",
+        clientSequence: "2",
+        eventType: "CHECK_OUT",
+        occurredAtUtc: "2026-10-20T20:00:00.000Z",
+        recordedAtUtc: "2026-10-20T20:00:00.000Z",
+        confirmedAtUtc: "2026-10-20T20:00:01.000Z",
+        syncStatus: "SYNCHRONIZED",
+        correctedByProfileId: null,
+        correctedByDisplayName: null,
+        correctionReason: null,
+        relatedEventId: null,
+      },
+    ]);
+
+    const response = await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/attendance/hours`,
+      )
+      .query({ fromDate: "2026-10-20", toDate: "2026-10-20" })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      version: "attendance-hours-v1",
+      timezone: "America/Costa_Rica",
+      period: {
+        fromUtc: "2026-10-20T06:00:00.000Z",
+        toUtc: "2026-10-21T06:00:00.000Z",
+      },
+      summary: {
+        confirmedShiftCount: 1,
+        openShiftCount: 0,
+        totalConfirmedMinutes: 480,
+      },
+    });
+    expect(attendance.listHistory.mock.calls).toContainEqual([
+      ACTIVE_PROFILE.organizationId,
+      {
+        plantId: undefined,
+        workerId: undefined,
+      },
+    ]);
+  });
+
+  it("rejects attendance dates that do not exist", async () => {
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/attendance/hours`,
+      )
+      .query({ fromDate: "2026-02-30", toDate: "2026-03-01" })
+      .set("Authorization", "Bearer valid-token")
+      .expect(422);
+    expect(attendance.listHistory.mock.calls).toHaveLength(0);
   });
 
   it("reports gold coverage without excluding a recorded zero", async () => {

@@ -95,6 +95,28 @@ describe("normalizeSyncItem", () => {
     item.payload.movementKind = "RELOAD";
     expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
   });
+
+  it("accepts attendance with its original time after 24 hours offline", () => {
+    const item = attendanceEvent();
+    expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
+  });
+
+  it("validates attendance correction authorship and station sequence", () => {
+    const item = attendanceEvent();
+    Object.assign(item.payload, {
+      eventType: "ADJUSTED_CHECK_OUT",
+      correctedByProfileId: item.authorization.actorProfileId,
+      correctionReason: "Salida olvidada confirmada por el jefe de planta.",
+      relatedEventId: "49000000-0000-4000-8000-000000000002",
+    });
+    expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
+
+    item.payload.correctedByProfileId = "a1000000-0000-4000-8000-000000000099";
+    expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
+    item.payload.correctedByProfileId = item.authorization.actorProfileId;
+    item.payload.clientSequence = 99;
+    expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
+  });
 });
 
 function operationStarted(): SyncEnvelopeItem {
@@ -227,6 +249,38 @@ function mercuryMovement(): SyncEnvelopeItem {
       recordedByProfileId: operationStarted().authorization.actorProfileId,
       supersedesMovementId: null,
       notes: null,
+    },
+  };
+}
+
+function attendanceEvent(): SyncEnvelopeItem {
+  return {
+    outboxMessageId: "49000000-0000-4000-8000-000000000001",
+    stationSequence: 5,
+    operationType: "ATTENDANCE_EVENT_RECORDED",
+    aggregateType: "attendance_event",
+    aggregateId: "49000000-0000-4000-8000-000000000001",
+    payloadSchemaVersion: 1,
+    createdAtUtc: "2026-09-16T18:00:01.000Z",
+    authorization: {
+      ...operationStarted().authorization,
+      validatedAtUtc: "2026-09-16T17:00:00.000Z",
+      offlineValidUntilUtc: "2026-09-17T17:00:00.000Z",
+    },
+    payload: {
+      schemaVersion: 1,
+      clientEventId: "49000000-0000-4000-8000-000000000001",
+      organizationId: scope.organizationId,
+      plantId: scope.plantId,
+      stationId: scope.stationId,
+      workerId: "b1000000-0000-4000-8000-000000000001",
+      eventType: "CHECK_IN",
+      clientSequence: 5,
+      occurredAtUtc: "2026-09-15T18:00:00.000Z",
+      recordedAtUtc: "2026-09-16T18:00:01.000Z",
+      correctedByProfileId: null,
+      correctionReason: null,
+      relatedEventId: null,
     },
   };
 }

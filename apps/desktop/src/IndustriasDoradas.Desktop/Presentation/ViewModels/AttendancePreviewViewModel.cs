@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -16,15 +17,24 @@ public sealed record AttendanceWorkerStatus(
     string State,
     string LastMark,
     int IncidentCount,
-    Guid? OpenCheckInId)
+    Guid? OpenCheckInId,
+    DateTimeOffset? OpenCheckInAt)
 {
     public Guid Id => Worker.Id;
     public string Name => Worker.Name;
+    public string CategoryLabel => Worker.Category == "JEFE_PLANTA" ? "Jefe de planta" : "Operario";
+    public string DisplayName => $"{Name} · {CategoryLabel}";
     public string StateColor => IsPresent ? "#178449" : "#71808A";
 }
 
 public sealed class AttendancePreviewViewModel : ObservableObject
 {
+    private static readonly TimeZoneInfo CostaRicaTimeZone = TimeZoneInfo.CreateCustomTimeZone(
+        "America/Costa_Rica",
+        TimeSpan.FromHours(-6),
+        "Costa Rica",
+        "Costa Rica");
+
     private readonly ILocalAttendanceRepository? attendance;
     private readonly ILocalCatalogRepository? catalogs;
     private readonly IProtectedStationStore? stationStore;
@@ -34,6 +44,8 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     private AttendanceWorkerStatus? selectedWorker;
     private string status = "Cargando el registro local de asistencia…";
     private string correctionReason = string.Empty;
+    private DateTime? correctionDate;
+    private string correctionTime = string.Empty;
     private bool isBusy;
     private int presentCount;
     private int openShiftCount;
@@ -70,8 +82,15 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         get => selectedWorker;
         set
         {
+            Guid? previousWorkerId = selectedWorker?.Id;
             if (!SetProperty(ref selectedWorker, value)) return;
+            if (previousWorkerId != value?.Id)
+            {
+                CorrectionReason = string.Empty;
+                PrepareCorrectionMoment(value);
+            }
             OnPropertyChanged(nameof(SelectedWorkerSummary));
+            OnPropertyChanged(nameof(CorrectionValidationMessage));
             NotifyCommands();
         }
     }
@@ -88,9 +107,31 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         set
         {
             if (!SetProperty(ref correctionReason, value)) return;
-            CorrectOpenShiftCommand.NotifyCanExecuteChanged();
+            NotifyCorrectionState();
         }
     }
+
+    public DateTime? CorrectionDate
+    {
+        get => correctionDate;
+        set
+        {
+            if (!SetProperty(ref correctionDate, value)) return;
+            NotifyCorrectionState();
+        }
+    }
+
+    public string CorrectionTime
+    {
+        get => correctionTime;
+        set
+        {
+            if (!SetProperty(ref correctionTime, value)) return;
+            NotifyCorrectionState();
+        }
+    }
+
+    public string CorrectionValidationMessage => CorrectionMessage();
 
     public bool IsBusy
     {
@@ -123,7 +164,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
     public string SelectedWorkerSummary => SelectedWorker is null
         ? "Seleccione su nombre antes de registrar una marca."
-        : $"{SelectedWorker.Name} · {SelectedWorker.State} · {SelectedWorker.LastMark}";
+        : $"{SelectedWorker.Name} · {SelectedWorker.CategoryLabel} · {SelectedWorker.State} · {SelectedWorker.LastMark}";
 
     public bool IsManagerMode => managerMode?.IsActive == true;
 
@@ -137,7 +178,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     public void RefreshManagerMode()
     {
         OnPropertyChanged(nameof(IsManagerMode));
-        CorrectOpenShiftCommand.NotifyCanExecuteChanged();
+        NotifyCorrectionState();
     }
 
     private async Task RefreshAsync()
@@ -191,7 +232,8 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                         ? "Sin marcas"
                         : $"Última marca {Describe(latest.Type)} · {latest.OccurredAt.ToLocalTime():dd/MM HH:mm}",
                     projection.Incidents.Count,
-                    open?.CheckIn.ClientEventId));
+                    open?.CheckIn.ClientEventId,
+                    open?.CheckIn.OccurredAt));
             }
 
             Workers.Clear();
@@ -243,6 +285,12 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         Guid workerId = SelectedWorker.Id;
         string workerName = SelectedWorker.Name;
         string reason = CorrectionReason.Trim();
+        if (!TryGetCorrectionMoment(out DateTimeOffset occurredAt, out string validationMessage))
+        {
+            Status = validationMessage;
+            return;
+        }
+
         await RunAsync(async () =>
         {
             DateTimeOffset now = timeProvider.GetUtcNow();
@@ -253,7 +301,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 station.Authorization.StationId,
                 workerId,
                 AttendanceEventType.AdjustedCheckOut,
-                now,
+                occurredAt,
                 now,
                 station.Session.ProfileId,
                 reason,
@@ -261,7 +309,8 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 AuthorizationFrom(station))).ConfigureAwait(true);
             CorrectionReason = string.Empty;
             await RefreshCoreAsync(workerId).ConfigureAwait(true);
-            Status = $"Jornada de {workerName} cerrada mediante corrección auditada.";
+            DateTimeOffset localExit = TimeZoneInfo.ConvertTime(occurredAt, CostaRicaTimeZone);
+            Status = $"Jornada de {workerName} cerrada a las {localExit:dd/MM/yyyy HH:mm} mediante corrección auditada.";
         }).ConfigureAwait(true);
     }
 
@@ -296,7 +345,8 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                     ? "Sin marcas"
                     : $"Última marca {Describe(latest.Type)} · {latest.OccurredAt.ToLocalTime():dd/MM HH:mm}",
                 projection.Incidents.Count,
-                open?.CheckIn.ClientEventId));
+                open?.CheckIn.ClientEventId,
+                open?.CheckIn.OccurredAt));
         }
 
         Workers.Clear();
@@ -317,8 +367,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         !IsBusy && station is not null && SelectedWorker is { IsPresent: true };
 
     private bool CanCorrectOpenShift() =>
-        !IsBusy && IsManagerMode && SelectedWorker?.OpenCheckInId is not null &&
-        !string.IsNullOrWhiteSpace(CorrectionReason);
+        !IsBusy && TryGetCorrectionMoment(out _, out _);
 
     private async Task RunAsync(Func<Task> action)
     {
@@ -344,6 +393,95 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         CheckInCommand.NotifyCanExecuteChanged();
         CheckOutCommand.NotifyCanExecuteChanged();
         CorrectOpenShiftCommand.NotifyCanExecuteChanged();
+    }
+
+    private void NotifyCorrectionState()
+    {
+        OnPropertyChanged(nameof(CorrectionValidationMessage));
+        CorrectOpenShiftCommand.NotifyCanExecuteChanged();
+    }
+
+    private void PrepareCorrectionMoment(AttendanceWorkerStatus? worker)
+    {
+        if (worker?.OpenCheckInId is null)
+        {
+            CorrectionDate = null;
+            CorrectionTime = string.Empty;
+            return;
+        }
+
+        DateTimeOffset localNow = TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), CostaRicaTimeZone);
+        CorrectionDate = localNow.Date;
+        CorrectionTime = localNow.ToString("HH:mm", CultureInfo.InvariantCulture);
+    }
+
+    private bool TryGetCorrectionMoment(
+        out DateTimeOffset occurredAt,
+        out string validationMessage)
+    {
+        occurredAt = default;
+        if (!IsManagerMode)
+        {
+            validationMessage = "Eleve temporalmente el Modo Jefe de Planta para completar una salida olvidada.";
+            return false;
+        }
+
+        if (SelectedWorker?.OpenCheckInId is null || SelectedWorker.OpenCheckInAt is null)
+        {
+            validationMessage = "Seleccione una persona con una jornada abierta.";
+            return false;
+        }
+
+        if (CorrectionDate is null)
+        {
+            validationMessage = "Indique la fecha real de salida.";
+            return false;
+        }
+
+        if (!TimeSpan.TryParseExact(
+                CorrectionTime?.Trim(),
+                ["h\\:mm", "hh\\:mm"],
+                CultureInfo.InvariantCulture,
+                out TimeSpan timeOfDay) ||
+            timeOfDay < TimeSpan.Zero ||
+            timeOfDay >= TimeSpan.FromDays(1))
+        {
+            validationMessage = "Indique la hora real de salida en formato de 24 horas, por ejemplo 17:00.";
+            return false;
+        }
+
+        DateTime localDateTime = DateTime.SpecifyKind(
+            CorrectionDate.Value.Date.Add(timeOfDay),
+            DateTimeKind.Unspecified);
+        occurredAt = new DateTimeOffset(
+            localDateTime,
+            CostaRicaTimeZone.GetUtcOffset(localDateTime)).ToUniversalTime();
+        if (occurredAt <= SelectedWorker.OpenCheckInAt.Value)
+        {
+            validationMessage = "La salida real debe ser posterior a la entrada de la jornada.";
+            return false;
+        }
+
+        if (occurredAt > timeProvider.GetUtcNow())
+        {
+            validationMessage = "La salida real no puede estar en el futuro.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(CorrectionReason))
+        {
+            validationMessage = "Explique por qué se registra manualmente esta salida.";
+            return false;
+        }
+
+        validationMessage = "La salida se agregará una sola vez y quedará disponible en la auditoría de gerencia.";
+        return true;
+    }
+
+    private string CorrectionMessage()
+    {
+        _ = TryGetCorrectionMoment(out _, out string message);
+        return message;
     }
 
     private static string Describe(AttendanceEventType type) => type switch

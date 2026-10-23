@@ -1,8 +1,8 @@
 # Dominio de asistencia — Sprint 6.3
 
-**Estado:** dominio y persistencia local/central implementados
-**Fecha:** 2026-10-15
-**Persistencia:** paso 6.4 completado; UI y sincronización central continúan en 6.5 y 6.7
+**Estado:** dominio, persistencia, UI local y sincronización multiestación implementados
+**Fecha:** 2026-10-20
+**Persistencia y lectura:** pasos 6.4–6.9 y piloto técnico 6.10 completados; aceptación manual pendiente antes de Sprint 7
 
 ## Reglas confirmadas
 
@@ -17,24 +17,31 @@
    produce una estimación de pago final.
 5. Una jornada abierta durante más de ocho horas genera una incidencia visible.
    No se cierra automáticamente.
-6. Por ahora, el jefe de planta corrige olvidos mediante elevación temporal,
-   motivo obligatorio y un evento compensatorio. La marca original permanece.
-7. La duración se deriva de las marcas válidas con precisión de minuto y no es
+6. El jefe de planta completa una entrada o salida omitida mediante elevación
+   temporal, fecha/hora real y motivo obligatorio. Puede hacerlo una sola vez
+   por omisión y la marca original permanece.
+7. Gerencia puede agregar una corrección posterior desde web. Esa nueva versión
+   reemplaza a la anterior únicamente en la proyección; ambas permanecen en la
+   auditoría con actor, motivo y momento de registro.
+8. La duración se deriva de las marcas válidas con precisión de minuto y no es
    un campo editable.
-8. El MVP no captura fotografías ni biometría.
+9. El MVP no captura fotografías ni biometría.
 
 ## Eventos
 
-| Tipo | Origen | Propósito |
-|---|---|---|
-| `CHECK_IN` | Trabajador en Modo Operación | Abre una jornada. |
-| `CHECK_OUT` | Trabajador en Modo Operación | Cierra la jornada abierta. |
-| `ADJUSTED_CHECK_IN` | Jefe de planta elevado | Compensa una entrada omitida. |
-| `ADJUSTED_CHECK_OUT` | Jefe de planta elevado | Compensa una salida omitida y puede cerrar una jornada abierta. |
+| Tipo                 | Origen                       | Propósito                                                       |
+| -------------------- | ---------------------------- | --------------------------------------------------------------- |
+| `CHECK_IN`           | Trabajador en Modo Operación | Abre una jornada.                                               |
+| `CHECK_OUT`          | Trabajador en Modo Operación | Cierra la jornada abierta.                                      |
+| `ADJUSTED_CHECK_IN`  | Jefe de planta elevado       | Compensa una entrada omitida.                                   |
+| `ADJUSTED_CHECK_OUT` | Jefe de planta elevado       | Compensa una salida omitida y puede cerrar una jornada abierta. |
 
 Todos llevan UUID cliente, organización, planta, estación, trabajador,
 secuencia de estación, `occurred_at`, `recorded_at`, `confirmed_at` opcional y
 estado de sincronización. Los ajustes agregan actor, motivo y evento relacionado.
+Una relación con una marca de dirección opuesta completa una omisión; una
+relación con una marca de la misma dirección crea la siguiente versión. Solo se
+admite un reemplazo directo por versión, evitando ramas contradictorias.
 
 La secuencia y el UUID soportan idempotencia. El mismo UUID con contenido
 distinto o la misma secuencia de estación asignada a eventos diferentes es un
@@ -52,11 +59,18 @@ eventos:
   `OPEN_SHIFT_EXCEEDED`;
 - un ajuste tardío se coloca por su hora real de ocurrencia, mientras su hora de
   registro conserva cuándo y quién corrigió.
+- una corrección gerencial posterior sustituye la marca vigente al calcular
+  horas, pero no elimina la corrección previa del historial.
 
-Perfiles `PROVISIONAL` y `PROVISIONAL_VENCIDO` pueden originar eventos. Una
-proyección nunca descarta horas por un cambio posterior de estado, rechazo o
+Perfiles `PROVISIONAL` pueden originar eventos y permanecen pendientes hasta
+una resolución explícita. El valor legado `PROVISIONAL_VENCIDO` se conserva
+solo para compatibilidad histórica. Una proyección nunca descarta horas por un cambio posterior de estado, rechazo o
 fusión del trabajador; la referencia persistente apunta al UUID estable del
 trabajador y se restringe por organización.
+
+Cada `JEFE_PLANTA` activo o pendiente de activación posee además una ficha en
+`workers` vinculada por `user_profile_id`. Esa ficha permite registrar su
+asistencia junto a los operarios sin copiar contraseña, PIN ni permisos.
 
 ## Tarifa configurable y estimación
 
@@ -89,8 +103,10 @@ pago. Jornadas abiertas e incidencias no se convierten silenciosamente en cero.
   índices para trabajador, planta, estación y relaciones de ajuste.
 - SQLite conserva marcas locales y las agrega al outbox dentro de una misma
   transacción inmediata. Un fallo del outbox revierte también la marca.
-- Eventos y tarifas son append-only. Una corrección es otra marca relacionada,
-  con perfil de jefe y motivo; no se permiten `UPDATE` ni `DELETE`.
+- Los hechos de eventos y tarifas son append-only. Una corrección es otra marca
+  relacionada, con perfil de jefe y motivo; no se permiten `UPDATE` ni
+  `DELETE` de esos hechos. SQLite solo permite que la metadata local transicione
+  de pendiente a confirmada cuando el pull recibe el mismo contenido central.
 - El mismo UUID con igual contenido es un reintento idempotente. Con contenido
   distinto se rechaza.
 - La tarifa solo se guarda centralmente; el desktop no replica información
@@ -111,6 +127,20 @@ pago. Jornadas abiertas e incidencias no se convierten silenciosamente en cero.
 - `SqliteAttendanceRepository.cs`: persistencia atómica de marca + outbox.
 - `20261015123903_sprint_6_4_attendance_persistence.sql`: tablas centrales,
   permisos, RLS y tarifas versionadas.
+- `019_attendance_sync_projection.sql`: confirmación local sin alterar hechos.
+- `20261020074204_attendance_sync_ingestion.sql`: ingestión idempotente,
+  dependencias reintentables y publicación por planta.
+- `apps/api/src/attendance/attendance-read-model.ts`: proyección central
+  `attendance-hours-v1`, con cortes de período en Costa Rica, minutos
+  confirmados, jornadas abiertas, incidencias, cobertura y frescura.
+- `GET /management/attendance/hours`: consulta gerencial protegida por
+  `attendance.read`, con filtros opcionales por planta y trabajador.
+- `apps/web/src/features/attendance/`: módulo gerencial de solo lectura con
+  filtros persistidos en URL, resumen de cobertura, jornadas, incidencias e
+  historial de ajustes con actor y motivo.
 
-Todavía no existen controles reales de UI ni ingestión central del evento de
-asistencia. Esos elementos corresponden a 6.5 y 6.7.
+Los controles reales de UI, la ingestión central, el read model autorizado y
+su consulta web están implementados. El piloto automatizado de 6.10 valida una
+jornada nocturna offline, reinicio, corrección y consulta con 825 minutos. La
+aceptación manual final continúa pendiente; fotografía y biometría permanecen
+fuera del MVP.

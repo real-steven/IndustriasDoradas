@@ -221,8 +221,9 @@ y cambiar el perfil se ejecutará como un solo caso de uso auditable.
 - `ACTIVO`
 - `RECHAZADO`
 
-Vencer no equivale a desactivar. Un trabajador `PROVISIONAL_VENCIDO` conserva
-`is_active = true` y puede seguir acumulando eventos. Una fusión deja al origen
+`PROVISIONAL_VENCIDO` se conserva para leer datos históricos, pero el flujo
+vigente mantiene `PROVISIONAL` hasta una decisión explícita y no produce nuevos
+vencimientos. Una fusión deja al origen
 `RECHAZADO`, crea `worker_merges` y nunca elimina el perfil ni cambia eventos
 históricos silenciosamente.
 
@@ -455,9 +456,8 @@ estado central sin reducir un bloqueo más estricto.
 | `resolution_reason` | `text` | Sí | Obligatorio para rechazo/fusión. |
 | `created_at`, `updated_at` | `timestamptz` | No | UTC. |
 
-La solicitud y su trabajador provisional se crean atómicamente. Expirar el
-plazo cambia al trabajador a `PROVISIONAL_VENCIDO`, pero la solicitud sigue
-pendiente hasta decisión administrativa. Una resolución `MERGED` exige una fila
+La solicitud y su trabajador provisional se crean atómicamente. La solicitud
+sigue pendiente sin vencimiento hasta decisión administrativa. Una resolución `MERGED` exige una fila
 `worker_merges` con el mismo `source_request_id` en la misma transacción; el
 destino no se duplica en esta tabla.
 
@@ -524,7 +524,8 @@ No se inventan cédula, cuenta bancaria, tarifa ni condiciones comerciales.
 8. Un jefe activo necesita alcance de planta antes de autorización de estación.
 9. Solo jefe de planta puede poseer PIN/autorización de estación.
 10. Un perfil tiene como máximo una credencial PIN.
-11. `review_due_at = requested_at + interval '72 hours'`.
+11. `review_due_at` se conserva como dato histórico de compatibilidad y no
+    cambia el estado del trabajador.
 12. Resolver una solicitud exige actor/fecha; rechazar o fusionar exige motivo.
 13. Fusionar exige una única fila `worker_merges`, destino distinto, misma
     organización y ausencia de ciclos.
@@ -562,21 +563,16 @@ iniciales.
 ```mermaid
 stateDiagram-v2
     [*] --> PROVISIONAL: solicitud + trabajador
-    PROVISIONAL --> PROVISIONAL_VENCIDO: 72 h sin resolución
     PROVISIONAL --> ACTIVO: administrador aprueba
-    PROVISIONAL_VENCIDO --> ACTIVO: administrador aprueba tarde
     PROVISIONAL --> RECHAZADO: rechazo documentado
-    PROVISIONAL_VENCIDO --> RECHAZADO: rechazo documentado
     PROVISIONAL --> RECHAZADO: fusión hacia canónico
-    PROVISIONAL_VENCIDO --> RECHAZADO: fusión hacia canónico
 ```
 
 Invariantes del flujo:
 
 - solicitud y trabajador provisional se confirman juntos;
-- el reloj de 72 horas parte de `requested_at`, no de una tarea en segundo plano;
-- una tarea idempotente puede materializar `PROVISIONAL_VENCIDO`, pero las
-  consultas también detectan pendientes vencidos por `review_due_at`;
+- no existe transición automática por tiempo; la solicitud permanece pendiente
+  hasta aprobación, rechazo o fusión explícita;
 - vencimiento, rechazo y fusión nunca borran horas/evidencias;
 - aprobación tardía conserva la hora de ingreso y todo lo registrado;
 - `worker_merges` conserva origen y destino; no se sobreescribe identidad.

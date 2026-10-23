@@ -59,11 +59,14 @@ public static class AttendanceProjectionService
 
         EnsureSingleWorkerScope(events);
 
+        HashSet<Guid> supersededEventIds = FindSupersededEvents(events);
+
         var shifts = new List<AttendanceShift>();
         var incidents = new List<AttendanceIncident>();
         AttendanceEvent? openCheckIn = null;
 
         foreach (AttendanceEvent attendanceEvent in events
+                     .Where(item => !supersededEventIds.Contains(item.ClientEventId))
                      .OrderBy(item => item.OccurredAt)
                      .ThenBy(item => item.ClientSequence))
         {
@@ -117,6 +120,32 @@ public static class AttendanceProjectionService
         }
 
         return new AttendanceProjection(shifts.AsReadOnly(), incidents.AsReadOnly());
+    }
+
+    private static HashSet<Guid> FindSupersededEvents(AttendanceEvent[] events)
+    {
+        var byId = events.ToDictionary(item => item.ClientEventId);
+        var superseded = new HashSet<Guid>();
+        var replacementsByTarget = new Dictionary<Guid, Guid>();
+        foreach (AttendanceEvent adjustment in events.Where(item => item.IsAdjustment))
+        {
+            if (adjustment.RelatedEventId is not Guid relatedId ||
+                !byId.TryGetValue(relatedId, out AttendanceEvent? related) ||
+                adjustment.IsCheckIn != related.IsCheckIn)
+            {
+                continue;
+            }
+
+            if (!replacementsByTarget.TryAdd(relatedId, adjustment.ClientEventId))
+            {
+                throw new InvalidOperationException(
+                    "Una marca de asistencia no puede tener dos correcciones posteriores.");
+            }
+
+            superseded.Add(relatedId);
+        }
+
+        return superseded;
     }
 
     private static AttendanceShift CreateShift(

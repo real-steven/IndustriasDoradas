@@ -34,7 +34,6 @@ export class WorkersService {
   ) {}
 
   async listRequests(organizationId: string, query: WorkerRequestListQuery) {
-    await this.expire(organizationId);
     try {
       return await this.repository.listRequests(organizationId, query);
     } catch (error) {
@@ -46,7 +45,6 @@ export class WorkersService {
     organizationId: string,
     query: WorkerListQuery,
   ): Promise<PageResponse<WorkerItem>> {
-    await this.expire(organizationId);
     try {
       return await this.repository.listWorkers(organizationId, query);
     } catch (error) {
@@ -235,14 +233,6 @@ export class WorkersService {
         }
       },
     );
-  }
-
-  private async expire(organizationId: string): Promise<void> {
-    try {
-      await this.repository.expire(organizationId, new Date().toISOString());
-    } catch (error) {
-      this.storageError(error);
-    }
   }
 
   private actor(auth: AuthenticatedContext): AuditActor {

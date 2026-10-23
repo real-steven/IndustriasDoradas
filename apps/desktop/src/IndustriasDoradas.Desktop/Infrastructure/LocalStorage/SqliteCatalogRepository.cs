@@ -36,13 +36,14 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
         CancellationToken cancellationToken = default) =>
         UpsertAsync(
             """
-            INSERT INTO cached_workers(id, organization_id, name, is_active, updated_at_utc)
-            VALUES ($id, $organizationId, $name, $isActive, $updatedAtUtc)
+            INSERT INTO cached_workers(id, organization_id, name, is_active, updated_at_utc, category)
+            VALUES ($id, $organizationId, $name, $isActive, $updatedAtUtc, $category)
             ON CONFLICT(id) DO UPDATE SET
                 organization_id = excluded.organization_id,
                 name = excluded.name,
                 is_active = excluded.is_active,
-                updated_at_utc = excluded.updated_at_utc;
+                updated_at_utc = excluded.updated_at_utc,
+                category = excluded.category;
             """,
             command =>
             {
@@ -53,6 +54,7 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
                 command.Parameters.AddWithValue("$name", SqliteLocalStorageConverters.Text(worker.Name, nameof(worker)));
                 command.Parameters.AddWithValue("$isActive", worker.IsActive ? 1 : 0);
                 command.Parameters.AddWithValue("$updatedAtUtc", SqliteLocalStorageConverters.Timestamp(worker.UpdatedAt));
+                command.Parameters.AddWithValue("$category", NormalizeWorkerCategory(worker.Category));
             },
             cancellationToken);
 
@@ -125,7 +127,7 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
         await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, organization_id, name, is_active, updated_at_utc
+            SELECT id, organization_id, name, is_active, updated_at_utc, category
             FROM cached_workers
             WHERE organization_id = $organizationId AND is_active = 1
             ORDER BY name COLLATE NOCASE, id;
@@ -142,7 +144,8 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
                 Guid.Parse(reader.GetString(1)),
                 reader.GetString(2),
                 reader.GetInt64(3) == 1,
-                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4))));
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4)),
+                reader.GetString(5)));
         }
 
         return result;
@@ -229,7 +232,7 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
             .ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, organization_id, name, is_active, updated_at_utc
+            SELECT id, organization_id, name, is_active, updated_at_utc, category
             FROM cached_workers
             WHERE id = $id;
             """;
@@ -242,7 +245,8 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
                 Guid.Parse(reader.GetString(1)),
                 reader.GetString(2),
                 reader.GetInt64(3) == 1,
-                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4)))
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4)),
+                reader.GetString(5))
             : null;
     }
 
@@ -286,4 +290,9 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
         addParameters(command);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static string NormalizeWorkerCategory(string category) =>
+        string.Equals(category, "JEFE_PLANTA", StringComparison.Ordinal)
+            ? "JEFE_PLANTA"
+            : "OPERARIO";
 }

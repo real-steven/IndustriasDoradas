@@ -247,14 +247,19 @@ en
 
 - **Decisión:** jefe de planta solicita un trabajador con nombre obligatorio y
   contacto opcional. El perfil puede registrar horas inmediatamente como
-  `PROVISIONAL`; tras 72 horas sin resolución pasa a `PROVISIONAL_VENCIDO` sin
+  `PROVISIONAL` y permanece pendiente hasta una decisión explícita, sin
   bloquear ni perder marcas.
+- **Jefes de planta:** cada cuenta `JEFE_PLANTA` tiene una ficha laboral
+  vinculada para usar el mismo check-in/out. Correo, contraseña, PIN y permisos
+  permanecen exclusivamente en el perfil de acceso y no se duplican en la ficha.
 - **Resolución central:** `JEFE_EMPRESA` podrá aprobar, rechazar, fusionar
   duplicados o reasignar horas cuando el flujo correspondiente se confirme.
   Ninguna resolución borra eventos ya confirmados.
 - **Asistencia inicial:** check-in/out conserva la hora original y funciona sin
   fotografía. El jefe de planta revisa incidencias desde desktop mediante
-  elevación temporal y motivo auditable.
+    elevación temporal, hora real y motivo auditable. Solo completa una vez la
+    omisión; gerencia puede encadenar una versión posterior desde web sin borrar
+    la corrección de planta.
 - **Privacidad vigente:** el paso 6.2 aplazó fotografía para el MVP. No se crean
   temporales, referencias, checksums, buckets de Storage ni respaldos de imagen.
 - **Biometría:** reconocimiento facial, enrolamiento y plantillas biométricas

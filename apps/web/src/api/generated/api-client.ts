@@ -76,6 +76,109 @@ export interface ManagementFreshness {
   serverTimeUtc: string;
   pollAfterSeconds: number;
 }
+export interface Worker {
+  id: string;
+  organizationId: string;
+  plantId: string;
+  sourceRequestId: string;
+  userProfileId: string | null;
+  category: "OPERARIO" | "JEFE_PLANTA";
+  name: string;
+  email: string | null;
+  phone: string | null;
+  status: "PROVISIONAL" | "PROVISIONAL_VENCIDO" | "ACTIVO" | "RECHAZADO";
+  statusChangedAt: string;
+  isActive: boolean;
+  deactivatedAt: string | null;
+}
+export interface PageWorker {
+  items: Worker[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+export interface AttendanceHoursFilters {
+  fromDate: string;
+  toDate: string;
+  plantId?: string;
+  workerId?: string;
+}
+export interface AttendanceHoursShift {
+  workerId: string;
+  workerName: string;
+  plantId: string;
+  status: "COMPLETED" | "OPEN";
+  startedOn: string;
+  checkInEventId: string;
+  checkInAtUtc: string;
+  checkOutEventId: string | null;
+  checkOutAtUtc: string | null;
+  durationMinutes: number | null;
+  minutesInPeriod: number | null;
+}
+export interface AttendanceHoursIncident {
+  type:
+    "DUPLICATE_CHECK_IN" | "CHECK_OUT_WITHOUT_CHECK_IN" | "OPEN_SHIFT_EXCEEDED";
+  workerId: string;
+  workerName: string;
+  eventId: string;
+  detectedAtUtc: string;
+  description: string;
+}
+export interface AttendanceHoursAdjustment {
+  eventId: string;
+  eventType: "ADJUSTED_CHECK_IN" | "ADJUSTED_CHECK_OUT";
+  workerId: string;
+  workerName: string;
+  plantId: string;
+  occurredAtUtc: string;
+  recordedAtUtc: string;
+  confirmedAtUtc: string;
+  correctedByProfileId: string;
+  correctedByDisplayName: string;
+  correctionReason: string;
+  relatedEventId: string;
+}
+export interface AttendanceWorkerHours {
+  workerId: string;
+  workerName: string;
+  confirmedMinutes: number;
+  completedShiftCount: number;
+  openShiftCount: number;
+  incidentCount: number;
+}
+export interface AttendanceHours {
+  version: "attendance-hours-v1";
+  timezone: "America/Costa_Rica";
+  period: { fromDate: string; toDate: string; fromUtc: string; toUtc: string };
+  summary: {
+    workerCount: number;
+    confirmedShiftCount: number;
+    openShiftCount: number;
+    incidentCount: number;
+    adjustmentCount: number;
+    totalConfirmedMinutes: number;
+  };
+  workers: AttendanceWorkerHours[];
+  shifts: AttendanceHoursShift[];
+  incidents: AttendanceHoursIncident[];
+  adjustments: AttendanceHoursAdjustment[];
+  coverage: {
+    status: "COMPLETE";
+    eventsRead: number;
+    confirmedEventsUsed: number;
+    excludedEvents: number;
+    eventsInPeriod: number;
+    firstEventAtUtc: string | null;
+    lastEventAtUtc: string | null;
+  };
+  freshness: {
+    generatedAtUtc: string;
+    lastConfirmedAtUtc: string | null;
+    lagSeconds: number | null;
+  };
+}
 export interface ManagementOperationLine {
   organizationId: string;
   plantId: string;
@@ -277,6 +380,15 @@ export class ApiClient {
       },
     );
   }
+  listWorkers(
+    organizationId: string,
+    signal?: AbortSignal,
+  ): Promise<PageWorker> {
+    return this.request<PageWorker>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/workers?page=1&pageSize=100&state=all`,
+      signal,
+    );
+  }
   listManagementOperationLines(
     organizationId: string,
     filters: ManagementFilters = {},
@@ -297,6 +409,22 @@ export class ApiClient {
     const suffix = query.size === 0 ? "" : `?${query}`;
     return this.request<ManagementFreshness>(
       `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/freshness${suffix}`,
+      signal,
+    );
+  }
+  getManagementAttendanceHours(
+    organizationId: string,
+    filters: AttendanceHoursFilters,
+    signal?: AbortSignal,
+  ): Promise<AttendanceHours> {
+    const query = new URLSearchParams({
+      fromDate: filters.fromDate,
+      toDate: filters.toDate,
+    });
+    if (filters.plantId !== undefined) query.set("plantId", filters.plantId);
+    if (filters.workerId !== undefined) query.set("workerId", filters.workerId);
+    return this.request<AttendanceHours>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/attendance/hours?${query}`,
       signal,
     );
   }

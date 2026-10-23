@@ -84,6 +84,8 @@ export function useManagementFreshness(): ManagementFreshnessQuery {
       "management-shipment-sweeps",
       "shipment-audit",
       "gold-summary",
+      "attendance-hours",
+      "attendance-workers",
     ];
     void Promise.all(
       affectedKeys.map((queryKey) =>

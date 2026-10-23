@@ -164,14 +164,17 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                 break;
             case "WORKER":
                 await ExecuteAsync(connection, transaction, """
-                    INSERT INTO cached_workers(id, organization_id, name, is_active, updated_at_utc)
-                    VALUES ($id, $organizationId, $name, $active, $updated)
+                    INSERT INTO cached_workers(id, organization_id, name, is_active, updated_at_utc, category)
+                    VALUES ($id, $organizationId, $name, $active, $updated, $category)
                     ON CONFLICT(id) DO UPDATE SET organization_id=excluded.organization_id,
-                        name=excluded.name, is_active=excluded.is_active, updated_at_utc=excluded.updated_at_utc;
+                        name=excluded.name, is_active=excluded.is_active,
+                        updated_at_utc=excluded.updated_at_utc, category=excluded.category;
                     """, cancellationToken,
                     ("$id", Text(payload, "id")), ("$organizationId", Text(payload, "organization_id")),
                     ("$name", Text(payload, "name")), ("$active", Bool(payload, "is_active") ? 1 : 0),
-                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc))).ConfigureAwait(false);
+                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc)),
+                    ("$category", NullableText(payload, "user_profile_id") is null
+                        ? "OPERARIO" : "JEFE_PLANTA")).ConfigureAwait(false);
                 break;
             case "PRODUCTION_LINE":
                 await ExecuteAsync(connection, transaction, """
@@ -369,7 +372,87 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$notes", NullableText(payload, "notes") ?? (object)DBNull.Value))
                     .ConfigureAwait(false);
                 break;
+            case "ATTENDANCE_EVENT":
+                await ApplyAttendanceAsync(connection, transaction, payload, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
         }
+    }
+
+    private static async Task ApplyAttendanceAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        JsonElement payload,
+        CancellationToken cancellationToken)
+    {
+        string id = Text(payload, "id");
+        string organizationId = Text(payload, "organization_id");
+        string plantId = Text(payload, "plant_id");
+        string stationId = Text(payload, "station_id");
+        string workerId = Text(payload, "worker_id");
+        long sequence = Long(payload, "client_sequence");
+        string eventType = Text(payload, "event_type");
+        string occurredAt = CanonicalTimestamp(payload, "occurred_at_utc");
+        string recordedAt = CanonicalTimestamp(payload, "recorded_at_utc");
+        string confirmedAt = CanonicalTimestamp(payload, "confirmed_at_utc");
+        object correctedBy = NullableText(payload, "corrected_by_profile_id") ?? (object)DBNull.Value;
+        object reason = NullableText(payload, "correction_reason") ?? (object)DBNull.Value;
+        object relatedEventId = NullableText(payload, "related_event_id") ?? (object)DBNull.Value;
+        if (Text(payload, "sync_status") != "SYNCHRONIZED")
+            throw new InvalidOperationException("El servidor publicó una asistencia sin confirmar.");
+
+        (string Name, object Value)[] parameters =
+        [
+            ("$id", id), ("$organizationId", organizationId), ("$plantId", plantId),
+            ("$stationId", stationId), ("$workerId", workerId), ("$sequence", sequence),
+            ("$eventType", eventType), ("$occurredAt", occurredAt),
+            ("$recordedAt", recordedAt), ("$confirmedAt", confirmedAt),
+            ("$correctedBy", correctedBy), ("$reason", reason),
+            ("$relatedEventId", relatedEventId),
+        ];
+        await ExecuteAsync(connection, transaction, """
+            INSERT OR IGNORE INTO attendance_events(
+                client_event_id, organization_id, plant_id, station_id, worker_id,
+                client_sequence, event_type, occurred_at_utc, recorded_at_utc,
+                confirmed_at_utc, sync_status, corrected_by_profile_id,
+                correction_reason, related_event_id)
+            VALUES ($id, $organizationId, $plantId, $stationId, $workerId,
+                $sequence, $eventType, $occurredAt, $recordedAt,
+                $confirmedAt, 'SYNCHRONIZED', $correctedBy, $reason, $relatedEventId);
+            """, cancellationToken, parameters).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, """
+            UPDATE attendance_events
+            SET sync_status = 'SYNCHRONIZED', confirmed_at_utc = $confirmedAt
+            WHERE client_event_id = $id
+              AND organization_id = $organizationId AND plant_id = $plantId
+              AND station_id = $stationId AND worker_id = $workerId
+              AND client_sequence = $sequence AND event_type = $eventType
+              AND occurred_at_utc = $occurredAt AND recorded_at_utc = $recordedAt
+              AND corrected_by_profile_id IS $correctedBy
+              AND correction_reason IS $reason AND related_event_id IS $relatedEventId
+              AND sync_status <> 'SYNCHRONIZED';
+            """, cancellationToken, parameters).ConfigureAwait(false);
+
+        await using SqliteCommand verify = connection.CreateCommand();
+        verify.Transaction = transaction;
+        verify.CommandText = """
+            SELECT COUNT(*) FROM attendance_events
+            WHERE client_event_id = $id
+              AND organization_id = $organizationId AND plant_id = $plantId
+              AND station_id = $stationId AND worker_id = $workerId
+              AND client_sequence = $sequence AND event_type = $eventType
+              AND occurred_at_utc = $occurredAt AND recorded_at_utc = $recordedAt
+              AND corrected_by_profile_id IS $correctedBy
+              AND correction_reason IS $reason AND related_event_id IS $relatedEventId
+              AND sync_status = 'SYNCHRONIZED' AND confirmed_at_utc = $confirmedAt;
+            """;
+        foreach ((string name, object value) in parameters)
+            verify.Parameters.AddWithValue(name, value);
+        long matches = Convert.ToInt64(
+            await verify.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+            CultureInfo.InvariantCulture);
+        if (matches != 1)
+            throw new InvalidOperationException("El evento remoto de asistencia contradice el historial local.");
     }
 
     private static async Task UpsertGenericAsync(SqliteConnection connection, SqliteTransaction transaction,
@@ -492,4 +575,14 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
     }
     private static string Timestamp(JsonElement payload, string name, DateTimeOffset fallback) =>
         NullableText(payload, name) ?? SqliteLocalStorageConverters.Timestamp(fallback);
+
+    private static string CanonicalTimestamp(JsonElement payload, string name)
+    {
+        string value = Text(payload, name);
+        return SqliteLocalStorageConverters.Timestamp(
+            DateTimeOffset.Parse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind));
+    }
 }

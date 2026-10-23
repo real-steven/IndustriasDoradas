@@ -88,8 +88,12 @@ describe("sync ingestion with PostgreSQL", () => {
       findActivePullScope: () => Promise.resolve(null),
       listChanges: () => Promise.resolve([]),
       ingestItem: async (input) => {
+        const rpc =
+          input.item.operationType === "ATTENDANCE_EVENT_RECORDED"
+            ? "ingest_attendance_sync_item_v1"
+            : "ingest_sync_item_v1";
         const result = await db.query<{ result: SyncItemResult }>(
-          "select app.ingest_sync_item_v1($1::jsonb) as result",
+          `select app.${rpc}($1::jsonb) as result`,
           [
             JSON.stringify({
               ...scope,
@@ -134,7 +138,12 @@ describe("sync ingestion with PostgreSQL", () => {
     );
 
   async function count(
-    table: "shipments" | "production_events" | "sync_receipts" | "audit_events",
+    table:
+      | "shipments"
+      | "production_events"
+      | "attendance_events"
+      | "sync_receipts"
+      | "audit_events",
   ) {
     return (
       await db.query<{ count: number }>(
@@ -389,7 +398,100 @@ describe("sync ingestion with PostgreSQL", () => {
     expect(await count("shipments")).toBe(1);
     expect(await count("sync_receipts")).toBe(2);
   });
+
+  it("synchronizes attendance after 24 hours offline and retries an early correction", async () => {
+    const checkIn = attendanceItem({
+      id: "49000000-0000-4000-8000-000000000001",
+      outboxId: "49100000-0000-4000-8000-000000000001",
+      sequence: 7001,
+      type: "CHECK_IN",
+      occurredAtUtc: "2026-10-18T12:00:00.000Z",
+      recordedAtUtc: "2026-10-18T12:00:01.000Z",
+    });
+    const correction = attendanceItem({
+      id: "49000000-0000-4000-8000-000000000002",
+      outboxId: "49100000-0000-4000-8000-000000000002",
+      sequence: 7002,
+      type: "ADJUSTED_CHECK_OUT",
+      occurredAtUtc: "2026-10-18T22:00:00.000Z",
+      recordedAtUtc: "2026-10-19T12:00:00.000Z",
+      relatedEventId: checkIn.aggregateId,
+    });
+
+    expect((await push([correction])).results[0]).toMatchObject({
+      status: "RETRY_LATER",
+      code: "DEPENDENCY_NOT_READY",
+    });
+    expect(await count("sync_receipts")).toBe(0);
+
+    const applied = await push([correction, checkIn]);
+    expect(applied.results.map((result) => result.status)).toEqual([
+      "APPLIED",
+      "APPLIED",
+    ]);
+    expect(await count("attendance_events")).toBe(2);
+    const storedOccurrence = (
+      await db.query<{ occurred_at_utc: string }>(
+        "select occurred_at_utc::text from app.attendance_events where id = $1",
+        [checkIn.aggregateId],
+      )
+    ).rows[0]?.occurred_at_utc;
+    expect(new Date(storedOccurrence!).toISOString()).toBe(
+      "2026-10-18T12:00:00.000Z",
+    );
+    expect(
+      (await push([checkIn, correction])).results.map(
+        (result) => result.status,
+      ),
+    ).toEqual(["ALREADY_APPLIED", "ALREADY_APPLIED"]);
+    expect(
+      (
+        await db.query<{ count: number }>(
+          "select count(*)::int as count from app.sync_changes where entity_type = 'ATTENDANCE_EVENT'",
+        )
+      ).rows[0]?.count,
+    ).toBe(2);
+  });
 });
+
+function attendanceItem(input: {
+  id: string;
+  outboxId: string;
+  sequence: number;
+  type: "CHECK_IN" | "ADJUSTED_CHECK_OUT";
+  occurredAtUtc: string;
+  recordedAtUtc: string;
+  relatedEventId?: string;
+}): SyncEnvelopeItem {
+  const adjusted = input.type === "ADJUSTED_CHECK_OUT";
+  return {
+    outboxMessageId: input.outboxId,
+    stationSequence: input.sequence,
+    operationType: "ATTENDANCE_EVENT_RECORDED",
+    aggregateType: "attendance_event",
+    aggregateId: input.id,
+    payloadSchemaVersion: 1,
+    createdAtUtc: input.recordedAtUtc,
+    authorization: {
+      ...authorization,
+      validatedAtUtc: "2026-10-18T11:00:00.000Z",
+      offlineValidUntilUtc: "2026-10-20T11:00:00.000Z",
+    },
+    payload: {
+      schemaVersion: 1,
+      clientEventId: input.id,
+      ...scope,
+      workerId,
+      eventType: input.type,
+      clientSequence: input.sequence,
+      occurredAtUtc: input.occurredAtUtc,
+      recordedAtUtc: input.recordedAtUtc,
+      correctedByProfileId: adjusted ? actorProfileId : null,
+      correctionReason: adjusted ? "Salida olvidada confirmada." : null,
+      relatedEventId: input.relatedEventId ?? null,
+    },
+  };
+}
 
 function scenario() {
   const shipmentId = randomUUID();

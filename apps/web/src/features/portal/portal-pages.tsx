@@ -3,6 +3,7 @@ import { NavLink, useOutletContext } from "react-router-dom";
 
 import { useLanguage } from "../../i18n/language-context";
 import { GoldFeature } from "../gold/gold";
+import { AttendanceFeature } from "../attendance/attendance";
 import {
   OperationFreshness,
   OperationLinesPanel,
@@ -26,13 +27,6 @@ const futureModules = [
     "Statistics",
     "Rendimiento por proveedor, línea y período.",
     "Performance by supplier, line, and period.",
-  ],
-  [
-    "♙",
-    "Trabajadores",
-    "Workers",
-    "Operarios, asistencia y horas.",
-    "Operators, attendance, and hours.",
   ],
   [
     "⇩",
@@ -204,6 +198,23 @@ export function ShipmentsPage() {
       )}
     >
       <ShipmentsFeature />
+    </PortalPage>
+  );
+}
+
+export function WorkersPage() {
+  const { tr } = useLanguage();
+
+  return (
+    <PortalPage
+      title={tr("Trabajadores y horas", "Workers and hours")}
+      eyebrow={tr("ASISTENCIA CONFIRMADA", "CONFIRMED ATTENDANCE")}
+      description={tr(
+        "Consulte jornadas, horas confirmadas, pendientes y correcciones por trabajador. Esta pantalla no modifica marcas ni calcula pagos.",
+        "Review shifts, confirmed hours, open items, and corrections by worker. This screen does not modify marks or calculate payroll.",
+      )}
+    >
+      <AttendanceFeature />
     </PortalPage>
   );
 }

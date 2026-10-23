@@ -37,6 +37,10 @@ const OPERATION_SCHEMAS: Readonly<
     aggregateType: "mercury_movement",
     version: 1,
   },
+  ATTENDANCE_EVENT_RECORDED: {
+    aggregateType: "attendance_event",
+    version: 1,
+  },
 };
 
 export function normalizeSyncItem(
@@ -121,6 +125,9 @@ function normalizePayload(
     }
     if (operationType === "MERCURY_MOVEMENT_RECORDED") {
       return normalizeMercuryMovement(payload, item, scope);
+    }
+    if (operationType === "ATTENDANCE_EVENT_RECORDED") {
+      return normalizeAttendanceEvent(payload, item, scope);
     }
     const common = normalizeOperationalCommon(payload, scope, item);
     if (operationType === "OPERATION_STARTED") {
@@ -213,6 +220,91 @@ function normalizePayload(
   } catch {
     return { payload: canonicalObject(item.payload), code: "INVALID_EVENT" };
   }
+}
+
+function normalizeAttendanceEvent(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "clientEventId",
+    "organizationId",
+    "plantId",
+    "stationId",
+    "workerId",
+    "eventType",
+    "clientSequence",
+    "occurredAtUtc",
+    "recordedAtUtc",
+    "correctedByProfileId",
+    "correctionReason",
+    "relatedEventId",
+  ]);
+  const eventType = requireText(payload, "eventType", 40);
+  const occurredAtUtc = requireDate(payload, "occurredAtUtc");
+  const recordedAtUtc = requireDate(payload, "recordedAtUtc");
+  const correctedByProfileId = requireNullableUuid(
+    payload,
+    "correctedByProfileId",
+  );
+  const correctionReason = requireNullableText(
+    payload,
+    "correctionReason",
+    500,
+  );
+  const relatedEventId = requireNullableUuid(payload, "relatedEventId");
+  const clientEventId = requireUuid(payload, "clientEventId");
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    clientEventId,
+    organizationId: requireUuid(payload, "organizationId"),
+    plantId: requireUuid(payload, "plantId"),
+    stationId: requireUuid(payload, "stationId"),
+    workerId: requireUuid(payload, "workerId"),
+    eventType,
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    occurredAtUtc,
+    recordedAtUtc,
+    correctedByProfileId,
+    correctionReason,
+    relatedEventId,
+  };
+  const isAdjustment = ["ADJUSTED_CHECK_IN", "ADJUSTED_CHECK_OUT"].includes(
+    eventType,
+  );
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.organizationId !== scope.organizationId ||
+    normalized.plantId !== scope.plantId ||
+    normalized.stationId !== scope.stationId ||
+    normalized.clientEventId !== item.aggregateId ||
+    normalized.clientSequence !== item.stationSequence ||
+    ![
+      "CHECK_IN",
+      "CHECK_OUT",
+      "ADJUSTED_CHECK_IN",
+      "ADJUSTED_CHECK_OUT",
+    ].includes(eventType) ||
+    Date.parse(recordedAtUtc) < Date.parse(occurredAtUtc) ||
+    (isAdjustment &&
+      (correctedByProfileId !== item.authorization.actorProfileId ||
+        correctionReason === null ||
+        relatedEventId === null ||
+        relatedEventId === clientEventId)) ||
+    (!isAdjustment &&
+      (correctedByProfileId !== null ||
+        correctionReason !== null ||
+        relatedEventId !== null))
+  ) {
+    throw new Error("invalid attendance event");
+  }
+
+  // La marca puede describir una salida olvidada del pasado. La autorización
+  // corresponde al momento en que el evento se registró, no a la hora corregida.
+  validateAuthorizationWindow(item, recordedAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
 }
 
 function normalizeProductionSweep(

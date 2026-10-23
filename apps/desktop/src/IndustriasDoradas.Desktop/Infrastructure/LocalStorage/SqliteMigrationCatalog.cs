@@ -29,6 +29,9 @@ public static class SqliteMigrationCatalog
         Read(14, "line_component_projection", "014_line_component_projection.sql"),
         Read(15, "mercury_sweep_measurements", "015_mercury_sweep_measurements.sql"),
         Read(16, "attendance_persistence", "016_attendance_persistence.sql"),
+        Read(17, "worker_attendance_category", "017_worker_attendance_category.sql"),
+        Read(18, "attendance_correction_chain", "018_attendance_correction_chain.sql"),
+        Read(19, "attendance_sync_projection", "019_attendance_sync_projection.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

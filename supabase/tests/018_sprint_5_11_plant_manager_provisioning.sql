@@ -63,6 +63,19 @@ begin
   ) then
     raise exception 'PIN verifier must be attributed to the manager without storing the PIN';
   end if;
+
+  if not exists (
+    select 1
+    from app.workers
+    where organization_id = '30000000-0000-4000-8000-000000000001'
+      and user_profile_id = 'f5110000-0000-4000-8000-000000000001'
+      and plant_id = '31000000-0000-4000-8000-000000000001'
+      and name = 'Jefe de planta 5.11'
+      and status = 'ACTIVO'
+      and is_active
+  ) then
+    raise exception 'plant manager provisioning must create its active attendance worker';
+  end if;
 end;
 $$;
 

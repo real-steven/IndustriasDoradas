@@ -77,10 +77,10 @@ begin
     select 1
     from app.workers
     where id = 'c1000000-0000-4000-8000-000000000001'
-      and status = 'PROVISIONAL_VENCIDO'
+      and status = 'PROVISIONAL'
       and is_active
   ) then
-    raise exception 'expired worker must remain active';
+    raise exception 'pending worker must remain provisional without automatic expiration';
   end if;
 end;
 $$;

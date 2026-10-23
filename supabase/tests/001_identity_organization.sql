@@ -29,8 +29,8 @@ begin
   end if;
 
   select count(*) into actual_count from app.role_permissions;
-  if actual_count <> 23 then
-    raise exception 'expected 23 fixed role permission assignments, found %', actual_count;
+  if actual_count <> 24 then
+    raise exception 'expected 24 fixed role permission assignments, found %', actual_count;
   end if;
 
   select count(*) into actual_count from app.production_lines;

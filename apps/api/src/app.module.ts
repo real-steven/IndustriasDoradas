@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 
 import { AccountsModule } from "./accounts/accounts.module";
 import { AuditModule } from "./audit/audit.module";
+import { AttendanceModule } from "./attendance/attendance.module";
 import { AuthenticationGuard } from "./auth/authentication.guard";
 import { AuthModule } from "./auth/auth.module";
 import { AuthorizationGuard } from "./auth/authorization.guard";
@@ -36,6 +37,7 @@ const environmentFiles = nodeEnvironment
       validate: validateEnvironment,
     }),
     AccountsModule,
+    AttendanceModule,
     AuditModule,
     AuthModule,
     CatalogsModule,

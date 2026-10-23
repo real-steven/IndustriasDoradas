@@ -30,18 +30,6 @@ export class SupabaseWorkersRepository implements WorkersRepository {
     this.secret = config.get("SUPABASE_SECRET_KEY", { infer: true });
   }
 
-  async expire(organizationId: string, observedAt: string): Promise<number> {
-    const response = await this.request("rpc/expire_provisional_workers", {
-      body: JSON.stringify({
-        target_organization_id: organizationId,
-        observed_at: observedAt,
-      }),
-      method: "POST",
-    });
-    const result = (await response.json()) as unknown;
-    return typeof result === "number" ? result : 0;
-  }
-
   async listRequests(
     organizationId: string,
     query: WorkerRequestListQuery,
@@ -251,8 +239,7 @@ export class SupabaseWorkersRepository implements WorkersRepository {
       status: this.string(row, "status") as WorkerRequestItem["status"],
       requestedAt: this.string(row, "requested_at"),
       reviewDueAt,
-      isOverdue:
-        row.status === "PENDING" && Date.parse(reviewDueAt) <= Date.now(),
+      isOverdue: false,
       resolvedByProfileId: this.nullableString(row, "resolved_by_profile_id"),
       resolvedAt: this.nullableString(row, "resolved_at"),
       resolutionReason: this.nullableString(row, "resolution_reason"),
@@ -265,6 +252,11 @@ export class SupabaseWorkersRepository implements WorkersRepository {
       organizationId: this.string(row, "organization_id"),
       plantId: this.string(row, "plant_id"),
       sourceRequestId: this.string(row, "source_request_id"),
+      userProfileId: this.nullableString(row, "user_profile_id"),
+      category:
+        row.user_profile_id === null || row.user_profile_id === undefined
+          ? "OPERARIO"
+          : "JEFE_PLANTA",
       name: this.string(row, "name"),
       email: this.nullableString(row, "email"),
       phone: this.nullableString(row, "phone"),

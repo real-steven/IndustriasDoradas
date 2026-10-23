@@ -75,8 +75,116 @@ public sealed class SqliteAttendanceRepositoryTests
                 Guid.NewGuid(),
                 AttendanceEventType.AdjustedCheckIn,
                 correctedBy: ManagerId,
-                reason: "Dirección inválida.",
-                related: checkInId)));
+                reason: "Referencia inexistente.",
+                related: Guid.NewGuid())));
+    }
+
+    [TestMethod]
+    public async Task CorrectionChainIsLinearAndKeepsEveryVersion()
+    {
+        await using var database = new AttendanceTestDatabase();
+        await database.InitializeAsync();
+        Guid checkInId = Guid.NewGuid();
+        await database.Repository.RecordAsync(Mutation(checkInId, AttendanceEventType.CheckIn));
+        Guid managerCorrectionId = Guid.NewGuid();
+        await database.Repository.RecordAsync(Mutation(
+            managerCorrectionId,
+            AttendanceEventType.AdjustedCheckOut,
+            correctedBy: ManagerId,
+            reason: "El trabajador olvidó la salida.",
+            related: checkInId));
+
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => database.Repository.RecordAsync(Mutation(
+            Guid.NewGuid(),
+            AttendanceEventType.AdjustedCheckOut,
+            correctedBy: ManagerId,
+            reason: "Segundo cierre no permitido.",
+            related: checkInId)));
+
+        await database.Repository.RecordAsync(Mutation(
+            Guid.NewGuid(),
+            AttendanceEventType.AdjustedCheckOut,
+            correctedBy: Guid.Parse("a1000000-0000-4000-8000-000000000001"),
+            reason: "Gerencia confirmó otra hora.",
+            related: managerCorrectionId));
+
+        IReadOnlyList<AttendanceEvent> events = await database.Repository
+            .ListForWorkerAsync(OrganizationId, WorkerId);
+        Assert.HasCount(3, events);
+        AttendanceProjection projection = AttendanceProjectionService.Project(
+            events,
+            StartedAt.AddHours(10));
+        Assert.HasCount(1, projection.Shifts);
+        Assert.AreEqual(events[2].ClientEventId, projection.Shifts[0].CheckOut!.ClientEventId);
+    }
+
+    [TestMethod]
+    public async Task PilotKeepsOvernightOfflineShiftAcrossRestartAndMotivatedCorrection()
+    {
+        await using var database = new AttendanceTestDatabase();
+        await database.InitializeAsync();
+        Guid checkInId = Guid.Parse("78000000-0000-4000-8000-000000000001");
+        Guid correctionId = Guid.Parse("78000000-0000-4000-8000-000000000002");
+        DateTimeOffset checkInAt = new(2026, 10, 20, 23, 30, 0, TimeSpan.Zero);
+        DateTimeOffset actualCheckOutAt = new(2026, 10, 21, 13, 15, 0, TimeSpan.Zero);
+        DateTimeOffset correctionRecordedAt = new(2026, 10, 21, 14, 0, 0, TimeSpan.Zero);
+
+        await database.Repository.RecordAsync(new RecordLocalAttendanceMutation(
+            checkInId,
+            OrganizationId,
+            PlantId,
+            StationId,
+            WorkerId,
+            AttendanceEventType.CheckIn,
+            checkInAt,
+            checkInAt.AddSeconds(1)));
+
+        var repositoryAfterRestart = new SqliteAttendanceRepository(database.Factory);
+        IReadOnlyList<AttendanceEvent> afterRestart = await repositoryAfterRestart
+            .ListForWorkerAsync(OrganizationId, WorkerId);
+        AttendanceProjection openProjection = AttendanceProjectionService.Project(
+            afterRestart,
+            checkInAt.AddHours(9));
+
+        Assert.HasCount(1, afterRestart);
+        Assert.AreEqual(AttendanceSyncStatus.Pending, afterRestart[0].SyncStatus);
+        Assert.AreEqual(AttendanceShiftStatus.Open, openProjection.Shifts[0].Status);
+        Assert.AreEqual(AttendanceIncidentType.OpenShiftExceeded, openProjection.Incidents[0].Type);
+
+        await repositoryAfterRestart.RecordAsync(new RecordLocalAttendanceMutation(
+            correctionId,
+            OrganizationId,
+            PlantId,
+            StationId,
+            WorkerId,
+            AttendanceEventType.AdjustedCheckOut,
+            actualCheckOutAt,
+            correctionRecordedAt,
+            ManagerId,
+            "El trabajador olvidó registrar la salida.",
+            checkInId));
+
+        var repositoryAfterSecondRestart = new SqliteAttendanceRepository(database.Factory);
+        IReadOnlyList<AttendanceEvent> completedHistory = await repositoryAfterSecondRestart
+            .ListForWorkerAsync(OrganizationId, WorkerId);
+        AttendanceProjection completedProjection = AttendanceProjectionService.Project(
+            completedHistory,
+            correctionRecordedAt);
+
+        Assert.HasCount(2, completedHistory);
+        Assert.HasCount(1, completedProjection.Shifts);
+        Assert.IsEmpty(completedProjection.Incidents);
+        Assert.AreEqual(AttendanceShiftStatus.Completed, completedProjection.Shifts[0].Status);
+        Assert.AreEqual(new DateOnly(2026, 10, 20), completedProjection.Shifts[0].StartedOn);
+        Assert.AreEqual(TimeSpan.FromMinutes(825), completedProjection.Shifts[0].Duration);
+        Assert.AreEqual(correctionId, completedProjection.Shifts[0].CheckOut!.ClientEventId);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(2L, await ScalarAsync(
+            connection,
+            "SELECT COUNT(*) FROM outbox_messages WHERE operation_type = 'ATTENDANCE_EVENT_RECORDED' AND aggregate_id IN ($first, $second);",
+            ("$first", checkInId),
+            ("$second", correctionId)));
     }
 
     [TestMethod]
@@ -148,6 +256,21 @@ public sealed class SqliteAttendanceRepositoryTests
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         command.Parameters.AddWithValue("$id", id.ToString("D"));
+        return Convert.ToInt64(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<long> ScalarAsync(
+        SqliteConnection connection,
+        string sql,
+        params (string Name, Guid Value)[] parameters)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        foreach ((string name, Guid value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value.ToString("D"));
+        }
+
         return Convert.ToInt64(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
     }
 

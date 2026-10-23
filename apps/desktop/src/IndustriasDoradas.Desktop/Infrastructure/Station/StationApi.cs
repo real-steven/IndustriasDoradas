@@ -50,7 +50,12 @@ public sealed class StationApi(HttpClient httpClient) : IStationApi
             suppliers.Select(item => new CachedSupplier(
                 item.Id, item.OrganizationId, item.Name, item.IsActive, item.UpdatedAt)).ToArray(),
             workers.Select(item => new CachedWorker(
-                item.Id, item.OrganizationId, item.Name, item.IsActive, item.StatusChangedAt)).ToArray(),
+                item.Id,
+                item.OrganizationId,
+                item.Name,
+                item.IsActive,
+                item.StatusChangedAt,
+                item.Category ?? "OPERARIO")).ToArray(),
             lines.Select(item => new CachedProductionLine(
                 item.Id,
                 item.OrganizationId,
@@ -104,5 +109,6 @@ public sealed class StationApi(HttpClient httpClient) : IStationApi
         Guid OrganizationId,
         string Name,
         bool IsActive,
-        DateTimeOffset StatusChangedAt);
+        DateTimeOffset StatusChangedAt,
+        string? Category = "OPERARIO");
 }

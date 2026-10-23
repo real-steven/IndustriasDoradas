@@ -126,8 +126,8 @@ permanecer fuera de los esquemas expuestos.
 Las rutas versionadas bajo `/api/v1/organizations/:organizationId` son
 específicas por recurso, paginadas y acotadas a la organización autenticada. No
 existe `DELETE`: los catálogos y trabajadores se activan o desactivan. Solicitar
-un trabajador crea atómicamente solicitud y perfil provisional; a las 72 horas
-pasa a `PROVISIONAL_VENCIDO` sin dejar de estar activo. Aprobar, rechazar o
+un trabajador crea atómicamente solicitud y perfil provisional. Permanece
+pendiente y activo hasta una decisión explícita, sin perder asistencia. Aprobar, rechazar o
 fusionar exige el permiso atómico correspondiente; `JEFE_EMPRESA` siempre lo
 posee y cada `ADMINISTRADOR` depende de su concesión. Todo cambio se audita.
 
@@ -138,6 +138,15 @@ autorizados invitar administradores, listar cuentas, suspender/reactivar y
 reemplazar concesiones individuales. La invitación se ejecuta desde NestJS con
 Supabase Auth Admin; la clave secreta nunca llega a React. Una falla durante el
 aprovisionamiento deja el perfil suspendido de forma segura y auditable.
+
+## Horas de asistencia
+
+`GET /api/v1/organizations/:organizationId/management/attendance/hours`
+acepta `fromDate` y `toDate` inclusivos en `America/Costa_Rica`, además de
+filtros opcionales por planta y trabajador. El read model versionado devuelve
+minutos confirmados, jornadas abiertas, incidencias, cobertura y frescura. Una
+jornada incompleta conserva duración nula: nunca se convierte en cero ni se
+mezcla con tarifas o cálculos de pago.
 
 ## OpenAPI
 

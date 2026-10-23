@@ -51,6 +51,237 @@
         "required": ["code", "description", "assigned"],
         "type": "object"
       },
+      "AttendanceHours": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustments": {
+            "items": {
+              "properties": {
+                "confirmedAtUtc": { "format": "date-time", "type": "string" },
+                "correctedByDisplayName": { "type": "string" },
+                "correctedByProfileId": { "format": "uuid", "type": "string" },
+                "correctionReason": { "type": "string" },
+                "eventId": { "format": "uuid", "type": "string" },
+                "eventType": {
+                  "enum": ["ADJUSTED_CHECK_IN", "ADJUSTED_CHECK_OUT"],
+                  "type": "string"
+                },
+                "occurredAtUtc": { "format": "date-time", "type": "string" },
+                "plantId": { "format": "uuid", "type": "string" },
+                "recordedAtUtc": { "format": "date-time", "type": "string" },
+                "relatedEventId": { "format": "uuid", "type": "string" },
+                "workerId": { "format": "uuid", "type": "string" },
+                "workerName": { "type": "string" }
+              },
+              "required": [
+                "eventId",
+                "eventType",
+                "workerId",
+                "workerName",
+                "plantId",
+                "occurredAtUtc",
+                "recordedAtUtc",
+                "confirmedAtUtc",
+                "correctedByProfileId",
+                "correctedByDisplayName",
+                "correctionReason",
+                "relatedEventId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "coverage": {
+            "properties": {
+              "confirmedEventsUsed": { "minimum": 0, "type": "integer" },
+              "eventsInPeriod": { "minimum": 0, "type": "integer" },
+              "eventsRead": { "minimum": 0, "type": "integer" },
+              "excludedEvents": { "minimum": 0, "type": "integer" },
+              "firstEventAtUtc": {
+                "format": "date-time",
+                "nullable": true,
+                "type": "string"
+              },
+              "lastEventAtUtc": {
+                "format": "date-time",
+                "nullable": true,
+                "type": "string"
+              },
+              "status": { "enum": ["COMPLETE"], "type": "string" }
+            },
+            "required": [
+              "status",
+              "eventsRead",
+              "confirmedEventsUsed",
+              "excludedEvents",
+              "eventsInPeriod",
+              "firstEventAtUtc",
+              "lastEventAtUtc"
+            ],
+            "type": "object"
+          },
+          "freshness": {
+            "properties": {
+              "generatedAtUtc": { "format": "date-time", "type": "string" },
+              "lagSeconds": {
+                "minimum": 0,
+                "nullable": true,
+                "type": "integer"
+              },
+              "lastConfirmedAtUtc": {
+                "format": "date-time",
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "required": ["generatedAtUtc", "lastConfirmedAtUtc", "lagSeconds"],
+            "type": "object"
+          },
+          "incidents": {
+            "items": {
+              "properties": {
+                "description": { "type": "string" },
+                "detectedAtUtc": { "format": "date-time", "type": "string" },
+                "eventId": { "format": "uuid", "type": "string" },
+                "type": {
+                  "enum": [
+                    "DUPLICATE_CHECK_IN",
+                    "CHECK_OUT_WITHOUT_CHECK_IN",
+                    "OPEN_SHIFT_EXCEEDED"
+                  ],
+                  "type": "string"
+                },
+                "workerId": { "format": "uuid", "type": "string" },
+                "workerName": { "type": "string" }
+              },
+              "required": [
+                "type",
+                "workerId",
+                "workerName",
+                "eventId",
+                "detectedAtUtc",
+                "description"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "period": {
+            "properties": {
+              "fromDate": { "format": "date", "type": "string" },
+              "fromUtc": { "format": "date-time", "type": "string" },
+              "toDate": { "format": "date", "type": "string" },
+              "toUtc": { "format": "date-time", "type": "string" }
+            },
+            "required": ["fromDate", "toDate", "fromUtc", "toUtc"],
+            "type": "object"
+          },
+          "shifts": {
+            "items": {
+              "properties": {
+                "checkInAtUtc": { "format": "date-time", "type": "string" },
+                "checkInEventId": { "format": "uuid", "type": "string" },
+                "checkOutAtUtc": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "checkOutEventId": {
+                  "format": "uuid",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "durationMinutes": {
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "number"
+                },
+                "minutesInPeriod": {
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "number"
+                },
+                "plantId": { "format": "uuid", "type": "string" },
+                "startedOn": { "format": "date", "type": "string" },
+                "status": { "enum": ["COMPLETED", "OPEN"], "type": "string" },
+                "workerId": { "format": "uuid", "type": "string" },
+                "workerName": { "type": "string" }
+              },
+              "required": [
+                "workerId",
+                "workerName",
+                "plantId",
+                "status",
+                "startedOn",
+                "checkInEventId",
+                "checkInAtUtc",
+                "checkOutEventId",
+                "checkOutAtUtc",
+                "durationMinutes",
+                "minutesInPeriod"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "properties": {
+              "adjustmentCount": { "minimum": 0, "type": "integer" },
+              "confirmedShiftCount": { "minimum": 0, "type": "integer" },
+              "incidentCount": { "minimum": 0, "type": "integer" },
+              "openShiftCount": { "minimum": 0, "type": "integer" },
+              "totalConfirmedMinutes": { "minimum": 0, "type": "number" },
+              "workerCount": { "minimum": 0, "type": "integer" }
+            },
+            "required": [
+              "workerCount",
+              "confirmedShiftCount",
+              "openShiftCount",
+              "incidentCount",
+              "adjustmentCount",
+              "totalConfirmedMinutes"
+            ],
+            "type": "object"
+          },
+          "timezone": { "enum": ["America/Costa_Rica"], "type": "string" },
+          "version": { "enum": ["attendance-hours-v1"], "type": "string" },
+          "workers": {
+            "items": {
+              "properties": {
+                "completedShiftCount": { "minimum": 0, "type": "integer" },
+                "confirmedMinutes": { "minimum": 0, "type": "number" },
+                "incidentCount": { "minimum": 0, "type": "integer" },
+                "openShiftCount": { "minimum": 0, "type": "integer" },
+                "workerId": { "format": "uuid", "type": "string" },
+                "workerName": { "type": "string" }
+              },
+              "required": [
+                "workerId",
+                "workerName",
+                "confirmedMinutes",
+                "completedShiftCount",
+                "openShiftCount",
+                "incidentCount"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "version",
+          "timezone",
+          "period",
+          "summary",
+          "workers",
+          "shifts",
+          "incidents",
+          "adjustments",
+          "coverage",
+          "freshness"
+        ],
+        "type": "object"
+      },
       "CatalogItem": {
         "additionalProperties": false,
         "properties": {
@@ -885,6 +1116,7 @@
       },
       "Worker": {
         "properties": {
+          "category": { "enum": ["OPERARIO", "JEFE_PLANTA"], "type": "string" },
           "deactivatedAt": {
             "format": "date-time",
             "nullable": true,
@@ -907,13 +1139,20 @@
             ],
             "type": "string"
           },
-          "statusChangedAt": { "format": "date-time", "type": "string" }
+          "statusChangedAt": { "format": "date-time", "type": "string" },
+          "userProfileId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          }
         },
         "required": [
           "id",
           "organizationId",
           "plantId",
           "sourceRequestId",
+          "userProfileId",
+          "category",
           "name",
           "status",
           "statusChangedAt",
@@ -2816,6 +3055,119 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Catalogs"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/attendance/hours": {
+      "get": {
+        "operationId": "AttendanceController_hours",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "required": true,
+            "schema": {
+              "example": "2026-10-19",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "required": true,
+            "schema": {
+              "example": "2026-10-25",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "workerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AttendanceHours" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Attendance"]
       }
     },
     "/api/v1/organizations/{organizationId}/management/freshness": {
