@@ -59,6 +59,29 @@ reemplazo conserva actor, motivo y estado anterior/nuevo.
 
 ### 7.1 Levantamiento y vocabulario
 
+**Estado — iniciado el 2026-10-23:** se revisaron la línea base, las fronteras
+de los Sprints 1–6 y el esquema demostrativo histórico. Los hechos confirmados,
+las preguntas para la empresa, los cinco escenarios de validación y la
+compuerta de salida están en
+[`../requirements/levantamiento-inventario-sprint-07.md`](../requirements/levantamiento-inventario-sprint-07.md).
+El esquema `demo_supervisor` no es fuente de verdad para Sprint 7: contiene un
+consumo de mercurio derivado y un catálogo de movimientos incompleto que
+contradicen el alcance vigente. Durante el levantamiento no se inició 7.2 antes
+de aprobar la ficha.
+
+**Cierre — 2026-10-24:** el audio de la empresa y las decisiones posteriores del
+desarrollador cerraron la pausa. El catálogo usa tipos seleccionables y permite
+crear uno particular; tipo, nombre, unidad y cantidad son obligatorios. El
+formulario general admite entrada, salida, consumo, reintegro, ajuste y reverso,
+con destino, observación y trabajador responsable opcionales. Jefe de planta y
+gerencia operan con auditoría; no se crean cuentas para trabajadores.
+
+Se aprobó rechazo de saldos insuficientes, revisión total o parcial cada 30 días
+como recordatorio configurable, mercurio como artículo manual independiente de
+las barridas y componentes de rastra genéricos sin asumir que sean llantas. La
+ficha contiene seis escenarios ficticios y la compuerta completa. El siguiente
+paso es 7.2; todavía no corresponde crear migraciones ni interfaces.
+
 **Prompt:** Identifica con la empresa herramientas, consumibles, envases,
 unidades, ubicación y responsables reales. Confirma el nombre del componente de
 desgaste de cada rastra, intervalo aproximado de reemplazo y datos que se anotan
@@ -68,6 +91,22 @@ permita. Deja compras, costos y múltiples bodegas fuera de alcance.
 **Pausa:** catálogo y cinco movimientos/reemplazos reales aprobados.
 
 ### 7.2 Kardex y revisiones
+
+**Estado — implementado el 2026-10-24:** el dominio puro define tipos y unidades
+configurables, artículos con unidad base, los seis movimientos append-only,
+saldo derivado sin negativos, reintegros relacionados, reverso exacto y único,
+idempotencia por UUID/secuencia y revisiones sin modificación automática. La
+especificación y el kardex manual están en
+[`../architecture/dominio-inventario-sprint-07.md`](../architecture/dominio-inventario-sprint-07.md).
+
+Las pruebas de dominio reproducen martillos `10 → 6 → 8 → 7 → 8`, consumo de
+sal, conteo de filtros, exceso de saldo, precisión por unidad, reintentos,
+conflictos, alcance de planta y mutación web sin estación. Persistencia, API,
+sincronización y UI continúan reservadas para 7.4–7.8.
+
+**Pausa cumplida:** el kardex manual coincide con la proyección y la regresión
+desktop completa aprobó 254 pruebas, incluidas 15 nuevas de inventario. El paso
+7.2 queda cerrado sin adelantar migraciones de 7.4.
 
 **Prompt:** Diseña artículo, unidad y movimientos append-only `ENTRADA`,
 `SALIDA`, `CONSUMO`, `DEVOLUCION`, `AJUSTE` y `REVERSO`. La existencia se deriva

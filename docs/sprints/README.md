@@ -14,6 +14,12 @@ Guía de ejecución del Sistema de Gestión de Producción Minera. Cubre 17 sema
 | 7 | [Inventario y mantenimiento básico](sprint-07-inventario.md) | 2 | Kardex, revisiones y vida útil de componentes sin inferir consumo de mercurio | 1, 3–5 |
 | 8 | [Indicadores, reportes y entrega](sprint-08-entrega.md) | 2 | Comparación de proveedores, Excel, despliegue y recuperación | 5; 6–7 solo si cerraron |
 
+**Transición 6 → 7:** el cierre técnico automatizado de Sprint 6 está aprobado.
+El 2026-10-23 se autorizó conservar MAN-01–MAN-06 como deuda de aceptación
+manual. El levantamiento 7.1 cerró el 2026-10-24 y 7.2 queda como siguiente
+unidad de trabajo. La deuda de Sprint 6 continúa visible y no se presenta como
+prueba ejecutada.
+
 El cierre aprobado del Sprint 2 y la guía de contexto para comenzar Sprint 3
 están en
 [`sprint-02-cierre-y-traspaso-sprint-03.md`](sprint-02-cierre-y-traspaso-sprint-03.md).
