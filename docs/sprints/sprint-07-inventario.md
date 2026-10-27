@@ -226,12 +226,35 @@ manual del contrato permanece pendiente del desarrollador.
 
 ### 7.6 Inventario local-first
 
+**Estado — implementado el 2026-10-26:** desktop incorpora una pantalla de
+inventario para `JEFE_PLANTA`, protegida por Modo Jefe de Planta, con catálogo
+local, existencias, entrada, salida, consumo, devolución, ajuste motivado y
+conteo físico parcial. Movimiento + outbox y revisión + líneas + outbox se
+guardan en transacciones SQLite únicas y comparten la secuencia monotónica de
+la estación. Reiniciar el repositorio conserva saldo y pendientes.
+
+La vista diferencia saldo local de saldo central conocido, muestra fecha del
+último pull, estado de red y hechos pendientes, y advierte que otras estaciones
+offline impiden prometer una existencia global exacta. Los mensajes nuevos
+quedan pendientes y no son reclamados por el worker hasta ampliar el contrato
+central en 7.7; así no se convierten falsamente en fallos permanentes. El diseño
+y sus límites están en
+[`../architecture/inventario-local-first-sprint-07.md`](../architecture/inventario-local-first-sprint-07.md).
+
+**Pruebas automatizadas:** atomicidad, saldo insuficiente sin escrituras
+parciales, revisión sin movimiento, recuperación después de reinicio,
+diferimiento seguro del sync y navegación WPF. La regresión desktop aprobó 273
+de 273 pruebas, además de compilación y formato sin advertencias.
+
 **Prompt:** Implementa WPF para movimientos y revisiones esenciales con
 catálogo cacheado, evento + outbox atómicos y última frescura central. Mientras
 otra estación esté offline, presenta saldo local/central con advertencia y no
 prometas existencia global exacta.
 
-**Pausa:** registrar, reiniciar y continuar offline sin perder movimientos.
+**Pausa automática cumplida:** registrar, recrear el repositorio y continuar
+offline no pierde movimientos. La comprobación visual con reinicio de la
+aplicación queda a cargo del desarrollador cuando 7.7 alimente el catálogo local
+o exista un dataset controlado.
 
 ### 7.7 Sincronización y concurrencia
 

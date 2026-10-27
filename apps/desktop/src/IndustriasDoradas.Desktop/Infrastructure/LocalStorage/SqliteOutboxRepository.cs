@@ -94,6 +94,8 @@ public sealed class SqliteOutboxRepository(ILocalSqliteConnectionFactory connect
             select.CommandText = """
                 SELECT id FROM outbox_messages
                 WHERE station_id = $stationId AND state = 'PENDING'
+                  AND operation_type NOT IN (
+                      'INVENTORY_MOVEMENT_RECORDED', 'INVENTORY_REVIEW_RECORDED')
                   AND (next_attempt_at_utc IS NULL OR next_attempt_at_utc <= $now)
                 ORDER BY station_sequence LIMIT $limit;
                 """;

@@ -104,12 +104,55 @@ internal sealed record AttendanceEventOutboxPayload(
     string? CorrectionReason,
     Guid? RelatedEventId);
 
+internal sealed record InventoryMovementOutboxPayload(
+    int SchemaVersion,
+    Guid ClientMovementId,
+    Guid OrganizationId,
+    Guid PlantId,
+    Guid StationId,
+    long ClientSequence,
+    Guid InventoryItemId,
+    Guid UnitId,
+    string MovementType,
+    decimal QuantityDelta,
+    Guid ActorProfileId,
+    Guid? ResponsibleWorkerId,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset RecordedAtUtc,
+    string? Reason,
+    string? Destination,
+    string? Notes,
+    Guid? RelatedMovementId);
+
+internal sealed record InventoryReviewLineOutboxPayload(
+    Guid InventoryItemId,
+    Guid UnitId,
+    decimal ExpectedQuantity,
+    decimal CountedQuantity,
+    decimal DifferenceQuantity);
+
+internal sealed record InventoryReviewOutboxPayload(
+    int SchemaVersion,
+    Guid ReviewId,
+    Guid OrganizationId,
+    Guid PlantId,
+    Guid StationId,
+    long ClientSequence,
+    string Status,
+    Guid ReviewedByProfileId,
+    DateTimeOffset ReviewedAtUtc,
+    DateTimeOffset RecordedAtUtc,
+    string? Notes,
+    IReadOnlyList<InventoryReviewLineOutboxPayload> Lines);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ProductionEventOutboxPayload))]
 [JsonSerializable(typeof(ProductionEventReversalOutboxPayload))]
 [JsonSerializable(typeof(ProductionSweepOutboxPayload))]
 [JsonSerializable(typeof(MercuryMovementOutboxPayload))]
 [JsonSerializable(typeof(AttendanceEventOutboxPayload))]
+[JsonSerializable(typeof(InventoryMovementOutboxPayload))]
+[JsonSerializable(typeof(InventoryReviewOutboxPayload))]
 internal sealed partial class LocalStorageJsonSerializerContext : JsonSerializerContext
 {
 }

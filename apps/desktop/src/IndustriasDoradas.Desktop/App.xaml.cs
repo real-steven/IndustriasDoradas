@@ -207,6 +207,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
         builder.Services.AddSingleton<ILocalAttendanceRepository, SqliteAttendanceRepository>();
+        builder.Services.AddSingleton<ILocalInventoryRepository, SqliteInventoryRepository>();
         builder.Services.AddSingleton<ILocalProductionSweepRepository, SqliteProductionSweepRepository>();
         builder.Services.AddSingleton<ILocalMercuryRepository, SqliteMercuryRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();
@@ -240,6 +241,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<AuditViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
         builder.Services.AddSingleton<AttendancePreviewViewModel>();
+        builder.Services.AddSingleton<InventoryViewModel>();
         builder.Services.AddSingleton<StationViewModel>();
         builder.Services.AddSingleton<OperationViewModel>();
         builder.Services.AddSingleton<MainWindowViewModel>();

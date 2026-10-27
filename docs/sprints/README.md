@@ -22,7 +22,9 @@ con su pausa manual pendiente para el flujo visual integrado. La persistencia
 7.4 quedó implementada y verificada el 2026-10-26 en PostgreSQL y SQLite. La API
 y autorización 7.5 también quedaron implementadas y verificadas automáticamente
 el 2026-10-26; su exploración manual queda a cargo del desarrollador. El
-siguiente paso es inventario local-first 7.6. La deuda de Sprint 6 continúa
+siguiente paso era inventario local-first 7.6, que quedó implementado y probado
+automáticamente el 2026-10-26 con su validación visual pendiente. El siguiente
+paso técnico es sincronización y concurrencia 7.7. La deuda de Sprint 6 continúa
 visible y no se presenta como prueba ejecutada.
 
 El cierre aprobado del Sprint 2 y la guía de contexto para comenzar Sprint 3

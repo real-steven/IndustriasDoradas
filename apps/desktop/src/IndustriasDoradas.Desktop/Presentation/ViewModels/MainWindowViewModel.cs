@@ -81,7 +81,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         SettingsViewModel? settings,
         ISyncStatusNotifier? syncStatusNotifier,
         IUiDispatcher uiDispatcher,
-        AttendancePreviewViewModel? attendance = null)
+        AttendancePreviewViewModel? attendance = null,
+        InventoryViewModel? inventory = null)
     {
         Home = home;
         Diagnostics = diagnostics;
@@ -90,6 +91,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Audit = audit;
         Settings = settings;
         Attendance = attendance;
+        Inventory = inventory;
         this.syncStatusNotifier = syncStatusNotifier;
         this.uiDispatcher = uiDispatcher;
         currentPage = operation ?? (object?)station ?? home;
@@ -112,6 +114,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ShowAttendanceCommand = new RelayCommand(
             () => CurrentPage = Attendance!,
             () => Attendance is not null);
+        ShowInventoryCommand = new AsyncRelayCommand(
+            ShowInventoryAsync,
+            () => Inventory is not null);
         ShowStationCommand = new RelayCommand(
             () => CurrentPage = Station!,
             () => Station is not null);
@@ -134,6 +139,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public AuditViewModel? Audit { get; }
     public SettingsViewModel? Settings { get; }
     public AttendancePreviewViewModel? Attendance { get; }
+    public InventoryViewModel? Inventory { get; }
 
     public object CurrentPage
     {
@@ -148,6 +154,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsDiagnosticsPage));
             OnPropertyChanged(nameof(IsSettingsPage));
             OnPropertyChanged(nameof(IsAttendancePage));
+            OnPropertyChanged(nameof(IsInventoryPage));
             OnPropertyChanged(nameof(CurrentPageTitle));
         }
     }
@@ -162,12 +169,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsDiagnosticsPage => ReferenceEquals(CurrentPage, Diagnostics);
     public bool IsSettingsPage => ReferenceEquals(CurrentPage, Settings);
     public bool IsAttendancePage => ReferenceEquals(CurrentPage, Attendance);
+    public bool IsInventoryPage => ReferenceEquals(CurrentPage, Inventory);
     public string CurrentPageTitle => CurrentPage switch
     {
         OperationViewModel => "Modo Operación",
         StationViewModel => "Estación",
         AuditViewModel => "Auditoría",
         AttendancePreviewViewModel => "Asistencia",
+        InventoryViewModel => "Inventario",
         SettingsViewModel => "Configuración",
         DiagnosticsViewModel => "Diagnóstico",
         _ => "Inicio",
@@ -181,6 +190,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public IRelayCommand DismissCorrectionNotificationCommand { get; }
     public IRelayCommand ShowSettingsCommand { get; }
     public IRelayCommand ShowAttendanceCommand { get; }
+    public IAsyncRelayCommand ShowInventoryCommand { get; }
     public IRelayCommand ShowStationCommand { get; }
     public IRelayCommand ShowOperationCommand { get; }
     public bool HasCorrectionNotification => Diagnostics.HasCorrections &&
@@ -214,6 +224,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 await Attendance.InitializeAsync();
             }
+
+            if (Inventory is not null)
+            {
+                await Inventory.InitializeAsync();
+            }
         }
         catch (Exception exception) when (
             exception is IOException or SqliteException or InvalidOperationException)
@@ -238,6 +253,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (Operation is null) return;
         await Operation.RefreshAsync();
         CurrentPage = Operation;
+    }
+
+    private async Task ShowInventoryAsync()
+    {
+        if (Inventory is null) return;
+        await Inventory.RefreshAsync();
+        CurrentPage = Inventory;
     }
 
     private async Task ShowAuditAsync()
@@ -297,6 +319,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ShowAuditCommand.NotifyCanExecuteChanged();
             ShowAuditCorrectionsCommand.NotifyCanExecuteChanged();
             ShowSettingsCommand.NotifyCanExecuteChanged();
+            Inventory?.RefreshManagerMode();
             OnPropertyChanged(nameof(HasCorrectionNotification));
             if (!CanShowSettings() && ReferenceEquals(CurrentPage, Settings))
             {
@@ -339,6 +362,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                     else if (ReferenceEquals(CurrentPage, Operation) && Operation is not null)
                     {
                         await Operation.RefreshAsync();
+                    }
+                    else if (ReferenceEquals(CurrentPage, Inventory) && Inventory is not null)
+                    {
+                        await Inventory.RefreshAsync();
                     }
                 }
                 catch (Exception exception) when (
