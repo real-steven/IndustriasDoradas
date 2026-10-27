@@ -156,6 +156,33 @@ explica un período sin producción.
 
 ### 7.4 Migraciones e integridad
 
+**Estado — implementado el 2026-10-26:** PostgreSQL y SQLite representan los
+catálogos de tipos, unidades y artículos; kardex, revisiones y sus líneas;
+cambios de componentes de rastra; y aperturas/cierres de novedades. No existe
+una columna `stock`: el saldo se deriva de los movimientos. PostgreSQL conserva
+cantidades `numeric(18,3)` y SQLite milésimas enteras para evitar errores de
+punto flotante.
+
+Los hechos son append-only incluso para `service_role`; actualización y borrado
+se rechazan. Las restricciones validan organización/planta, artículo-unidad,
+precisión, trabajador opcional, saldo no negativo, reintegro máximo, reverso
+exacto y único, conteos, secuencia de reemplazos y apertura previa al cierre de
+una novedad. Los índices cubren todas las claves foráneas y el bloqueo asesor
+por artículo serializa la validación del saldo central.
+
+La especificación de persistencia y sus límites están en
+[`../architecture/persistencia-inventario-sprint-07.md`](../architecture/persistencia-inventario-sprint-07.md).
+La suite central aplica las 24 migraciones desde cero, ejecuta el seed dos
+veces y aprueba 21 pruebas SQL. La regresión desktop aplica 20 migraciones,
+prueba actualización desde Sprint 6 y aprueba 269 de 269 casos. Incluye el
+kardex `10 → 6 → 8 → 7 → 8`, rechazos de negativo/precisión/reintegro, revisión
+física, dos reemplazos y una novedad 17:30–19:15.
+
+**Pausa cumplida:** base vacía, actualización desde la versión 19, repetición
+del migrador, integridad referencial, permisos y conservación del historial
+quedaron verificadas automáticamente. La interfaz, API y sincronización de
+estos hechos continúan reservadas para 7.5–7.8.
+
 **Prompt:** Implementa PostgreSQL/SQLite con aislamiento por organización,
 checks de cantidad/unidad, FK, índices, UUID, append-only y actualización desde
 Sprint 6. No mantengas un `stock` editable como única verdad. Prueba base vacía,

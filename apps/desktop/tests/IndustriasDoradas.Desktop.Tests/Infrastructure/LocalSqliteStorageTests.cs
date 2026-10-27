@@ -30,6 +30,11 @@ public sealed class LocalSqliteStorageTests
     private static readonly Guid SecondWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000002");
     private static readonly Guid ThirdWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000003");
     private static readonly Guid ActorProfileId = Guid.Parse("20000000-0000-4000-8000-000000000001");
+    private static readonly Guid InventoryItemTypeId = Guid.Parse("77000000-0000-4000-8000-000000000001");
+    private static readonly Guid InventoryUnitId = Guid.Parse("77100000-0000-4000-8000-000000000001");
+    private static readonly Guid InventoryItemId = Guid.Parse("77200000-0000-4000-8000-000000000001");
+    private static readonly Guid RastraId = Guid.Parse("46000000-0000-4000-8000-000000000001");
+    private static readonly Guid NoveltyCategoryId = Guid.Parse("77300000-0000-4000-8000-000000000001");
     private static readonly DateTimeOffset StartedAt = new(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
 
     [TestMethod]
@@ -59,8 +64,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(19L, result.CurrentVersion);
-        Assert.AreEqual(19, result.AppliedCount);
+        Assert.AreEqual(20L, result.CurrentVersion);
+        Assert.AreEqual(20, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -69,10 +74,233 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(19L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(20L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
+    }
+
+    [TestMethod]
+    public async Task InventoryMigrationUpgradesSprint6WithoutLosingExistingData()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(19).ToArray());
+        await SeedSelectableCatalogsAsync(database);
+
+        LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
+
+        Assert.AreEqual(20L, result.CurrentVersion);
+        Assert.AreEqual(1, result.AppliedCount);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_workers;"));
+        Assert.AreEqual(9L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type = 'table' AND name IN (
+                'inventory_item_types', 'inventory_units', 'inventory_items',
+                'inventory_movements', 'inventory_reviews', 'inventory_review_lines',
+                'rastra_component_changes', 'operational_novelty_categories',
+                'operational_novelty_changes');
+            """));
+        Assert.AreEqual(0L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*)
+            FROM pragma_table_info('inventory_items')
+            WHERE lower(name) IN ('stock', 'balance', 'quantity');
+            """));
+    }
+
+    [TestMethod]
+    public async Task InventoryLedgerDerivesExactBalanceAndRejectsInvalidHistory()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        await SeedInventoryCatalogAsync(database);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        const string entryId = "77400000-0000-4000-8000-000000000001";
+        const string exitId = "77400000-0000-4000-8000-000000000002";
+        const string returnId = "77400000-0000-4000-8000-000000000003";
+        const string adjustmentId = "77400000-0000-4000-8000-000000000004";
+        const string reversalId = "77400000-0000-4000-8000-000000000005";
+
+        await ExecuteWithoutParametersAsync(connection, $"""
+            INSERT INTO inventory_movements(
+                client_movement_id, organization_id, plant_id, inventory_item_id, unit_id,
+                movement_type, quantity_delta_milliunits, actor_profile_id, station_id,
+                client_sequence, responsible_worker_id, occurred_at_utc, recorded_at_utc,
+                reason, destination, notes, related_movement_id)
+            VALUES
+                ('{entryId}', '{OrganizationId:D}', '{PlantId:D}', '{InventoryItemId:D}',
+                 '{InventoryUnitId:D}', 'ENTRY', 10000, '{ActorProfileId:D}', '{StationId:D}',
+                 701, NULL, '{StartedAt:O}', '{StartedAt:O}', NULL, NULL, 'Entrada inicial', NULL),
+                ('{exitId}', '{OrganizationId:D}', '{PlantId:D}', '{InventoryItemId:D}',
+                 '{InventoryUnitId:D}', 'EXIT', -4000, '{ActorProfileId:D}', '{StationId:D}',
+                 702, '{WorkerId:D}', '{StartedAt.AddMinutes(1):O}',
+                 '{StartedAt.AddMinutes(1):O}', NULL, 'Planta', NULL, NULL),
+                ('{returnId}', '{OrganizationId:D}', '{PlantId:D}', '{InventoryItemId:D}',
+                 '{InventoryUnitId:D}', 'RETURN', 2000, '{ActorProfileId:D}', '{StationId:D}',
+                 703, '{WorkerId:D}', '{StartedAt.AddMinutes(2):O}',
+                 '{StartedAt.AddMinutes(2):O}', NULL, NULL, NULL, '{exitId}'),
+                ('{adjustmentId}', '{OrganizationId:D}', '{PlantId:D}', '{InventoryItemId:D}',
+                 '{InventoryUnitId:D}', 'ADJUSTMENT', -1000, '{ActorProfileId:D}', '{StationId:D}',
+                 704, NULL, '{StartedAt.AddMinutes(3):O}', '{StartedAt.AddMinutes(3):O}',
+                 'Diferencia en conteo físico', NULL, NULL, NULL),
+                ('{reversalId}', '{OrganizationId:D}', '{PlantId:D}', '{InventoryItemId:D}',
+                 '{InventoryUnitId:D}', 'REVERSAL', 1000, '{ActorProfileId:D}', '{StationId:D}',
+                 705, NULL, '{StartedAt.AddMinutes(4):O}', '{StartedAt.AddMinutes(4):O}',
+                 'Corrección del ajuste', NULL, NULL, '{adjustmentId}');
+
+            INSERT INTO inventory_reviews(
+                id, organization_id, plant_id, status, reviewed_by_profile_id,
+                station_id, client_sequence, reviewed_at_utc, recorded_at_utc, notes)
+            VALUES ('77500000-0000-4000-8000-000000000001', '{OrganizationId:D}',
+                '{PlantId:D}', 'WITH_DIFFERENCES', '{ActorProfileId:D}', '{StationId:D}', 706,
+                '{StartedAt.AddMinutes(5):O}', '{StartedAt.AddMinutes(5):O}', 'Conteo de cierre');
+
+            INSERT INTO inventory_review_lines(
+                organization_id, plant_id, review_id, inventory_item_id, unit_id,
+                expected_milliunits, counted_milliunits, difference_milliunits)
+            VALUES ('{OrganizationId:D}', '{PlantId:D}',
+                '77500000-0000-4000-8000-000000000001', '{InventoryItemId:D}',
+                '{InventoryUnitId:D}', 8000, 7000, -1000);
+            """);
+
+        Assert.AreEqual(8000L, await ScalarLongAsync(connection, "SELECT SUM(quantity_delta_milliunits) FROM inventory_movements;"));
+        Assert.AreEqual(5L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM inventory_movements;"));
+        Assert.AreEqual(-1000L, await ScalarLongAsync(connection, "SELECT difference_milliunits FROM inventory_review_lines;"));
+
+        SqliteException negativeStock = await Assert.ThrowsExactlyAsync<SqliteException>(() =>
+            ExecuteWithoutParametersAsync(connection, $"""
+                INSERT INTO inventory_movements(
+                    client_movement_id, organization_id, plant_id, inventory_item_id, unit_id,
+                    movement_type, quantity_delta_milliunits, actor_profile_id,
+                    occurred_at_utc, recorded_at_utc)
+                VALUES ('77400000-0000-4000-8000-000000000006', '{OrganizationId:D}',
+                    '{PlantId:D}', '{InventoryItemId:D}', '{InventoryUnitId:D}', 'CONSUMPTION',
+                    -9000, '{ActorProfileId:D}', '{StartedAt.AddMinutes(6):O}',
+                    '{StartedAt.AddMinutes(6):O}');
+                """));
+        StringAssert.Contains(negativeStock.Message, "INVENTORY_STOCK_INSUFFICIENT");
+
+        SqliteException wrongPrecision = await Assert.ThrowsExactlyAsync<SqliteException>(() =>
+            ExecuteWithoutParametersAsync(connection, $"""
+                INSERT INTO inventory_movements(
+                    client_movement_id, organization_id, plant_id, inventory_item_id, unit_id,
+                    movement_type, quantity_delta_milliunits, actor_profile_id,
+                    occurred_at_utc, recorded_at_utc)
+                VALUES ('77400000-0000-4000-8000-000000000007', '{OrganizationId:D}',
+                    '{PlantId:D}', '{InventoryItemId:D}', '{InventoryUnitId:D}', 'ENTRY',
+                    500, '{ActorProfileId:D}', '{StartedAt.AddMinutes(7):O}',
+                    '{StartedAt.AddMinutes(7):O}');
+                """));
+        StringAssert.Contains(wrongPrecision.Message, "INVENTORY_ITEM_UNIT_OR_PRECISION_MISMATCH");
+
+        SqliteException excessiveReturn = await Assert.ThrowsExactlyAsync<SqliteException>(() =>
+            ExecuteWithoutParametersAsync(connection, $"""
+                INSERT INTO inventory_movements(
+                    client_movement_id, organization_id, plant_id, inventory_item_id, unit_id,
+                    movement_type, quantity_delta_milliunits, actor_profile_id,
+                    occurred_at_utc, recorded_at_utc, related_movement_id)
+                VALUES ('77400000-0000-4000-8000-000000000008', '{OrganizationId:D}',
+                    '{PlantId:D}', '{InventoryItemId:D}', '{InventoryUnitId:D}', 'RETURN',
+                    3000, '{ActorProfileId:D}', '{StartedAt.AddMinutes(8):O}',
+                    '{StartedAt.AddMinutes(8):O}', '{exitId}');
+                """));
+        StringAssert.Contains(excessiveReturn.Message, "INVENTORY_RETURN_EXCEEDS_EXIT");
+
+        SqliteException mutation = await Assert.ThrowsExactlyAsync<SqliteException>(() =>
+            ExecuteWithoutParametersAsync(connection, $"""
+                UPDATE inventory_movements SET notes = 'alterado'
+                WHERE client_movement_id = '{entryId}';
+                """));
+        StringAssert.Contains(mutation.Message, "INVENTORY_HISTORY_IS_APPEND_ONLY");
+    }
+
+    [TestMethod]
+    public async Task ComponentAndNoveltyHistoryRetainsReplacementsAndRealTimes()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        await SeedInventoryCatalogAsync(database);
+        await SeedRastraAsync(database, RastraId);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        const string installationA = "77600000-0000-4000-8000-000000000001";
+        const string installationB = "77600000-0000-4000-8000-000000000002";
+        const string installationC = "77600000-0000-4000-8000-000000000003";
+        const string noveltyId = "77700000-0000-4000-8000-000000000001";
+        const string openedAt = "2026-08-26T23:30:00.0000000+00:00";
+        const string closedAt = "2026-08-27T01:15:00.0000000+00:00";
+
+        await ExecuteWithoutParametersAsync(connection, $"""
+            INSERT INTO operational_novelty_categories(
+                id, organization_id, code, name, is_active, updated_at_utc)
+            VALUES ('{NoveltyCategoryId:D}', '{OrganizationId:D}', 'FALLA_EQUIPO',
+                'Falla de equipo', 1, '{StartedAt:O}');
+
+            INSERT INTO rastra_component_changes(
+                client_change_id, organization_id, plant_id, rastra_id, change_type,
+                installation_id, replaced_installation_id, inventory_item_id, unit_id,
+                quantity_milliunits, actor_profile_id, responsible_worker_id,
+                occurred_at_utc, recorded_at_utc, component_identifier,
+                installed_condition, removed_condition, reason)
+            VALUES
+                ('77800000-0000-4000-8000-000000000001', '{OrganizationId:D}',
+                 '{PlantId:D}', '{RastraId:D}', 'INSTALLATION', '{installationA}', NULL,
+                 '{InventoryItemId:D}', '{InventoryUnitId:D}', 1000, '{ActorProfileId:D}',
+                 '{WorkerId:D}', '{StartedAt.AddMinutes(10):O}', '{StartedAt.AddMinutes(10):O}',
+                 'CADENA-A', 'Nueva', NULL, NULL),
+                ('77800000-0000-4000-8000-000000000002', '{OrganizationId:D}',
+                 '{PlantId:D}', '{RastraId:D}', 'REPLACEMENT', '{installationB}', '{installationA}',
+                 '{InventoryItemId:D}', '{InventoryUnitId:D}', 1000, '{ActorProfileId:D}',
+                 '{WorkerId:D}', '{StartedAt.AddMinutes(20):O}', '{StartedAt.AddMinutes(20):O}',
+                 'CADENA-B', 'Nueva', 'Desgastada', 'Desgaste normal'),
+                ('77800000-0000-4000-8000-000000000003', '{OrganizationId:D}',
+                 '{PlantId:D}', '{RastraId:D}', 'REPLACEMENT', '{installationC}', '{installationB}',
+                 '{InventoryItemId:D}', '{InventoryUnitId:D}', 1000, '{ActorProfileId:D}',
+                 '{WorkerId:D}', '{StartedAt.AddMinutes(30):O}', '{StartedAt.AddMinutes(30):O}',
+                 'CADENA-C', 'Nueva', 'Dañada', 'Rotura');
+
+            INSERT INTO operational_novelty_changes(
+                client_change_id, novelty_id, organization_id, plant_id, change_type,
+                line_id, category_id, description, actor_profile_id, responsible_worker_id,
+                occurred_at_utc, recorded_at_utc)
+            VALUES
+                ('77900000-0000-4000-8000-000000000001', '{noveltyId}', '{OrganizationId:D}',
+                 '{PlantId:D}', 'OPENING', '{LineId:D}', '{NoveltyCategoryId:D}',
+                 'Rastra detenida por cadena dañada', '{ActorProfileId:D}', '{WorkerId:D}',
+                 '{openedAt}', '{openedAt}'),
+                ('77900000-0000-4000-8000-000000000002', '{noveltyId}', '{OrganizationId:D}',
+                 '{PlantId:D}', 'CLOSURE', NULL, NULL, NULL, '{ActorProfileId:D}',
+                 '{WorkerId:D}', '{closedAt}', '{closedAt}');
+            """);
+
+        Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM rastra_component_changes;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(connection, """
+            SELECT COUNT(*)
+            FROM rastra_component_changes AS installed
+            WHERE installed.change_type IN ('INSTALLATION', 'REPLACEMENT')
+              AND NOT EXISTS (
+                  SELECT 1 FROM rastra_component_changes AS closed
+                  WHERE closed.organization_id = installed.organization_id
+                    AND closed.change_type IN ('REMOVAL', 'REPLACEMENT')
+                    AND (CASE WHEN closed.change_type = 'REMOVAL'
+                              THEN closed.installation_id ELSE closed.replaced_installation_id END)
+                        = installed.installation_id);
+            """));
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM operational_novelty_changes;"));
+        Assert.AreEqual(openedAt, await ScalarTextAsync(connection, """
+            SELECT occurred_at_utc FROM operational_novelty_changes WHERE change_type = 'OPENING';
+            """));
+        Assert.AreEqual(closedAt, await ScalarTextAsync(connection, """
+            SELECT occurred_at_utc FROM operational_novelty_changes WHERE change_type = 'CLOSURE';
+            """));
+
+        SqliteException mutation = await Assert.ThrowsExactlyAsync<SqliteException>(() =>
+            ExecuteWithoutParametersAsync(connection, $"""
+                UPDATE operational_novelty_changes SET description = 'alterada'
+                WHERE novelty_id = '{noveltyId}';
+                """));
+        StringAssert.Contains(mutation.Message, "INVENTORY_HISTORY_IS_APPEND_ONLY");
     }
 
     [TestMethod]
@@ -137,7 +365,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(18, result.AppliedCount);
+        Assert.AreEqual(19, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -157,8 +385,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(19L, result.CurrentVersion);
-        Assert.AreEqual(8, result.AppliedCount);
+        Assert.AreEqual(20L, result.CurrentVersion);
+        Assert.AreEqual(9, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -426,7 +654,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(19L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(20L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -576,7 +804,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(17, result.AppliedCount);
+        Assert.AreEqual(18, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -943,8 +1171,8 @@ public sealed class LocalSqliteStorageTests
         IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
             .ListRastrasAsync(OrganizationId, LineId);
 
-        Assert.AreEqual(19L, result.CurrentVersion);
-        Assert.AreEqual(6, result.AppliedCount);
+        Assert.AreEqual(20L, result.CurrentVersion);
+        Assert.AreEqual(7, result.AppliedCount);
         Assert.HasCount(1, rastras);
         Assert.AreEqual(rastraId, rastras[0].Id);
     }
@@ -2274,6 +2502,32 @@ public sealed class LocalSqliteStorageTests
         command.Parameters.AddWithValue("$organizationId", OrganizationId.ToString("D"));
         command.Parameters.AddWithValue("$lineId", LineId.ToString("D"));
         command.Parameters.AddWithValue("$updatedAt", StartedAt.ToString("O"));
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedInventoryCatalogAsync(TestDatabase database)
+    {
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO inventory_item_types(
+                id, organization_id, code, name, is_custom, is_active, updated_at_utc)
+            VALUES ('{InventoryItemTypeId:D}', '{OrganizationId:D}', 'HERRAMIENTA',
+                'Herramienta', 0, 1, '{StartedAt:O}');
+
+            INSERT INTO inventory_units(
+                id, organization_id, code, name, decimal_places, is_custom, is_active,
+                updated_at_utc)
+            VALUES ('{InventoryUnitId:D}', '{OrganizationId:D}', 'UNIDAD', 'Unidad',
+                0, 0, 1, '{StartedAt:O}');
+
+            INSERT INTO inventory_items(
+                id, organization_id, plant_id, item_type_id, unit_id, name,
+                is_active, updated_at_utc)
+            VALUES ('{InventoryItemId:D}', '{OrganizationId:D}', '{PlantId:D}',
+                '{InventoryItemTypeId:D}', '{InventoryUnitId:D}', 'Cadena de rastra',
+                1, '{StartedAt:O}');
+            """;
         await command.ExecuteNonQueryAsync();
     }
 

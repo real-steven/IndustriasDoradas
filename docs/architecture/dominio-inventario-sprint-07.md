@@ -2,7 +2,8 @@
 
 **Estado:** diseño y dominio puro implementados
 **Fecha:** 2026-10-24
-**Persistencia:** reservada para 7.4
+**Persistencia:** implementada en 7.4; véase
+[`persistencia-inventario-sprint-07.md`](persistencia-inventario-sprint-07.md)
 **API y sincronización:** reservadas para 7.5 y 7.7
 
 ## Propósito
@@ -12,8 +13,9 @@ catálogo físico de la empresa. Los nombres de artículos, tipos y unidades son
 datos configurables; las reglas invariables son append-only, precisión por
 unidad, idempotencia, saldo derivado y prohibición de existencias negativas.
 
-Este paso no crea tablas, endpoints ni pantallas. Su resultado es un dominio
-probado que esas capas deben respetar después.
+El paso 7.2 no creó tablas, endpoints ni pantallas. Desde 7.4, PostgreSQL y
+SQLite ya materializan este contrato; API, sincronización y pantallas siguen
+pendientes.
 
 ## Vocabulario estable
 
@@ -158,6 +160,6 @@ negativas o cambiar el significado contable de un tipo de movimiento.
 - `InventoryDomainTests.cs`: dataset manual, precisión, negativos, conflictos,
   revisiones y aislamiento.
 
-La persistencia de 7.4 debe representar estos hechos sin introducir un campo
-`stock` editable como autoridad. Un saldo materializado futuro solo podrá ser
-una proyección reconstruible desde el kardex.
+La persistencia de 7.4 representa estos hechos sin introducir un campo `stock`
+editable como autoridad. Un saldo materializado futuro solo podrá ser una
+proyección reconstruible desde el kardex.

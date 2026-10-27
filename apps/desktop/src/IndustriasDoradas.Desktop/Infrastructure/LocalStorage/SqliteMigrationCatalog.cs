@@ -32,6 +32,7 @@ public static class SqliteMigrationCatalog
         Read(17, "worker_attendance_category", "017_worker_attendance_category.sql"),
         Read(18, "attendance_correction_chain", "018_attendance_correction_chain.sql"),
         Read(19, "attendance_sync_projection", "019_attendance_sync_projection.sql"),
+        Read(20, "inventory_persistence", "020_inventory_persistence.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)
