@@ -52,6 +52,12 @@ const primaryNavigation = [
     labelEn: "Workers",
     icon: "◷",
   },
+  {
+    to: "/gerencia/inventario",
+    label: "Inventario",
+    labelEn: "Inventory",
+    icon: "□",
+  },
 ] as const;
 
 const futureNavigation = [
@@ -66,12 +72,6 @@ const futureNavigation = [
     label: "Reportes",
     labelEn: "Reports",
     icon: "⇩",
-  },
-  {
-    to: "/gerencia/inventario",
-    label: "Inventario",
-    labelEn: "Inventory",
-    icon: "□",
   },
   {
     to: "/gerencia/configuracion",
@@ -90,8 +90,8 @@ const pageTitles: Record<string, readonly [string, string]> = {
   "/gerencia/usuarios": ["Usuarios", "Users"],
   "/gerencia/estadisticas": ["Estadísticas", "Statistics"],
   "/gerencia/trabajadores": ["Trabajadores", "Workers"],
-  "/gerencia/reportes": ["Reportes", "Reports"],
   "/gerencia/inventario": ["Inventario", "Inventory"],
+  "/gerencia/reportes": ["Reportes", "Reports"],
   "/gerencia/configuracion": ["Configuración", "Settings"],
 };
 

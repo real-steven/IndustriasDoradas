@@ -206,6 +206,27 @@ describe("API smoke (e2e)", () => {
         total: 0,
         totalPages: 0,
       }),
+      listStock: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
+      listReviews: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
+      listComponentChanges: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
       findMovement: jest.fn(),
       getBalance: jest.fn().mockResolvedValue(10),
       createMovement: jest.fn(),
@@ -1189,6 +1210,42 @@ describe("API smoke (e2e)", () => {
       .expect(403);
 
     expect(inventory.listCatalog.mock.calls).toHaveLength(0);
+  });
+
+  it("exposes paginated inventory read models for management", async () => {
+    const base = `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/inventory/plants/31000000-0000-4000-8000-000000000001`;
+
+    await request(httpServer)
+      .get(`${base}/stock?page=2&pageSize=10&state=all&search=cadena`)
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+    await request(httpServer)
+      .get(`${base}/reviews?differencesOnly=true&state=all`)
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+    await request(httpServer)
+      .get(`${base}/component-changes?direction=asc&state=all`)
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+
+    expect(inventory.listStock.mock.calls[0]).toEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({
+        plantId: "31000000-0000-4000-8000-000000000001",
+        page: 2,
+        pageSize: 10,
+        search: "cadena",
+        state: "all",
+      }),
+    ]);
+    expect(inventory.listReviews.mock.calls[0]).toEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({ differencesOnly: true }),
+    ]);
+    expect(inventory.listComponentChanges.mock.calls[0]).toEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({ direction: "asc" }),
+    ]);
   });
 
   it("accepts a versioned sync batch for an assigned plant manager", async () => {

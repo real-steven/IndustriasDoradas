@@ -6,6 +6,7 @@ import {
   AuditPage,
   DashboardPage,
   GoldPage,
+  InventoryPage,
   OperationPage,
   ShipmentDetailPage,
   ShipmentsPage,
@@ -60,18 +61,7 @@ export function App() {
               />
             }
           />
-          <Route
-            path="inventario"
-            element={
-              <UpcomingPage
-                title={tr("Inventario", "Inventory")}
-                description={tr(
-                  "Trazabilidad futura de herramientas, componentes y mantenimiento.",
-                  "Future traceability of tools, components, and maintenance.",
-                )}
-              />
-            }
-          />
+          <Route path="inventario" element={<InventoryPage />} />
           <Route
             path="configuracion"
             element={

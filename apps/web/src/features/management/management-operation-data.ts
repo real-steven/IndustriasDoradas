@@ -86,6 +86,10 @@ export function useManagementFreshness(): ManagementFreshnessQuery {
       "gold-summary",
       "attendance-hours",
       "attendance-workers",
+      "inventory-stock",
+      "inventory-movements",
+      "inventory-reviews",
+      "inventory-components",
     ];
     void Promise.all(
       affectedKeys.map((queryKey) =>

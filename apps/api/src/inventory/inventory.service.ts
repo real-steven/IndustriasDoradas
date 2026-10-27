@@ -191,6 +191,57 @@ export class InventoryService {
     }
   }
 
+  async listStock(
+    organizationId: string,
+    plantId: string,
+    query: InventoryListQuery,
+    context: InventoryMutationContext,
+  ) {
+    await this.ensurePlantScope(organizationId, plantId, context.auth);
+    try {
+      return await this.repository.listStock(organizationId, {
+        ...query,
+        plantId,
+      });
+    } catch (error) {
+      this.storageError(error);
+    }
+  }
+
+  async listReviews(
+    organizationId: string,
+    plantId: string,
+    query: InventoryListQuery,
+    context: InventoryMutationContext,
+  ) {
+    await this.ensurePlantScope(organizationId, plantId, context.auth);
+    try {
+      return await this.repository.listReviews(organizationId, {
+        ...query,
+        plantId,
+      });
+    } catch (error) {
+      this.storageError(error);
+    }
+  }
+
+  async listComponentChanges(
+    organizationId: string,
+    plantId: string,
+    query: InventoryListQuery,
+    context: InventoryMutationContext,
+  ) {
+    await this.ensurePlantScope(organizationId, plantId, context.auth);
+    try {
+      return await this.repository.listComponentChanges(organizationId, {
+        ...query,
+        plantId,
+      });
+    } catch (error) {
+      this.storageError(error);
+    }
+  }
+
   async recordMovement(
     organizationId: string,
     plantId: string,

@@ -26,6 +26,9 @@ describe("InventoryService", () => {
       createCatalog: jest.fn(),
       setCatalogActive: jest.fn(),
       listMovements: jest.fn(),
+      listStock: jest.fn(),
+      listReviews: jest.fn(),
+      listComponentChanges: jest.fn(),
       findMovement: jest.fn(),
       getBalance: jest.fn().mockResolvedValue(10),
       createMovement: jest
@@ -163,6 +166,41 @@ describe("InventoryService", () => {
       status: HttpStatus.FORBIDDEN,
       response: { code: "INVENTORY_PLANT_NOT_AUTHORIZED" },
     });
+  });
+
+  it("scopes the three management read models to the requested plant", async () => {
+    const page = { items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 };
+    repository.listStock.mockResolvedValue(page);
+    repository.listReviews.mockResolvedValue(page);
+    repository.listComponentChanges.mockResolvedValue(page);
+    const query = { page: 1, pageSize: 20, state: "all" as const };
+
+    await service.listStock(ORGANIZATION_ID, PLANT_ID, query, context(MANAGER));
+    await service.listReviews(
+      ORGANIZATION_ID,
+      PLANT_ID,
+      { ...query, differencesOnly: true },
+      context(MANAGER),
+    );
+    await service.listComponentChanges(
+      ORGANIZATION_ID,
+      PLANT_ID,
+      { ...query, direction: "asc" },
+      context(MANAGER),
+    );
+
+    expect(repository.listStock.mock.calls[0]).toEqual([
+      ORGANIZATION_ID,
+      expect.objectContaining({ plantId: PLANT_ID }),
+    ]);
+    expect(repository.listReviews.mock.calls[0]).toEqual([
+      ORGANIZATION_ID,
+      expect.objectContaining({ plantId: PLANT_ID, differencesOnly: true }),
+    ]);
+    expect(repository.listComponentChanges.mock.calls[0]).toEqual([
+      ORGANIZATION_ID,
+      expect.objectContaining({ plantId: PLANT_ID, direction: "asc" }),
+    ]);
   });
 
   it("computes review differences without creating an adjustment", async () => {

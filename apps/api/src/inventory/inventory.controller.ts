@@ -16,7 +16,9 @@ import {
   CreateInventoryItemTypeDto,
   CreateInventoryUnitDto,
   InventoryCatalogQueryDto,
+  InventoryComponentHistoryQueryDto,
   InventoryHistoryQueryDto,
+  InventoryReviewHistoryQueryDto,
   RecordInventoryAdjustmentDto,
   RecordInventoryMovementDto,
   RecordInventoryReviewDto,
@@ -175,6 +177,21 @@ export class InventoryController {
     );
   }
 
+  @Get("plants/:plantId/stock")
+  listStock(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("plantId", ParseUUIDPipe) plantId: string,
+    @Query() query: InventoryCatalogQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inventory.listStock(
+      organizationId,
+      plantId,
+      query,
+      this.context(request),
+    );
+  }
+
   @Post("plants/:plantId/movements")
   recordMovement(
     @Param("organizationId", ParseUUIDPipe) organizationId: string,
@@ -237,6 +254,21 @@ export class InventoryController {
     );
   }
 
+  @Get("plants/:plantId/reviews")
+  listReviews(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("plantId", ParseUUIDPipe) plantId: string,
+    @Query() query: InventoryReviewHistoryQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inventory.listReviews(
+      organizationId,
+      plantId,
+      query,
+      this.context(request),
+    );
+  }
+
   @Post("plants/:plantId/component-changes")
   recordComponentChange(
     @Param("organizationId", ParseUUIDPipe) organizationId: string,
@@ -248,6 +280,21 @@ export class InventoryController {
       organizationId,
       plantId,
       body,
+      this.context(request),
+    );
+  }
+
+  @Get("plants/:plantId/component-changes")
+  listComponentChanges(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("plantId", ParseUUIDPipe) plantId: string,
+    @Query() query: InventoryComponentHistoryQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inventory.listComponentChanges(
+      organizationId,
+      plantId,
+      query,
       this.context(request),
     );
   }

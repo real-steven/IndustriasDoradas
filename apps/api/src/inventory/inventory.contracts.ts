@@ -20,6 +20,59 @@ export interface InventoryListQuery {
   plantId?: string;
   inventoryItemId?: string;
   rastraId?: string;
+  direction?: "asc" | "desc";
+  differencesOnly?: boolean;
+}
+
+export interface ManagementInventoryStock {
+  organizationId: string;
+  plantId: string;
+  inventoryItemId: string;
+  inventoryItemName: string;
+  isActive: boolean;
+  itemTypeId: string;
+  itemTypeName: string;
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+  decimalPlaces: number;
+  balance: number;
+  firstMovementAtUtc: string | null;
+  lastMovementAtUtc: string | null;
+  movementCount: number;
+  latestReviewId: string | null;
+  latestReviewStatus: InventoryReview["status"] | null;
+  latestReviewedAtUtc: string | null;
+  latestExpectedQuantity: number | null;
+  latestCountedQuantity: number | null;
+  latestDifferenceQuantity: number | null;
+}
+
+export interface ManagementInventoryReviewLine extends InventoryReviewLine {
+  organizationId: string;
+  plantId: string;
+  reviewId: string;
+  status: InventoryReview["status"];
+  reviewedByProfileId: string;
+  reviewedByDisplayName: string;
+  reviewedAtUtc: string;
+  recordedAtUtc: string;
+  notes: string | null;
+  inventoryItemName: string;
+  unitCode: string;
+  unitName: string;
+}
+
+export interface ManagementRastraComponentChange extends RastraComponentChange {
+  rastraName: string;
+  productionLineId: string;
+  productionLineName: string;
+  inventoryItemName: string | null;
+  unitCode: string | null;
+  unitName: string | null;
+  actorDisplayName: string;
+  responsibleWorkerName: string | null;
+  isActiveInstallation: boolean;
 }
 
 export interface InventoryCatalogItem {
@@ -187,6 +240,18 @@ export interface InventoryRepository {
     organizationId: string,
     query: InventoryListQuery,
   ): Promise<PageResponse<InventoryMovement>>;
+  listStock(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementInventoryStock>>;
+  listReviews(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementInventoryReviewLine>>;
+  listComponentChanges(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementRastraComponentChange>>;
   findMovement(
     organizationId: string,
     id: string,

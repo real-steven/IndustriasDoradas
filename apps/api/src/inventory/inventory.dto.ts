@@ -38,6 +38,33 @@ export class InventoryHistoryQueryDto extends PageQueryDto {
   @IsOptional()
   @IsUUID()
   inventoryItemId?: string;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  direction: "asc" | "desc" = "desc";
+}
+
+export class InventoryReviewHistoryQueryDto extends PageQueryDto {
+  @IsOptional()
+  @IsUUID()
+  inventoryItemId?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    value === "true" ? true : value === "false" ? false : value,
+  )
+  @IsOptional()
+  @IsBoolean()
+  differencesOnly = false;
+}
+
+export class InventoryComponentHistoryQueryDto extends PageQueryDto {
+  @IsOptional()
+  @IsUUID()
+  rastraId?: string;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  direction: "asc" | "desc" = "desc";
 }
 
 export class CreateInventoryItemTypeDto {

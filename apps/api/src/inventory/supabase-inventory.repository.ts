@@ -12,6 +12,9 @@ import {
   type InventoryMovement,
   type InventoryRepository,
   type InventoryReview,
+  type ManagementInventoryReviewLine,
+  type ManagementInventoryStock,
+  type ManagementRastraComponentChange,
   type RastraComponentChange,
 } from "./inventory.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
@@ -165,7 +168,8 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     const parameters = this.pageParameters(query);
     parameters.set("organization_id", `eq.${organizationId}`);
     parameters.set("select", "*");
-    parameters.set("order", "occurred_at_utc.desc,id.desc");
+    const direction = query.direction ?? "desc";
+    parameters.set("order", `occurred_at_utc.${direction},id.${direction}`);
     if (query.plantId !== undefined)
       parameters.set("plant_id", `eq.${query.plantId}`);
     if (query.inventoryItemId !== undefined) {
@@ -179,6 +183,102 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       query,
       response,
       rows.map((row) => this.movement(row)),
+    );
+  }
+
+  async listStock(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementInventoryStock>> {
+    const parameters = this.pageParameters(query);
+    parameters.set("organization_id", `eq.${organizationId}`);
+    parameters.set("select", "*");
+    parameters.set("order", "inventory_item_name.asc,inventory_item_id.asc");
+    if (query.plantId !== undefined)
+      parameters.set("plant_id", `eq.${query.plantId}`);
+    if (query.search?.trim()) {
+      parameters.set(
+        "inventory_item_name",
+        `ilike.*${this.escapeLike(query.search.trim())}*`,
+      );
+    }
+    if (query.state !== undefined && query.state !== "all") {
+      parameters.set("is_active", `eq.${query.state === "active"}`);
+    }
+    const response = await this.request(
+      `management_inventory_stock?${parameters}`,
+      { headers: { Prefer: "count=exact" } },
+    );
+    const rows = (await response.json()) as Row[];
+    return this.page(
+      query,
+      response,
+      rows.map((row) => this.managementStock(row)),
+    );
+  }
+
+  async listReviews(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementInventoryReviewLine>> {
+    const parameters = this.pageParameters(query);
+    parameters.set("organization_id", `eq.${organizationId}`);
+    parameters.set("select", "*");
+    parameters.set("order", "reviewed_at_utc.desc,review_id.desc");
+    if (query.plantId !== undefined)
+      parameters.set("plant_id", `eq.${query.plantId}`);
+    if (query.inventoryItemId !== undefined) {
+      parameters.set("inventory_item_id", `eq.${query.inventoryItemId}`);
+    }
+    if (query.differencesOnly === true) {
+      parameters.set("difference_quantity", "neq.0");
+    }
+    if (query.search?.trim()) {
+      parameters.set(
+        "inventory_item_name",
+        `ilike.*${this.escapeLike(query.search.trim())}*`,
+      );
+    }
+    const response = await this.request(
+      `management_inventory_review_lines?${parameters}`,
+      { headers: { Prefer: "count=exact" } },
+    );
+    const rows = (await response.json()) as Row[];
+    return this.page(
+      query,
+      response,
+      rows.map((row) => this.managementReviewLine(row)),
+    );
+  }
+
+  async listComponentChanges(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementRastraComponentChange>> {
+    const parameters = this.pageParameters(query);
+    const direction = query.direction ?? "desc";
+    parameters.set("organization_id", `eq.${organizationId}`);
+    parameters.set("select", "*");
+    parameters.set("order", `occurred_at_utc.${direction},id.${direction}`);
+    if (query.plantId !== undefined)
+      parameters.set("plant_id", `eq.${query.plantId}`);
+    if (query.rastraId !== undefined)
+      parameters.set("rastra_id", `eq.${query.rastraId}`);
+    if (query.search?.trim()) {
+      parameters.set(
+        "rastra_name",
+        `ilike.*${this.escapeLike(query.search.trim())}*`,
+      );
+    }
+    const response = await this.request(
+      `management_rastra_component_history?${parameters}`,
+      { headers: { Prefer: "count=exact" } },
+    );
+    const rows = (await response.json()) as Row[];
+    return this.page(
+      query,
+      response,
+      rows.map((row) => this.managementComponentChange(row)),
     );
   }
 
@@ -446,6 +546,87 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       reason: this.nullableString(row, "reason"),
       installationNotes: this.nullableString(row, "installation_notes"),
       removalNotes: this.nullableString(row, "removal_notes"),
+    };
+  }
+
+  private managementStock(row: Row): ManagementInventoryStock {
+    return {
+      organizationId: this.string(row, "organization_id"),
+      plantId: this.string(row, "plant_id"),
+      inventoryItemId: this.string(row, "inventory_item_id"),
+      inventoryItemName: this.string(row, "inventory_item_name"),
+      isActive: this.boolean(row, "is_active"),
+      itemTypeId: this.string(row, "item_type_id"),
+      itemTypeName: this.string(row, "item_type_name"),
+      unitId: this.string(row, "unit_id"),
+      unitCode: this.string(row, "unit_code"),
+      unitName: this.string(row, "unit_name"),
+      decimalPlaces: this.number(row, "decimal_places"),
+      balance: this.number(row, "balance"),
+      firstMovementAtUtc: this.nullableString(row, "first_movement_at_utc"),
+      lastMovementAtUtc: this.nullableString(row, "last_movement_at_utc"),
+      movementCount: this.number(row, "movement_count"),
+      latestReviewId: this.nullableString(row, "latest_review_id"),
+      latestReviewStatus: this.nullableString(
+        row,
+        "latest_review_status",
+      ) as ManagementInventoryStock["latestReviewStatus"],
+      latestReviewedAtUtc: this.nullableString(row, "latest_reviewed_at_utc"),
+      latestExpectedQuantity: this.nullableNumber(
+        row,
+        "latest_expected_quantity",
+      ),
+      latestCountedQuantity: this.nullableNumber(
+        row,
+        "latest_counted_quantity",
+      ),
+      latestDifferenceQuantity: this.nullableNumber(
+        row,
+        "latest_difference_quantity",
+      ),
+    };
+  }
+
+  private managementReviewLine(row: Row): ManagementInventoryReviewLine {
+    return {
+      organizationId: this.string(row, "organization_id"),
+      plantId: this.string(row, "plant_id"),
+      reviewId: this.string(row, "review_id"),
+      status: this.string(
+        row,
+        "status",
+      ) as ManagementInventoryReviewLine["status"],
+      reviewedByProfileId: this.string(row, "reviewed_by_profile_id"),
+      reviewedByDisplayName: this.string(row, "reviewed_by_display_name"),
+      reviewedAtUtc: this.string(row, "reviewed_at_utc"),
+      recordedAtUtc: this.string(row, "recorded_at_utc"),
+      notes: this.nullableString(row, "notes"),
+      inventoryItemId: this.string(row, "inventory_item_id"),
+      inventoryItemName: this.string(row, "inventory_item_name"),
+      unitId: this.string(row, "unit_id"),
+      unitCode: this.string(row, "unit_code"),
+      unitName: this.string(row, "unit_name"),
+      expectedQuantity: this.number(row, "expected_quantity"),
+      countedQuantity: this.number(row, "counted_quantity"),
+      differenceQuantity: this.number(row, "difference_quantity"),
+    };
+  }
+
+  private managementComponentChange(row: Row): ManagementRastraComponentChange {
+    return {
+      ...this.componentChange(row),
+      rastraName: this.string(row, "rastra_name"),
+      productionLineId: this.string(row, "production_line_id"),
+      productionLineName: this.string(row, "production_line_name"),
+      inventoryItemName: this.nullableString(row, "inventory_item_name"),
+      unitCode: this.nullableString(row, "unit_code"),
+      unitName: this.nullableString(row, "unit_name"),
+      actorDisplayName: this.string(row, "actor_display_name"),
+      responsibleWorkerName: this.nullableString(
+        row,
+        "responsible_worker_name",
+      ),
+      isActiveInstallation: this.boolean(row, "is_active_installation"),
     };
   }
 

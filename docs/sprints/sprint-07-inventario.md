@@ -289,6 +289,27 @@ multi-PC queda como validación manual complementaria antes de 7.10.
 
 ### 7.8 Inventario web
 
+**Implementado:** el espacio futuro del portal se sustituyó por una consulta
+gerencial responsive con vistas de existencias, kardex, revisiones físicas e
+historial de componentes. Planta, búsqueda, vista, artículo/rastra, página,
+solo diferencias e intervalos de recordatorio permanecen en la URL. La fecha
+de corte y la invalidación automática reutilizan la frescura central del Sprint
+5.
+
+Tres vistas privadas `security_invoker` reconstruyen saldo, última revisión y
+estado de instalaciones desde hechos append-only. El API las publica solo por
+organización y planta con permiso `inventory.manage`; el navegador no recibe
+acceso directo a Supabase. El kardex y los componentes admiten orden ascendente
+para comenzar por el primer evento. Los recordatorios de revisión y reemplazo
+parten en 30 días, son configurables desde la URL e informativos: nunca escriben
+ni bloquean. Diseño en
+[`../architecture/inventario-web-sprint-07.md`](../architecture/inventario-web-sprint-07.md).
+
+**Pruebas automatizadas:** base de datos completa con la prueba SQL 023; 123/123
+API unitarias, 35/35 e2e y 60/60 web. Incluyen privacidad de las vistas, saldo
+reconstruido desde cinco movimientos, última diferencia, instalación activa,
+filtros persistentes y apertura del kardex desde el primer evento.
+
 **Prompt:** Implementa el módulo `Inventario` de Sprint 5 para
 `JEFE_EMPRESA`: existencias, kardex, diferencias, fecha de corte, última
 revisión e historial de componentes. Conserva filtros en URL, paginación y
@@ -296,6 +317,11 @@ frescura. Recordatorios de revisión/reemplazo son informativos y configurables,
 nunca bloquean.
 
 **Pausa:** un artículo y una rastra se reconstruyen desde su primer evento.
+
+**Pausa automática cumplida:** el artículo conserva cinco movimientos en orden
+cronológico y la rastra conserva instalación y dos reemplazos, con un único
+componente activo. La comprobación visual con datos reales queda disponible
+como validación manual antes de cerrar 7.8.
 
 ### 7.9 Frontera con mercurio y asignaciones
 
