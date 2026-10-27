@@ -15,6 +15,7 @@ import {
   CreateInventoryItemDto,
   CreateInventoryItemTypeDto,
   CreateInventoryUnitDto,
+  InventoryAssignmentQueryDto,
   InventoryCatalogQueryDto,
   InventoryComponentHistoryQueryDto,
   InventoryHistoryQueryDto,
@@ -185,6 +186,21 @@ export class InventoryController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.inventory.listStock(
+      organizationId,
+      plantId,
+      query,
+      this.context(request),
+    );
+  }
+
+  @Get("plants/:plantId/assignments")
+  listAssignments(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("plantId", ParseUUIDPipe) plantId: string,
+    @Query() query: InventoryAssignmentQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inventory.listAssignments(
       organizationId,
       plantId,
       query,

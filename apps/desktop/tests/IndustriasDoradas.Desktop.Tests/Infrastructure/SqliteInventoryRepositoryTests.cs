@@ -50,6 +50,63 @@ public sealed class SqliteInventoryRepositoryTests
     }
 
     [TestMethod]
+    public async Task LinkedMovementPersistsOneSweepLinkAndSchemaTwoOutboxAtomically()
+    {
+        await using var database = new TestDatabase();
+        await database.PrepareAsync();
+        Guid sweepId = Guid.Parse("47000000-0000-4000-8000-000000000091");
+        await database.ExecuteAsync($"""
+            INSERT INTO cached_suppliers(id, organization_id, name, is_active, updated_at_utc)
+            VALUES ('35000000-0000-4000-8000-000000000091', '{OrganizationId:D}',
+                'Proveedor de prueba', 1, '{Now:O}');
+            INSERT INTO cached_production_lines(
+                id, organization_id, plant_id, name, is_active, updated_at_utc)
+            VALUES ('32000000-0000-4000-8000-000000000091', '{OrganizationId:D}',
+                '{PlantId:D}', 'Línea de prueba', 1, '{Now:O}');
+            INSERT INTO cached_shipments(
+                id, organization_id, supplier_id, line_id, feed_cycle_id,
+                started_at_utc, status)
+            VALUES ('42000000-0000-4000-8000-000000000091', '{OrganizationId:D}',
+                '35000000-0000-4000-8000-000000000091',
+                '32000000-0000-4000-8000-000000000091',
+                '43000000-0000-4000-8000-000000000091', '{Now:O}', 'ACTIVE');
+            INSERT INTO production_sweeps(
+                id, organization_id, plant_id, station_id, line_id, feed_cycle_id,
+                shipment_id, client_sequence, cajuela_count, swept_at_utc,
+                recorded_at_utc, recorded_by_profile_id)
+            VALUES ('{sweepId:D}', '{OrganizationId:D}', '{PlantId:D}', '{StationId:D}',
+                '32000000-0000-4000-8000-000000000091',
+                '43000000-0000-4000-8000-000000000091',
+                '42000000-0000-4000-8000-000000000091', 91, 1,
+                '{Now:O}', '{Now:O}', '{ActorId:D}');
+            """);
+
+        var repository = new SqliteInventoryRepository(database.Factory);
+        await repository.RecordMovementAsync(Movement(
+            Guid.Parse("77400000-0000-4000-8000-000000000091"),
+            InventoryMovementType.Entry,
+            10m));
+        Guid linkedMovementId = Guid.Parse("77400000-0000-4000-8000-000000000092");
+        await repository.RecordMovementAsync(Movement(
+            linkedMovementId,
+            InventoryMovementType.Exit,
+            2m) with
+        { LinkedSweepId = sweepId });
+
+        Assert.AreEqual(1L, await database.ScalarAsync($"""
+            SELECT COUNT(*) FROM inventory_sweep_links
+            WHERE inventory_movement_id = '{linkedMovementId:D}'
+              AND sweep_id = '{sweepId:D}';
+            """));
+        Assert.AreEqual(1L, await database.ScalarAsync($"""
+            SELECT COUNT(*) FROM outbox_messages
+            WHERE aggregate_id = '{linkedMovementId:D}'
+              AND json_extract(payload_json, '$.schemaVersion') = 2
+              AND json_extract(payload_json, '$.linkedSweepId') = '{sweepId:D}';
+            """));
+    }
+
+    [TestMethod]
     public async Task InsufficientExitRollsBackMovementAndOutbox()
     {
         await using var database = new TestDatabase();
@@ -140,6 +197,46 @@ public sealed class SqliteInventoryRepositoryTests
         Assert.AreEqual(1L, await database.ScalarAsync($"""
             SELECT COUNT(*) FROM inventory_movements
             WHERE client_movement_id = '{rejectedId:D}';
+            """));
+    }
+
+    [TestMethod]
+    public async Task PullEnrichesExistingCentralMovementWithSweepLinkWithoutDuplicatingBalance()
+    {
+        await using var database = new TestDatabase();
+        await database.PrepareAsync();
+        var pull = new SqliteSyncChangeRepository(database.Factory);
+        Guid movementId = Guid.Parse("77400000-0000-4000-8000-000000000093");
+        Guid sweepId = Guid.Parse("47000000-0000-4000-8000-000000000093");
+        await ApplyCentralMovementAsync(pull, 1, movementId, StationId, 10m, "ENTRY");
+
+        using JsonDocument document = JsonDocument.Parse($$"""
+            {"id":"{{movementId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","inventory_item_id":"{{ItemId:D}}",
+             "unit_id":"77100000-0000-4000-8000-000000000001",
+             "movement_type":"ENTRY","quantity_delta":10,
+             "actor_profile_id":"{{ActorId:D}}","station_id":"{{StationId:D}}",
+             "client_sequence":1,"responsible_worker_id":null,
+             "occurred_at_utc":"{{Now:O}}","recorded_at_utc":"{{Now:O}}",
+             "reason":null,"destination":null,"notes":null,"related_movement_id":null,
+             "linked_sweep_id":"{{sweepId:D}}"}
+            """);
+        await pull.ApplyPageAsync(new SyncPullPage(
+            1,
+            "inventory-1",
+            "inventory-2",
+            false,
+            Now,
+            [new SyncChange(Guid.NewGuid(), 2, "INVENTORY_MOVEMENT", movementId,
+                2, "UPSERT", Now, 2, document.RootElement.Clone())]));
+
+        Assert.AreEqual(1L, await database.ScalarAsync($"""
+            SELECT COUNT(*) FROM inventory_central_movements
+            WHERE id = '{movementId:D}' AND linked_sweep_id = '{sweepId:D}';
+            """));
+        Assert.AreEqual(10000L, await database.ScalarAsync($"""
+            SELECT SUM(quantity_delta_milliunits) FROM inventory_central_movements
+            WHERE id = '{movementId:D}';
             """));
     }
 

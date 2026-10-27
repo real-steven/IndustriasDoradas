@@ -67,6 +67,16 @@ export class InventoryComponentHistoryQueryDto extends PageQueryDto {
   direction: "asc" | "desc" = "desc";
 }
 
+export class InventoryAssignmentQueryDto extends PageQueryDto {
+  @IsOptional()
+  @IsUUID()
+  responsibleWorkerId?: string;
+
+  @IsOptional()
+  @IsIn(["ASSIGNED", "RETURNED"])
+  assignmentStatus?: "ASSIGNED" | "RETURNED";
+}
+
 export class CreateInventoryItemTypeDto {
   @Transform(normalizeCode)
   @IsString()
@@ -150,6 +160,10 @@ export class RecordInventoryMovementDto {
   @IsOptional()
   @IsUUID()
   relatedMovementId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  linkedSweepId?: string;
 }
 
 export class RecordInventoryAdjustmentDto {

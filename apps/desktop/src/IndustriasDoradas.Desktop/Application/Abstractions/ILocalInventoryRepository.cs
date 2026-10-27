@@ -33,7 +33,8 @@ public sealed record RecordLocalInventoryMovement(
     string? Destination = null,
     string? Notes = null,
     Guid? RelatedMovementId = null,
-    OutboxAuthorizationEvidence? Authorization = null);
+    OutboxAuthorizationEvidence? Authorization = null,
+    Guid? LinkedSweepId = null);
 
 public sealed record LocalInventoryMovementRegistration(
     Guid ClientMovementId,

@@ -122,7 +122,8 @@ internal sealed record InventoryMovementOutboxPayload(
     string? Reason,
     string? Destination,
     string? Notes,
-    Guid? RelatedMovementId);
+    Guid? RelatedMovementId,
+    Guid? LinkedSweepId);
 
 internal sealed record InventoryReviewLineOutboxPayload(
     Guid InventoryItemId,

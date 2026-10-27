@@ -117,6 +117,18 @@ describe("normalizeSyncItem", () => {
     item.payload.clientSequence = 99;
     expect(normalizeSyncItem(item, scope).precheckCode).toBe("INVALID_EVENT");
   });
+
+  it("keeps inventory schema 1 compatible and accepts an optional sweep in schema 2", () => {
+    const legacy = inventoryMovement(1);
+    expect(normalizeSyncItem(legacy, scope).precheckCode).toBeNull();
+
+    const linked = inventoryMovement(2);
+    linked.payload.linkedSweepId = "47000000-0000-4000-8000-000000000001";
+    expect(normalizeSyncItem(linked, scope).precheckCode).toBeNull();
+
+    delete linked.payload.linkedSweepId;
+    expect(normalizeSyncItem(linked, scope).precheckCode).toBe("INVALID_EVENT");
+  });
 });
 
 function operationStarted(): SyncEnvelopeItem {
@@ -281,6 +293,41 @@ function attendanceEvent(): SyncEnvelopeItem {
       correctedByProfileId: null,
       correctionReason: null,
       relatedEventId: null,
+    },
+  };
+}
+
+function inventoryMovement(schemaVersion: 1 | 2): SyncEnvelopeItem {
+  const movementId = "4a000000-0000-4000-8000-000000000001";
+  return {
+    outboxMessageId: "4a000000-0000-4000-8000-000000000002",
+    stationSequence: 6,
+    operationType: "INVENTORY_MOVEMENT_RECORDED",
+    aggregateType: "inventory_movement",
+    aggregateId: movementId,
+    payloadSchemaVersion: schemaVersion,
+    createdAtUtc: "2026-09-15T18:07:01.000Z",
+    authorization: operationStarted().authorization,
+    payload: {
+      schemaVersion,
+      clientMovementId: movementId,
+      organizationId: scope.organizationId,
+      plantId: scope.plantId,
+      stationId: scope.stationId,
+      clientSequence: 6,
+      inventoryItemId: "73000000-0000-4000-8000-000000000001",
+      unitId: "72000000-0000-4000-8000-000000000001",
+      movementType: "CONSUMPTION",
+      quantityDelta: -2,
+      actorProfileId: operationStarted().authorization.actorProfileId,
+      responsibleWorkerId: null,
+      occurredAtUtc: "2026-09-15T18:07:00.000Z",
+      recordedAtUtc: "2026-09-15T18:07:01.000Z",
+      reason: null,
+      destination: null,
+      notes: null,
+      relatedMovementId: null,
+      ...(schemaVersion === 2 ? { linkedSweepId: null } : {}),
     },
   };
 }

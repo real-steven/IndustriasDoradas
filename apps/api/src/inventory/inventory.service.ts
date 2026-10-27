@@ -33,6 +33,7 @@ interface RegularMovementInput {
   destination?: string;
   notes?: string;
   relatedMovementId?: string;
+  linkedSweepId?: string;
 }
 
 @Injectable()
@@ -242,6 +243,23 @@ export class InventoryService {
     }
   }
 
+  async listAssignments(
+    organizationId: string,
+    plantId: string,
+    query: InventoryListQuery,
+    context: InventoryMutationContext,
+  ) {
+    await this.ensurePlantScope(organizationId, plantId, context.auth);
+    try {
+      return await this.repository.listAssignments(organizationId, {
+        ...query,
+        plantId,
+      });
+    } catch (error) {
+      this.storageError(error);
+    }
+  }
+
   async recordMovement(
     organizationId: string,
     plantId: string,
@@ -296,6 +314,9 @@ export class InventoryService {
         ...(input.relatedMovementId === undefined
           ? {}
           : { relatedMovementId: input.relatedMovementId }),
+        ...(input.linkedSweepId === undefined
+          ? {}
+          : { linkedSweepId: input.linkedSweepId }),
       },
       context,
     );
@@ -372,6 +393,9 @@ export class InventoryService {
         recordedAtUtc: new Date().toISOString(),
         reason: input.reason,
         relatedMovementId: original.id,
+        ...(original.linkedSweepId === null
+          ? {}
+          : { linkedSweepId: original.linkedSweepId }),
       },
       context,
     );
@@ -573,6 +597,7 @@ export class InventoryService {
           "quantity_delta",
           "reason",
           "related_movement_id",
+          "linked_sweep_id",
         ],
         changes: {
           inventory_item_id: {
@@ -590,6 +615,14 @@ export class InventoryService {
                 related_movement_id: {
                   before: null,
                   after: movement.relatedMovementId,
+                },
+              }),
+          ...(movement.linkedSweepId === undefined
+            ? {}
+            : {
+                linked_sweep_id: {
+                  before: null,
+                  after: movement.linkedSweepId,
                 },
               }),
         },

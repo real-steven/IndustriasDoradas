@@ -323,7 +323,32 @@ cronológico y la rastra conserva instalación y dos reemplazos, con un único
 componente activo. La comprobación visual con datos reales queda disponible
 como validación manual antes de cerrar 7.8.
 
+**Pausa manual cumplida el 2026-10-27:** el desarrollador confirmó en web que
+Inventario carga correctamente y presenta el estado vacío sin error de servicio.
+
 ### 7.9 Frontera con mercurio y asignaciones
+
+**Implementado el 2026-10-27:** las mediciones de entrada y remanente de una
+barrida permanecen independientes del kardex. Un movimiento físico puede
+enlazarse opcionalmente con una barrida mediante una relación inmutable sin
+cantidad; el RPC central y el Outbox SQLite versión 2 guardan el movimiento y
+el enlace atómicamente. La sincronización conserva compatibilidad con mensajes
+versión 1, enriquece por pull un movimiento ya recibido y no vuelve a sumar su
+cantidad.
+
+La entrega de herramientas se reconstruye desde una salida con trabajador y
+sus devoluciones enlazadas. No existe un segundo estado mutable de custodia. La
+consulta gerencial informa cantidad entregada, devuelta, pendiente y estado
+`ASSIGNED`/`RETURNED`, con filtros por trabajador, estado, organización y planta.
+Diseño en
+[`../architecture/frontera-mercurio-asignaciones-sprint-07.md`](../architecture/frontera-mercurio-asignaciones-sprint-07.md).
+
+**Pruebas automatizadas:** base de datos completa con la prueba SQL 024; 125/125
+API unitarias, 35/35 e2e y 277/277 desktop. La prueba SQL conserva las mediciones
+de mercurio, comprueba un solo efecto neto ante reverso y valida la asignación
+parcial de un martillo. API comprueba contratos v1/v2, reintento idempotente,
+endpoint y herencia del enlace en el reverso. Desktop comprueba migración,
+escritura atómica y enriquecimiento por pull sin duplicar saldo.
 
 **Prompt:** No conviertas entrada menos remanente de mercurio en consumo de
 inventario. Si la empresa confirma un acto físico separado de retiro/ingreso de
@@ -333,6 +358,11 @@ cantidades. Implementa asignación de herramientas a trabajador únicamente si
 
 **Pausa:** repetir sincronización/corrección mantiene un solo efecto neto y las
 mediciones de barrida permanecen intactas.
+
+**Pausa automática cumplida:** las pruebas SQL, API y desktop mantienen un solo
+efecto de inventario, un único enlace y las mediciones originales intactas. No
+hay una pantalla manual nueva en 7.9; la consulta Swagger queda disponible como
+comprobación complementaria del endpoint de asignaciones antes de 7.10.
 
 ### 7.10 Carga inicial y cierre
 

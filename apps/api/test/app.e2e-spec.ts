@@ -213,6 +213,13 @@ describe("API smoke (e2e)", () => {
         total: 0,
         totalPages: 0,
       }),
+      listAssignments: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
       listReviews: jest.fn().mockResolvedValue({
         items: [],
         page: 1,
@@ -324,6 +331,7 @@ describe("API smoke (e2e)", () => {
     gold.createResult.mockReset();
     inventory.findMovement.mockReset();
     inventory.createMovement.mockReset();
+    inventory.listAssignments.mockClear();
     inventory.getBalance.mockResolvedValue(10);
     attendance.listHistory.mockClear();
     management.listOperationLines.mockClear();
@@ -411,6 +419,9 @@ describe("API smoke (e2e)", () => {
     );
     expect(body.paths).toHaveProperty(
       "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/movements/{movementId}/reversal",
+    );
+    expect(body.paths).toHaveProperty(
+      "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/assignments",
     );
   });
 
@@ -1126,6 +1137,7 @@ describe("API smoke (e2e)", () => {
         destination: input.destination ?? null,
         notes: input.notes ?? null,
         relatedMovementId: input.relatedMovementId ?? null,
+        linkedSweepId: input.linkedSweepId ?? null,
       }),
     );
 
@@ -1149,6 +1161,7 @@ describe("API smoke (e2e)", () => {
         unitId: "77100000-0000-4000-8000-000000000001",
         movementType: "EXIT",
         quantity: 4,
+        linkedSweepId: "47000000-0000-4000-8000-000000000001",
         occurredAtUtc: "2026-10-26T18:01:00.000Z",
       })
       .expect(201);
@@ -1186,6 +1199,7 @@ describe("API smoke (e2e)", () => {
       movementType: "REVERSAL",
       quantityDelta: 4,
       relatedMovementId: exitBody.id,
+      linkedSweepId: "47000000-0000-4000-8000-000000000001",
     });
     expect(adjustment.body).toMatchObject({
       movementType: "ADJUSTMENT",
@@ -1227,6 +1241,10 @@ describe("API smoke (e2e)", () => {
       .get(`${base}/component-changes?direction=asc&state=all`)
       .set("Authorization", "Bearer valid-token")
       .expect(200);
+    await request(httpServer)
+      .get(`${base}/assignments?assignmentStatus=ASSIGNED`)
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
 
     expect(inventory.listStock.mock.calls[0]).toEqual([
       ACTIVE_PROFILE.organizationId,
@@ -1245,6 +1263,10 @@ describe("API smoke (e2e)", () => {
     expect(inventory.listComponentChanges.mock.calls[0]).toEqual([
       ACTIVE_PROFILE.organizationId,
       expect.objectContaining({ direction: "asc" }),
+    ]);
+    expect(inventory.listAssignments.mock.calls[0]).toEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({ assignmentStatus: "ASSIGNED" }),
     ]);
   });
 

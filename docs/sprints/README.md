@@ -27,8 +27,12 @@ automáticamente el 2026-10-26 con su validación visual pendiente. El siguiente
 paso técnico era sincronización y concurrencia 7.7, implementado y verificado
 automáticamente el 2026-10-26: catálogo y kardex ya convergen por push/pull, y
 un exceso concurrente queda como conflicto auditable sin perder el hecho local.
-El siguiente incremento es inventario web 7.8. La deuda de Sprint 6 continúa
-visible y no se presenta como prueba ejecutada.
+Inventario web 7.8 fue implementado y su estado vacío fue aprobado manualmente
+el 2026-10-27. La frontera de mercurio y asignaciones 7.9 quedó implementada ese
+mismo día: las barridas no descuentan inventario y los vínculos físicos son
+explícitos e idempotentes. El siguiente incremento es carga inicial y cierre
+7.10. La deuda de Sprint 6 continúa visible y no se presenta como prueba
+ejecutada.
 
 El cierre aprobado del Sprint 2 y la guía de contexto para comenzar Sprint 3
 están en

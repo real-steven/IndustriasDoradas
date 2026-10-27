@@ -19,6 +19,9 @@ const actorProfileId = "a1000000-0000-4000-8000-000000000002";
 const itemTypeId = "71000000-0000-4000-8000-000000000001";
 const unitId = "72000000-0000-4000-8000-000000000001";
 const itemId = "73000000-0000-4000-8000-000000000001";
+const shipmentId = "42000000-0000-4000-8000-000000000091";
+const feedCycleId = "43000000-0000-4000-8000-000000000091";
+const sweepId = "47000000-0000-4000-8000-000000000091";
 const occurredAtUtc = "2026-09-15T18:00:00.000Z";
 const recordedAtUtc = "2026-09-15T18:00:01.000Z";
 
@@ -89,6 +92,41 @@ describe("inventory sync ingestion with PostgreSQL", () => {
       [randomUUID(), organizationId, plantId, secondStationId, actorProfileId],
     );
     await db.query(
+      `insert into app.shipments(
+         id, organization_id, plant_id, station_id, production_line_id,
+         supplier_id, feed_cycle_id, started_by_profile_id, started_at_utc)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        shipmentId,
+        organizationId,
+        plantId,
+        firstStationId,
+        "32000000-0000-4000-8000-000000000001",
+        "35000000-0000-4000-8000-000000000001",
+        feedCycleId,
+        actorProfileId,
+        occurredAtUtc,
+      ],
+    );
+    await db.query(
+      `insert into app.production_sweeps(
+         id, organization_id, plant_id, station_id, production_line_id,
+         feed_cycle_id, shipment_id, client_sequence, cajuela_count,
+         swept_at_utc, recorded_at_utc, recorded_by_profile_id)
+       values ($1, $2, $3, $4, $5, $6, $7, 9001, 1, $8, $8, $9)`,
+      [
+        sweepId,
+        organizationId,
+        plantId,
+        firstStationId,
+        "32000000-0000-4000-8000-000000000001",
+        feedCycleId,
+        shipmentId,
+        occurredAtUtc,
+        actorProfileId,
+      ],
+    );
+    await db.query(
       `insert into app.inventory_item_types(id, organization_id, code, name)
        values ($1, $2, 'HERRAMIENTA', 'Herramienta')`,
       [itemTypeId, organizationId],
@@ -111,7 +149,7 @@ describe("inventory sync ingestion with PostgreSQL", () => {
       listChanges: () => Promise.resolve([]),
       ingestItem: async (input) => {
         const result = await db.query<{ result: SyncItemResult }>(
-          "select app.ingest_inventory_sync_item_v1($1::jsonb) as result",
+          "select app.ingest_inventory_sync_item_v2($1::jsonb) as result",
           [
             JSON.stringify({
               organizationId: input.organizationId,
@@ -198,6 +236,36 @@ describe("inventory sync ingestion with PostgreSQL", () => {
         "INVENTORY_MOVEMENT",
       ]),
     );
+  });
+
+  it("links one offline movement to a sweep without duplicating its stock effect", async () => {
+    const entry = movement(firstStationId, 1100, "ENTRY", 10);
+    expect((await push(firstStationId, [entry])).results[0]?.status).toBe(
+      "APPLIED",
+    );
+    const linkedExit = movement(firstStationId, 1101, "EXIT", -2);
+    linkedExit.payloadSchemaVersion = 2;
+    linkedExit.payload.schemaVersion = 2;
+    linkedExit.payload.linkedSweepId = sweepId;
+
+    const first = (await push(firstStationId, [linkedExit])).results[0];
+    const replay = (await push(firstStationId, [linkedExit])).results[0];
+
+    expect(first).toMatchObject({ status: "APPLIED", code: "APPLIED" });
+    expect(replay).toMatchObject({
+      status: "ALREADY_APPLIED",
+      code: "ALREADY_APPLIED",
+      receiptId: first?.receiptId,
+    });
+    expect(await balance()).toBe(8);
+    expect(
+      (
+        await db.query<{ count: number }>(
+          "select count(*)::int as count from app.inventory_sweep_links where inventory_movement_id = $1",
+          [linkedExit.aggregateId],
+        )
+      ).rows[0]?.count,
+    ).toBe(1);
   });
 
   it("records a physical review atomically and replays its receipt", async () => {

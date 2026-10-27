@@ -1169,6 +1169,7 @@
         "properties": {
           "destination": { "maxLength": 200, "minLength": 1, "type": "string" },
           "inventoryItemId": { "format": "uuid", "type": "string" },
+          "linkedSweepId": { "format": "uuid", "type": "string" },
           "movementType": {
             "enum": ["ENTRY", "EXIT", "CONSUMPTION", "RETURN"],
             "type": "string"
@@ -3383,6 +3384,144 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/InventoryMovement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/assignments": {
+      "get": {
+        "operationId": "InventoryController_listAssignments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "default": "active",
+              "enum": ["all", "active", "inactive"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "responsibleWorkerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "assignmentStatus",
+            "required": false,
+            "schema": { "enum": ["ASSIGNED", "RETURNED"], "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageInventoryCatalog"
+                }
               }
             },
             "description": ""

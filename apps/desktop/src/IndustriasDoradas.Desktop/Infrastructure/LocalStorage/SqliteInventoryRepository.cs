@@ -122,6 +122,8 @@ public sealed class SqliteInventoryRepository(
         long deltaMilliunits = ToMilliunits(delta);
         await InsertMovementAsync(connection, transaction, mutation, item, sequence, deltaMilliunits,
             cancellationToken).ConfigureAwait(false);
+        await InsertSweepLinkAsync(connection, transaction, mutation, cancellationToken)
+            .ConfigureAwait(false);
         await InsertMovementOutboxAsync(connection, transaction, mutation, item, sequence, delta,
             cancellationToken).ConfigureAwait(false);
         await AdvanceSequenceAsync(connection, transaction, mutation.StationId, sequence + 1,
@@ -221,6 +223,8 @@ public sealed class SqliteInventoryRepository(
             throw new ArgumentException("El ajuste o reverso requiere motivo.", nameof(mutation));
         if (mutation.MovementType == InventoryMovementType.Reversal && mutation.RelatedMovementId is null)
             throw new ArgumentException("El reverso requiere el movimiento original.", nameof(mutation));
+        if (mutation.LinkedSweepId == Guid.Empty)
+            throw new ArgumentException("La barrida vinculada no puede usar un identificador vacío.", nameof(mutation));
     }
 
     private static decimal SignedQuantity(InventoryMovementType type, decimal quantity) => type switch
@@ -269,17 +273,39 @@ public sealed class SqliteInventoryRepository(
         SqliteTransaction transaction, RecordLocalInventoryMovement mutation, InventoryItem item,
         long sequence, decimal delta, CancellationToken cancellationToken)
     {
-        var payload = new InventoryMovementOutboxPayload(1, mutation.ClientMovementId,
+        var payload = new InventoryMovementOutboxPayload(2, mutation.ClientMovementId,
             mutation.OrganizationId, mutation.PlantId, mutation.StationId, sequence,
             item.Id, item.Unit.Id, ToStorage(mutation.MovementType), delta, mutation.ActorProfileId,
             mutation.ResponsibleWorkerId, mutation.OccurredAt.ToUniversalTime(),
             mutation.RecordedAt.ToUniversalTime(), mutation.Reason?.Trim(), mutation.Destination?.Trim(),
-            mutation.Notes?.Trim(), mutation.RelatedMovementId);
+            mutation.Notes?.Trim(), mutation.RelatedMovementId, mutation.LinkedSweepId);
         string json = JsonSerializer.Serialize(payload,
             LocalStorageJsonSerializerContext.Default.InventoryMovementOutboxPayload);
         await InsertOutboxAsync(connection, transaction, Guid.NewGuid(), mutation.StationId, sequence,
             "INVENTORY_MOVEMENT_RECORDED", "inventory_movement", mutation.ClientMovementId,
             json, mutation.RecordedAt, mutation.Authorization, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task InsertSweepLinkAsync(SqliteConnection connection,
+        SqliteTransaction transaction, RecordLocalInventoryMovement mutation,
+        CancellationToken cancellationToken)
+    {
+        if (mutation.LinkedSweepId is null) return;
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO inventory_sweep_links(organization_id, plant_id,
+                inventory_movement_id, sweep_id, linked_by_profile_id, linked_at_utc)
+            VALUES ($organizationId, $plantId, $movementId, $sweepId, $actorId, $linkedAt);
+            """;
+        command.Parameters.AddWithValue("$organizationId", mutation.OrganizationId.ToString("D"));
+        command.Parameters.AddWithValue("$plantId", mutation.PlantId.ToString("D"));
+        command.Parameters.AddWithValue("$movementId", mutation.ClientMovementId.ToString("D"));
+        command.Parameters.AddWithValue("$sweepId", mutation.LinkedSweepId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$actorId", mutation.ActorProfileId.ToString("D"));
+        command.Parameters.AddWithValue("$linkedAt",
+            SqliteLocalStorageConverters.Timestamp(mutation.RecordedAt));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task InsertReviewAsync(SqliteConnection connection, SqliteTransaction transaction,

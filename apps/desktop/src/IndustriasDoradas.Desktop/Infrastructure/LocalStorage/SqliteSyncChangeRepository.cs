@@ -108,7 +108,9 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
         SyncChange change,
         CancellationToken cancellationToken)
     {
-        if (change.PayloadSchemaVersion != 1 || change.Payload.ValueKind != JsonValueKind.Object)
+        bool supportedSchema = change.PayloadSchemaVersion == 1 ||
+            (change.EntityType == "INVENTORY_MOVEMENT" && change.PayloadSchemaVersion == 2);
+        if (!supportedSchema || change.Payload.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("El cambio remoto usa un esquema no compatible.");
         string payload = change.Payload.GetRawText();
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
@@ -452,14 +454,19 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
         CancellationToken cancellationToken)
     {
         await ExecuteAsync(connection, transaction, """
-            INSERT OR IGNORE INTO inventory_central_movements(
+            INSERT INTO inventory_central_movements(
                 id, organization_id, plant_id, inventory_item_id, unit_id, movement_type,
                 quantity_delta_milliunits, actor_profile_id, station_id, client_sequence,
                 responsible_worker_id, occurred_at_utc, recorded_at_utc, reason,
-                destination, notes, related_movement_id)
+                destination, notes, related_movement_id, linked_sweep_id)
             VALUES ($id, $organizationId, $plantId, $itemId, $unitId, $type,
                 $delta, $actorId, $stationId, $sequence, $workerId, $occurred,
-                $recorded, $reason, $destination, $notes, $relatedId);
+                $recorded, $reason, $destination, $notes, $relatedId, $linkedSweepId)
+            ON CONFLICT(id) DO UPDATE SET
+                linked_sweep_id = COALESCE(
+                    excluded.linked_sweep_id,
+                    inventory_central_movements.linked_sweep_id
+                );
             """, cancellationToken,
             ("$id", Text(payload, "id")),
             ("$organizationId", Text(payload, "organization_id")),
@@ -477,7 +484,8 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             ("$reason", NullableText(payload, "reason") ?? (object)DBNull.Value),
             ("$destination", NullableText(payload, "destination") ?? (object)DBNull.Value),
             ("$notes", NullableText(payload, "notes") ?? (object)DBNull.Value),
-            ("$relatedId", NullableText(payload, "related_movement_id") ?? (object)DBNull.Value))
+            ("$relatedId", NullableText(payload, "related_movement_id") ?? (object)DBNull.Value),
+            ("$linkedSweepId", NullableText(payload, "linked_sweep_id") ?? (object)DBNull.Value))
             .ConfigureAwait(false);
     }
 

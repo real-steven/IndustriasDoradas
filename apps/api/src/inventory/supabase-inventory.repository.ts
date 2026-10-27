@@ -12,6 +12,7 @@ import {
   type InventoryMovement,
   type InventoryRepository,
   type InventoryReview,
+  type ManagementInventoryAssignment,
   type ManagementInventoryReviewLine,
   type ManagementInventoryStock,
   type ManagementRastraComponentChange,
@@ -175,9 +176,12 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     if (query.inventoryItemId !== undefined) {
       parameters.set("inventory_item_id", `eq.${query.inventoryItemId}`);
     }
-    const response = await this.request(`inventory_movements?${parameters}`, {
-      headers: { Prefer: "count=exact" },
-    });
+    const response = await this.request(
+      `management_inventory_movements?${parameters}`,
+      {
+        headers: { Prefer: "count=exact" },
+      },
+    );
     const rows = (await response.json()) as Row[];
     return this.page(
       query,
@@ -282,6 +286,43 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     );
   }
 
+  async listAssignments(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementInventoryAssignment>> {
+    const parameters = this.pageParameters(query);
+    parameters.set("organization_id", `eq.${organizationId}`);
+    parameters.set("select", "*");
+    parameters.set("order", "assigned_at_utc.desc,exit_movement_id.desc");
+    if (query.plantId !== undefined)
+      parameters.set("plant_id", `eq.${query.plantId}`);
+    if (query.responsibleWorkerId !== undefined) {
+      parameters.set(
+        "responsible_worker_id",
+        `eq.${query.responsibleWorkerId}`,
+      );
+    }
+    if (query.assignmentStatus !== undefined) {
+      parameters.set("assignment_status", `eq.${query.assignmentStatus}`);
+    }
+    if (query.search?.trim()) {
+      parameters.set(
+        "inventory_item_name",
+        `ilike.*${this.escapeLike(query.search.trim())}*`,
+      );
+    }
+    const response = await this.request(
+      `management_inventory_assignments?${parameters}`,
+      { headers: { Prefer: "count=exact" } },
+    );
+    const rows = (await response.json()) as Row[];
+    return this.page(
+      query,
+      response,
+      rows.map((row) => this.managementAssignment(row)),
+    );
+  }
+
   async findMovement(
     organizationId: string,
     id: string,
@@ -292,7 +333,9 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       select: "*",
       limit: "1",
     });
-    const response = await this.request(`inventory_movements?${parameters}`);
+    const response = await this.request(
+      `management_inventory_movements?${parameters}`,
+    );
     const rows = (await response.json()) as Row[];
     return rows[0] === undefined ? null : this.movement(rows[0]);
   }
@@ -316,32 +359,30 @@ export class SupabaseInventoryRepository implements InventoryRepository {
   async createMovement(
     input: CreateInventoryMovement,
   ): Promise<InventoryMovement> {
-    const response = await this.request("inventory_movements", {
+    const response = await this.request("rpc/record_inventory_movement_v2", {
       body: JSON.stringify({
-        id: input.id,
-        organization_id: input.organizationId,
-        plant_id: input.plantId,
-        inventory_item_id: input.inventoryItemId,
-        unit_id: input.unitId,
-        movement_type: input.movementType,
-        quantity_delta: input.quantityDelta,
-        actor_profile_id: input.actorProfileId,
-        responsible_worker_id: input.responsibleWorkerId ?? null,
-        occurred_at_utc: input.occurredAtUtc,
-        recorded_at_utc: input.recordedAtUtc,
-        reason: input.reason ?? null,
-        destination: input.destination ?? null,
-        notes: input.notes ?? null,
-        related_movement_id: input.relatedMovementId ?? null,
+        target_movement_id: input.id,
+        target_organization_id: input.organizationId,
+        target_plant_id: input.plantId,
+        target_inventory_item_id: input.inventoryItemId,
+        target_unit_id: input.unitId,
+        target_movement_type: input.movementType,
+        target_quantity_delta: input.quantityDelta,
+        target_actor_profile_id: input.actorProfileId,
+        target_responsible_worker_id: input.responsibleWorkerId ?? null,
+        target_occurred_at_utc: input.occurredAtUtc,
+        target_recorded_at_utc: input.recordedAtUtc,
+        target_reason: input.reason ?? null,
+        target_destination: input.destination ?? null,
+        target_notes: input.notes ?? null,
+        target_related_movement_id: input.relatedMovementId ?? null,
+        target_linked_sweep_id: input.linkedSweepId ?? null,
       }),
-      headers: { Prefer: "return=representation" },
       method: "POST",
     });
-    const rows = (await response.json()) as Row[];
-    const row = rows[0];
-    if (row === undefined)
-      throw new SupabaseDataError("EMPTY_RESPONSE", "inventory_movements");
-    return this.movement(row);
+    return this.movement(
+      this.object(await response.json(), "record_inventory_movement_v2"),
+    );
   }
 
   async createReview(input: CreateInventoryReview): Promise<InventoryReview> {
@@ -488,6 +529,7 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       destination: this.nullableString(row, "destination"),
       notes: this.nullableString(row, "notes"),
       relatedMovementId: this.nullableString(row, "related_movement_id"),
+      linkedSweepId: this.nullableString(row, "linked_sweep_id"),
     };
   }
 
@@ -627,6 +669,34 @@ export class SupabaseInventoryRepository implements InventoryRepository {
         "responsible_worker_name",
       ),
       isActiveInstallation: this.boolean(row, "is_active_installation"),
+    };
+  }
+
+  private managementAssignment(row: Row): ManagementInventoryAssignment {
+    return {
+      organizationId: this.string(row, "organization_id"),
+      plantId: this.string(row, "plant_id"),
+      exitMovementId: this.string(row, "exit_movement_id"),
+      inventoryItemId: this.string(row, "inventory_item_id"),
+      inventoryItemName: this.string(row, "inventory_item_name"),
+      itemTypeId: this.string(row, "item_type_id"),
+      itemTypeName: this.string(row, "item_type_name"),
+      unitId: this.string(row, "unit_id"),
+      unitCode: this.string(row, "unit_code"),
+      unitName: this.string(row, "unit_name"),
+      responsibleWorkerId: this.string(row, "responsible_worker_id"),
+      responsibleWorkerName: this.string(row, "responsible_worker_name"),
+      assignedAtUtc: this.string(row, "assigned_at_utc"),
+      assignedQuantity: this.number(row, "assigned_quantity"),
+      returnedQuantity: this.number(row, "returned_quantity"),
+      pendingQuantity: this.number(row, "pending_quantity"),
+      assignmentStatus: this.string(
+        row,
+        "assignment_status",
+      ) as ManagementInventoryAssignment["assignmentStatus"],
+      linkedSweepId: this.nullableString(row, "linked_sweep_id"),
+      destination: this.nullableString(row, "destination"),
+      notes: this.nullableString(row, "notes"),
     };
   }
 

@@ -69,10 +69,11 @@ export function normalizeSyncItem(
     precheckCode = "INVALID_EVENT";
   } else {
     const schema = OPERATION_SCHEMAS[operationType];
-    if (
-      item.payloadSchemaVersion !== schema.version ||
-      item.aggregateType !== schema.aggregateType
-    ) {
+    const supportedVersion =
+      operationType === "INVENTORY_MOVEMENT_RECORDED"
+        ? item.payloadSchemaVersion === 1 || item.payloadSchemaVersion === 2
+        : item.payloadSchemaVersion === schema.version;
+    if (!supportedVersion || item.aggregateType !== schema.aggregateType) {
       precheckCode = "UNSUPPORTED_PAYLOAD_SCHEMA";
     } else {
       const result = normalizePayload(operationType, item, scope);
@@ -241,7 +242,7 @@ function normalizeInventoryMovement(
   item: SyncEnvelopeItem,
   scope: NormalizationScope,
 ): PayloadResult {
-  requireExactKeys(payload, [
+  const keys = [
     "schemaVersion",
     "clientMovementId",
     "organizationId",
@@ -260,7 +261,9 @@ function normalizeInventoryMovement(
     "destination",
     "notes",
     "relatedMovementId",
-  ]);
+  ];
+  if (item.payloadSchemaVersion === 2) keys.push("linkedSweepId");
+  requireExactKeys(payload, keys);
   const movementType = requireText(payload, "movementType", 40);
   const quantityDelta = requireQuantity(payload, "quantityDelta", false);
   const occurredAtUtc = requireDate(payload, "occurredAtUtc");
@@ -284,11 +287,14 @@ function normalizeInventoryMovement(
     destination: requireNullableText(payload, "destination", 500),
     notes: requireNullableText(payload, "notes", 500),
     relatedMovementId: requireNullableUuid(payload, "relatedMovementId"),
+    ...(item.payloadSchemaVersion === 2
+      ? { linkedSweepId: requireNullableUuid(payload, "linkedSweepId") }
+      : {}),
   };
   const negative = ["EXIT", "CONSUMPTION"].includes(movementType);
   const positive = ["ENTRY", "RETURN"].includes(movementType);
   if (
-    normalized.schemaVersion !== 1 ||
+    normalized.schemaVersion !== item.payloadSchemaVersion ||
     normalized.organizationId !== scope.organizationId ||
     normalized.plantId !== scope.plantId ||
     normalized.stationId !== scope.stationId ||

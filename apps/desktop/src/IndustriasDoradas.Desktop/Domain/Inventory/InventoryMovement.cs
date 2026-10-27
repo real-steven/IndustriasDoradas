@@ -109,7 +109,8 @@ public sealed record InventoryMovement
         string? reason,
         string? destination,
         string? notes,
-        Guid? relatedMovementId)
+        Guid? relatedMovementId,
+        Guid? linkedSweepId)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(item);
@@ -118,6 +119,12 @@ public sealed record InventoryMovement
         item.Unit.EnsureValidQuantity(quantityDelta, nameof(quantityDelta));
         ValidateDirection(type, quantityDelta);
         ValidateRelation(type, relatedMovementId);
+        if (linkedSweepId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "La barrida vinculada no puede usar un identificador vacío.",
+                nameof(linkedSweepId));
+        }
 
         string? normalizedReason = NormalizeOptional(reason);
         if (type is InventoryMovementType.Adjustment or InventoryMovementType.Reversal &&
@@ -139,6 +146,7 @@ public sealed record InventoryMovement
         Destination = NormalizeOptional(destination);
         Notes = NormalizeOptional(notes);
         RelatedMovementId = relatedMovementId;
+        LinkedSweepId = linkedSweepId;
     }
 
     public Guid ClientMovementId { get; }
@@ -167,6 +175,8 @@ public sealed record InventoryMovement
 
     public Guid? RelatedMovementId { get; }
 
+    public Guid? LinkedSweepId { get; }
+
     public static InventoryMovement Entry(
         Guid id,
         InventoryMovementContext context,
@@ -175,7 +185,8 @@ public sealed record InventoryMovement
         DateTimeOffset occurredAt,
         DateTimeOffset recordedAt,
         string? destination = null,
-        string? notes = null) =>
+        string? notes = null,
+        Guid? linkedSweepId = null) =>
         CreateOrdinary(
             id,
             context,
@@ -185,7 +196,8 @@ public sealed record InventoryMovement
             occurredAt,
             recordedAt,
             destination,
-            notes);
+            notes,
+            linkedSweepId);
 
     public static InventoryMovement Exit(
         Guid id,
@@ -195,7 +207,8 @@ public sealed record InventoryMovement
         DateTimeOffset occurredAt,
         DateTimeOffset recordedAt,
         string? destination = null,
-        string? notes = null) =>
+        string? notes = null,
+        Guid? linkedSweepId = null) =>
         CreateOrdinary(
             id,
             context,
@@ -205,7 +218,8 @@ public sealed record InventoryMovement
             occurredAt,
             recordedAt,
             destination,
-            notes);
+            notes,
+            linkedSweepId);
 
     public static InventoryMovement Consumption(
         Guid id,
@@ -215,7 +229,8 @@ public sealed record InventoryMovement
         DateTimeOffset occurredAt,
         DateTimeOffset recordedAt,
         string? destination = null,
-        string? notes = null) =>
+        string? notes = null,
+        Guid? linkedSweepId = null) =>
         CreateOrdinary(
             id,
             context,
@@ -225,7 +240,8 @@ public sealed record InventoryMovement
             occurredAt,
             recordedAt,
             destination,
-            notes);
+            notes,
+            linkedSweepId);
 
     public static InventoryMovement Return(
         Guid id,
@@ -235,7 +251,8 @@ public sealed record InventoryMovement
         DateTimeOffset occurredAt,
         DateTimeOffset recordedAt,
         Guid? relatedExitId = null,
-        string? notes = null) =>
+        string? notes = null,
+        Guid? linkedSweepId = null) =>
         new(
             id,
             context,
@@ -247,7 +264,8 @@ public sealed record InventoryMovement
             null,
             null,
             notes,
-            relatedExitId);
+            relatedExitId,
+            linkedSweepId);
 
     public static InventoryMovement Adjustment(
         Guid id,
@@ -257,7 +275,8 @@ public sealed record InventoryMovement
         DateTimeOffset occurredAt,
         DateTimeOffset recordedAt,
         string reason,
-        string? notes = null) =>
+        string? notes = null,
+        Guid? linkedSweepId = null) =>
         new(
             id,
             context,
@@ -269,7 +288,8 @@ public sealed record InventoryMovement
             reason,
             null,
             notes,
-            null);
+            null,
+            linkedSweepId);
 
     public static InventoryMovement Reversal(
         Guid id,
@@ -303,7 +323,8 @@ public sealed record InventoryMovement
             reason,
             null,
             notes,
-            target.ClientMovementId);
+            target.ClientMovementId,
+            target.LinkedSweepId);
     }
 
     private static InventoryMovement CreateOrdinary(
@@ -315,7 +336,8 @@ public sealed record InventoryMovement
         DateTimeOffset occurredAt,
         DateTimeOffset recordedAt,
         string? destination,
-        string? notes) =>
+        string? notes,
+        Guid? linkedSweepId) =>
         new(
             id,
             context,
@@ -327,7 +349,8 @@ public sealed record InventoryMovement
             null,
             destination,
             notes,
-            null);
+            null,
+            linkedSweepId);
 
     private static void EnsureSameScope(InventoryMovementContext context, InventoryItem item)
     {

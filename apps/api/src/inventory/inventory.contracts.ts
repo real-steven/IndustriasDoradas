@@ -22,6 +22,8 @@ export interface InventoryListQuery {
   rastraId?: string;
   direction?: "asc" | "desc";
   differencesOnly?: boolean;
+  responsibleWorkerId?: string;
+  assignmentStatus?: "ASSIGNED" | "RETURNED";
 }
 
 export interface ManagementInventoryStock {
@@ -75,6 +77,29 @@ export interface ManagementRastraComponentChange extends RastraComponentChange {
   isActiveInstallation: boolean;
 }
 
+export interface ManagementInventoryAssignment {
+  organizationId: string;
+  plantId: string;
+  exitMovementId: string;
+  inventoryItemId: string;
+  inventoryItemName: string;
+  itemTypeId: string;
+  itemTypeName: string;
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+  responsibleWorkerId: string;
+  responsibleWorkerName: string;
+  assignedAtUtc: string;
+  assignedQuantity: number;
+  returnedQuantity: number;
+  pendingQuantity: number;
+  assignmentStatus: "ASSIGNED" | "RETURNED";
+  linkedSweepId: string | null;
+  destination: string | null;
+  notes: string | null;
+}
+
 export interface InventoryCatalogItem {
   id: string;
   organizationId: string;
@@ -119,6 +144,7 @@ export interface InventoryMovement {
   destination: string | null;
   notes: string | null;
   relatedMovementId: string | null;
+  linkedSweepId: string | null;
 }
 
 export interface CreateInventoryMovement extends Omit<
@@ -128,12 +154,14 @@ export interface CreateInventoryMovement extends Omit<
   | "destination"
   | "notes"
   | "relatedMovementId"
+  | "linkedSweepId"
 > {
   responsibleWorkerId?: string;
   reason?: string;
   destination?: string;
   notes?: string;
   relatedMovementId?: string;
+  linkedSweepId?: string;
 }
 
 export interface InventoryReviewLine {
@@ -252,6 +280,10 @@ export interface InventoryRepository {
     organizationId: string,
     query: InventoryListQuery,
   ): Promise<PageResponse<ManagementRastraComponentChange>>;
+  listAssignments(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementInventoryAssignment>>;
   findMovement(
     organizationId: string,
     id: string,

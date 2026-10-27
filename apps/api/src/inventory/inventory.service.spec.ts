@@ -27,6 +27,7 @@ describe("InventoryService", () => {
       setCatalogActive: jest.fn(),
       listMovements: jest.fn(),
       listStock: jest.fn(),
+      listAssignments: jest.fn(),
       listReviews: jest.fn(),
       listComponentChanges: jest.fn(),
       findMovement: jest.fn(),
@@ -41,6 +42,7 @@ describe("InventoryService", () => {
             destination: input.destination ?? null,
             notes: input.notes ?? null,
             relatedMovementId: input.relatedMovementId ?? null,
+            linkedSweepId: input.linkedSweepId ?? null,
           }),
         ),
       createReview: jest
@@ -81,6 +83,7 @@ describe("InventoryService", () => {
         unitId: UNIT_ID,
         movementType: "EXIT",
         quantity: 4,
+        linkedSweepId: SWEEP_ID,
         occurredAtUtc: "2026-10-26T18:01:00.000Z",
       },
       context(MANAGER),
@@ -115,6 +118,7 @@ describe("InventoryService", () => {
       movementType: "REVERSAL",
       quantityDelta: 4,
       relatedMovementId: exit.id,
+      linkedSweepId: SWEEP_ID,
       reason: "Salida registrada por error",
     });
     expect(adjustment).toMatchObject({
@@ -168,14 +172,21 @@ describe("InventoryService", () => {
     });
   });
 
-  it("scopes the three management read models to the requested plant", async () => {
+  it("scopes the management read models to the requested plant", async () => {
     const page = { items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 };
     repository.listStock.mockResolvedValue(page);
+    repository.listAssignments.mockResolvedValue(page);
     repository.listReviews.mockResolvedValue(page);
     repository.listComponentChanges.mockResolvedValue(page);
     const query = { page: 1, pageSize: 20, state: "all" as const };
 
     await service.listStock(ORGANIZATION_ID, PLANT_ID, query, context(MANAGER));
+    await service.listAssignments(
+      ORGANIZATION_ID,
+      PLANT_ID,
+      { ...query, assignmentStatus: "ASSIGNED" },
+      context(MANAGER),
+    );
     await service.listReviews(
       ORGANIZATION_ID,
       PLANT_ID,
@@ -192,6 +203,13 @@ describe("InventoryService", () => {
     expect(repository.listStock.mock.calls[0]).toEqual([
       ORGANIZATION_ID,
       expect.objectContaining({ plantId: PLANT_ID }),
+    ]);
+    expect(repository.listAssignments.mock.calls[0]).toEqual([
+      ORGANIZATION_ID,
+      expect.objectContaining({
+        plantId: PLANT_ID,
+        assignmentStatus: "ASSIGNED",
+      }),
     ]);
     expect(repository.listReviews.mock.calls[0]).toEqual([
       ORGANIZATION_ID,
@@ -256,6 +274,7 @@ const ORGANIZATION_ID = "30000000-0000-4000-8000-000000000001";
 const PLANT_ID = "31000000-0000-4000-8000-000000000001";
 const ITEM_ID = "77200000-0000-4000-8000-000000000001";
 const UNIT_ID = "77100000-0000-4000-8000-000000000001";
+const SWEEP_ID = "f4000000-0000-4000-8000-000000000001";
 const CORRELATION_ID = "40000000-0000-4000-8000-000000000001";
 
 const MANAGER = auth("JEFE_EMPRESA");
