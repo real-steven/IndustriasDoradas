@@ -24,7 +24,10 @@ y autorización 7.5 también quedaron implementadas y verificadas automáticamen
 el 2026-10-26; su exploración manual queda a cargo del desarrollador. El
 siguiente paso era inventario local-first 7.6, que quedó implementado y probado
 automáticamente el 2026-10-26 con su validación visual pendiente. El siguiente
-paso técnico es sincronización y concurrencia 7.7. La deuda de Sprint 6 continúa
+paso técnico era sincronización y concurrencia 7.7, implementado y verificado
+automáticamente el 2026-10-26: catálogo y kardex ya convergen por push/pull, y
+un exceso concurrente queda como conflicto auditable sin perder el hecho local.
+El siguiente incremento es inventario web 7.8. La deuda de Sprint 6 continúa
 visible y no se presenta como prueba ejecutada.
 
 El cierre aprobado del Sprint 2 y la guía de contexto para comenzar Sprint 3

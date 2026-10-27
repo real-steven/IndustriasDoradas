@@ -65,6 +65,7 @@ with assignments (role_code, permission_code) as (
     ('JEFE_EMPRESA', 'attendance.correct'),
     ('JEFE_EMPRESA', 'attendance.pay_rates.read'),
     ('JEFE_EMPRESA', 'attendance.pay_rates.manage'),
+    ('JEFE_EMPRESA', 'inventory.manage'),
     ('JEFE_EMPRESA', 'gold_deliveries.confirm'),
     ('JEFE_EMPRESA', 'profile.locale_update'),
     ('ADMINISTRADOR', 'profile.locale_update'),

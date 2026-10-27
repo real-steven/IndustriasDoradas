@@ -41,6 +41,14 @@ const OPERATION_SCHEMAS: Readonly<
     aggregateType: "attendance_event",
     version: 1,
   },
+  INVENTORY_MOVEMENT_RECORDED: {
+    aggregateType: "inventory_movement",
+    version: 1,
+  },
+  INVENTORY_REVIEW_RECORDED: {
+    aggregateType: "inventory_review",
+    version: 1,
+  },
 };
 
 export function normalizeSyncItem(
@@ -128,6 +136,12 @@ function normalizePayload(
     }
     if (operationType === "ATTENDANCE_EVENT_RECORDED") {
       return normalizeAttendanceEvent(payload, item, scope);
+    }
+    if (operationType === "INVENTORY_MOVEMENT_RECORDED") {
+      return normalizeInventoryMovement(payload, item, scope);
+    }
+    if (operationType === "INVENTORY_REVIEW_RECORDED") {
+      return normalizeInventoryReview(payload, item, scope);
     }
     const common = normalizeOperationalCommon(payload, scope, item);
     if (operationType === "OPERATION_STARTED") {
@@ -220,6 +234,184 @@ function normalizePayload(
   } catch {
     return { payload: canonicalObject(item.payload), code: "INVALID_EVENT" };
   }
+}
+
+function normalizeInventoryMovement(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "clientMovementId",
+    "organizationId",
+    "plantId",
+    "stationId",
+    "clientSequence",
+    "inventoryItemId",
+    "unitId",
+    "movementType",
+    "quantityDelta",
+    "actorProfileId",
+    "responsibleWorkerId",
+    "occurredAtUtc",
+    "recordedAtUtc",
+    "reason",
+    "destination",
+    "notes",
+    "relatedMovementId",
+  ]);
+  const movementType = requireText(payload, "movementType", 40);
+  const quantityDelta = requireQuantity(payload, "quantityDelta", false);
+  const occurredAtUtc = requireDate(payload, "occurredAtUtc");
+  const recordedAtUtc = requireDate(payload, "recordedAtUtc");
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    clientMovementId: requireUuid(payload, "clientMovementId"),
+    organizationId: requireUuid(payload, "organizationId"),
+    plantId: requireUuid(payload, "plantId"),
+    stationId: requireUuid(payload, "stationId"),
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    inventoryItemId: requireUuid(payload, "inventoryItemId"),
+    unitId: requireUuid(payload, "unitId"),
+    movementType,
+    quantityDelta,
+    actorProfileId: requireUuid(payload, "actorProfileId"),
+    responsibleWorkerId: requireNullableUuid(payload, "responsibleWorkerId"),
+    occurredAtUtc,
+    recordedAtUtc,
+    reason: requireNullableText(payload, "reason", 500),
+    destination: requireNullableText(payload, "destination", 500),
+    notes: requireNullableText(payload, "notes", 500),
+    relatedMovementId: requireNullableUuid(payload, "relatedMovementId"),
+  };
+  const negative = ["EXIT", "CONSUMPTION"].includes(movementType);
+  const positive = ["ENTRY", "RETURN"].includes(movementType);
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.organizationId !== scope.organizationId ||
+    normalized.plantId !== scope.plantId ||
+    normalized.stationId !== scope.stationId ||
+    normalized.clientSequence !== item.stationSequence ||
+    normalized.clientMovementId !== item.aggregateId ||
+    normalized.actorProfileId !== item.authorization.actorProfileId ||
+    ![
+      "ENTRY",
+      "EXIT",
+      "CONSUMPTION",
+      "RETURN",
+      "ADJUSTMENT",
+      "REVERSAL",
+    ].includes(movementType) ||
+    (negative && quantityDelta >= 0) ||
+    (positive && quantityDelta <= 0) ||
+    (movementType === "ENTRY" && normalized.responsibleWorkerId !== null) ||
+    ((movementType === "ADJUSTMENT" || movementType === "REVERSAL") &&
+      normalized.reason === null) ||
+    (movementType === "REVERSAL" && normalized.relatedMovementId === null) ||
+    (movementType !== "RETURN" &&
+      movementType !== "REVERSAL" &&
+      normalized.relatedMovementId !== null) ||
+    Date.parse(recordedAtUtc) < Date.parse(occurredAtUtc)
+  )
+    throw new Error("invalid inventory movement");
+  validateAuthorizationWindow(item, occurredAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
+}
+
+function normalizeInventoryReview(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "reviewId",
+    "organizationId",
+    "plantId",
+    "stationId",
+    "clientSequence",
+    "status",
+    "reviewedByProfileId",
+    "reviewedAtUtc",
+    "recordedAtUtc",
+    "notes",
+    "lines",
+  ]);
+  const reviewedAtUtc = requireDate(payload, "reviewedAtUtc");
+  const recordedAtUtc = requireDate(payload, "recordedAtUtc");
+  const linesValue = payload.lines;
+  if (
+    !Array.isArray(linesValue) ||
+    linesValue.length === 0 ||
+    linesValue.length > 500
+  )
+    throw new Error("invalid inventory review lines");
+  const lines = linesValue.map((value) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      throw new Error("invalid inventory review line");
+    const line = value as Record<string, unknown>;
+    requireExactKeys(line, [
+      "inventoryItemId",
+      "unitId",
+      "expectedQuantity",
+      "countedQuantity",
+      "differenceQuantity",
+    ]);
+    const expectedQuantity = requireQuantity(line, "expectedQuantity", true);
+    const countedQuantity = requireQuantity(line, "countedQuantity", true);
+    const differenceQuantity = requireQuantity(
+      line,
+      "differenceQuantity",
+      true,
+    );
+    if (
+      expectedQuantity < 0 ||
+      countedQuantity < 0 ||
+      differenceQuantity !==
+        Math.round((countedQuantity - expectedQuantity) * 1000) / 1000
+    )
+      throw new Error("invalid inventory review difference");
+    return {
+      inventoryItemId: requireUuid(line, "inventoryItemId"),
+      unitId: requireUuid(line, "unitId"),
+      expectedQuantity,
+      countedQuantity,
+      differenceQuantity,
+    };
+  });
+  const status = requireText(payload, "status", 40);
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    reviewId: requireUuid(payload, "reviewId"),
+    organizationId: requireUuid(payload, "organizationId"),
+    plantId: requireUuid(payload, "plantId"),
+    stationId: requireUuid(payload, "stationId"),
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    status,
+    reviewedByProfileId: requireUuid(payload, "reviewedByProfileId"),
+    reviewedAtUtc,
+    recordedAtUtc,
+    notes: requireNullableText(payload, "notes", 500),
+    lines,
+  };
+  const hasDifferences = lines.some((line) => line.differenceQuantity !== 0);
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.organizationId !== scope.organizationId ||
+    normalized.plantId !== scope.plantId ||
+    normalized.stationId !== scope.stationId ||
+    normalized.clientSequence !== item.stationSequence ||
+    normalized.reviewId !== item.aggregateId ||
+    normalized.reviewedByProfileId !== item.authorization.actorProfileId ||
+    !["WITHOUT_DIFFERENCES", "WITH_DIFFERENCES"].includes(status) ||
+    (status === "WITH_DIFFERENCES") !== hasDifferences ||
+    new Set(lines.map((line) => line.inventoryItemId)).size !== lines.length ||
+    Date.parse(recordedAtUtc) < Date.parse(reviewedAtUtc)
+  )
+    throw new Error("invalid inventory review");
+  validateAuthorizationWindow(item, reviewedAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
 }
 
 function normalizeAttendanceEvent(
@@ -642,6 +834,22 @@ function requireNullableAmount(
     !Number.isFinite(field) ||
     field < 0 ||
     Math.round(field * 100) !== field * 100
+  )
+    throw new Error(`invalid ${key}`);
+  return field;
+}
+
+function requireQuantity(
+  value: Record<string, unknown>,
+  key: string,
+  allowZero: boolean,
+): number {
+  const field = value[key];
+  if (
+    typeof field !== "number" ||
+    !Number.isFinite(field) ||
+    Math.abs(Math.round(field * 1000) - field * 1000) > 1e-9 ||
+    (!allowZero && field === 0)
   )
     throw new Error(`invalid ${key}`);
   return field;

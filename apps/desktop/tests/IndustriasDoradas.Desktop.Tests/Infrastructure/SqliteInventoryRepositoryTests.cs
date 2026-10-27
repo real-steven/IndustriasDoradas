@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain.Inventory;
@@ -71,7 +72,7 @@ public sealed class SqliteInventoryRepositoryTests
     }
 
     [TestMethod]
-    public async Task ReviewIsAtomicDoesNotMoveStockAndWaitsForSprint77Sync()
+    public async Task ReviewIsAtomicDoesNotMoveStockAndIsClaimedForSync()
     {
         await using var database = new TestDatabase();
         await database.PrepareAsync();
@@ -103,8 +104,115 @@ public sealed class SqliteInventoryRepositoryTests
         Assert.AreEqual(1L, await database.ScalarAsync("SELECT COUNT(*) FROM inventory_review_lines;"));
         var outbox = new SqliteOutboxRepository(database.Factory);
         Assert.AreEqual(2, (await outbox.ListPendingAsync(10)).Count);
-        Assert.AreEqual(0, (await outbox.ClaimAsync(StationId, Guid.NewGuid(), 10,
+        Assert.AreEqual(2, (await outbox.ClaimAsync(StationId, Guid.NewGuid(), 10,
             Now.AddMinutes(2), Now.AddMinutes(3), Authorization())).Count);
+    }
+
+    [TestMethod]
+    public async Task RejectedOfflineExitRemainsVisibleWhileCentralBalanceConverges()
+    {
+        await using var database = new TestDatabase();
+        await database.PrepareAsync();
+        var pull = new SqliteSyncChangeRepository(database.Factory);
+        await ApplyCentralMovementAsync(pull, 1,
+            Guid.Parse("77400000-0000-4000-8000-000000000010"), StationId, 10m, "ENTRY");
+
+        var inventory = new SqliteInventoryRepository(database.Factory);
+        Guid rejectedId = Guid.Parse("77400000-0000-4000-8000-000000000011");
+        await inventory.RecordMovementAsync(Movement(rejectedId, InventoryMovementType.Exit, 6m));
+        await database.ExecuteAsync($"""
+            UPDATE outbox_messages SET state = 'FAILED_REVIEW',
+                last_error_code = 'INVENTORY_STOCK_INSUFFICIENT'
+            WHERE aggregate_id = '{rejectedId:D}';
+            """);
+
+        await ApplyCentralMovementAsync(pull, 2,
+            Guid.Parse("77400000-0000-4000-8000-000000000012"),
+            Guid.Parse("34000000-0000-4000-8000-000000000002"), -6m, "EXIT");
+
+        IReadOnlyList<LocalInventoryStock> stocks =
+            await inventory.ListStockAsync(OrganizationId, PlantId);
+        Assert.HasCount(1, stocks);
+        LocalInventoryStock stock = stocks[0];
+        Assert.AreEqual(4m, stock.CentralKnownBalance);
+        Assert.AreEqual(-2m, stock.LocalBalance);
+        Assert.AreEqual(1, stock.PendingMovementCount);
+        Assert.AreEqual(1L, await database.ScalarAsync($"""
+            SELECT COUNT(*) FROM inventory_movements
+            WHERE client_movement_id = '{rejectedId:D}';
+            """));
+    }
+
+    [TestMethod]
+    public async Task PullPopulatesInventoryCatalogForDesktopUse()
+    {
+        await using var database = new TestDatabase();
+        await new SqliteDatabaseMigrator(database.Factory).MigrateAsync();
+        var changes = new List<SyncChange>();
+        Add("INVENTORY_ITEM_TYPE", Guid.Parse("77000000-0000-4000-8000-000000000001"), $$"""
+            {"id":"77000000-0000-4000-8000-000000000001",
+             "organization_id":"{{OrganizationId:D}}","code":"HERRAMIENTA",
+             "name":"Herramienta","is_custom":false,"is_active":true,
+             "updated_at":"{{Now:O}}"}
+            """);
+        Add("INVENTORY_UNIT", Guid.Parse("77100000-0000-4000-8000-000000000001"), $$"""
+            {"id":"77100000-0000-4000-8000-000000000001",
+             "organization_id":"{{OrganizationId:D}}","code":"UNIDAD","name":"unidades",
+             "decimal_places":0,"is_custom":false,"is_active":true,
+             "updated_at":"{{Now:O}}"}
+            """);
+        Add("INVENTORY_ITEM", ItemId, $$"""
+            {"id":"{{ItemId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}",
+             "item_type_id":"77000000-0000-4000-8000-000000000001",
+             "unit_id":"77100000-0000-4000-8000-000000000001",
+             "name":"Martillo","is_active":true,"updated_at":"{{Now:O}}"}
+            """);
+
+        await new SqliteSyncChangeRepository(database.Factory).ApplyPageAsync(
+            new SyncPullPage(1, null, "inventory-catalog", false, Now, changes));
+
+        IReadOnlyList<LocalInventoryStock> stocks = await new SqliteInventoryRepository(database.Factory)
+            .ListStockAsync(OrganizationId, PlantId);
+        Assert.HasCount(1, stocks);
+        Assert.AreEqual("Martillo", stocks[0].Item.Name);
+        Assert.AreEqual(0m, stocks[0].CentralKnownBalance);
+
+        void Add(string type, Guid id, string json)
+        {
+            using JsonDocument document = JsonDocument.Parse(json);
+            long sequence = changes.Count + 1;
+            changes.Add(new SyncChange(Guid.NewGuid(), sequence, type, id, sequence,
+                "UPSERT", Now, 1, document.RootElement.Clone()));
+        }
+    }
+
+    private static async Task ApplyCentralMovementAsync(
+        SqliteSyncChangeRepository repository,
+        long sequence,
+        Guid movementId,
+        Guid stationId,
+        decimal delta,
+        string movementType)
+    {
+        using JsonDocument document = JsonDocument.Parse($$"""
+            {"id":"{{movementId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","inventory_item_id":"{{ItemId:D}}",
+             "unit_id":"77100000-0000-4000-8000-000000000001",
+             "movement_type":"{{movementType}}","quantity_delta":{{delta.ToString(CultureInfo.InvariantCulture)}},
+             "actor_profile_id":"{{ActorId:D}}","station_id":"{{stationId:D}}",
+             "client_sequence":{{sequence}},"responsible_worker_id":null,
+             "occurred_at_utc":"{{Now:O}}","recorded_at_utc":"{{Now:O}}",
+             "reason":null,"destination":null,"notes":null,"related_movement_id":null}
+            """);
+        await repository.ApplyPageAsync(new SyncPullPage(
+            1,
+            sequence == 1 ? null : "inventory-1",
+            $"inventory-{sequence}",
+            false,
+            Now,
+            [new SyncChange(Guid.NewGuid(), sequence, "INVENTORY_MOVEMENT", movementId,
+                sequence, "UPSERT", Now, 1, document.RootElement.Clone())]));
     }
 
     private static RecordLocalInventoryMovement Movement(
@@ -179,6 +287,14 @@ public sealed class SqliteInventoryRepositoryTests
             await using SqliteCommand command = connection.CreateCommand();
             command.CommandText = sql;
             return Convert.ToInt64(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+        }
+
+        public async Task ExecuteAsync(string sql)
+        {
+            await using SqliteConnection connection = await Factory.OpenAsync();
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync();
         }
 
         public ValueTask DisposeAsync()

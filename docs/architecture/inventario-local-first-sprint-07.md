@@ -24,34 +24,33 @@ y motivado.
 
 ## Saldos y frescura
 
-La vista presenta dos cifras distintas:
+La vista presenta dos cifras distintas desde 7.7:
 
-- **saldo local:** todos los movimientos conservados en el equipo;
-- **central conocido:** saldo local menos movimientos de esta estación que aún
-  no fueron confirmados por el servidor.
+- **saldo local:** espejo central confirmado más movimientos del equipo que
+  siguen pendientes o rechazados;
+- **central conocido:** suma exclusiva de movimientos publicados por el
+  servidor mediante pull.
 
 Se muestra además la fecha central del último pull, estado reciente de red y
 cantidad de hechos pendientes. La advertencia aclara que ninguna cifra puede
 incluir movimientos que todavía estén offline en otra estación. No existe una
 promesa de existencia global exacta mientras haya trabajo desconectado.
 
-## Frontera con 7.7
+## Integración completada en 7.7
 
-Los mensajes de inventario quedan `PENDING` y son visibles en diagnóstico, pero
-el worker no los reclama todavía. El contrato sync central de los Sprints 3–4
-no conoce esos tipos; enviarlos antes de 7.7 los convertiría incorrectamente en
-fallos permanentes. El siguiente paso agregará normalización, ingestión, pull de
-catálogos/hechos y resolución visible de concurrencia, y entonces habilitará su
-envío.
+El worker ya reclama los mensajes de inventario. El contrato central normaliza,
+ingiere y publica catálogos, movimientos y revisiones. Un rechazo central queda
+visible localmente y no desaparece. La política y evidencia se describen en
+[`sincronizacion-inventario-sprint-07.md`](sincronizacion-inventario-sprint-07.md).
 
 ## Evidencia
 
 - movimiento + outbox atómicos y saldo recuperado tras recrear el repositorio;
 - salida que excede el saldo revierte movimiento y outbox;
-- revisión con diferencia no modifica el kardex y queda pendiente para 7.7;
+- revisión con diferencia no modifica el kardex y se sincroniza como hecho;
 - navegación WPF y compilación XAML;
-- regresión desktop completa: 273 de 273 pruebas.
+- regresión desktop completa de 7.7: 275 de 275 pruebas.
 
-La prueba manual de registrar, cerrar, reiniciar y continuar offline queda para
-el desarrollador cuando el catálogo de la estación pueda poblarse por el pull
-de 7.7 o mediante un dataset de validación controlado.
+El catálogo ya puede poblarse por pull. La prueba visual de registrar, cerrar,
+reiniciar y continuar offline queda a cargo del desarrollador antes del cierre
+7.10.

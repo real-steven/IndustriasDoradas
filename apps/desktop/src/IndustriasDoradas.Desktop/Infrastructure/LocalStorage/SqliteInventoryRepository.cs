@@ -21,9 +21,18 @@ public sealed class SqliteInventoryRepository(
             SELECT item.id, item.organization_id, item.plant_id, item.name, item.is_active,
                    type.id, type.code, type.name, type.is_custom, type.is_active,
                    unit.id, unit.code, unit.name, unit.decimal_places, unit.is_custom,
-                   COALESCE(SUM(movement.quantity_delta_milliunits), 0) AS local_balance,
-                   COALESCE(SUM(CASE WHEN outbox.id IS NOT NULL AND outbox.state <> 'SYNCED'
-                       THEN movement.quantity_delta_milliunits ELSE 0 END), 0) AS pending_delta,
+                   COALESCE((SELECT SUM(central.quantity_delta_milliunits)
+                       FROM inventory_central_movements AS central
+                       WHERE central.organization_id = item.organization_id
+                         AND central.plant_id = item.plant_id
+                         AND central.inventory_item_id = item.id), 0)
+                     + COALESCE(SUM(CASE WHEN outbox.id IS NULL OR outbox.state <> 'SYNCED'
+                         THEN movement.quantity_delta_milliunits ELSE 0 END), 0) AS local_balance,
+                   COALESCE((SELECT SUM(central.quantity_delta_milliunits)
+                       FROM inventory_central_movements AS central
+                       WHERE central.organization_id = item.organization_id
+                         AND central.plant_id = item.plant_id
+                         AND central.inventory_item_id = item.id), 0) AS central_balance,
                    COUNT(CASE WHEN outbox.id IS NOT NULL AND outbox.state <> 'SYNCED' THEN 1 END)
             FROM inventory_items AS item
             JOIN inventory_item_types AS type
@@ -51,8 +60,8 @@ public sealed class SqliteInventoryRepository(
         {
             InventoryItem item = ReadItem(reader);
             decimal local = FromMilliunits(reader.GetInt64(15));
-            decimal pending = FromMilliunits(reader.GetInt64(16));
-            result.Add(new LocalInventoryStock(item, local, local - pending, reader.GetInt32(17)));
+            decimal central = FromMilliunits(reader.GetInt64(16));
+            result.Add(new LocalInventoryStock(item, local, central, reader.GetInt32(17)));
         }
         return result;
     }

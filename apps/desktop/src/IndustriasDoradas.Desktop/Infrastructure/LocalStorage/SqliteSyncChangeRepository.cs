@@ -151,6 +151,72 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
         JsonElement payload = change.Payload;
         switch (change.EntityType)
         {
+            case "INVENTORY_ITEM_TYPE":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO inventory_item_types(
+                        id, organization_id, code, name, is_custom, is_active, updated_at_utc)
+                    VALUES ($id, $organizationId, $code, $name, $custom, $active, $updated)
+                    ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name,
+                        is_custom=excluded.is_custom, is_active=excluded.is_active,
+                        updated_at_utc=excluded.updated_at_utc;
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$code", Text(payload, "code")), ("$name", Text(payload, "name")),
+                    ("$custom", Bool(payload, "is_custom") ? 1 : 0),
+                    ("$active", Bool(payload, "is_active") ? 1 : 0),
+                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc)))
+                    .ConfigureAwait(false);
+                break;
+            case "INVENTORY_UNIT":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO inventory_units(
+                        id, organization_id, code, name, decimal_places, is_custom,
+                        is_active, updated_at_utc)
+                    VALUES ($id, $organizationId, $code, $name, $places, $custom,
+                        $active, $updated)
+                    ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name,
+                        decimal_places=excluded.decimal_places,
+                        is_custom=excluded.is_custom, is_active=excluded.is_active,
+                        updated_at_utc=excluded.updated_at_utc;
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$code", Text(payload, "code")), ("$name", Text(payload, "name")),
+                    ("$places", Integer(payload, "decimal_places")),
+                    ("$custom", Bool(payload, "is_custom") ? 1 : 0),
+                    ("$active", Bool(payload, "is_active") ? 1 : 0),
+                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc)))
+                    .ConfigureAwait(false);
+                break;
+            case "INVENTORY_ITEM":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO inventory_items(id, organization_id, plant_id, item_type_id,
+                        unit_id, name, is_active, updated_at_utc)
+                    VALUES ($id, $organizationId, $plantId, $typeId, $unitId, $name,
+                        $active, $updated)
+                    ON CONFLICT(id) DO UPDATE SET item_type_id=excluded.item_type_id,
+                        unit_id=excluded.unit_id, name=excluded.name,
+                        is_active=excluded.is_active, updated_at_utc=excluded.updated_at_utc;
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$typeId", Text(payload, "item_type_id")),
+                    ("$unitId", Text(payload, "unit_id")),
+                    ("$name", Text(payload, "name")),
+                    ("$active", Bool(payload, "is_active") ? 1 : 0),
+                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc)))
+                    .ConfigureAwait(false);
+                break;
+            case "INVENTORY_MOVEMENT":
+                await ApplyInventoryMovementAsync(connection, transaction, payload, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+            case "INVENTORY_REVIEW":
+                await ApplyInventoryReviewAsync(connection, transaction, payload, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
             case "SUPPLIER":
                 await ExecuteAsync(connection, transaction, """
                     INSERT INTO cached_suppliers(id, organization_id, name, is_active, updated_at_utc)
@@ -379,6 +445,90 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
         }
     }
 
+    private static async Task ApplyInventoryMovementAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        JsonElement payload,
+        CancellationToken cancellationToken)
+    {
+        await ExecuteAsync(connection, transaction, """
+            INSERT OR IGNORE INTO inventory_central_movements(
+                id, organization_id, plant_id, inventory_item_id, unit_id, movement_type,
+                quantity_delta_milliunits, actor_profile_id, station_id, client_sequence,
+                responsible_worker_id, occurred_at_utc, recorded_at_utc, reason,
+                destination, notes, related_movement_id)
+            VALUES ($id, $organizationId, $plantId, $itemId, $unitId, $type,
+                $delta, $actorId, $stationId, $sequence, $workerId, $occurred,
+                $recorded, $reason, $destination, $notes, $relatedId);
+            """, cancellationToken,
+            ("$id", Text(payload, "id")),
+            ("$organizationId", Text(payload, "organization_id")),
+            ("$plantId", Text(payload, "plant_id")),
+            ("$itemId", Text(payload, "inventory_item_id")),
+            ("$unitId", Text(payload, "unit_id")),
+            ("$type", Text(payload, "movement_type")),
+            ("$delta", Milliunits(payload, "quantity_delta")),
+            ("$actorId", Text(payload, "actor_profile_id")),
+            ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
+            ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+            ("$workerId", NullableText(payload, "responsible_worker_id") ?? (object)DBNull.Value),
+            ("$occurred", CanonicalTimestamp(payload, "occurred_at_utc")),
+            ("$recorded", CanonicalTimestamp(payload, "recorded_at_utc")),
+            ("$reason", NullableText(payload, "reason") ?? (object)DBNull.Value),
+            ("$destination", NullableText(payload, "destination") ?? (object)DBNull.Value),
+            ("$notes", NullableText(payload, "notes") ?? (object)DBNull.Value),
+            ("$relatedId", NullableText(payload, "related_movement_id") ?? (object)DBNull.Value))
+            .ConfigureAwait(false);
+    }
+
+    private static async Task ApplyInventoryReviewAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        JsonElement payload,
+        CancellationToken cancellationToken)
+    {
+        await ExecuteAsync(connection, transaction, """
+            INSERT OR IGNORE INTO inventory_reviews(id, organization_id, plant_id, status,
+                reviewed_by_profile_id, station_id, client_sequence, reviewed_at_utc,
+                recorded_at_utc, notes)
+            VALUES ($id, $organizationId, $plantId, $status, $reviewedBy,
+                $stationId, $sequence, $reviewed, $recorded, $notes);
+            """, cancellationToken,
+            ("$id", Text(payload, "id")),
+            ("$organizationId", Text(payload, "organization_id")),
+            ("$plantId", Text(payload, "plant_id")),
+            ("$status", Text(payload, "status")),
+            ("$reviewedBy", Text(payload, "reviewed_by_profile_id")),
+            ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
+            ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+            ("$reviewed", CanonicalTimestamp(payload, "reviewed_at_utc")),
+            ("$recorded", CanonicalTimestamp(payload, "recorded_at_utc")),
+            ("$notes", NullableText(payload, "notes") ?? (object)DBNull.Value))
+            .ConfigureAwait(false);
+        if (!payload.TryGetProperty("lines", out JsonElement lines) ||
+            lines.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Faltan líneas en revisión remota.");
+        foreach (JsonElement line in lines.EnumerateArray())
+        {
+            await ExecuteAsync(connection, transaction, """
+                INSERT OR IGNORE INTO inventory_review_lines(
+                    organization_id, plant_id, review_id, inventory_item_id, unit_id,
+                    expected_milliunits, counted_milliunits, difference_milliunits)
+                VALUES ($organizationId, $plantId, $reviewId, $itemId, $unitId,
+                    $expected, $counted, $difference);
+                """, cancellationToken,
+                ("$organizationId", Text(payload, "organization_id")),
+                ("$plantId", Text(payload, "plant_id")),
+                ("$reviewId", Text(payload, "id")),
+                ("$itemId", Text(line, "inventory_item_id")),
+                ("$unitId", Text(line, "unit_id")),
+                ("$expected", Milliunits(line, "expected_quantity")),
+                ("$counted", Milliunits(line, "counted_quantity")),
+                ("$difference", Milliunits(line, "difference_quantity")))
+                .ConfigureAwait(false);
+        }
+    }
+
     private static async Task ApplyAttendanceAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -557,6 +707,20 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
     private static long Long(JsonElement payload, string name) =>
         payload.TryGetProperty(name, out JsonElement value) && value.TryGetInt64(out long result)
             ? result : throw new InvalidOperationException($"Falta {name} en cambio remoto.");
+    private static long? NullableLong(JsonElement payload, string name)
+    {
+        if (!payload.TryGetProperty(name, out JsonElement value) || value.ValueKind == JsonValueKind.Null)
+            return null;
+        return value.TryGetInt64(out long result)
+            ? result : throw new InvalidOperationException($"Valor inválido para {name} en cambio remoto.");
+    }
+    private static long Milliunits(JsonElement payload, string name)
+    {
+        if (!payload.TryGetProperty(name, out JsonElement value) || !value.TryGetDecimal(out decimal quantity) ||
+            decimal.Round(quantity, 3) != quantity)
+            throw new InvalidOperationException($"Valor inválido para {name} en cambio remoto.");
+        return checked((long)(quantity * 1000m));
+    }
     private static long? Centigrams(JsonElement payload, string name)
     {
         if (!payload.TryGetProperty(name, out JsonElement value) || value.ValueKind == JsonValueKind.Null)

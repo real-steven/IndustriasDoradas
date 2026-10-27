@@ -258,12 +258,34 @@ o exista un dataset controlado.
 
 ### 7.7 Sincronización y concurrencia
 
+**Estado — implementado el 2026-10-26:** push acepta movimientos y revisiones
+de inventario con recibos idempotentes, autorización y auditoría. Pull publica
+tipos, unidades, artículos, kardex y revisiones hacia el espejo SQLite. Las
+secuencias pueden llegar fuera de orden sin exigir continuidad.
+
+Cuando dos salidas offline superan juntas el saldo, la primera confirmada queda
+en el kardex central y la segunda recibe `FAILED_REVIEW` con
+`INVENTORY_STOCK_INSUFFICIENT`. El movimiento rechazado sigue visible en su
+estación y el reintento conserva el mismo recibo; ninguna acción desaparece.
+Desktop separa saldo central confirmado de hechos locales pendientes o
+rechazados para converger sin ocultar el conflicto. El diseño está en
+[`../architecture/sincronizacion-inventario-sprint-07.md`](../architecture/sincronizacion-inventario-sprint-07.md).
+
+**Pruebas automatizadas:** migraciones y pruebas SQL completas; 122/122 API,
+34/34 e2e y 275/275 desktop. Incluyen dos estaciones, saldo insuficiente,
+reintento idempotente, llegada fuera de orden, revisión física, catálogo por
+pull y permanencia local del rechazo.
+
 **Prompt:** Extiende push/pull con idempotencia y llegada fuera de orden. Define
 la política cuando dos salidas desconectadas superarían el stock central:
 ningún movimiento desaparece; el servidor acepta, rechaza para revisión o exige
 compensación según la regla aprobada. Añade pruebas de carrera y convergencia.
 
 **Pausa:** dos estaciones producen un resultado central auditable y comprensible.
+
+**Pausa automática cumplida:** el resultado central, el recibo rechazado, la
+auditoría y la convergencia local están comprobados. La comprobación visual
+multi-PC queda como validación manual complementaria antes de 7.10.
 
 ### 7.8 Inventario web
 
