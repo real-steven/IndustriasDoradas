@@ -118,6 +118,31 @@ stock.
 
 ### 7.3 Componentes de rastra y novedades
 
+**Estado — dominio puro implementado el 2026-10-26:** los componentes se
+registran mediante cambios inmutables de instalación, retiro y reemplazo. Cada
+instalación conserva artículo, cantidad/unidad, rastra, identificación
+opcional, condiciones, fechas, actor autenticado, responsable opcional y
+observaciones. Un reemplazo cierra exactamente una instalación activa y abre
+la siguiente en el mismo hecho, enlazando ambas sin borrar historia. Se admite
+más de un componente activo porque la cardinalidad física continúa abierta.
+
+Las novedades usan apertura/cierre auditables, alcance de planta o línea,
+categoría configurable opcional, descripción obligatoria e inicio obligatorio.
+El fin y el trabajador relacionado continúan opcionales. Una novedad puede
+cruzar jornada y no crea órdenes, repuestos, agenda ni predicción. El detalle de
+decisiones está en
+[`../architecture/componentes-y-novedades-sprint-07.md`](../architecture/componentes-y-novedades-sprint-07.md).
+
+**Pruebas automatizadas:** 12 casos cubren dos reemplazos, retiro único,
+fechas, alcance, cantidad/unidad, UUID/secuencia, categoría opcional, novedad
+abierta y mantenimiento de línea que cruza de 17:30 a 19:15. La regresión
+desktop completa en la base actual aprobó 238 de 238 pruebas.
+
+**Pausa manual pendiente:** el desarrollador comprobará visualmente la línea
+temporal de dos reemplazos y que una novedad explique un período sin
+producción. Persistencia, API y pantallas todavía no existen; esa validación se
+repite sobre el flujo integrado en 7.4–7.8.
+
 **Prompt:** Diseña un historial mínimo de componente instalado: rastra, tipo,
 identificador opcional, fecha de instalación, retiro, condición, responsable y
 observación. El reemplazo cierra una instalación y abre otra sin borrar la
