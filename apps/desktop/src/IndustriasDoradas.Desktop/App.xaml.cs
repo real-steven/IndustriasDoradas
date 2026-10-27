@@ -208,6 +208,8 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();
         builder.Services.AddSingleton<ILocalAttendanceRepository, SqliteAttendanceRepository>();
         builder.Services.AddSingleton<ILocalInventoryRepository, SqliteInventoryRepository>();
+        builder.Services.AddSingleton<ILocalInventoryMaintenanceRepository,
+            SqliteInventoryMaintenanceRepository>();
         builder.Services.AddSingleton<ILocalProductionSweepRepository, SqliteProductionSweepRepository>();
         builder.Services.AddSingleton<ILocalMercuryRepository, SqliteMercuryRepository>();
         builder.Services.AddSingleton<ILocalOperationDashboardRepository, SqliteOperationDashboardRepository>();

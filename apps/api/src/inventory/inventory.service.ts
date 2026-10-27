@@ -5,6 +5,7 @@ import {
   INVENTORY_REPOSITORY,
   type CreateInventoryCatalogItem,
   type CreateInventoryMovement,
+  type CreateOperationalNoveltyChange,
   type InventoryCatalogResource,
   type InventoryListQuery,
   type InventoryMovement,
@@ -235,6 +236,31 @@ export class InventoryService {
     await this.ensurePlantScope(organizationId, plantId, context.auth);
     try {
       return await this.repository.listComponentChanges(organizationId, {
+        ...query,
+        plantId,
+      });
+    } catch (error) {
+      this.storageError(error);
+    }
+  }
+
+  async listNoveltyCategories(organizationId: string) {
+    try {
+      return await this.repository.listNoveltyCategories(organizationId);
+    } catch (error) {
+      this.storageError(error);
+    }
+  }
+
+  async listNovelties(
+    organizationId: string,
+    plantId: string,
+    query: InventoryListQuery,
+    context: InventoryMutationContext,
+  ) {
+    await this.ensurePlantScope(organizationId, plantId, context.auth);
+    try {
+      return await this.repository.listNovelties(organizationId, {
         ...query,
         plantId,
       });
@@ -555,6 +581,126 @@ export class InventoryService {
             recordedAtUtc: new Date().toISOString(),
             ...input,
           });
+        } catch (error) {
+          this.storageError(error);
+        }
+      },
+    );
+  }
+
+  async openNovelty(
+    organizationId: string,
+    plantId: string,
+    input: {
+      lineId?: string;
+      categoryId?: string;
+      description: string;
+      responsibleWorkerId?: string;
+      occurredAtUtc: string;
+    },
+    context: InventoryMutationContext,
+  ) {
+    await this.ensurePlantScope(organizationId, plantId, context.auth);
+    const noveltyId = randomUUID();
+    return this.createNoveltyChange(
+      {
+        id: randomUUID(),
+        noveltyId,
+        organizationId,
+        plantId,
+        changeType: "OPENING",
+        actorProfileId: context.auth.profile.id,
+        occurredAtUtc: input.occurredAtUtc,
+        recordedAtUtc: new Date().toISOString(),
+        description: input.description,
+        ...(input.lineId === undefined ? {} : { lineId: input.lineId }),
+        ...(input.categoryId === undefined
+          ? {}
+          : { categoryId: input.categoryId }),
+        ...(input.responsibleWorkerId === undefined
+          ? {}
+          : { responsibleWorkerId: input.responsibleWorkerId }),
+      },
+      context,
+    );
+  }
+
+  async closeNovelty(
+    organizationId: string,
+    plantId: string,
+    noveltyId: string,
+    input: { responsibleWorkerId?: string; occurredAtUtc: string },
+    context: InventoryMutationContext,
+  ) {
+    await this.ensurePlantScope(organizationId, plantId, context.auth);
+    return this.createNoveltyChange(
+      {
+        id: randomUUID(),
+        noveltyId,
+        organizationId,
+        plantId,
+        changeType: "CLOSURE",
+        actorProfileId: context.auth.profile.id,
+        occurredAtUtc: input.occurredAtUtc,
+        recordedAtUtc: new Date().toISOString(),
+        ...(input.responsibleWorkerId === undefined
+          ? {}
+          : { responsibleWorkerId: input.responsibleWorkerId }),
+      },
+      context,
+    );
+  }
+
+  private createNoveltyChange(
+    change: CreateOperationalNoveltyChange,
+    context: InventoryMutationContext,
+  ) {
+    return this.auditTrail.execute(
+      {
+        correlationId: context.correlationId,
+        organizationId: change.organizationId,
+        actor: this.actor(context.auth),
+        origin: "API",
+        action: AUDIT_ACTIONS.BUSINESS_MUTATION,
+        entityType: "operational_novelty_change",
+        entityId: change.id,
+        failureResult: "REJECTED",
+        failureReasonCode: "OPERATIONAL_NOVELTY_REJECTED",
+        allowedChangeFields: [
+          "novelty_id",
+          "change_type",
+          "line_id",
+          "category_id",
+          "description",
+          "responsible_worker_id",
+          "occurred_at_utc",
+        ],
+        changes: {
+          novelty_id: { before: null, after: change.noveltyId },
+          change_type: { before: null, after: change.changeType },
+          ...(change.lineId === undefined
+            ? {}
+            : { line_id: { before: null, after: change.lineId } }),
+          ...(change.categoryId === undefined
+            ? {}
+            : { category_id: { before: null, after: change.categoryId } }),
+          ...(change.description === undefined
+            ? {}
+            : { description: { before: null, after: change.description } }),
+          ...(change.responsibleWorkerId === undefined
+            ? {}
+            : {
+                responsible_worker_id: {
+                  before: null,
+                  after: change.responsibleWorkerId,
+                },
+              }),
+          occurred_at_utc: { before: null, after: change.occurredAtUtc },
+        },
+      },
+      async () => {
+        try {
+          return await this.repository.createNoveltyChange(change);
         } catch (error) {
           this.storageError(error);
         }

@@ -5,6 +5,7 @@ import {
   type CreateInventoryCatalogItem,
   type CreateInventoryMovement,
   type CreateInventoryReview,
+  type CreateOperationalNoveltyChange,
   type CreateRastraComponentChange,
   type InventoryCatalogItem,
   type InventoryCatalogResource,
@@ -15,8 +16,11 @@ import {
   type ManagementInventoryAssignment,
   type ManagementInventoryReviewLine,
   type ManagementInventoryStock,
+  type ManagementOperationalNovelty,
   type ManagementRastraComponentChange,
   type RastraComponentChange,
+  type OperationalNoveltyCategory,
+  type OperationalNoveltyChange,
 } from "./inventory.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
 import type { PageResponse } from "../common/dto/page-query.dto";
@@ -323,6 +327,53 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     );
   }
 
+  async listNoveltyCategories(
+    organizationId: string,
+  ): Promise<readonly OperationalNoveltyCategory[]> {
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${organizationId}`,
+      is_active: "eq.true",
+      select: "*",
+      order: "name.asc,id.asc",
+    });
+    const response = await this.request(
+      `operational_novelty_categories?${parameters}`,
+    );
+    const rows = (await response.json()) as Row[];
+    return rows.map((row) => this.noveltyCategory(row));
+  }
+
+  async listNovelties(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementOperationalNovelty>> {
+    const parameters = this.pageParameters(query);
+    parameters.set("organization_id", `eq.${organizationId}`);
+    parameters.set("select", "*");
+    parameters.set("order", "opened_at_utc.desc,novelty_id.desc");
+    if (query.plantId !== undefined)
+      parameters.set("plant_id", `eq.${query.plantId}`);
+    if (query.lineId !== undefined)
+      parameters.set("line_id", `eq.${query.lineId}`);
+    if (query.openOnly) parameters.set("is_open", "eq.true");
+    if (query.search?.trim()) {
+      parameters.set(
+        "description",
+        `ilike.*${this.escapeLike(query.search.trim())}*`,
+      );
+    }
+    const response = await this.request(
+      `management_operational_novelties?${parameters}`,
+      { headers: { Prefer: "count=exact" } },
+    );
+    const rows = (await response.json()) as Row[];
+    return this.page(
+      query,
+      response,
+      rows.map((row) => this.managementNovelty(row)),
+    );
+  }
+
   async findMovement(
     organizationId: string,
     id: string,
@@ -443,6 +494,37 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     if (row === undefined)
       throw new SupabaseDataError("EMPTY_RESPONSE", "rastra_component_changes");
     return this.componentChange(row);
+  }
+
+  async createNoveltyChange(
+    input: CreateOperationalNoveltyChange,
+  ): Promise<OperationalNoveltyChange> {
+    const response = await this.request("operational_novelty_changes", {
+      body: JSON.stringify({
+        id: input.id,
+        novelty_id: input.noveltyId,
+        organization_id: input.organizationId,
+        plant_id: input.plantId,
+        change_type: input.changeType,
+        line_id: input.lineId ?? null,
+        category_id: input.categoryId ?? null,
+        description: input.description ?? null,
+        actor_profile_id: input.actorProfileId,
+        responsible_worker_id: input.responsibleWorkerId ?? null,
+        occurred_at_utc: input.occurredAtUtc,
+        recorded_at_utc: input.recordedAtUtc,
+      }),
+      headers: { Prefer: "return=representation" },
+      method: "POST",
+    });
+    const rows = (await response.json()) as Row[];
+    const row = rows[0];
+    if (row === undefined)
+      throw new SupabaseDataError(
+        "EMPTY_RESPONSE",
+        "operational_novelty_changes",
+      );
+    return this.noveltyChange(row);
   }
 
   private async request(
@@ -591,6 +673,36 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     };
   }
 
+  private noveltyCategory(row: Row): OperationalNoveltyCategory {
+    return {
+      id: this.string(row, "id"),
+      organizationId: this.string(row, "organization_id"),
+      code: this.string(row, "code"),
+      name: this.string(row, "name"),
+      isActive: this.boolean(row, "is_active"),
+    };
+  }
+
+  private noveltyChange(row: Row): OperationalNoveltyChange {
+    return {
+      id: this.string(row, "id"),
+      noveltyId: this.string(row, "novelty_id"),
+      organizationId: this.string(row, "organization_id"),
+      plantId: this.string(row, "plant_id"),
+      changeType: this.string(
+        row,
+        "change_type",
+      ) as OperationalNoveltyChange["changeType"],
+      lineId: this.nullableString(row, "line_id"),
+      categoryId: this.nullableString(row, "category_id"),
+      description: this.nullableString(row, "description"),
+      actorProfileId: this.string(row, "actor_profile_id"),
+      responsibleWorkerId: this.nullableString(row, "responsible_worker_id"),
+      occurredAtUtc: this.string(row, "occurred_at_utc"),
+      recordedAtUtc: this.string(row, "recorded_at_utc"),
+    };
+  }
+
   private managementStock(row: Row): ManagementInventoryStock {
     return {
       organizationId: this.string(row, "organization_id"),
@@ -697,6 +809,48 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       linkedSweepId: this.nullableString(row, "linked_sweep_id"),
       destination: this.nullableString(row, "destination"),
       notes: this.nullableString(row, "notes"),
+    };
+  }
+
+  private managementNovelty(row: Row): ManagementOperationalNovelty {
+    return {
+      organizationId: this.string(row, "organization_id"),
+      plantId: this.string(row, "plant_id"),
+      noveltyId: this.string(row, "novelty_id"),
+      openingChangeId: this.string(row, "opening_change_id"),
+      lineId: this.nullableString(row, "line_id"),
+      lineName: this.nullableString(row, "line_name"),
+      categoryId: this.nullableString(row, "category_id"),
+      categoryCode: this.nullableString(row, "category_code"),
+      categoryName: this.nullableString(row, "category_name"),
+      description: this.string(row, "description"),
+      openedByProfileId: this.string(row, "opened_by_profile_id"),
+      openedByDisplayName: this.string(row, "opened_by_display_name"),
+      openingResponsibleWorkerId: this.nullableString(
+        row,
+        "opening_responsible_worker_id",
+      ),
+      openingResponsibleWorkerName: this.nullableString(
+        row,
+        "opening_responsible_worker_name",
+      ),
+      openedAtUtc: this.string(row, "opened_at_utc"),
+      openingRecordedAtUtc: this.string(row, "opening_recorded_at_utc"),
+      closureChangeId: this.nullableString(row, "closure_change_id"),
+      closedByProfileId: this.nullableString(row, "closed_by_profile_id"),
+      closedByDisplayName: this.nullableString(row, "closed_by_display_name"),
+      closureResponsibleWorkerId: this.nullableString(
+        row,
+        "closure_responsible_worker_id",
+      ),
+      closureResponsibleWorkerName: this.nullableString(
+        row,
+        "closure_responsible_worker_name",
+      ),
+      closedAtUtc: this.nullableString(row, "closed_at_utc"),
+      closureRecordedAtUtc: this.nullableString(row, "closure_recorded_at_utc"),
+      isOpen: this.boolean(row, "is_open"),
+      durationMinutes: this.nullableNumber(row, "duration_minutes"),
     };
   }
 

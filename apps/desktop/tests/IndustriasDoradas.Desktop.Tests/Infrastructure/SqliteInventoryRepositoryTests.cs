@@ -50,6 +50,43 @@ public sealed class SqliteInventoryRepositoryTests
     }
 
     [TestMethod]
+    public async Task MovementReferencesSupportLinkedReturnAndOneExactReversal()
+    {
+        await using var database = new TestDatabase();
+        await database.PrepareAsync();
+        var repository = new SqliteInventoryRepository(database.Factory);
+        Guid entryId = Guid.Parse("77400000-0000-4000-8000-000000000021");
+        Guid exitId = Guid.Parse("77400000-0000-4000-8000-000000000022");
+        Guid returnId = Guid.Parse("77400000-0000-4000-8000-000000000023");
+        Guid secondExitId = Guid.Parse("77400000-0000-4000-8000-000000000024");
+        Guid reversalId = Guid.Parse("77400000-0000-4000-8000-000000000025");
+        await repository.RecordMovementAsync(Movement(entryId, InventoryMovementType.Entry, 10m));
+        await repository.RecordMovementAsync(Movement(exitId, InventoryMovementType.Exit, 4m));
+        await repository.RecordMovementAsync(Movement(returnId, InventoryMovementType.Return, 2m) with
+        { RelatedMovementId = exitId });
+        await repository.RecordMovementAsync(Movement(secondExitId, InventoryMovementType.Exit, 1m));
+        LocalInventoryMovementRegistration reversal = await repository.RecordMovementAsync(
+            Movement(reversalId, InventoryMovementType.Reversal, 1m) with
+            { RelatedMovementId = secondExitId, Reason = "Salida registrada por error" });
+
+        Assert.AreEqual(1m, reversal.QuantityDelta);
+        Assert.AreEqual(8m, reversal.LocalBalance);
+        IReadOnlyList<LocalInventoryMovementReference> movements =
+            await repository.ListMovementsAsync(OrganizationId, PlantId);
+        Assert.HasCount(5, movements);
+        Assert.IsTrue(movements.Single(item => item.Id == secondExitId).HasBeenReversed);
+        Assert.AreEqual(exitId, movements.Single(item => item.Id == returnId).RelatedMovementId);
+
+        SqliteException duplicate = await Assert.ThrowsExactlyAsync<SqliteException>(() =>
+            repository.RecordMovementAsync(Movement(
+                Guid.Parse("77400000-0000-4000-8000-000000000026"),
+                InventoryMovementType.Reversal,
+                1m) with
+            { RelatedMovementId = secondExitId, Reason = "Segundo intento" }));
+        StringAssert.Contains(duplicate.Message, "UNIQUE");
+    }
+
+    [TestMethod]
     public async Task LinkedMovementPersistsOneSweepLinkAndSchemaTwoOutboxAtomically()
     {
         await using var database = new TestDatabase();
@@ -282,6 +319,79 @@ public sealed class SqliteInventoryRepositoryTests
             changes.Add(new SyncChange(Guid.NewGuid(), sequence, type, id, sequence,
                 "UPSERT", Now, 1, document.RootElement.Clone()));
         }
+    }
+
+    [TestMethod]
+    public async Task MaintenanceFactsAreLocalFirstAppendOnlyAndDoNotMoveInventoryStock()
+    {
+        await using var database = new TestDatabase();
+        await database.PrepareAsync();
+        Guid lineId = Guid.Parse("32000000-0000-4000-8000-000000000071");
+        Guid rastraId = Guid.Parse("32100000-0000-4000-8000-000000000071");
+        Guid categoryId = Guid.Parse("77300000-0000-4000-8000-000000000071");
+        Guid firstInstallationId = Guid.Parse("77600000-0000-4000-8000-000000000071");
+        Guid replacementId = Guid.Parse("77600000-0000-4000-8000-000000000072");
+        Guid noveltyId = Guid.Parse("77700000-0000-4000-8000-000000000071");
+        await database.ExecuteAsync($"""
+            INSERT INTO cached_production_lines(
+                id, organization_id, plant_id, name, is_active, updated_at_utc)
+            VALUES ('{lineId:D}', '{OrganizationId:D}', '{PlantId:D}',
+                'Línea 1', 1, '{Now:O}');
+            INSERT INTO cached_line_components(
+                id, organization_id, line_id, component_type_code, code, name,
+                display_order, is_active, updated_at_utc)
+            VALUES ('{rastraId:D}', '{OrganizationId:D}', '{lineId:D}',
+                'RASTRA', 'RASTRA_1', 'Rastra 1', 1, 1, '{Now:O}');
+            INSERT INTO operational_novelty_categories(
+                id, organization_id, code, name, is_active, updated_at_utc)
+            VALUES ('{categoryId:D}', '{OrganizationId:D}', 'MANTENIMIENTO',
+                'Mantenimiento', 1, '{Now:O}');
+            """);
+        var repository = new SqliteInventoryMaintenanceRepository(database.Factory);
+
+        LocalMaintenanceRegistration installation = await repository.RecordComponentChangeAsync(new(
+            Guid.Parse("77500000-0000-4000-8000-000000000071"), firstInstallationId,
+            OrganizationId, PlantId, StationId, ActorId, lineId, rastraId,
+            RastraComponentChangeType.Installation, Now, Now,
+            InventoryItemId: ItemId, Quantity: 1m, ComponentIdentifier: "M-01",
+            InstalledCondition: "Nueva", Authorization: Authorization()));
+        LocalMaintenanceRegistration replacement = await repository.RecordComponentChangeAsync(new(
+            Guid.Parse("77500000-0000-4000-8000-000000000072"), replacementId,
+            OrganizationId, PlantId, StationId, ActorId, lineId, rastraId,
+            RastraComponentChangeType.Replacement, Now.AddHours(1), Now.AddHours(1),
+            ReplacedInstallationId: firstInstallationId, InventoryItemId: ItemId,
+            Quantity: 1m, ComponentIdentifier: "M-02", InstalledCondition: "Nueva",
+            RemovedCondition: "Desgastada", Reason: "Fin de vida útil",
+            Authorization: Authorization()));
+        var openingMutation = new RecordLocalOperationalNoveltyChange(
+            Guid.Parse("77800000-0000-4000-8000-000000000071"), noveltyId,
+            OrganizationId, PlantId, StationId, ActorId, OperationalNoveltyChangeType.Opening,
+            Now.AddHours(2), Now.AddHours(2), lineId, categoryId,
+            "Paro para cambio de componente", Authorization: Authorization());
+        LocalMaintenanceRegistration opening = await repository.RecordNoveltyChangeAsync(openingMutation);
+        LocalMaintenanceRegistration duplicate = await repository.RecordNoveltyChangeAsync(openingMutation);
+        LocalMaintenanceRegistration closure = await repository.RecordNoveltyChangeAsync(new(
+            Guid.Parse("77800000-0000-4000-8000-000000000072"), noveltyId,
+            OrganizationId, PlantId, StationId, ActorId, OperationalNoveltyChangeType.Closure,
+            Now.AddHours(3), Now.AddHours(3), Authorization: Authorization()));
+
+        Assert.AreEqual(1L, installation.ClientSequence);
+        Assert.AreEqual(2L, replacement.ClientSequence);
+        Assert.AreEqual(3L, opening.ClientSequence);
+        Assert.IsTrue(duplicate.WasDuplicate);
+        Assert.AreEqual(3L, duplicate.ClientSequence);
+        Assert.AreEqual(4L, closure.ClientSequence);
+        IReadOnlyList<LocalRastraInstallation> active = await repository.ListActiveInstallationsAsync(
+            OrganizationId, PlantId, rastraId);
+        Assert.HasCount(1, active);
+        Assert.AreEqual(replacementId, active[0].InstallationId);
+        IReadOnlyList<LocalOperationalNovelty> novelties = await repository.ListNoveltiesAsync(
+            OrganizationId, PlantId);
+        Assert.HasCount(1, novelties);
+        Assert.IsFalse(novelties[0].IsOpen);
+        Assert.AreEqual("Mantenimiento", novelties[0].CategoryName);
+        Assert.AreEqual(0L, await database.ScalarAsync("SELECT COUNT(*) FROM inventory_movements;"));
+        Assert.AreEqual(4L, await database.ScalarAsync("SELECT COUNT(*) FROM outbox_messages;"));
     }
 
     private static async Task ApplyCentralMovementAsync(

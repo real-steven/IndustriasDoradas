@@ -90,11 +90,22 @@
                             <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
                                       ItemsSource="{Binding MovementTypes}"
                                       SelectedItem="{Binding SelectedMovement}" DisplayMemberPath="Name" />
-                            <TextBlock FontSize="11" FontWeight="Bold" Text="CANTIDAD" />
-                            <TextBox MinHeight="42" Margin="0,6,0,3" Padding="10"
-                                     Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBlock Margin="0,0,0,10" Foreground="{StaticResource MutedBrush}"
-                                       FontSize="10" Text="{Binding QuantityHint}" />
+                            <StackPanel Visibility="{Binding RequiresQuantity, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock FontSize="11" FontWeight="Bold" Text="CANTIDAD" />
+                                <TextBox MinHeight="42" Margin="0,6,0,3" Padding="10"
+                                         Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Margin="0,0,0,10" Foreground="{StaticResource MutedBrush}"
+                                           FontSize="10" Text="{Binding QuantityHint}" />
+                            </StackPanel>
+                            <StackPanel Visibility="{Binding AllowsRelatedMovement, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock FontSize="11" FontWeight="Bold" Text="{Binding RelatedMovementLabel}" />
+                                <ComboBox MinHeight="42" Margin="0,6,0,4" Padding="10,5"
+                                          ItemsSource="{Binding RelatedMovements}"
+                                          SelectedItem="{Binding SelectedRelatedMovement}"
+                                          DisplayMemberPath="Description" />
+                                <TextBlock Margin="0,0,0,10" Foreground="{StaticResource MutedBrush}"
+                                           FontSize="10" Text="El reintegro puede quedar sin vínculo; la anulación siempre exige el original." TextWrapping="Wrap" />
+                            </StackPanel>
                             <StackPanel Visibility="{Binding AllowsWorker, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <TextBlock FontSize="11" FontWeight="Bold" Text="RESPONSABLE OPCIONAL" />
                                 <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
@@ -133,6 +144,101 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
+            </Grid>
+
+            <Grid Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Padding="22" Style="{StaticResource SurfaceCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontSize="20" FontWeight="Bold" Text="Componentes de rastra" />
+                        <TextBlock Margin="0,5,0,14" Foreground="{StaticResource MutedBrush}"
+                                   Text="Instalar, retirar o reemplazar conserva la historia y no descuenta inventario automáticamente."
+                                   TextWrapping="Wrap" />
+                        <TextBlock FontSize="11" FontWeight="Bold" Text="RASTRA" />
+                        <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
+                                  ItemsSource="{Binding Rastras}" SelectedItem="{Binding SelectedRastra}"
+                                  DisplayMemberPath="DisplayName" />
+                        <TextBlock FontSize="11" FontWeight="Bold" Text="ACCIÓN" />
+                        <ComboBox MinHeight="42" Margin="0,6,0,4" Padding="10,5"
+                                  ItemsSource="{Binding ComponentActions}"
+                                  SelectedItem="{Binding SelectedComponentAction}" DisplayMemberPath="Name" />
+                        <TextBlock Margin="0,0,0,12" Foreground="{StaticResource MutedBrush}"
+                                   FontSize="10" Text="{Binding ComponentActionHelp}" TextWrapping="Wrap" />
+                        <StackPanel Visibility="{Binding ComponentNeedsExisting, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="INSTALACIÓN ACTIVA" />
+                            <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
+                                      ItemsSource="{Binding ActiveInstallations}"
+                                      SelectedItem="{Binding SelectedInstallation}" DisplayMemberPath="DisplayName" />
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="CONDICIÓN AL RETIRAR" />
+                            <TextBox MinHeight="42" Margin="0,6,0,12" Padding="10"
+                                     Text="{Binding RemovedCondition, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="MOTIVO" />
+                            <TextBox MinHeight="42" Margin="0,6,0,12" Padding="10"
+                                     Text="{Binding ComponentReason, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Visibility="{Binding ComponentNeedsNewItem, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="ARTÍCULO INSTALADO" />
+                            <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
+                                      ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedComponentItem}"
+                                      DisplayMemberPath="Name" />
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="CANTIDAD" />
+                            <TextBox MinHeight="42" Margin="0,6,0,12" Padding="10"
+                                     Text="{Binding ComponentQuantity, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="IDENTIFICADOR OPCIONAL" />
+                            <TextBox MinHeight="42" Margin="0,6,0,12" Padding="10"
+                                     Text="{Binding ComponentIdentifier, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="CONDICIÓN AL INSTALAR" />
+                            <TextBox MinHeight="42" Margin="0,6,0,12" Padding="10"
+                                     Text="{Binding InstalledCondition, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <TextBlock FontSize="11" FontWeight="Bold" Text="OBSERVACIÓN OPCIONAL" />
+                        <TextBox MinHeight="54" Margin="0,6,0,14" Padding="10" AcceptsReturn="True"
+                                 TextWrapping="Wrap" Text="{Binding ComponentNotes, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button MinHeight="46" Command="{Binding RecordComponentChangeCommand}"
+                                Content="GUARDAR CAMBIO LOCAL" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Padding="22" Style="{StaticResource SurfaceCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontSize="20" FontWeight="Bold" Text="Novedades operativas" />
+                        <TextBlock Margin="0,5,0,14" Foreground="{StaticResource MutedBrush}"
+                                   Text="Explique paros, mantenimiento, emergencias, feriados u otros hechos. No crea órdenes de trabajo."
+                                   TextWrapping="Wrap" />
+                        <TextBlock FontSize="11" FontWeight="Bold" Text="CATEGORÍA OPCIONAL" />
+                        <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
+                                  ItemsSource="{Binding NoveltyCategories}"
+                                  SelectedItem="{Binding SelectedNoveltyCategory}" DisplayMemberPath="Name" />
+                        <CheckBox Margin="0,0,0,12" IsChecked="{Binding NoveltyIsPlantWide}"
+                                  Content="Aplica a toda la planta" />
+                        <StackPanel Visibility="{Binding NoveltyNeedsLine, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock FontSize="11" FontWeight="Bold" Text="LÍNEA" />
+                            <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
+                                      ItemsSource="{Binding NoveltyLines}"
+                                      SelectedItem="{Binding SelectedNoveltyLine}" DisplayMemberPath="Name" />
+                        </StackPanel>
+                        <TextBlock FontSize="11" FontWeight="Bold" Text="DESCRIPCIÓN" />
+                        <TextBox MinHeight="70" Margin="0,6,0,14" Padding="10" AcceptsReturn="True"
+                                 TextWrapping="Wrap" Text="{Binding NoveltyDescription, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button MinHeight="46" Command="{Binding OpenNoveltyCommand}"
+                                Content="ABRIR NOVEDAD LOCAL" />
+
+                        <TextBlock Margin="0,22,0,0" FontSize="16" FontWeight="Bold"
+                                   Text="Novedades abiertas" />
+                        <ComboBox MinHeight="42" Margin="0,8,0,4" Padding="10,5"
+                                  ItemsSource="{Binding OpenNovelties}"
+                                  SelectedItem="{Binding SelectedOpenNovelty}" DisplayMemberPath="DisplayName" />
+                        <TextBlock Margin="0,0,0,12" Foreground="{StaticResource MutedBrush}" FontSize="10"
+                                   Text="{Binding SelectedOpenNovelty.StatusLabel}" TextWrapping="Wrap" />
+                        <Button MinHeight="46" Command="{Binding CloseNoveltyCommand}"
+                                Content="CERRAR NOVEDAD LOCAL" />
+                    </StackPanel>
+                </Border>
             </Grid>
         </StackPanel>
     </ScrollViewer>

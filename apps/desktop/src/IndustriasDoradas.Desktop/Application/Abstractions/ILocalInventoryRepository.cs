@@ -43,6 +43,17 @@ public sealed record LocalInventoryMovementRegistration(
     decimal LocalBalance,
     bool WasDuplicate);
 
+public sealed record LocalInventoryMovementReference(
+    Guid Id,
+    Guid InventoryItemId,
+    InventoryMovementType MovementType,
+    decimal QuantityDelta,
+    DateTimeOffset OccurredAt,
+    string? Reason,
+    string? Destination,
+    Guid? RelatedMovementId,
+    bool HasBeenReversed);
+
 public sealed record RecordLocalInventoryReview(
     Guid ReviewId,
     Guid OrganizationId,
@@ -74,6 +85,11 @@ public interface ILocalInventoryRepository
 
     Task<LocalInventoryFreshness> GetFreshnessAsync(
         Guid stationId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LocalInventoryMovementReference>> ListMovementsAsync(
+        Guid organizationId,
+        Guid plantId,
         CancellationToken cancellationToken = default);
 
     Task<LocalInventoryMovementRegistration> RecordMovementAsync(

@@ -18,6 +18,12 @@ import {
   type InventoryView,
   type Page,
 } from "./inventory-data";
+import { InventoryCatalog } from "./inventory-catalog";
+import { InventoryActions } from "./inventory-actions";
+import {
+  InventoryComponentActions,
+  InventoryNovelties,
+} from "./inventory-maintenance";
 
 export function InventoryFeature() {
   const { language, tr } = useLanguage();
@@ -62,7 +68,12 @@ export function InventoryFeature() {
             </p>
           </div>
           <span className="read-only-badge">
-            {tr("SOLO CONSULTA", "READ ONLY")}
+            {filters.view === "catalog" ||
+            filters.view === "actions" ||
+            filters.view === "components" ||
+            filters.view === "novelties"
+              ? tr("ACCIÓN AUDITADA", "AUDITED ACTION")
+              : tr("SOLO CONSULTA", "READ ONLY")}
           </span>
         </header>
         <div className="inventory-filter-grid">
@@ -85,7 +96,10 @@ export function InventoryFeature() {
             <input
               type="search"
               value={filters.search}
-              placeholder={tr("Artículo o rastra", "Item or rastra")}
+              placeholder={tr(
+                "Artículo, rastra o novedad",
+                "Item, rastra, or novelty",
+              )}
               onChange={(event) => update("search", event.target.value)}
             />
           </label>
@@ -153,6 +167,24 @@ export function InventoryFeature() {
         >
           {tr("Componentes", "Components")}
         </Tab>
+        <Tab
+          active={filters.view === "novelties"}
+          onClick={() => changeView("novelties")}
+        >
+          {tr("Novedades", "Novelties")}
+        </Tab>
+        <Tab
+          active={filters.view === "catalog"}
+          onClick={() => changeView("catalog")}
+        >
+          {tr("Catálogo", "Catalog")}
+        </Tab>
+        <Tab
+          active={filters.view === "actions"}
+          onClick={() => changeView("actions")}
+        >
+          {tr("Registrar", "Record")}
+        </Tab>
       </nav>
 
       {plants.isError ? (
@@ -197,6 +229,8 @@ function InventoryViewPanel({
   searchParams: URLSearchParams;
   setSearchParams(this: void, value: URLSearchParams): void;
 }) {
+  if (filters.view === "actions") return <InventoryActions plantId={plantId} />;
+  if (filters.view === "catalog") return <InventoryCatalog plantId={plantId} />;
   if (filters.view === "kardex")
     return (
       <Kardex
@@ -224,6 +258,8 @@ function InventoryViewPanel({
         setSearchParams={setSearchParams}
       />
     );
+  if (filters.view === "novelties")
+    return <InventoryNovelties plantId={plantId} filters={filters} />;
   return (
     <Stock
       filters={filters}
@@ -470,77 +506,83 @@ function Components(props: ViewProps) {
   const { language, tr } = useLanguage();
   const query = useRastraComponentHistory(props.filters, props.plantId);
   return (
-    <QueryPanel
-      query={query}
-      title={tr("Historial de componentes", "Component history")}
-      empty={tr(
-        "No hay cambios de componentes para estos filtros.",
-        "No component changes match these filters.",
-      )}
-    >
-      {(data) => (
-        <>
-          <ol className="inventory-timeline component-timeline">
-            {data.items.map((change) => {
-              const due =
-                change.isActiveInstallation &&
-                reminderDue(
-                  null,
-                  change.occurredAtUtc,
-                  props.filters.replacementReminderDays,
+    <div className="inventory-maintenance-stack">
+      <InventoryComponentActions plantId={props.plantId} />
+      <QueryPanel
+        query={query}
+        title={tr("Historial de componentes", "Component history")}
+        empty={tr(
+          "No hay cambios de componentes para estos filtros.",
+          "No component changes match these filters.",
+        )}
+      >
+        {(data) => (
+          <>
+            <ol className="inventory-timeline component-timeline">
+              {data.items.map((change) => {
+                const due =
+                  change.isActiveInstallation &&
+                  reminderDue(
+                    null,
+                    change.occurredAtUtc,
+                    props.filters.replacementReminderDays,
+                  );
+                return (
+                  <li key={change.id}>
+                    <div>
+                      <strong>
+                        {change.rastraName} ·{" "}
+                        {componentLabel(change.changeType, language)}
+                      </strong>
+                      <span>
+                        {change.productionLineName} ·{" "}
+                        {formatCostaRicaDateTime(
+                          change.occurredAtUtc,
+                          language,
+                        )}
+                      </span>
+                    </div>
+                    {due && (
+                      <span className="inventory-reminder">
+                        {tr("REEMPLAZO SUGERIDO", "REPLACEMENT SUGGESTED")}
+                      </span>
+                    )}
+                    <p>
+                      {change.inventoryItemName ??
+                        change.reason ??
+                        tr("Retiro registrado", "Removal recorded")}
+                      {change.quantity === null
+                        ? ""
+                        : ` · ${change.quantity} ${change.unitCode ?? ""}`}
+                    </p>
+                    {props.filters.rastraId === undefined && (
+                      <button
+                        type="button"
+                        className="secondary-link"
+                        onClick={() =>
+                          openDetail(
+                            props,
+                            "components",
+                            "rastra",
+                            change.rastraId,
+                          )
+                        }
+                      >
+                        {tr(
+                          "VER RASTRA DESDE EL INICIO →",
+                          "VIEW RASTRA FROM START →",
+                        )}
+                      </button>
+                    )}
+                  </li>
                 );
-              return (
-                <li key={change.id}>
-                  <div>
-                    <strong>
-                      {change.rastraName} ·{" "}
-                      {componentLabel(change.changeType, language)}
-                    </strong>
-                    <span>
-                      {change.productionLineName} ·{" "}
-                      {formatCostaRicaDateTime(change.occurredAtUtc, language)}
-                    </span>
-                  </div>
-                  {due && (
-                    <span className="inventory-reminder">
-                      {tr("REEMPLAZO SUGERIDO", "REPLACEMENT SUGGESTED")}
-                    </span>
-                  )}
-                  <p>
-                    {change.inventoryItemName ??
-                      change.reason ??
-                      tr("Retiro registrado", "Removal recorded")}
-                    {change.quantity === null
-                      ? ""
-                      : ` · ${change.quantity} ${change.unitCode ?? ""}`}
-                  </p>
-                  {props.filters.rastraId === undefined && (
-                    <button
-                      type="button"
-                      className="secondary-link"
-                      onClick={() =>
-                        openDetail(
-                          props,
-                          "components",
-                          "rastra",
-                          change.rastraId,
-                        )
-                      }
-                    >
-                      {tr(
-                        "VER RASTRA DESDE EL INICIO →",
-                        "VIEW RASTRA FROM START →",
-                      )}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-          <Pagination {...props} data={data} />
-        </>
-      )}
-    </QueryPanel>
+              })}
+            </ol>
+            <Pagination {...props} data={data} />
+          </>
+        )}
+      </QueryPanel>
+    </div>
   );
 }
 

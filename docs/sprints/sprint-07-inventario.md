@@ -293,8 +293,7 @@ multi-PC queda como validación manual complementaria antes de 7.10.
 gerencial responsive con vistas de existencias, kardex, revisiones físicas e
 historial de componentes. Planta, búsqueda, vista, artículo/rastra, página,
 solo diferencias e intervalos de recordatorio permanecen en la URL. La fecha
-de corte y la invalidación automática reutilizan la frescura central del Sprint
-5.
+de corte y la invalidación automática reutilizan la frescura central del Sprint 5.
 
 Tres vistas privadas `security_invoker` reconstruyen saldo, última revisión y
 estado de instalaciones desde hechos append-only. El API las publica solo por
@@ -366,9 +365,111 @@ comprobación complementaria del endpoint de asignaciones antes de 7.10.
 
 ### 7.10 Carga inicial y cierre
 
-**Prompt:** Si existe catálogo confiable, ofrece plantilla CSV/Excel con
-previsualización y aplicación transaccional; de lo contrario usa carga manual.
-Ejecuta conteo piloto, dos estaciones offline, conciliación, regresión y cierre.
-No importes cuadernos sin fecha/unidad verificable.
+**Decisión de entrada del 2026-10-27:** la empresa todavía no entregó un
+catálogo real con unidad, precisión y cantidad verificadas. Por tanto, 7.10 no
+crea una importación CSV/Excel ni precarga los ejemplos del audio. La ruta de
+cierre es una carga manual pequeña y auditable. Una importación solo se evalúa
+después si existe una fuente confiable y suficientemente grande para justificarla.
 
-**Pausa:** muestra física = kardex para el mismo corte y cero críticos/altos.
+#### 7.10.1 Catálogo manual y compuerta de carga
+
+La web gerencial permite crear un tipo particular, una unidad con precisión de
+0 a 3 decimales y un artículo asociado a la planta. Tipo, nombre y unidad son
+obligatorios. Crear el artículo no crea saldo: el conteo físico se registra
+después como `ENTRADA` y conserva fecha, actor y auditoría. Esta separación
+evita que una fila de catálogo se interprete como existencia comprobada.
+
+**Estado:** implementado; prueba web dirigida 4/4, lint y build aprobados. Queda
+la comprobación visual junto con el piloto físico.
+
+#### 7.10.2 Acciones excepcionales de gerencia
+
+La web deja de ser solo consulta en una vista claramente separada para que
+`JEFE_EMPRESA` pueda registrar una entrada, salida, consumo o reintegro
+excepcional, una revisión física, un ajuste motivado y el reverso único de un
+movimiento. Los mismos límites de saldo, unidad, organización y auditoría del
+API aplican; no se edita ni elimina el kardex.
+
+**Estado:** implementado; la web muestra saldo y unidad antes de guardar,
+permite vincular opcionalmente el reintegro y exige original más motivo para el
+reverso. Suite web 62/62 aprobada.
+
+#### 7.10.3 Trazabilidad completa en desktop
+
+La pantalla operativa debe permitir enlazar un reintegro con la salida conocida
+y anular un movimiento erróneo con motivo, mostrando términos sencillos. Debe
+conservar el modo local-first, la elevación vigente, el recibo de sincronización
+y el conflicto por saldo insuficiente construidos en 7.5–7.7.
+
+**Estado:** implementado; la pantalla carga las salidas locales elegibles,
+excluye de reverso las ya anuladas o parcialmente devueltas y calcula el efecto
+contrario sin pedir al usuario que cambie signos. Suite desktop 278/278 aprobada.
+
+#### 7.10.4 Componentes y novedades mínimas
+
+Se expone la captura mínima ya aprobada para instalación, retiro o reemplazo de
+componentes de rastra y para novedades `PARO`, `MANTENIMIENTO`, `EMERGENCIA`,
+`FERIADO` u `OTRO`. Son hechos auditables; no crean mantenimiento predictivo,
+órdenes de trabajo ni descuentos automáticos de inventario.
+
+**Estado — implementación local validada el 2026-10-27:** el API central expone
+categorías y apertura/cierre de novedades, y reconstruye su duración desde
+hechos inmutables. Web permite instalar, retirar o reemplazar componentes y
+gestionar novedades de planta o línea. Desktop registra ambos flujos sin
+Internet, conserva secuencia/idempotencia y los envía por el outbox; instalar un
+componente no descuenta inventario automáticamente.
+
+La migración agrega las cinco categorías iniciales configurables, una vista
+`security_invoker`, captura pull de los tres tipos de entidad y una RPC de
+ingesta reservada a `service_role`. Fue aplicada al proyecto Supabase remoto el
+2026-10-27 y se verificaron la vista, la RPC, las cinco categorías y la ausencia
+de acceso directo para `anon`/`authenticated`. Aprobaron 25 pruebas SQL, 29
+pruebas API enfocadas, 35 E2E, 5 pruebas web y 279 pruebas desktop. El recorrido
+visual quedó registrado con la guía
+[`../testing/sprint-07-10-pruebas-manuales.md`](../testing/sprint-07-10-pruebas-manuales.md).
+
+**Evidencia manual cumplida — 2026-10-27:** una novedad `MANTENIMIENTO`
+abierta en desktop sincronizó a web, fue cerrada allí y regresó al desktop. La
+proyección central conservó apertura, cierre y tres minutos de duración. Se creó
+un artículo de prueba, se instaló y reemplazó en una rastra desde el flujo
+integrado y la web conservó las dos entradas, enlazó la instalación anterior y
+dejó activa únicamente la nueva. El artículo mantuvo saldo `12` derivado de un
+solo movimiento: los dos hechos de componente no alteraron el kardex.
+
+**Compuerta 7.10.4 cerrada:** automatización, migración remota y recorrido visual
+aprobaron. El siguiente paso es el piloto y cierre 7.10.5.
+
+#### 7.10.5 Piloto y cierre
+
+**Estado — cerrado el 2026-10-27:** el piloto partió de `12 UNIDADES` y terminó
+en saldo central `9`, igual a la suma de siete movimientos del kardex. Conservó
+un reintegro y un reverso enlazados, una revisión sin diferencias y otra con
+diferencia `-1`, seguida por su ajuste motivado. Web y desktop convergieron, y
+el `verify` completo aprobó.
+
+La empresa operará por ahora una sola estación con alcance sobre todas las
+líneas. Por ello no se habilitó una segunda estación ficticia para una prueba
+manual que no corresponde al despliegue real. La política de concurrencia queda
+conservada y cubierta por la prueba automatizada de dos estaciones: el servidor
+acepta el primer hecho compatible y devuelve un rechazo visible e idempotente
+cuando el segundo excede el saldo. Si la topología cambia, esa prueba manual se
+reactiva antes de habilitar la nueva estación.
+
+1. La empresa crea únicamente artículos realmente identificados con su unidad.
+2. Se hace un conteo físico pequeño y se registra como entrada inicial.
+3. Se ejecutan entrada, salida o consumo, entrega y reintegro de herramienta,
+   revisión sin diferencia, revisión con ajuste y reverso de un error.
+4. Dos estaciones producen movimientos offline sobre el mismo artículo; al
+   reconectar, ambas muestran el mismo resultado central o un rechazo visible y
+   auditable cuando el saldo no alcanza.
+5. Para un mismo instante de corte, conteo físico, suma del kardex y existencia
+   mostrada coinciden. Web y desktop conservan la unidad y precisión del artículo.
+6. Se ejecuta `pnpm run verify` y la revisión manual de la matriz de evidencias.
+
+**Fuera de alcance:** compras, proveedores del artículo, costos, factura,
+múltiples bodegas, mínimos de reposición, código de barras, lotes, vencimiento,
+CMMS, mantenimiento predictivo y descuento automático de mercurio desde barridas.
+
+**Pausa final cumplida para la topología vigente:** conteo, kardex y existencia
+coinciden para el mismo corte; evidencias manuales completas; concurrencia futura
+cubierta automáticamente; cero defectos críticos o altos observados.

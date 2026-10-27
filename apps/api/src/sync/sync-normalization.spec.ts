@@ -129,6 +129,30 @@ describe("normalizeSyncItem", () => {
     delete linked.payload.linkedSweepId;
     expect(normalizeSyncItem(linked, scope).precheckCode).toBe("INVALID_EVENT");
   });
+
+  it("accepts a complete component installation and rejects an ambiguous removal", () => {
+    const installation = componentChange();
+    expect(normalizeSyncItem(installation, scope).precheckCode).toBeNull();
+
+    installation.payload.changeType = "REMOVAL";
+    expect(normalizeSyncItem(installation, scope).precheckCode).toBe(
+      "INVALID_EVENT",
+    );
+  });
+
+  it("accepts novelty opening and requires an empty closure payload", () => {
+    const opening = operationalNovelty();
+    expect(normalizeSyncItem(opening, scope).precheckCode).toBeNull();
+
+    opening.operationType = "OPERATIONAL_NOVELTY_CLOSED";
+    expect(normalizeSyncItem(opening, scope).precheckCode).toBe(
+      "INVALID_EVENT",
+    );
+    opening.payload.lineId = null;
+    opening.payload.categoryId = null;
+    opening.payload.description = null;
+    expect(normalizeSyncItem(opening, scope).precheckCode).toBeNull();
+  });
 });
 
 function operationStarted(): SyncEnvelopeItem {
@@ -328,6 +352,76 @@ function inventoryMovement(schemaVersion: 1 | 2): SyncEnvelopeItem {
       notes: null,
       relatedMovementId: null,
       ...(schemaVersion === 2 ? { linkedSweepId: null } : {}),
+    },
+  };
+}
+
+function componentChange(): SyncEnvelopeItem {
+  const id = "4b000000-0000-4000-8000-000000000001";
+  return {
+    outboxMessageId: "4b000000-0000-4000-8000-000000000002",
+    stationSequence: 7,
+    operationType: "RASTRA_COMPONENT_CHANGE_RECORDED",
+    aggregateType: "rastra_component_change",
+    aggregateId: id,
+    payloadSchemaVersion: 1,
+    createdAtUtc: "2026-09-15T18:08:01.000Z",
+    authorization: operationStarted().authorization,
+    payload: {
+      schemaVersion: 1,
+      clientChangeId: id,
+      organizationId: scope.organizationId,
+      plantId: scope.plantId,
+      stationId: scope.stationId,
+      clientSequence: 7,
+      lineId: "32000000-0000-4000-8000-000000000001",
+      rastraId: "33000000-0000-4000-8001-000000000002",
+      changeType: "INSTALLATION",
+      installationId: "4b000000-0000-4000-8000-000000000003",
+      replacedInstallationId: null,
+      inventoryItemId: "73000000-0000-4000-8000-000000000001",
+      unitId: "72000000-0000-4000-8000-000000000001",
+      quantity: 1,
+      actorProfileId: operationStarted().authorization.actorProfileId,
+      responsibleWorkerId: null,
+      occurredAtUtc: "2026-09-15T18:08:00.000Z",
+      recordedAtUtc: "2026-09-15T18:08:01.000Z",
+      componentIdentifier: null,
+      installedCondition: "Nuevo",
+      removedCondition: null,
+      reason: null,
+      installationNotes: null,
+      removalNotes: null,
+    },
+  };
+}
+
+function operationalNovelty(): SyncEnvelopeItem {
+  const id = "4c000000-0000-4000-8000-000000000001";
+  return {
+    outboxMessageId: "4c000000-0000-4000-8000-000000000002",
+    stationSequence: 8,
+    operationType: "OPERATIONAL_NOVELTY_OPENED",
+    aggregateType: "operational_novelty_change",
+    aggregateId: id,
+    payloadSchemaVersion: 1,
+    createdAtUtc: "2026-09-15T18:09:01.000Z",
+    authorization: operationStarted().authorization,
+    payload: {
+      schemaVersion: 1,
+      clientChangeId: id,
+      noveltyId: "4c000000-0000-4000-8000-000000000003",
+      organizationId: scope.organizationId,
+      plantId: scope.plantId,
+      stationId: scope.stationId,
+      clientSequence: 8,
+      lineId: "32000000-0000-4000-8000-000000000001",
+      categoryId: null,
+      description: "Paro de prueba",
+      actorProfileId: operationStarted().authorization.actorProfileId,
+      responsibleWorkerId: null,
+      occurredAtUtc: "2026-09-15T18:09:00.000Z",
+      recordedAtUtc: "2026-09-15T18:09:01.000Z",
     },
   };
 }

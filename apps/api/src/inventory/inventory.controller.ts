@@ -15,11 +15,14 @@ import {
   CreateInventoryItemDto,
   CreateInventoryItemTypeDto,
   CreateInventoryUnitDto,
+  CloseOperationalNoveltyDto,
   InventoryAssignmentQueryDto,
   InventoryCatalogQueryDto,
   InventoryComponentHistoryQueryDto,
   InventoryHistoryQueryDto,
   InventoryReviewHistoryQueryDto,
+  OpenOperationalNoveltyDto,
+  OperationalNoveltyQueryDto,
   RecordInventoryAdjustmentDto,
   RecordInventoryMovementDto,
   RecordInventoryReviewDto,
@@ -311,6 +314,60 @@ export class InventoryController {
       organizationId,
       plantId,
       query,
+      this.context(request),
+    );
+  }
+
+  @Get("novelty-categories")
+  listNoveltyCategories(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+  ) {
+    return this.inventory.listNoveltyCategories(organizationId);
+  }
+
+  @Get("plants/:plantId/novelties")
+  listNovelties(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("plantId", ParseUUIDPipe) plantId: string,
+    @Query() query: OperationalNoveltyQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inventory.listNovelties(
+      organizationId,
+      plantId,
+      query,
+      this.context(request),
+    );
+  }
+
+  @Post("plants/:plantId/novelties")
+  openNovelty(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("plantId", ParseUUIDPipe) plantId: string,
+    @Body() body: OpenOperationalNoveltyDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inventory.openNovelty(
+      organizationId,
+      plantId,
+      body,
+      this.context(request),
+    );
+  }
+
+  @Post("plants/:plantId/novelties/:noveltyId/closure")
+  closeNovelty(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("plantId", ParseUUIDPipe) plantId: string,
+    @Param("noveltyId", ParseUUIDPipe) noveltyId: string,
+    @Body() body: CloseOperationalNoveltyDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.inventory.closeNovelty(
+      organizationId,
+      plantId,
+      noveltyId,
+      body,
       this.context(request),
     );
   }

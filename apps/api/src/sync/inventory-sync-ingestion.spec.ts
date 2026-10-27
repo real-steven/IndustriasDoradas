@@ -148,8 +148,15 @@ describe("inventory sync ingestion with PostgreSQL", () => {
       findActivePullScope: () => Promise.resolve(null),
       listChanges: () => Promise.resolve([]),
       ingestItem: async (input) => {
+        const functionName = [
+          "RASTRA_COMPONENT_CHANGE_RECORDED",
+          "OPERATIONAL_NOVELTY_OPENED",
+          "OPERATIONAL_NOVELTY_CLOSED",
+        ].includes(input.item.operationType)
+          ? "app.ingest_inventory_maintenance_sync_item_v1"
+          : "app.ingest_inventory_sync_item_v2";
         const result = await db.query<{ result: SyncItemResult }>(
-          "select app.ingest_inventory_sync_item_v2($1::jsonb) as result",
+          `select ${functionName}($1::jsonb) as result`,
           [
             JSON.stringify({
               organizationId: input.organizationId,
@@ -324,6 +331,61 @@ describe("inventory sync ingestion with PostgreSQL", () => {
     ).toBe(1);
   });
 
+  it("ingests component and novelty facts idempotently without moving stock", async () => {
+    const component = componentInstallation(1300);
+    const first = (await push(firstStationId, [component])).results[0];
+    expect(first).toMatchObject({ status: "APPLIED", code: "APPLIED" });
+    expect((await push(firstStationId, [component])).results[0]).toMatchObject({
+      status: "ALREADY_APPLIED",
+      code: "ALREADY_APPLIED",
+      receiptId: first?.receiptId,
+    });
+
+    const category = await db.query<{ id: string }>(
+      `select id::text from app.operational_novelty_categories
+       where organization_id = $1 and code = 'MANTENIMIENTO'`,
+      [organizationId],
+    );
+    const noveltyId = randomUUID();
+    const opening = noveltyChange(
+      1301,
+      noveltyId,
+      "OPERATIONAL_NOVELTY_OPENED",
+      category.rows[0]!.id,
+    );
+    const closure = noveltyChange(
+      1302,
+      noveltyId,
+      "OPERATIONAL_NOVELTY_CLOSED",
+      null,
+    );
+    expect((await push(firstStationId, [opening])).results[0]).toMatchObject({
+      status: "APPLIED",
+      code: "APPLIED",
+    });
+    expect((await push(firstStationId, [closure])).results[0]).toMatchObject({
+      status: "APPLIED",
+      code: "APPLIED",
+    });
+    expect(
+      (
+        await db.query<{ count: number }>(
+          "select count(*)::int as count from app.rastra_component_changes",
+        )
+      ).rows[0]?.count,
+    ).toBe(1);
+    expect(
+      (
+        await db.query<{ count: number }>(
+          `select count(*)::int as count from app.management_operational_novelties
+           where novelty_id = $1 and not is_open`,
+          [noveltyId],
+        )
+      ).rows[0]?.count,
+    ).toBe(1);
+    expect(await balance()).toBe(0);
+  });
+
   async function push(stationId: string, items: SyncEnvelopeItem[]) {
     return service.push(
       organizationId,
@@ -392,6 +454,74 @@ function movement(
       destination: null,
       notes: null,
       relatedMovementId: null,
+    },
+  };
+}
+
+function componentInstallation(sequence: number): SyncEnvelopeItem {
+  const id = randomUUID();
+  return {
+    ...movement(firstStationId, sequence, "ENTRY", 1),
+    operationType: "RASTRA_COMPONENT_CHANGE_RECORDED",
+    aggregateType: "rastra_component_change",
+    aggregateId: id,
+    payload: {
+      schemaVersion: 1,
+      clientChangeId: id,
+      organizationId,
+      plantId,
+      stationId: firstStationId,
+      clientSequence: sequence,
+      lineId: "32000000-0000-4000-8000-000000000001",
+      rastraId: "33000000-0000-4000-8001-000000000002",
+      changeType: "INSTALLATION",
+      installationId: randomUUID(),
+      replacedInstallationId: null,
+      inventoryItemId: itemId,
+      unitId,
+      quantity: 1,
+      actorProfileId,
+      responsibleWorkerId: null,
+      occurredAtUtc,
+      recordedAtUtc,
+      componentIdentifier: "COMP-01",
+      installedCondition: "Nuevo",
+      removedCondition: null,
+      reason: null,
+      installationNotes: null,
+      removalNotes: null,
+    },
+  };
+}
+
+function noveltyChange(
+  sequence: number,
+  noveltyId: string,
+  operationType: "OPERATIONAL_NOVELTY_OPENED" | "OPERATIONAL_NOVELTY_CLOSED",
+  categoryId: string | null,
+): SyncEnvelopeItem {
+  const id = randomUUID();
+  const opening = operationType === "OPERATIONAL_NOVELTY_OPENED";
+  return {
+    ...movement(firstStationId, sequence, "ENTRY", 1),
+    operationType,
+    aggregateType: "operational_novelty_change",
+    aggregateId: id,
+    payload: {
+      schemaVersion: 1,
+      clientChangeId: id,
+      noveltyId,
+      organizationId,
+      plantId,
+      stationId: firstStationId,
+      clientSequence: sequence,
+      lineId: opening ? "32000000-0000-4000-8000-000000000001" : null,
+      categoryId: opening ? categoryId : null,
+      description: opening ? "Paro para mantenimiento" : null,
+      actorProfileId,
+      responsibleWorkerId: null,
+      occurredAtUtc: opening ? occurredAtUtc : "2026-09-15T19:00:00.000Z",
+      recordedAtUtc: opening ? recordedAtUtc : "2026-09-15T19:00:01.000Z",
     },
   };
 }

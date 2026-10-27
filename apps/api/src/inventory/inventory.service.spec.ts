@@ -3,10 +3,12 @@ import { HttpStatus } from "@nestjs/common";
 import type {
   CreateInventoryMovement,
   CreateInventoryReview,
+  CreateOperationalNoveltyChange,
   InventoryCatalogItem,
   InventoryMovement,
   InventoryRepository,
   InventoryReview,
+  OperationalNoveltyChange,
 } from "./inventory.contracts";
 import { InventoryService } from "./inventory.service";
 import type { AuditEventRepository } from "../audit/audit.contracts";
@@ -30,6 +32,8 @@ describe("InventoryService", () => {
       listAssignments: jest.fn(),
       listReviews: jest.fn(),
       listComponentChanges: jest.fn(),
+      listNoveltyCategories: jest.fn(),
+      listNovelties: jest.fn(),
       findMovement: jest.fn(),
       getBalance: jest.fn().mockResolvedValue(10),
       createMovement: jest
@@ -54,6 +58,17 @@ describe("InventoryService", () => {
           }),
         ),
       createComponentChange: jest.fn(),
+      createNoveltyChange: jest
+        .fn()
+        .mockImplementation((input: CreateOperationalNoveltyChange) =>
+          Promise.resolve<OperationalNoveltyChange>({
+            ...input,
+            lineId: input.lineId ?? null,
+            categoryId: input.categoryId ?? null,
+            description: input.description ?? null,
+            responsibleWorkerId: input.responsibleWorkerId ?? null,
+          }),
+        ),
     };
     auditEvents = { insert: jest.fn().mockResolvedValue(undefined) };
     service = new InventoryService(
@@ -178,6 +193,7 @@ describe("InventoryService", () => {
     repository.listAssignments.mockResolvedValue(page);
     repository.listReviews.mockResolvedValue(page);
     repository.listComponentChanges.mockResolvedValue(page);
+    repository.listNovelties.mockResolvedValue(page);
     const query = { page: 1, pageSize: 20, state: "all" as const };
 
     await service.listStock(ORGANIZATION_ID, PLANT_ID, query, context(MANAGER));
@@ -197,6 +213,12 @@ describe("InventoryService", () => {
       ORGANIZATION_ID,
       PLANT_ID,
       { ...query, direction: "asc" },
+      context(MANAGER),
+    );
+    await service.listNovelties(
+      ORGANIZATION_ID,
+      PLANT_ID,
+      { ...query, lineId: LINE_ID, openOnly: true },
       context(MANAGER),
     );
 
@@ -219,6 +241,51 @@ describe("InventoryService", () => {
       ORGANIZATION_ID,
       expect.objectContaining({ plantId: PLANT_ID, direction: "asc" }),
     ]);
+    expect(repository.listNovelties.mock.calls[0]).toEqual([
+      ORGANIZATION_ID,
+      expect.objectContaining({
+        plantId: PLANT_ID,
+        lineId: LINE_ID,
+        openOnly: true,
+      }),
+    ]);
+  });
+
+  it("opens and closes an operational novelty as two audited facts", async () => {
+    const opened = await service.openNovelty(
+      ORGANIZATION_ID,
+      PLANT_ID,
+      {
+        lineId: LINE_ID,
+        categoryId: CATEGORY_ID,
+        description: "Rastra detenida por mantenimiento",
+        occurredAtUtc: "2026-10-27T23:30:00.000Z",
+      },
+      context(MANAGER),
+    );
+    const closed = await service.closeNovelty(
+      ORGANIZATION_ID,
+      PLANT_ID,
+      opened.noveltyId,
+      { occurredAtUtc: "2026-10-28T01:15:00.000Z" },
+      context(MANAGER),
+    );
+
+    expect(opened).toMatchObject({
+      changeType: "OPENING",
+      lineId: LINE_ID,
+      categoryId: CATEGORY_ID,
+      description: "Rastra detenida por mantenimiento",
+    });
+    expect(closed).toMatchObject({
+      noveltyId: opened.noveltyId,
+      changeType: "CLOSURE",
+      lineId: null,
+      categoryId: null,
+      description: null,
+    });
+    expect(repository.createNoveltyChange.mock.calls).toHaveLength(2);
+    expect(auditEvents.insert.mock.calls).toHaveLength(2);
   });
 
   it("computes review differences without creating an adjustment", async () => {
@@ -272,8 +339,10 @@ describe("InventoryService", () => {
 
 const ORGANIZATION_ID = "30000000-0000-4000-8000-000000000001";
 const PLANT_ID = "31000000-0000-4000-8000-000000000001";
+const LINE_ID = "32000000-0000-4000-8000-000000000001";
 const ITEM_ID = "77200000-0000-4000-8000-000000000001";
 const UNIT_ID = "77100000-0000-4000-8000-000000000001";
+const CATEGORY_ID = "77300000-0000-4000-8000-000000000001";
 const SWEEP_ID = "f4000000-0000-4000-8000-000000000001";
 const CORRELATION_ID = "40000000-0000-4000-8000-000000000001";
 

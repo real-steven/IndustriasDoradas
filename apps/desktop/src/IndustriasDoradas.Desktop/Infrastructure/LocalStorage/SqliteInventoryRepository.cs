@@ -95,6 +95,51 @@ public sealed class SqliteInventoryRepository(
             reader.GetInt32(3));
     }
 
+    public async Task<IReadOnlyList<LocalInventoryMovementReference>> ListMovementsAsync(
+        Guid organizationId,
+        Guid plantId,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT movement.client_movement_id, movement.inventory_item_id,
+                   movement.movement_type, movement.quantity_delta_milliunits,
+                   movement.occurred_at_utc, movement.reason, movement.destination,
+                   movement.related_movement_id,
+                   EXISTS (
+                     SELECT 1 FROM inventory_movements AS reversal
+                     WHERE reversal.organization_id = movement.organization_id
+                       AND reversal.movement_type = 'REVERSAL'
+                       AND reversal.related_movement_id = movement.client_movement_id
+                   )
+            FROM inventory_movements AS movement
+            WHERE movement.organization_id = $organizationId
+              AND movement.plant_id = $plantId
+            ORDER BY movement.occurred_at_utc DESC, movement.client_movement_id DESC;
+            """;
+        command.Parameters.AddWithValue("$organizationId", organizationId.ToString("D"));
+        command.Parameters.AddWithValue("$plantId", plantId.ToString("D"));
+        var result = new List<LocalInventoryMovementReference>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            result.Add(new(
+                Guid.Parse(reader.GetString(0)),
+                Guid.Parse(reader.GetString(1)),
+                FromMovementStorage(reader.GetString(2)),
+                FromMilliunits(reader.GetInt64(3)),
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4)),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : Guid.Parse(reader.GetString(7)),
+                reader.GetInt32(8) == 1));
+        }
+        return result;
+    }
+
     public async Task<LocalInventoryMovementRegistration> RecordMovementAsync(
         RecordLocalInventoryMovement mutation,
         CancellationToken cancellationToken = default)
@@ -231,6 +276,7 @@ public sealed class SqliteInventoryRepository(
     {
         InventoryMovementType.Exit or InventoryMovementType.Consumption => -Math.Abs(quantity),
         InventoryMovementType.Adjustment => quantity,
+        InventoryMovementType.Reversal => quantity,
         _ => Math.Abs(quantity),
     };
 
@@ -524,5 +570,16 @@ public sealed class SqliteInventoryRepository(
         "WITHOUT_DIFFERENCES" => InventoryReviewStatus.WithoutDifferences,
         "WITH_DIFFERENCES" => InventoryReviewStatus.WithDifferences,
         _ => throw new InvalidOperationException($"Estado de revisión desconocido: {status}."),
+    };
+
+    private static InventoryMovementType FromMovementStorage(string type) => type switch
+    {
+        "ENTRY" => InventoryMovementType.Entry,
+        "EXIT" => InventoryMovementType.Exit,
+        "CONSUMPTION" => InventoryMovementType.Consumption,
+        "RETURN" => InventoryMovementType.Return,
+        "ADJUSTMENT" => InventoryMovementType.Adjustment,
+        "REVERSAL" => InventoryMovementType.Reversal,
+        _ => throw new InvalidOperationException($"Tipo de movimiento desconocido: {type}."),
     };
 }

@@ -219,6 +219,86 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                 await ApplyInventoryReviewAsync(connection, transaction, payload, cancellationToken)
                     .ConfigureAwait(false);
                 break;
+            case "OPERATIONAL_NOVELTY_CATEGORY":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT INTO operational_novelty_categories(
+                        id, organization_id, code, name, is_active, updated_at_utc)
+                    VALUES ($id, $organizationId, $code, $name, $active, $updated)
+                    ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name,
+                        is_active=excluded.is_active, updated_at_utc=excluded.updated_at_utc;
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$code", Text(payload, "code")), ("$name", Text(payload, "name")),
+                    ("$active", Bool(payload, "is_active") ? 1 : 0),
+                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc)))
+                    .ConfigureAwait(false);
+                break;
+            case "RASTRA_COMPONENT_CHANGE":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT OR IGNORE INTO rastra_component_changes(
+                        client_change_id, organization_id, plant_id, rastra_id, change_type,
+                        installation_id, replaced_installation_id, inventory_item_id, unit_id,
+                        quantity_milliunits, actor_profile_id, station_id, client_sequence,
+                        responsible_worker_id, occurred_at_utc, recorded_at_utc,
+                        component_identifier, installed_condition, removed_condition, reason,
+                        installation_notes, removal_notes)
+                    VALUES ($id, $organizationId, $plantId, $rastraId, $type,
+                        $installationId, $replacedId, $itemId, $unitId, $quantity,
+                        $actorId, $stationId, $sequence, $workerId, $occurredAt, $recordedAt,
+                        $identifier, $installedCondition, $removedCondition, $reason,
+                        $installationNotes, $removalNotes);
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$rastraId", Text(payload, "rastra_id")),
+                    ("$type", Text(payload, "change_type")),
+                    ("$installationId", Text(payload, "installation_id")),
+                    ("$replacedId", NullableText(payload, "replaced_installation_id") ?? (object)DBNull.Value),
+                    ("$itemId", NullableText(payload, "inventory_item_id") ?? (object)DBNull.Value),
+                    ("$unitId", NullableText(payload, "unit_id") ?? (object)DBNull.Value),
+                    ("$quantity", NullableMilliunits(payload, "quantity") ?? (object)DBNull.Value),
+                    ("$actorId", Text(payload, "actor_profile_id")),
+                    ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
+                    ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+                    ("$workerId", NullableText(payload, "responsible_worker_id") ?? (object)DBNull.Value),
+                    ("$occurredAt", Timestamp(payload, "occurred_at_utc", change.ChangedAtUtc)),
+                    ("$recordedAt", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)),
+                    ("$identifier", NullableText(payload, "component_identifier") ?? (object)DBNull.Value),
+                    ("$installedCondition", NullableText(payload, "installed_condition") ?? (object)DBNull.Value),
+                    ("$removedCondition", NullableText(payload, "removed_condition") ?? (object)DBNull.Value),
+                    ("$reason", NullableText(payload, "reason") ?? (object)DBNull.Value),
+                    ("$installationNotes", NullableText(payload, "installation_notes") ?? (object)DBNull.Value),
+                    ("$removalNotes", NullableText(payload, "removal_notes") ?? (object)DBNull.Value))
+                    .ConfigureAwait(false);
+                break;
+            case "OPERATIONAL_NOVELTY_CHANGE":
+                await ExecuteAsync(connection, transaction, """
+                    INSERT OR IGNORE INTO operational_novelty_changes(
+                        client_change_id, novelty_id, organization_id, plant_id, change_type,
+                        line_id, category_id, description, actor_profile_id, station_id,
+                        client_sequence, responsible_worker_id, occurred_at_utc, recorded_at_utc)
+                    VALUES ($id, $noveltyId, $organizationId, $plantId, $type,
+                        $lineId, $categoryId, $description, $actorId, $stationId,
+                        $sequence, $workerId, $occurredAt, $recordedAt);
+                    """, cancellationToken,
+                    ("$id", Text(payload, "id")),
+                    ("$noveltyId", Text(payload, "novelty_id")),
+                    ("$organizationId", Text(payload, "organization_id")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$type", Text(payload, "change_type")),
+                    ("$lineId", NullableText(payload, "line_id") ?? (object)DBNull.Value),
+                    ("$categoryId", NullableText(payload, "category_id") ?? (object)DBNull.Value),
+                    ("$description", NullableText(payload, "description") ?? (object)DBNull.Value),
+                    ("$actorId", Text(payload, "actor_profile_id")),
+                    ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
+                    ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+                    ("$workerId", NullableText(payload, "responsible_worker_id") ?? (object)DBNull.Value),
+                    ("$occurredAt", Timestamp(payload, "occurred_at_utc", change.ChangedAtUtc)),
+                    ("$recordedAt", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)))
+                    .ConfigureAwait(false);
+                break;
             case "SUPPLIER":
                 await ExecuteAsync(connection, transaction, """
                     INSERT INTO cached_suppliers(id, organization_id, name, is_active, updated_at_utc)
@@ -726,6 +806,14 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
     {
         if (!payload.TryGetProperty(name, out JsonElement value) || !value.TryGetDecimal(out decimal quantity) ||
             decimal.Round(quantity, 3) != quantity)
+            throw new InvalidOperationException($"Valor inválido para {name} en cambio remoto.");
+        return checked((long)(quantity * 1000m));
+    }
+    private static long? NullableMilliunits(JsonElement payload, string name)
+    {
+        if (!payload.TryGetProperty(name, out JsonElement value) || value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (!value.TryGetDecimal(out decimal quantity) || decimal.Round(quantity, 3) != quantity)
             throw new InvalidOperationException($"Valor inválido para {name} en cambio remoto.");
         return checked((long)(quantity * 1000m));
     }

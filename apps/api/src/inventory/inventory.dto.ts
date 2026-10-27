@@ -77,6 +77,19 @@ export class InventoryAssignmentQueryDto extends PageQueryDto {
   assignmentStatus?: "ASSIGNED" | "RETURNED";
 }
 
+export class OperationalNoveltyQueryDto extends PageQueryDto {
+  @IsOptional()
+  @IsUUID()
+  lineId?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    value === "true" ? true : value === "false" ? false : value,
+  )
+  @IsOptional()
+  @IsBoolean()
+  openOnly = false;
+}
+
 export class CreateInventoryItemTypeDto {
   @Transform(normalizeCode)
   @IsString()
@@ -318,4 +331,36 @@ export class RecordRastraComponentChangeDto {
   @MinLength(1)
   @MaxLength(500)
   removalNotes?: string;
+}
+
+export class OpenOperationalNoveltyDto {
+  @IsOptional()
+  @IsUUID()
+  lineId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  description!: string;
+
+  @IsOptional()
+  @IsUUID()
+  responsibleWorkerId?: string;
+
+  @IsISO8601({ strict: true, strictSeparator: true })
+  occurredAtUtc!: string;
+}
+
+export class CloseOperationalNoveltyDto {
+  @IsOptional()
+  @IsUUID()
+  responsibleWorkerId?: string;
+
+  @IsISO8601({ strict: true, strictSeparator: true })
+  occurredAtUtc!: string;
 }

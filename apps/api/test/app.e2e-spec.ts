@@ -234,11 +234,20 @@ describe("API smoke (e2e)", () => {
         total: 0,
         totalPages: 0,
       }),
+      listNoveltyCategories: jest.fn().mockResolvedValue([]),
+      listNovelties: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
       findMovement: jest.fn(),
       getBalance: jest.fn().mockResolvedValue(10),
       createMovement: jest.fn(),
       createReview: jest.fn(),
       createComponentChange: jest.fn(),
+      createNoveltyChange: jest.fn(),
     };
     stations = {
       getSnapshot: jest.fn(),

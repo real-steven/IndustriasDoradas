@@ -49,6 +49,18 @@ const OPERATION_SCHEMAS: Readonly<
     aggregateType: "inventory_review",
     version: 1,
   },
+  RASTRA_COMPONENT_CHANGE_RECORDED: {
+    aggregateType: "rastra_component_change",
+    version: 1,
+  },
+  OPERATIONAL_NOVELTY_OPENED: {
+    aggregateType: "operational_novelty_change",
+    version: 1,
+  },
+  OPERATIONAL_NOVELTY_CLOSED: {
+    aggregateType: "operational_novelty_change",
+    version: 1,
+  },
 };
 
 export function normalizeSyncItem(
@@ -144,6 +156,15 @@ function normalizePayload(
     if (operationType === "INVENTORY_REVIEW_RECORDED") {
       return normalizeInventoryReview(payload, item, scope);
     }
+    if (operationType === "RASTRA_COMPONENT_CHANGE_RECORDED") {
+      return normalizeRastraComponentChange(payload, item, scope);
+    }
+    if (
+      operationType === "OPERATIONAL_NOVELTY_OPENED" ||
+      operationType === "OPERATIONAL_NOVELTY_CLOSED"
+    ) {
+      return normalizeOperationalNovelty(payload, item, scope, operationType);
+    }
     const common = normalizeOperationalCommon(payload, scope, item);
     if (operationType === "OPERATION_STARTED") {
       requireExactKeys(payload, [
@@ -235,6 +256,169 @@ function normalizePayload(
   } catch {
     return { payload: canonicalObject(item.payload), code: "INVALID_EVENT" };
   }
+}
+
+function normalizeRastraComponentChange(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "clientChangeId",
+    "organizationId",
+    "plantId",
+    "stationId",
+    "clientSequence",
+    "lineId",
+    "rastraId",
+    "changeType",
+    "installationId",
+    "replacedInstallationId",
+    "inventoryItemId",
+    "unitId",
+    "quantity",
+    "actorProfileId",
+    "responsibleWorkerId",
+    "occurredAtUtc",
+    "recordedAtUtc",
+    "componentIdentifier",
+    "installedCondition",
+    "removedCondition",
+    "reason",
+    "installationNotes",
+    "removalNotes",
+  ]);
+  const changeType = requireText(payload, "changeType", 40);
+  const occurredAtUtc = requireDate(payload, "occurredAtUtc");
+  const recordedAtUtc = requireDate(payload, "recordedAtUtc");
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    clientChangeId: requireUuid(payload, "clientChangeId"),
+    organizationId: requireUuid(payload, "organizationId"),
+    plantId: requireUuid(payload, "plantId"),
+    stationId: requireUuid(payload, "stationId"),
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    lineId: requireUuid(payload, "lineId"),
+    rastraId: requireUuid(payload, "rastraId"),
+    changeType,
+    installationId: requireUuid(payload, "installationId"),
+    replacedInstallationId: requireNullableUuid(
+      payload,
+      "replacedInstallationId",
+    ),
+    inventoryItemId: requireNullableUuid(payload, "inventoryItemId"),
+    unitId: requireNullableUuid(payload, "unitId"),
+    quantity: requireNullableQuantity(payload, "quantity"),
+    actorProfileId: requireUuid(payload, "actorProfileId"),
+    responsibleWorkerId: requireNullableUuid(payload, "responsibleWorkerId"),
+    occurredAtUtc,
+    recordedAtUtc,
+    componentIdentifier: requireNullableText(
+      payload,
+      "componentIdentifier",
+      120,
+    ),
+    installedCondition: requireNullableText(payload, "installedCondition", 200),
+    removedCondition: requireNullableText(payload, "removedCondition", 200),
+    reason: requireNullableText(payload, "reason", 500),
+    installationNotes: requireNullableText(payload, "installationNotes", 500),
+    removalNotes: requireNullableText(payload, "removalNotes", 500),
+  };
+  const installing = changeType === "INSTALLATION";
+  const removing = changeType === "REMOVAL";
+  const replacing = changeType === "REPLACEMENT";
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.organizationId !== scope.organizationId ||
+    normalized.plantId !== scope.plantId ||
+    normalized.stationId !== scope.stationId ||
+    normalized.clientChangeId !== item.aggregateId ||
+    normalized.clientSequence !== item.stationSequence ||
+    normalized.actorProfileId !== item.authorization.actorProfileId ||
+    Date.parse(recordedAtUtc) < Date.parse(occurredAtUtc) ||
+    (!installing && !removing && !replacing) ||
+    ((installing || replacing) &&
+      (normalized.inventoryItemId === null ||
+        normalized.unitId === null ||
+        normalized.quantity === null ||
+        normalized.installedCondition === null)) ||
+    (removing &&
+      (normalized.replacedInstallationId !== null ||
+        normalized.inventoryItemId !== null ||
+        normalized.unitId !== null ||
+        normalized.quantity !== null ||
+        normalized.installedCondition !== null)) ||
+    ((removing || replacing) &&
+      (normalized.removedCondition === null || normalized.reason === null)) ||
+    (replacing && normalized.replacedInstallationId === null)
+  ) {
+    throw new Error("invalid component change");
+  }
+  validateAuthorizationWindow(item, occurredAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
+}
+
+function normalizeOperationalNovelty(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+  operationType: "OPERATIONAL_NOVELTY_OPENED" | "OPERATIONAL_NOVELTY_CLOSED",
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "clientChangeId",
+    "noveltyId",
+    "organizationId",
+    "plantId",
+    "stationId",
+    "clientSequence",
+    "lineId",
+    "categoryId",
+    "description",
+    "actorProfileId",
+    "responsibleWorkerId",
+    "occurredAtUtc",
+    "recordedAtUtc",
+  ]);
+  const occurredAtUtc = requireDate(payload, "occurredAtUtc");
+  const recordedAtUtc = requireDate(payload, "recordedAtUtc");
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    clientChangeId: requireUuid(payload, "clientChangeId"),
+    noveltyId: requireUuid(payload, "noveltyId"),
+    organizationId: requireUuid(payload, "organizationId"),
+    plantId: requireUuid(payload, "plantId"),
+    stationId: requireUuid(payload, "stationId"),
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    lineId: requireNullableUuid(payload, "lineId"),
+    categoryId: requireNullableUuid(payload, "categoryId"),
+    description: requireNullableText(payload, "description", 500),
+    actorProfileId: requireUuid(payload, "actorProfileId"),
+    responsibleWorkerId: requireNullableUuid(payload, "responsibleWorkerId"),
+    occurredAtUtc,
+    recordedAtUtc,
+  };
+  const opening = operationType === "OPERATIONAL_NOVELTY_OPENED";
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.organizationId !== scope.organizationId ||
+    normalized.plantId !== scope.plantId ||
+    normalized.stationId !== scope.stationId ||
+    normalized.clientChangeId !== item.aggregateId ||
+    normalized.clientSequence !== item.stationSequence ||
+    normalized.actorProfileId !== item.authorization.actorProfileId ||
+    Date.parse(recordedAtUtc) < Date.parse(occurredAtUtc) ||
+    (opening && normalized.description === null) ||
+    (!opening &&
+      (normalized.lineId !== null ||
+        normalized.categoryId !== null ||
+        normalized.description !== null))
+  ) {
+    throw new Error("invalid operational novelty");
+  }
+  validateAuthorizationWindow(item, occurredAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
 }
 
 function normalizeInventoryMovement(
@@ -859,6 +1043,13 @@ function requireQuantity(
   )
     throw new Error(`invalid ${key}`);
   return field;
+}
+
+function requireNullableQuantity(
+  value: Record<string, unknown>,
+  key: string,
+): number | null {
+  return value[key] === null ? null : requireQuantity(value, key, false);
 }
 
 function requireNullableText(

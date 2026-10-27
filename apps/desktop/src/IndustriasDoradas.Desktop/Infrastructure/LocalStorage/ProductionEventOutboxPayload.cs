@@ -146,6 +146,48 @@ internal sealed record InventoryReviewOutboxPayload(
     string? Notes,
     IReadOnlyList<InventoryReviewLineOutboxPayload> Lines);
 
+internal sealed record RastraComponentChangeOutboxPayload(
+    int SchemaVersion,
+    Guid ClientChangeId,
+    Guid OrganizationId,
+    Guid PlantId,
+    Guid StationId,
+    long ClientSequence,
+    Guid LineId,
+    Guid RastraId,
+    string ChangeType,
+    Guid InstallationId,
+    Guid? ReplacedInstallationId,
+    Guid? InventoryItemId,
+    Guid? UnitId,
+    decimal? Quantity,
+    Guid ActorProfileId,
+    Guid? ResponsibleWorkerId,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset RecordedAtUtc,
+    string? ComponentIdentifier,
+    string? InstalledCondition,
+    string? RemovedCondition,
+    string? Reason,
+    string? InstallationNotes,
+    string? RemovalNotes);
+
+internal sealed record OperationalNoveltyChangeOutboxPayload(
+    int SchemaVersion,
+    Guid ClientChangeId,
+    Guid NoveltyId,
+    Guid OrganizationId,
+    Guid PlantId,
+    Guid StationId,
+    long ClientSequence,
+    Guid? LineId,
+    Guid? CategoryId,
+    string? Description,
+    Guid ActorProfileId,
+    Guid? ResponsibleWorkerId,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset RecordedAtUtc);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ProductionEventOutboxPayload))]
 [JsonSerializable(typeof(ProductionEventReversalOutboxPayload))]
@@ -154,6 +196,8 @@ internal sealed record InventoryReviewOutboxPayload(
 [JsonSerializable(typeof(AttendanceEventOutboxPayload))]
 [JsonSerializable(typeof(InventoryMovementOutboxPayload))]
 [JsonSerializable(typeof(InventoryReviewOutboxPayload))]
+[JsonSerializable(typeof(RastraComponentChangeOutboxPayload))]
+[JsonSerializable(typeof(OperationalNoveltyChangeOutboxPayload))]
 internal sealed partial class LocalStorageJsonSerializerContext : JsonSerializerContext
 {
 }

@@ -11,6 +11,7 @@ export type InventoryRegularMovementType = Exclude<
 >;
 export type RastraComponentChangeType =
   "INSTALLATION" | "REMOVAL" | "REPLACEMENT";
+export type OperationalNoveltyChangeType = "OPENING" | "CLOSURE";
 
 export interface InventoryListQuery {
   page: number;
@@ -24,6 +25,8 @@ export interface InventoryListQuery {
   differencesOnly?: boolean;
   responsibleWorkerId?: string;
   assignmentStatus?: "ASSIGNED" | "RETURNED";
+  lineId?: string;
+  openOnly?: boolean;
 }
 
 export interface ManagementInventoryStock {
@@ -98,6 +101,67 @@ export interface ManagementInventoryAssignment {
   linkedSweepId: string | null;
   destination: string | null;
   notes: string | null;
+}
+
+export interface OperationalNoveltyCategory {
+  id: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface OperationalNoveltyChange {
+  id: string;
+  noveltyId: string;
+  organizationId: string;
+  plantId: string;
+  changeType: OperationalNoveltyChangeType;
+  lineId: string | null;
+  categoryId: string | null;
+  description: string | null;
+  actorProfileId: string;
+  responsibleWorkerId: string | null;
+  occurredAtUtc: string;
+  recordedAtUtc: string;
+}
+
+export interface CreateOperationalNoveltyChange extends Omit<
+  OperationalNoveltyChange,
+  "lineId" | "categoryId" | "description" | "responsibleWorkerId"
+> {
+  lineId?: string;
+  categoryId?: string;
+  description?: string;
+  responsibleWorkerId?: string;
+}
+
+export interface ManagementOperationalNovelty {
+  organizationId: string;
+  plantId: string;
+  noveltyId: string;
+  openingChangeId: string;
+  lineId: string | null;
+  lineName: string | null;
+  categoryId: string | null;
+  categoryCode: string | null;
+  categoryName: string | null;
+  description: string;
+  openedByProfileId: string;
+  openedByDisplayName: string;
+  openingResponsibleWorkerId: string | null;
+  openingResponsibleWorkerName: string | null;
+  openedAtUtc: string;
+  openingRecordedAtUtc: string;
+  closureChangeId: string | null;
+  closedByProfileId: string | null;
+  closedByDisplayName: string | null;
+  closureResponsibleWorkerId: string | null;
+  closureResponsibleWorkerName: string | null;
+  closedAtUtc: string | null;
+  closureRecordedAtUtc: string | null;
+  isOpen: boolean;
+  durationMinutes: number | null;
 }
 
 export interface InventoryCatalogItem {
@@ -284,6 +348,13 @@ export interface InventoryRepository {
     organizationId: string,
     query: InventoryListQuery,
   ): Promise<PageResponse<ManagementInventoryAssignment>>;
+  listNoveltyCategories(
+    organizationId: string,
+  ): Promise<readonly OperationalNoveltyCategory[]>;
+  listNovelties(
+    organizationId: string,
+    query: InventoryListQuery,
+  ): Promise<PageResponse<ManagementOperationalNovelty>>;
   findMovement(
     organizationId: string,
     id: string,
@@ -298,4 +369,7 @@ export interface InventoryRepository {
   createComponentChange(
     input: CreateRastraComponentChange,
   ): Promise<RastraComponentChange>;
+  createNoveltyChange(
+    input: CreateOperationalNoveltyChange,
+  ): Promise<OperationalNoveltyChange>;
 }
