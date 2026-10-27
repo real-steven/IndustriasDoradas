@@ -1,8 +1,9 @@
-# Persistencia de inventario — Sprint 7.4
+# Persistencia y API de inventario — Sprint 7.4–7.5
 
 **Estado:** implementada y verificada  
 **Fecha:** 2026-10-26  
-**API y sincronización:** reservadas para 7.5 y 7.7
+**API:** implementada en 7.5
+**Sincronización:** reservada para 7.7
 
 ## Autoridad y exactitud
 
@@ -55,24 +56,54 @@ visibilidad se completa en 7.7.
 Las nueve tablas están en el esquema privado `app`, con RLS habilitado. `anon`
 y `authenticated` no tienen acceso directo. `service_role` puede mantener los
 cuatro catálogos y solo consultar/agregar hechos históricos; tampoco puede
-actualizarlos ni borrarlos. La API de 7.5 será la frontera de autorización para
-`JEFE_PLANTA` y `JEFE_EMPRESA`.
+actualizarlos ni borrarlos. La API es la frontera de autorización para
+`JEFE_PLANTA` y `JEFE_EMPRESA`: ambos requieren `inventory.manage`; el primero
+solo opera plantas incluidas en `user_plant_scopes` y la gerencia queda limitada
+a su organización. La clave de backend nunca se entrega a desktop o web.
+
+## API 7.5
+
+La ruta base es
+`/api/v1/organizations/{organizationId}/inventory`. Los casos publicados son:
+
+- listar, crear y activar/desactivar tipos, unidades y artículos;
+- listar el kardex y registrar entrada, salida, consumo o devolución;
+- registrar ajuste motivado y reverso exacto de un movimiento;
+- registrar una revisión física completa o parcial en una transacción;
+- registrar instalación, retiro o reemplazo de componentes de rastra.
+
+Los cuerpos aceptan una cantidad positiva para los movimientos ordinarios; el
+servicio la convierte al delta firmado del kardex. El ajuste recibe
+`quantityDelta` distinto de cero. El reverso obtiene el movimiento original y
+crea su inverso enlazado, sin editarlo. El conteo físico calcula estado y
+diferencias, pero no modifica el saldo. Cada mutación genera auditoría con actor
+y correlación.
+
+`app.inventory_balance_v1` devuelve la suma derivada exacta y
+`app.record_inventory_review_v1` persiste cabecera y líneas de conteo
+atómicamente. Ambas funciones son privadas y solo pueden ejecutarse con
+`service_role`. La comprobación previa mejora el mensaje de saldo insuficiente;
+el trigger y el bloqueo transaccional de PostgreSQL siguen siendo la autoridad
+si hay una carrera.
 
 ## Migración y evidencia
 
 - Central: `20261026191811_sprint_7_4_inventory_persistence.sql`.
+- API central: `20261026202144_sprint_7_5_inventory_api.sql`.
 - Local: `020_inventory_persistence.sql`, actualización desde versión 19.
-- Central: 24 migraciones desde cero, seed idempotente y 21 pruebas SQL.
+- Central: 25 migraciones desde cero, seed idempotente y 22 pruebas SQL.
 - Desktop: 20 migraciones, actualización sin pérdida y 269 pruebas aprobadas.
+- API: 20 suites/119 pruebas unitarias y 34 pruebas E2E aprobadas.
 
 Los casos automáticos reconstruyen el saldo de martillos, una revisión con
 diferencia, tres instalaciones encadenadas que dejan una activa y una novedad
 abierta a las 17:30 y cerrada a las 19:15. También prueban rechazo por negativo,
 precisión, reintegro excesivo y mutación del historial.
 
-## Límites de 7.4
+## Límites después de 7.5
 
-Todavía no existen endpoints, repositorios de aplicación, outbox/pull para
-inventario ni pantallas. Tampoco se crean compras, costos, varias bodegas,
-conversiones de unidad, órdenes de mantenimiento o consumo automático de
-mercurio. Esos límites conservan el contrato aprobado en 7.1–7.3.
+Todavía no existen outbox/pull de inventario ni pantallas desktop/web. La API de
+7.5 no publica novedades operativas, cuya integración pertenece a los pasos
+posteriores. Tampoco se crean compras, costos, varias bodegas, conversiones de
+unidad, órdenes de mantenimiento o consumo automático de mercurio. Esos límites
+conservan el contrato aprobado en 7.1–7.3.

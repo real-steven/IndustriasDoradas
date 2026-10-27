@@ -124,6 +124,168 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         updatedAt: DATE_TIME,
       },
     },
+    InventoryCatalogItem: {
+      type: "object",
+      required: [
+        "id",
+        "organizationId",
+        "name",
+        "isActive",
+        "deactivatedAt",
+        "createdAt",
+        "updatedAt",
+      ],
+      additionalProperties: false,
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        code: { type: "string", example: "HERRAMIENTA" },
+        name: { type: "string", example: "Martillo ficticio" },
+        isActive: { type: "boolean" },
+        deactivatedAt: { ...DATE_TIME, nullable: true },
+        isCustom: { type: "boolean" },
+        decimalPlaces: { type: "integer", minimum: 0, maximum: 3 },
+        plantId: UUID,
+        itemTypeId: UUID,
+        unitId: UUID,
+        createdAt: DATE_TIME,
+        updatedAt: DATE_TIME,
+      },
+    },
+    InventoryMovement: {
+      type: "object",
+      required: [
+        "id",
+        "organizationId",
+        "plantId",
+        "inventoryItemId",
+        "unitId",
+        "movementType",
+        "quantityDelta",
+        "actorProfileId",
+        "responsibleWorkerId",
+        "occurredAtUtc",
+        "recordedAtUtc",
+        "reason",
+        "destination",
+        "notes",
+        "relatedMovementId",
+      ],
+      additionalProperties: false,
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        plantId: UUID,
+        inventoryItemId: UUID,
+        unitId: UUID,
+        movementType: {
+          type: "string",
+          enum: [
+            "ENTRY",
+            "EXIT",
+            "CONSUMPTION",
+            "RETURN",
+            "ADJUSTMENT",
+            "REVERSAL",
+          ],
+        },
+        quantityDelta: { type: "number", multipleOf: 0.001 },
+        actorProfileId: UUID,
+        responsibleWorkerId: { ...UUID, nullable: true },
+        occurredAtUtc: DATE_TIME,
+        recordedAtUtc: DATE_TIME,
+        reason: { type: "string", nullable: true },
+        destination: { type: "string", nullable: true },
+        notes: { type: "string", nullable: true },
+        relatedMovementId: { ...UUID, nullable: true },
+      },
+    },
+    InventoryReviewLine: {
+      type: "object",
+      required: [
+        "inventoryItemId",
+        "unitId",
+        "expectedQuantity",
+        "countedQuantity",
+        "differenceQuantity",
+      ],
+      properties: {
+        inventoryItemId: UUID,
+        unitId: UUID,
+        expectedQuantity: { type: "number", minimum: 0 },
+        countedQuantity: { type: "number", minimum: 0 },
+        differenceQuantity: { type: "number" },
+      },
+    },
+    InventoryReview: {
+      type: "object",
+      required: [
+        "id",
+        "organizationId",
+        "plantId",
+        "status",
+        "reviewedByProfileId",
+        "reviewedAtUtc",
+        "recordedAtUtc",
+        "notes",
+        "lines",
+      ],
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        plantId: UUID,
+        status: {
+          type: "string",
+          enum: ["WITHOUT_DIFFERENCES", "WITH_DIFFERENCES"],
+        },
+        reviewedByProfileId: UUID,
+        reviewedAtUtc: DATE_TIME,
+        recordedAtUtc: DATE_TIME,
+        notes: { type: "string", nullable: true },
+        lines: {
+          type: "array",
+          items: { $ref: "#/components/schemas/InventoryReviewLine" },
+        },
+      },
+    },
+    RastraComponentChange: {
+      type: "object",
+      required: [
+        "id",
+        "organizationId",
+        "plantId",
+        "rastraId",
+        "changeType",
+        "installationId",
+        "occurredAtUtc",
+        "recordedAtUtc",
+      ],
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        plantId: UUID,
+        rastraId: UUID,
+        changeType: {
+          type: "string",
+          enum: ["INSTALLATION", "REMOVAL", "REPLACEMENT"],
+        },
+        installationId: UUID,
+        replacedInstallationId: { ...UUID, nullable: true },
+        inventoryItemId: { ...UUID, nullable: true },
+        unitId: { ...UUID, nullable: true },
+        quantity: { type: "number", nullable: true },
+        actorProfileId: UUID,
+        responsibleWorkerId: { ...UUID, nullable: true },
+        occurredAtUtc: DATE_TIME,
+        recordedAtUtc: DATE_TIME,
+        componentIdentifier: { type: "string", nullable: true },
+        installedCondition: { type: "string", nullable: true },
+        removedCondition: { type: "string", nullable: true },
+        reason: { type: "string", nullable: true },
+        installationNotes: { type: "string", nullable: true },
+        removalNotes: { type: "string", nullable: true },
+      },
+    },
     Worker: {
       type: "object",
       required: [
@@ -643,6 +805,8 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       },
     },
     PageCatalog: pageSchema("CatalogItem"),
+    PageInventoryCatalog: pageSchema("InventoryCatalogItem"),
+    PageInventoryMovement: pageSchema("InventoryMovement"),
     PageWorker: pageSchema("Worker"),
     PageAccount: pageSchema("Account"),
     PageManagementOperationLine: pageSchema("ManagementOperationLine"),
@@ -724,6 +888,25 @@ function responseSchema(
 ): Record<string, unknown> {
   if (path.endsWith("/auth/session"))
     return { $ref: "#/components/schemas/Session" };
+  if (path.includes("/inventory/")) {
+    if (path.endsWith("/movements")) {
+      return operationId.includes("list")
+        ? { $ref: "#/components/schemas/PageInventoryMovement" }
+        : { $ref: "#/components/schemas/InventoryMovement" };
+    }
+    if (path.endsWith("/reversal") || path.endsWith("/adjustments")) {
+      return { $ref: "#/components/schemas/InventoryMovement" };
+    }
+    if (path.endsWith("/reviews")) {
+      return { $ref: "#/components/schemas/InventoryReview" };
+    }
+    if (path.endsWith("/component-changes")) {
+      return { $ref: "#/components/schemas/RastraComponentChange" };
+    }
+    return operationId.includes("list")
+      ? { $ref: "#/components/schemas/PageInventoryCatalog" }
+      : { $ref: "#/components/schemas/InventoryCatalogItem" };
+  }
   if (path.endsWith("/management/operation-lines"))
     return { $ref: "#/components/schemas/PageManagementOperationLine" };
   if (path.endsWith("/management/freshness"))

@@ -192,14 +192,37 @@ actualización e historial referenciado.
 
 ### 7.5 API y autorización
 
+**Estado — implementado el 2026-10-26:** la API versionada expone casos de uso
+específicos para tipos, unidades y artículos; consulta y registro del kardex;
+reversos, ajustes motivados, revisiones físicas y cambios de componentes. No
+existe CRUD genérico ni borrado físico: los catálogos solo se crean, consultan o
+activan/desactivan, y los hechos permanecen append-only.
+
+Todos los endpoints exigen `inventory.manage` y rol `JEFE_PLANTA` o
+`JEFE_EMPRESA`. El jefe de planta queda limitado a sus plantas activas; la
+gerencia puede consultar y corregir dentro de su organización. Salidas y
+consumos validan el saldo antes de escribir y PostgreSQL conserva la autoridad
+final bajo concurrencia. Un rechazo informa cantidad solicitada y disponible.
+El ajuste y el reverso exigen motivo, y la revisión se guarda atómicamente sin
+crear ajustes ni cambiar existencias.
+
+La migración agrega las funciones privadas `inventory_balance_v1` y
+`record_inventory_review_v1`, ejecutables únicamente por `service_role`. El
+contrato OpenAPI documenta el flujo completo. La evidencia automática aprobó
+25 migraciones desde cero, seed repetido y 22 pruebas SQL; 20 suites/119 pruebas
+unitarias y 34 casos E2E de API, incluido
+entrada→salida→reverso→ajuste y rechazo sin permiso. La exploración manual del
+contrato queda a cargo del desarrollador, conforme al acuerdo de validación.
+
 **Prompt:** Implementa casos específicos para catálogo, movimientos, reversos,
 ajustes, revisiones y componentes. `JEFE_PLANTA` opera desde desktop y
 `JEFE_EMPRESA` consulta/corrige desde web según política. Ajuste y corrección
 requieren motivo; desactivar conserva kardex; no implementes CRUD genérico ni
 borrado físico.
 
-**Pausa:** OpenAPI recorre entrada→salida→reverso→ajuste y rechaza accesos no
-autorizados.
+**Pausa automática cumplida:** OpenAPI recorre
+entrada→salida→reverso→ajuste y la API rechaza accesos no autorizados. La prueba
+manual del contrato permanece pendiente del desarrollador.
 
 ### 7.6 Inventario local-first
 

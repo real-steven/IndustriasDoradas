@@ -341,6 +341,42 @@
         ],
         "type": "object"
       },
+      "CreateInventoryItemDto": {
+        "properties": {
+          "itemTypeId": { "format": "uuid", "type": "string" },
+          "name": { "maxLength": 160, "minLength": 1, "type": "string" },
+          "unitId": { "format": "uuid", "type": "string" }
+        },
+        "required": ["itemTypeId", "unitId", "name"],
+        "type": "object"
+      },
+      "CreateInventoryItemTypeDto": {
+        "properties": {
+          "code": {
+            "maxLength": 40,
+            "pattern": "^[A-Z0-9][A-Z0-9_-]*$",
+            "type": "string"
+          },
+          "isCustom": { "default": false, "type": "object" },
+          "name": { "maxLength": 120, "minLength": 1, "type": "string" }
+        },
+        "required": ["code", "name", "isCustom"],
+        "type": "object"
+      },
+      "CreateInventoryUnitDto": {
+        "properties": {
+          "code": {
+            "maxLength": 40,
+            "pattern": "^[A-Z0-9][A-Z0-9_-]*$",
+            "type": "string"
+          },
+          "decimalPlaces": { "maximum": 3, "minimum": 0, "type": "number" },
+          "isCustom": { "default": false, "type": "object" },
+          "name": { "maxLength": 120, "minLength": 1, "type": "string" }
+        },
+        "required": ["code", "name", "isCustom", "decimalPlaces"],
+        "type": "object"
+      },
       "CreateLineComponentDto": {
         "properties": {
           "code": {
@@ -592,6 +628,157 @@
         ],
         "type": "object"
       },
+      "InventoryCatalogItem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": { "example": "HERRAMIENTA", "type": "string" },
+          "createdAt": { "format": "date-time", "type": "string" },
+          "deactivatedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "decimalPlaces": { "maximum": 3, "minimum": 0, "type": "integer" },
+          "id": { "format": "uuid", "type": "string" },
+          "isActive": { "type": "boolean" },
+          "isCustom": { "type": "boolean" },
+          "itemTypeId": { "format": "uuid", "type": "string" },
+          "name": { "example": "Martillo ficticio", "type": "string" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "plantId": { "format": "uuid", "type": "string" },
+          "unitId": { "format": "uuid", "type": "string" },
+          "updatedAt": { "format": "date-time", "type": "string" }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "name",
+          "isActive",
+          "deactivatedAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "InventoryMovement": {
+        "additionalProperties": false,
+        "properties": {
+          "actorProfileId": { "format": "uuid", "type": "string" },
+          "destination": { "nullable": true, "type": "string" },
+          "id": { "format": "uuid", "type": "string" },
+          "inventoryItemId": { "format": "uuid", "type": "string" },
+          "movementType": {
+            "enum": [
+              "ENTRY",
+              "EXIT",
+              "CONSUMPTION",
+              "RETURN",
+              "ADJUSTMENT",
+              "REVERSAL"
+            ],
+            "type": "string"
+          },
+          "notes": { "nullable": true, "type": "string" },
+          "occurredAtUtc": { "format": "date-time", "type": "string" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "plantId": { "format": "uuid", "type": "string" },
+          "quantityDelta": { "multipleOf": 0.001, "type": "number" },
+          "reason": { "nullable": true, "type": "string" },
+          "recordedAtUtc": { "format": "date-time", "type": "string" },
+          "relatedMovementId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "responsibleWorkerId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "unitId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "plantId",
+          "inventoryItemId",
+          "unitId",
+          "movementType",
+          "quantityDelta",
+          "actorProfileId",
+          "responsibleWorkerId",
+          "occurredAtUtc",
+          "recordedAtUtc",
+          "reason",
+          "destination",
+          "notes",
+          "relatedMovementId"
+        ],
+        "type": "object"
+      },
+      "InventoryReview": {
+        "properties": {
+          "id": { "format": "uuid", "type": "string" },
+          "lines": {
+            "items": { "$ref": "#/components/schemas/InventoryReviewLine" },
+            "type": "array"
+          },
+          "notes": { "nullable": true, "type": "string" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "plantId": { "format": "uuid", "type": "string" },
+          "recordedAtUtc": { "format": "date-time", "type": "string" },
+          "reviewedAtUtc": { "format": "date-time", "type": "string" },
+          "reviewedByProfileId": { "format": "uuid", "type": "string" },
+          "status": {
+            "enum": ["WITHOUT_DIFFERENCES", "WITH_DIFFERENCES"],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "plantId",
+          "status",
+          "reviewedByProfileId",
+          "reviewedAtUtc",
+          "recordedAtUtc",
+          "notes",
+          "lines"
+        ],
+        "type": "object"
+      },
+      "InventoryReviewLine": {
+        "properties": {
+          "countedQuantity": { "minimum": 0, "type": "number" },
+          "differenceQuantity": { "type": "number" },
+          "expectedQuantity": { "minimum": 0, "type": "number" },
+          "inventoryItemId": { "format": "uuid", "type": "string" },
+          "unitId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "inventoryItemId",
+          "unitId",
+          "expectedQuantity",
+          "countedQuantity",
+          "differenceQuantity"
+        ],
+        "type": "object"
+      },
+      "InventoryReviewLineDto": {
+        "properties": {
+          "countedQuantity": { "minimum": 0, "type": "number" },
+          "expectedQuantity": { "minimum": 0, "type": "number" },
+          "inventoryItemId": { "format": "uuid", "type": "string" },
+          "unitId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "inventoryItemId",
+          "unitId",
+          "expectedQuantity",
+          "countedQuantity"
+        ],
+        "type": "object"
+      },
       "ManagementFreshness": {
         "additionalProperties": false,
         "properties": {
@@ -802,6 +989,34 @@
         "required": ["items", "page", "pageSize", "total", "totalPages"],
         "type": "object"
       },
+      "PageInventoryCatalog": {
+        "properties": {
+          "items": {
+            "items": { "$ref": "#/components/schemas/InventoryCatalogItem" },
+            "type": "array"
+          },
+          "page": { "minimum": 1, "type": "integer" },
+          "pageSize": { "maximum": 100, "minimum": 1, "type": "integer" },
+          "total": { "minimum": 0, "type": "integer" },
+          "totalPages": { "minimum": 0, "type": "integer" }
+        },
+        "required": ["items", "page", "pageSize", "total", "totalPages"],
+        "type": "object"
+      },
+      "PageInventoryMovement": {
+        "properties": {
+          "items": {
+            "items": { "$ref": "#/components/schemas/InventoryMovement" },
+            "type": "array"
+          },
+          "page": { "minimum": 1, "type": "integer" },
+          "pageSize": { "maximum": 100, "minimum": 1, "type": "integer" },
+          "total": { "minimum": 0, "type": "integer" },
+          "totalPages": { "minimum": 0, "type": "integer" }
+        },
+        "required": ["items", "page", "pageSize", "total", "totalPages"],
+        "type": "object"
+      },
       "PageManagementOperationLine": {
         "properties": {
           "items": {
@@ -882,6 +1097,161 @@
         "required": ["pin"],
         "type": "object"
       },
+      "RastraComponentChange": {
+        "properties": {
+          "actorProfileId": { "format": "uuid", "type": "string" },
+          "changeType": {
+            "enum": ["INSTALLATION", "REMOVAL", "REPLACEMENT"],
+            "type": "string"
+          },
+          "componentIdentifier": { "nullable": true, "type": "string" },
+          "id": { "format": "uuid", "type": "string" },
+          "installationId": { "format": "uuid", "type": "string" },
+          "installationNotes": { "nullable": true, "type": "string" },
+          "installedCondition": { "nullable": true, "type": "string" },
+          "inventoryItemId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "occurredAtUtc": { "format": "date-time", "type": "string" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "plantId": { "format": "uuid", "type": "string" },
+          "quantity": { "nullable": true, "type": "number" },
+          "rastraId": { "format": "uuid", "type": "string" },
+          "reason": { "nullable": true, "type": "string" },
+          "recordedAtUtc": { "format": "date-time", "type": "string" },
+          "removalNotes": { "nullable": true, "type": "string" },
+          "removedCondition": { "nullable": true, "type": "string" },
+          "replacedInstallationId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "responsibleWorkerId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "unitId": { "format": "uuid", "nullable": true, "type": "string" }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "plantId",
+          "rastraId",
+          "changeType",
+          "installationId",
+          "occurredAtUtc",
+          "recordedAtUtc"
+        ],
+        "type": "object"
+      },
+      "RecordInventoryAdjustmentDto": {
+        "properties": {
+          "inventoryItemId": { "format": "uuid", "type": "string" },
+          "notes": { "maxLength": 500, "minLength": 1, "type": "string" },
+          "occurredAtUtc": { "type": "string" },
+          "quantityDelta": { "type": "number" },
+          "reason": { "maxLength": 500, "minLength": 1, "type": "string" },
+          "unitId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "inventoryItemId",
+          "unitId",
+          "quantityDelta",
+          "reason",
+          "occurredAtUtc"
+        ],
+        "type": "object"
+      },
+      "RecordInventoryMovementDto": {
+        "properties": {
+          "destination": { "maxLength": 200, "minLength": 1, "type": "string" },
+          "inventoryItemId": { "format": "uuid", "type": "string" },
+          "movementType": {
+            "enum": ["ENTRY", "EXIT", "CONSUMPTION", "RETURN"],
+            "type": "string"
+          },
+          "notes": { "maxLength": 500, "minLength": 1, "type": "string" },
+          "occurredAtUtc": { "type": "string" },
+          "quantity": { "minimum": 0.001, "type": "number" },
+          "relatedMovementId": { "format": "uuid", "type": "string" },
+          "responsibleWorkerId": { "format": "uuid", "type": "string" },
+          "unitId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "inventoryItemId",
+          "unitId",
+          "movementType",
+          "quantity",
+          "occurredAtUtc"
+        ],
+        "type": "object"
+      },
+      "RecordInventoryReviewDto": {
+        "properties": {
+          "lines": {
+            "items": { "$ref": "#/components/schemas/InventoryReviewLineDto" },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array"
+          },
+          "notes": { "maxLength": 500, "minLength": 1, "type": "string" },
+          "reviewedAtUtc": { "type": "string" }
+        },
+        "required": ["reviewedAtUtc", "lines"],
+        "type": "object"
+      },
+      "RecordRastraComponentChangeDto": {
+        "properties": {
+          "changeType": {
+            "enum": ["INSTALLATION", "REMOVAL", "REPLACEMENT"],
+            "type": "string"
+          },
+          "componentIdentifier": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "installationId": { "format": "uuid", "type": "string" },
+          "installationNotes": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "installedCondition": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "inventoryItemId": { "format": "uuid", "type": "string" },
+          "occurredAtUtc": { "type": "string" },
+          "quantity": { "minimum": 0.001, "type": "number" },
+          "rastraId": { "format": "uuid", "type": "string" },
+          "reason": { "maxLength": 500, "minLength": 1, "type": "string" },
+          "removalNotes": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "removedCondition": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "replacedInstallationId": { "format": "uuid", "type": "string" },
+          "responsibleWorkerId": { "format": "uuid", "type": "string" },
+          "unitId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "rastraId",
+          "changeType",
+          "installationId",
+          "occurredAtUtc"
+        ],
+        "type": "object"
+      },
       "RecordShipmentGoldDto": {
         "additionalProperties": false,
         "properties": {
@@ -904,6 +1274,14 @@
         "properties": {
           "reason": { "maxLength": 300, "minLength": 1, "type": "string" }
         },
+        "type": "object"
+      },
+      "ReverseInventoryMovementDto": {
+        "properties": {
+          "occurredAtUtc": { "type": "string" },
+          "reason": { "maxLength": 500, "minLength": 1, "type": "string" }
+        },
+        "required": ["reason", "occurredAtUtc"],
         "type": "object"
       },
       "Session": {
@@ -938,6 +1316,11 @@
         "type": "object"
       },
       "SetCatalogStateDto": {
+        "properties": { "active": { "type": "boolean" } },
+        "required": ["active"],
+        "type": "object"
+      },
+      "SetInventoryCatalogStateDto": {
         "properties": { "active": { "type": "boolean" } },
         "required": ["active"],
         "type": "object"
@@ -2650,6 +3033,1595 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Catalogs"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/item-types": {
+      "get": {
+        "operationId": "InventoryController_listItemTypes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "default": "active",
+              "enum": ["all", "active", "inactive"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageInventoryCatalog"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      },
+      "post": {
+        "operationId": "InventoryController_createItemType",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInventoryItemTypeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryCatalogItem"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/item-types/{id}/state": {
+      "patch": {
+        "operationId": "InventoryController_setItemTypeState",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetInventoryCatalogStateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryCatalogItem"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/adjustments": {
+      "post": {
+        "operationId": "InventoryController_recordAdjustment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordInventoryAdjustmentDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InventoryMovement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/component-changes": {
+      "post": {
+        "operationId": "InventoryController_recordComponentChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRastraComponentChangeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RastraComponentChange"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/items": {
+      "get": {
+        "operationId": "InventoryController_listItems",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "default": "active",
+              "enum": ["all", "active", "inactive"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageInventoryCatalog"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      },
+      "post": {
+        "operationId": "InventoryController_createItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInventoryItemDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryCatalogItem"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/items/{id}/state": {
+      "patch": {
+        "operationId": "InventoryController_setItemState",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetInventoryCatalogStateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryCatalogItem"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/movements": {
+      "get": {
+        "operationId": "InventoryController_listMovements",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "default": "active",
+              "enum": ["all", "active", "inactive"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "inventoryItemId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageInventoryMovement"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      },
+      "post": {
+        "operationId": "InventoryController_recordMovement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordInventoryMovementDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InventoryMovement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/movements/{movementId}/reversal": {
+      "post": {
+        "operationId": "InventoryController_reverseMovement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "movementId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseInventoryMovementDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InventoryMovement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/reviews": {
+      "post": {
+        "operationId": "InventoryController_recordReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "plantId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordInventoryReviewDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InventoryReview" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/units": {
+      "get": {
+        "operationId": "InventoryController_listUnits",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": true,
+            "schema": {
+              "allOf": [{ "$ref": "#/components/schemas/Object" }],
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "default": "active",
+              "enum": ["all", "active", "inactive"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageInventoryCatalog"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      },
+      "post": {
+        "operationId": "InventoryController_createUnit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInventoryUnitDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryCatalogItem"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/inventory/units/{id}/state": {
+      "patch": {
+        "operationId": "InventoryController_setUnitState",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetInventoryCatalogStateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryCatalogItem"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Inventory"]
       }
     },
     "/api/v1/organizations/{organizationId}/lines/{id}": {

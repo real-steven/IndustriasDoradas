@@ -38,6 +38,11 @@ import {
   type GoldRepository,
 } from "../src/gold/gold.contracts";
 import {
+  INVENTORY_REPOSITORY,
+  type InventoryMovement,
+  type InventoryRepository,
+} from "../src/inventory/inventory.contracts";
+import {
   WORKERS_REPOSITORY,
   type WorkersRepository,
 } from "../src/workers/workers.contracts";
@@ -86,6 +91,7 @@ const ACTIVE_PROFILE: AuthorizedProfile = {
     "attendance.read",
     "gold.read",
     "gold.results.manage",
+    "inventory.manage",
     "administrators.govern",
     "administrators.create",
     "administrators.permissions.manage",
@@ -105,6 +111,7 @@ describe("API smoke (e2e)", () => {
   let attendance: jest.Mocked<AttendanceQueryRepository>;
   let accounts: jest.Mocked<AccountsRepository>;
   let gold: jest.Mocked<GoldRepository>;
+  let inventory: jest.Mocked<InventoryRepository>;
   let stations: jest.Mocked<StationRepository>;
   let management: jest.Mocked<ManagementQueryRepository>;
   let sync: jest.Mocked<SyncRepository>;
@@ -180,6 +187,31 @@ describe("API smoke (e2e)", () => {
       listResults: jest.fn().mockResolvedValue([]),
       createResult: jest.fn(),
     };
+    inventory = {
+      hasPlantScope: jest.fn().mockResolvedValue(true),
+      listCatalog: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
+      findCatalog: jest.fn().mockResolvedValue(inventoryItem()),
+      createCatalog: jest.fn(),
+      setCatalogActive: jest.fn(),
+      listMovements: jest.fn().mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      }),
+      findMovement: jest.fn(),
+      getBalance: jest.fn().mockResolvedValue(10),
+      createMovement: jest.fn(),
+      createReview: jest.fn(),
+      createComponentChange: jest.fn(),
+    };
     stations = {
       getSnapshot: jest.fn(),
       recordPinAttempt: jest.fn(),
@@ -241,6 +273,8 @@ describe("API smoke (e2e)", () => {
       .useValue(accounts)
       .overrideProvider(GOLD_REPOSITORY)
       .useValue(gold)
+      .overrideProvider(INVENTORY_REPOSITORY)
+      .useValue(inventory)
       .overrideProvider(STATION_REPOSITORY)
       .useValue(stations)
       .overrideProvider(MANAGEMENT_QUERY_REPOSITORY)
@@ -267,6 +301,9 @@ describe("API smoke (e2e)", () => {
     gold.listShipmentFacts.mockClear();
     gold.listResults.mockClear();
     gold.createResult.mockReset();
+    inventory.findMovement.mockReset();
+    inventory.createMovement.mockReset();
+    inventory.getBalance.mockResolvedValue(10);
     attendance.listHistory.mockClear();
     management.listOperationLines.mockClear();
     management.findLatestChange.mockClear();
@@ -338,6 +375,7 @@ describe("API smoke (e2e)", () => {
     expect(body.components.schemas).toHaveProperty("PageManagementShipment");
     expect(body.components.schemas).toHaveProperty("GoldResultEntry");
     expect(body.components.schemas).toHaveProperty("GoldSummary");
+    expect(body.components.schemas).toHaveProperty("InventoryMovement");
     expect(body.paths).toHaveProperty(
       "/api/v1/organizations/{organizationId}/management/shipments",
     );
@@ -346,6 +384,12 @@ describe("API smoke (e2e)", () => {
     );
     expect(body.paths).toHaveProperty(
       "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/gold-results",
+    );
+    expect(body.paths).toHaveProperty(
+      "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/movements",
+    );
+    expect(body.paths).toHaveProperty(
+      "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/movements/{movementId}/reversal",
     );
   });
 
@@ -1052,6 +1096,101 @@ describe("API smoke (e2e)", () => {
     expect(gold.createResult.mock.calls).toHaveLength(0);
   });
 
+  it("exposes the audited inventory entry to exit to reversal to adjustment flow", async () => {
+    inventory.createMovement.mockImplementation((input) =>
+      Promise.resolve({
+        ...input,
+        responsibleWorkerId: input.responsibleWorkerId ?? null,
+        reason: input.reason ?? null,
+        destination: input.destination ?? null,
+        notes: input.notes ?? null,
+        relatedMovementId: input.relatedMovementId ?? null,
+      }),
+    );
+
+    const base = `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/inventory/plants/31000000-0000-4000-8000-000000000001`;
+    const entry = await request(httpServer)
+      .post(`${base}/movements`)
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        inventoryItemId: "77200000-0000-4000-8000-000000000001",
+        unitId: "77100000-0000-4000-8000-000000000001",
+        movementType: "ENTRY",
+        quantity: 10,
+        occurredAtUtc: "2026-10-26T18:00:00.000Z",
+      })
+      .expect(201);
+    const exit = await request(httpServer)
+      .post(`${base}/movements`)
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        inventoryItemId: "77200000-0000-4000-8000-000000000001",
+        unitId: "77100000-0000-4000-8000-000000000001",
+        movementType: "EXIT",
+        quantity: 4,
+        occurredAtUtc: "2026-10-26T18:01:00.000Z",
+      })
+      .expect(201);
+    const exitBody = exit.body as InventoryMovement;
+    inventory.findMovement.mockResolvedValueOnce(exitBody);
+    const reversal = await request(httpServer)
+      .post(`${base}/movements/${exitBody.id}/reversal`)
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        reason: "Salida registrada por error",
+        occurredAtUtc: "2026-10-26T18:02:00.000Z",
+      })
+      .expect(201);
+    const adjustment = await request(httpServer)
+      .post(`${base}/adjustments`)
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        inventoryItemId: "77200000-0000-4000-8000-000000000001",
+        unitId: "77100000-0000-4000-8000-000000000001",
+        quantityDelta: -1,
+        reason: "Diferencia confirmada en conteo",
+        occurredAtUtc: "2026-10-26T18:03:00.000Z",
+      })
+      .expect(201);
+
+    expect(entry.body).toMatchObject({
+      movementType: "ENTRY",
+      quantityDelta: 10,
+    });
+    expect(exit.body).toMatchObject({
+      movementType: "EXIT",
+      quantityDelta: -4,
+    });
+    expect(reversal.body).toMatchObject({
+      movementType: "REVERSAL",
+      quantityDelta: 4,
+      relatedMovementId: exitBody.id,
+    });
+    expect(adjustment.body).toMatchObject({
+      movementType: "ADJUSTMENT",
+      quantityDelta: -1,
+    });
+    expect(inventory.createMovement.mock.calls).toHaveLength(4);
+  });
+
+  it("rejects inventory access without the inventory permission", async () => {
+    profiles.findByAuthUserId.mockResolvedValueOnce({
+      ...ACTIVE_PROFILE,
+      permissions: ACTIVE_PROFILE.permissions.filter(
+        (permission) => permission !== "inventory.manage",
+      ),
+    });
+
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/inventory/item-types`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .expect(403);
+
+    expect(inventory.listCatalog.mock.calls).toHaveLength(0);
+  });
+
   it("accepts a versioned sync batch for an assigned plant manager", async () => {
     profiles.findByAuthUserId.mockResolvedValueOnce({
       ...ACTIVE_PROFILE,
@@ -1149,6 +1288,21 @@ function managementShipment() {
     goldRecordedByProfileId: null,
     goldRevisionCount: null,
     hasGoldResult: false,
+  };
+}
+
+function inventoryItem() {
+  return {
+    id: "77200000-0000-4000-8000-000000000001",
+    organizationId: ACTIVE_PROFILE.organizationId,
+    plantId: "31000000-0000-4000-8000-000000000001",
+    itemTypeId: "77000000-0000-4000-8000-000000000001",
+    unitId: "77100000-0000-4000-8000-000000000001",
+    name: "Martillo ficticio",
+    isActive: true,
+    deactivatedAt: null,
+    createdAt: "2026-10-26T17:00:00.000Z",
+    updatedAt: "2026-10-26T17:00:00.000Z",
   };
 }
 

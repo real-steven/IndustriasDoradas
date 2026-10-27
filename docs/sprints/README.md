@@ -19,9 +19,11 @@ El 2026-10-23 se autorizó conservar MAN-01–MAN-06 como deuda de aceptación
 manual. El levantamiento 7.1 y el kardex/revisiones 7.2 están cerrados. El
 dominio puro de componentes y novedades 7.3 quedó implementado el 2026-10-26,
 con su pausa manual pendiente para el flujo visual integrado. La persistencia
-7.4 quedó implementada y verificada el 2026-10-26 en PostgreSQL y SQLite; el
-siguiente paso es API y autorización 7.5. La deuda de Sprint 6 continúa visible
-y no se presenta como prueba ejecutada.
+7.4 quedó implementada y verificada el 2026-10-26 en PostgreSQL y SQLite. La API
+y autorización 7.5 también quedaron implementadas y verificadas automáticamente
+el 2026-10-26; su exploración manual queda a cargo del desarrollador. El
+siguiente paso es inventario local-first 7.6. La deuda de Sprint 6 continúa
+visible y no se presenta como prueba ejecutada.
 
 El cierre aprobado del Sprint 2 y la guía de contexto para comenzar Sprint 3
 están en

@@ -13,6 +13,7 @@ import { AllExceptionsFilter } from "./common/http/all-exceptions.filter";
 import { validateEnvironment } from "./config/environment";
 import { GoldModule } from "./gold/gold.module";
 import { HealthModule } from "./health/health.module";
+import { InventoryModule } from "./inventory/inventory.module";
 import { ManagementModule } from "./management/management.module";
 import { StationModule } from "./station/station.module";
 import { SyncModule } from "./sync/sync.module";
@@ -43,6 +44,7 @@ const environmentFiles = nodeEnvironment
     CatalogsModule,
     GoldModule,
     HealthModule,
+    InventoryModule,
     ManagementModule,
     StationModule,
     SyncModule,

@@ -25,6 +25,7 @@ export class SupabaseDataError extends Error {
   constructor(
     readonly databaseCode: string,
     readonly source: string,
+    readonly databaseMessage?: string,
   ) {
     super("Supabase data operation failed");
   }
