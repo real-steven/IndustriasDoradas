@@ -2687,6 +2687,28 @@
           },
           {
             "in": "query",
+            "name": "fromUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "routine",
+            "required": true,
+            "schema": {
+              "default": "include",
+              "enum": ["include", "exclude"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "page",
             "required": true,
             "schema": {

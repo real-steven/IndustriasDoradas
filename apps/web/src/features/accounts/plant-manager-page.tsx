@@ -21,7 +21,6 @@ interface PlantManagerForm {
   passwordConfirmation: string;
   pin: string;
   pinConfirmation: string;
-  preferredLocale: "es" | "en";
 }
 
 const emptyForm: PlantManagerForm = {
@@ -31,21 +30,22 @@ const emptyForm: PlantManagerForm = {
   passwordConfirmation: "",
   pin: "",
   pinConfirmation: "",
-  preferredLocale: "es" as const,
 };
 
 export function PlantManagerPage() {
   const { language, locale, tr } = useLanguage();
   const managers = usePlantManagers();
   const plants = useAccountPlants();
-  const [plantId, setPlantId] = useState<string | null>(null);
   const selectedPlantId =
-    plantId ?? plants.data?.items.find((plant) => plant.isActive)?.id ?? "";
+    plants.data?.items.find((plant) => plant.isActive)?.id ?? "";
   const stations = useAccountStations(selectedPlantId);
+  const selectedStationId =
+    stations.data?.items.find((station) => station.isActive)?.id ?? "";
+  const automaticStationIds =
+    selectedStationId.length === 0 ? [] : [selectedStationId];
   const createManager = useCreatePlantManager();
   const governManager = useGovernPlantManager();
   const [form, setForm] = useState(emptyForm);
-  const [stationIds, setStationIds] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function PlantManagerPage() {
     const validation = validateForm(
       form,
       selectedPlantId,
-      stationIds,
+      automaticStationIds,
       language,
     );
     if (validation !== null) {
@@ -72,13 +72,12 @@ export function PlantManagerPage() {
       password: form.password,
       pin: form.pin,
       plantId: selectedPlantId,
-      stationIds,
-      preferredLocale: form.preferredLocale,
+      stationIds: automaticStationIds,
+      preferredLocale: "es",
     };
     try {
       await createManager.mutateAsync(input);
       setForm(emptyForm);
-      setStationIds([]);
       setSuccess(
         tr(
           "Cuenta creada pendiente de activación. Entregue la contraseña y el PIN por un canal seguro; no volverán a mostrarse.",
@@ -114,11 +113,6 @@ export function PlantManagerPage() {
     } catch (error) {
       setFormError(accountError(error, language));
     }
-  };
-
-  const changePlant = (nextPlantId: string) => {
-    setPlantId(nextPlantId);
-    setStationIds([]);
   };
 
   return (
@@ -259,76 +253,6 @@ export function PlantManagerPage() {
                 />
               </label>
             </div>
-            <div className="account-form-grid">
-              <label>
-                {tr("Planta", "Plant")}
-                <select
-                  required
-                  value={selectedPlantId}
-                  onChange={(event) => changePlant(event.target.value)}
-                >
-                  <option value="">{tr("Seleccione", "Select")}</option>
-                  {plants.data?.items
-                    .filter((plant) => plant.isActive)
-                    .map((plant) => (
-                      <option key={plant.id} value={plant.id}>
-                        {plant.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                {tr("Idioma inicial", "Initial language")}
-                <select
-                  value={form.preferredLocale}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      preferredLocale: event.target.value as "es" | "en",
-                    })
-                  }
-                >
-                  <option value="es">Español</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
-            </div>
-            <fieldset className="station-selection">
-              <legend>
-                {tr("Estaciones autorizadas", "Authorized stations")}
-              </legend>
-              {stations.isLoading && (
-                <p>{tr("Cargando estaciones…", "Loading stations…")}</p>
-              )}
-              {stations.data?.items
-                .filter((station) => station.isActive)
-                .map((station) => (
-                  <label key={station.id}>
-                    <input
-                      type="checkbox"
-                      checked={stationIds.includes(station.id)}
-                      onChange={(event) =>
-                        setStationIds((current) =>
-                          event.target.checked
-                            ? [...current, station.id]
-                            : current.filter((id) => id !== station.id),
-                        )
-                      }
-                    />
-                    <span>{station.name}</span>
-                  </label>
-                ))}
-              {stations.data !== undefined &&
-                stations.data.items.filter((station) => station.isActive)
-                  .length === 0 && (
-                  <p>
-                    {tr(
-                      "La planta no tiene estaciones activas.",
-                      "The plant has no active stations.",
-                    )}
-                  </p>
-                )}
-            </fieldset>
             <div className="credential-warning">
               <strong>{tr("Entrega segura", "Secure delivery")}</strong>
               <p>
@@ -343,7 +267,14 @@ export function PlantManagerPage() {
                 {formError}
               </p>
             )}
-            <button type="submit" disabled={createManager.isPending}>
+            <button
+              type="submit"
+              disabled={
+                createManager.isPending ||
+                selectedPlantId.length === 0 ||
+                selectedStationId.length === 0
+              }
+            >
               {createManager.isPending
                 ? tr("CREANDO…", "CREATING…")
                 : tr("CREAR CUENTA PENDIENTE", "CREATE PENDING ACCOUNT")}
@@ -411,14 +342,6 @@ export function PlantManagerPage() {
                   <div>
                     <dt>{tr("Rol", "Role")}</dt>
                     <dd>{tr("Jefe de planta", "Plant manager")}</dd>
-                  </div>
-                  <div>
-                    <dt>{tr("Entrega", "Delivery")}</dt>
-                    <dd>
-                      {account.provisioningMethod === "DIRECT"
-                        ? tr("Directa", "Direct")
-                        : tr("Invitación por correo", "Email invitation")}
-                    </dd>
                   </div>
                 </dl>
                 {account.statusReason !== null && (

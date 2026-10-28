@@ -1,6 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,11 +20,42 @@ describe("oro por cargamento", () => {
     renderGold();
 
     expect(await screen.findByText("50 %")).toBeInTheDocument();
-    expect(screen.getByText("1 excluidos sin registro")).toBeInTheDocument();
+    expect(screen.queryByText("Resultados")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Excluidos" }),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("0 g").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("button", { name: "CORREGIR RESULTADO" }),
     ).toBeInTheDocument();
+  });
+
+  it("consulta un rango de fechas y permite mostrar todo", async () => {
+    const user = userEvent.setup();
+    const fetchMock = transport({ amount: 2.5, hasGold: true });
+    vi.stubGlobal("fetch", fetchMock);
+    renderGold("/gerencia/oro?period=date&date=2026-10-01&to=2026-10-08");
+
+    expect(await screen.findByLabelText("Desde")).toHaveValue("2026-10-01");
+    expect(screen.getByLabelText("Hasta")).toHaveValue("2026-10-08");
+    await waitFor(() => {
+      const request = latestRequest(fetchMock, "/gold-summary");
+      expect(request.searchParams.get("fromUtc")).toBe(
+        "2026-10-01T06:00:00.000Z",
+      );
+      expect(request.searchParams.get("toUtc")).toBe(
+        "2026-10-09T06:00:00.000Z",
+      );
+    });
+
+    await user.selectOptions(screen.getByLabelText("Período"), "all");
+    await waitFor(() => {
+      const request = latestRequest(fetchMock, "/gold-summary");
+      expect(request.searchParams.has("fromUtc")).toBe(false);
+      expect(request.searchParams.has("toUtc")).toBe(false);
+    });
+    expect(screen.queryByLabelText("Desde")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Hasta")).not.toBeInTheDocument();
   });
 
   it("leaves an empty value unregistered and accepts zero explicitly", async () => {
@@ -145,10 +176,13 @@ describe("oro por cargamento", () => {
     expect(
       screen.getByRole("columnheader", { name: "Cobertura" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Excluidos" }),
+    ).not.toBeInTheDocument();
   });
 });
 
-function renderGold(): void {
+function renderGold(path = "/gerencia/oro"): void {
   const auth: AuthState = {
     session: { access_token: "fictitious-token" } as Session,
     profile: {
@@ -170,12 +204,24 @@ function renderGold(): void {
   render(
     <AuthContext.Provider value={auth}>
       <QueryProvider client={client}>
-        <MemoryRouter initialEntries={["/gerencia/oro"]}>
+        <MemoryRouter initialEntries={[path]}>
           <App />
         </MemoryRouter>
       </QueryProvider>
     </AuthContext.Provider>,
   );
+}
+
+function latestRequest(
+  fetchMock: ReturnType<typeof transport>,
+  pathname: string,
+): URL {
+  const matching = fetchMock.mock.calls
+    .map(([input]) => new URL(requestUrl(input), "http://localhost"))
+    .filter((request) => request.pathname.endsWith(pathname));
+  const request = matching.at(-1);
+  if (request === undefined) throw new Error(`Expected request ${pathname}`);
+  return request;
 }
 
 function transport({

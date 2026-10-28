@@ -59,9 +59,16 @@ export function GoldFeature() {
     if (value.length === 0) next.delete(key);
     else next.set(key, value);
     next.delete("page");
-    if (key === "period" && value !== "date") next.delete("date");
-    if (key === "period" && value === "date" && !next.has("date"))
-      next.set("date", filters.date);
+    if (key === "period" && value !== "date") {
+      next.delete("date");
+      next.delete("to");
+    }
+    if (key === "period" && value === "date") {
+      if (!next.has("date")) next.set("date", filters.date);
+      if (!next.has("to")) next.set("to", filters.toDate);
+    }
+    if (key === "date" && value > filters.toDate) next.set("to", value);
+    if (key === "to" && value < filters.date) next.set("date", value);
     setSearchParams(next);
   };
 
@@ -160,7 +167,6 @@ function GoldSummaryPanel({
         className="gold-summary-grid"
         aria-label={tr("Resumen de oro", "Gold summary")}
       >
-        <GoldMetric label={tr("Resultados", "Results")} value="…" />
         <GoldMetric label={tr("Cobertura", "Coverage")} value="…" />
         <GoldMetric
           label={tr("Total registrado", "Recorded total")}
@@ -198,11 +204,6 @@ function GoldSummaryPanel({
         className="gold-summary-grid"
         aria-label={tr("Resumen de oro", "Gold summary")}
       >
-        <GoldMetric
-          label={tr("Resultados", "Results")}
-          value={String(query.data.registeredShipments)}
-          detail={`${query.data.excludedShipments} ${tr("excluidos sin registro", "excluded without a record")}`}
-        />
         <GoldMetric
           label={tr("Cobertura", "Coverage")}
           value={`${formatNumber(query.data.coveragePercentage, locale)} %`}
@@ -268,7 +269,6 @@ function GoldSummaryPanel({
                 <tr>
                   <th scope="col">{tr("Proveedor", "Supplier")}</th>
                   <th scope="col">{tr("Cobertura", "Coverage")}</th>
-                  <th scope="col">{tr("Excluidos", "Excluded")}</th>
                   <th scope="col">{tr("Oro", "Gold")}</th>
                   <th scope="col">g / cajuela</th>
                 </tr>
@@ -280,9 +280,6 @@ function GoldSummaryPanel({
                     <td data-label={tr("Cobertura", "Coverage")}>
                       {supplier.registeredShipments}/{supplier.totalShipments} (
                       {formatNumber(supplier.coveragePercentage, locale)} %)
-                    </td>
-                    <td data-label={tr("Excluidos", "Excluded")}>
-                      {supplier.excludedShipments}
                     </td>
                     <td data-label={tr("Oro", "Gold")}>
                       {formatGrams(supplier.totalGoldGrams, locale)} g
@@ -327,20 +324,31 @@ function GoldFiltersPanel({
             <option value="previous">
               {tr("Semana anterior", "Previous week")}
             </option>
-            <option value="date">
-              {tr("Fecha específica", "Specific date")}
-            </option>
+            <option value="date">{tr("Rango de fechas", "Date range")}</option>
+            <option value="all">{tr("Mostrar todo", "All")}</option>
           </select>
         </label>
         {filters.period === "date" && (
-          <label>
-            <span>{tr("Fecha", "Date")}</span>
-            <input
-              type="date"
-              value={filters.date}
-              onChange={(event) => update("date", event.target.value)}
-            />
-          </label>
+          <>
+            <label>
+              <span>{tr("Desde", "From")}</span>
+              <input
+                type="date"
+                max={filters.toDate}
+                value={filters.date}
+                onChange={(event) => update("date", event.target.value)}
+              />
+            </label>
+            <label>
+              <span>{tr("Hasta", "To")}</span>
+              <input
+                type="date"
+                min={filters.date}
+                value={filters.toDate}
+                onChange={(event) => update("to", event.target.value)}
+              />
+            </label>
+          </>
         )}
         <FilterSelect
           label={tr("Línea", "Line")}

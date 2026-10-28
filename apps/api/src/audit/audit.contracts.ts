@@ -106,6 +106,9 @@ export interface AuditQueryRepository {
       pageSize: number;
       search?: string;
       result?: AuditResult;
+      fromUtc?: string;
+      toUtc?: string;
+      routine?: "include" | "exclude";
     },
   ): Promise<PageResponse<AuditListItem>>;
 }

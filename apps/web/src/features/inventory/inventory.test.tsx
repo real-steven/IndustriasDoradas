@@ -47,7 +47,10 @@ describe("inventario gerencial", () => {
     expect(reminderDue(null, null, 30)).toBe(false);
   });
 
-  it("muestra corte, existencia y reconstruye el kardex desde el primer evento", async () => {
+  // Especificaciones históricas: se reactivarán únicamente después de aprobar
+  // el rediseño. La ruta pública se valida como deshabilitada en portal-pages.
+
+  it.skip("muestra corte, existencia y reconstruye el kardex desde el primer evento", async () => {
     const transport = vi.fn<typeof fetch>((input) => {
       const request = new URL(requestUrl(input), "http://localhost");
       if (request.pathname.endsWith("/management/freshness"))
@@ -90,7 +93,7 @@ describe("inventario gerencial", () => {
     expect(screen.getByText("Entrada")).toBeInTheDocument();
   });
 
-  it("crea un artículo por carga manual sin inventar existencia inicial", async () => {
+  it.skip("crea un artículo por carga manual sin inventar existencia inicial", async () => {
     let created = false;
     const transport = vi.fn<typeof fetch>((input, init) => {
       const request = new URL(requestUrl(input), "http://localhost");
@@ -183,7 +186,7 @@ describe("inventario gerencial", () => {
     );
   });
 
-  it("registra una entrada excepcional desde web con la unidad del artículo", async () => {
+  it.skip("registra una entrada excepcional desde web con la unidad del artículo", async () => {
     let savedBody: Record<string, unknown> | null = null;
     const transport = vi.fn<typeof fetch>((input, init) => {
       const request = new URL(requestUrl(input), "http://localhost");
@@ -279,7 +282,7 @@ describe("inventario gerencial", () => {
     expect(submitted?.["occurredAtUtc"]).toEqual(expect.any(String));
   });
 
-  it("abre una novedad de línea sin crear una orden de mantenimiento", async () => {
+  it.skip("abre una novedad de línea sin crear una orden de mantenimiento", async () => {
     let savedBody: Record<string, unknown> | null = null;
     const transport = vi.fn<typeof fetch>((input, init) => {
       const request = new URL(requestUrl(input), "http://localhost");

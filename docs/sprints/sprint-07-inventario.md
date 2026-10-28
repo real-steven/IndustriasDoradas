@@ -1,5 +1,13 @@
 # Sprint 7 — Inventario y mantenimiento básico (semanas 14–15)
 
+> **Decisión posterior al cierre — 2026-10-27:** el equipo rechazó este diseño
+> como experiencia final y solicitó reemplazarlo por un inventario convencional.
+> Inventario queda deshabilitado en las interfaces Web y Desktop: no aparece en
+> la navegación, los enlaces web anteriores redirigen al resumen y Desktop no
+> registra ni inicializa su vista. La API, migraciones, sincronización y datos se
+> conservan temporalmente como historial técnico; no deben interpretarse como un
+> módulo disponible ni ampliarse hasta aprobar el nuevo alcance.
+
 **Objetivo:** conocer existencias y vida útil de herramientas/componentes
 mediante movimientos y revisiones trazables, sin construir compras,
 contabilidad ni un CMMS.

@@ -1,12 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,11 +18,7 @@ describe("portal gerencial", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>((input) =>
-        Promise.resolve(
-          isFreshnessRequest(input) ? freshnessResponse() : managementPage(),
-        ),
-      ),
+      vi.fn<typeof fetch>((input) => Promise.resolve(portalResponse(input))),
     );
   });
 
@@ -44,6 +34,20 @@ describe("portal gerencial", () => {
     expect(
       screen.getByRole("heading", { name: "Página no encontrada" }),
     ).toBeInTheDocument();
+  });
+
+  it("mantiene inventario fuera del portal y redirige enlaces anteriores", async () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia/inventario");
+
+    expect(
+      await screen.findByRole("heading", { name: "Buenos días, Lucía." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Inventario" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Existencias por artículo"),
+    ).not.toBeInTheDocument();
   });
 
   it("moves focus to the main content when the gerencial route changes", async () => {
@@ -71,17 +75,16 @@ describe("portal gerencial", () => {
   });
 
   it("presenta el resumen con los valores entregados por la API gerencial", async () => {
-    const operationRequests: string[] = [];
+    const dataRequests: string[] = [];
     const transport = vi.fn<typeof fetch>((input, init) => {
       const url = requestUrl(input);
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
-      operationRequests.push(url);
-      expect(url).toContain("/management/operation-lines?page=1&pageSize=100");
+      dataRequests.push(url);
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer fictitious-token",
       );
-      return Promise.resolve(managementPage());
+      return Promise.resolve(portalResponse(input));
     });
     vi.stubGlobal("fetch", transport);
 
@@ -91,20 +94,30 @@ describe("portal gerencial", () => {
       screen.getByRole("heading", { name: "Buenos días, Lucía." }),
     ).toBeInTheDocument();
     expect(await screen.findByText("1 línea activa")).toBeInTheDocument();
-    const card = screen
-      .getByRole("heading", { name: "Línea 1" })
-      .closest("article");
-    expect(card).not.toBeNull();
-    if (card === null) throw new Error("Expected operation line card");
-    expect(within(card).getByText("260")).toBeInTheDocument();
-    expect(within(card).getByText("Proveedor Norte")).toBeInTheDocument();
-    expect(within(card).getByText("Responsable Uno")).toBeInTheDocument();
-    expect(within(card).getByText("Barridas")).toBeInTheDocument();
-    expect(within(card).getByText("1")).toBeInTheDocument();
-    expect(within(card).getByText("Cargamento")).toBeInTheDocument();
-    expect(within(card).getByText("510 cajuelas")).toBeInTheDocument();
-    expect(within(card).getByText("ACTIVA")).toBeInTheDocument();
-    expect(operationRequests).toHaveLength(1);
+    expect(screen.getByText("Cajuelas en proceso")).toBeInTheDocument();
+    expect(screen.getByText("260")).toBeInTheDocument();
+    expect(screen.getByText("Necesita atención")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 cargamento está pendiente de registrar oro."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
+    expect(
+      screen.getByText("La planta registró una barrida"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Línea 1" }),
+    ).not.toBeInTheDocument();
+    expect(
+      dataRequests.some((url) =>
+        url.includes("/management/operation-lines?page=1&pageSize=100"),
+      ),
+    ).toBe(true);
+    expect(
+      dataRequests.some((url) => url.includes("/management/gold-summary")),
+    ).toBe(true);
+    expect(dataRequests.some((url) => url.includes("/audit-events"))).toBe(
+      true,
+    );
     expect(
       screen.queryByRole("link", { name: /Administración/u }),
     ).not.toBeInTheDocument();
@@ -232,6 +245,9 @@ describe("portal gerencial", () => {
       "/gerencia/trabajadores",
     );
     expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("link", { name: "Ver estado del sistema" }),
+    ).not.toBeInTheDocument();
   });
 
   it.each([
@@ -265,10 +281,7 @@ describe("portal gerencial", () => {
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
       dataRequests.push(url);
-      expect(
-        url.includes("/audit-events") ||
-          url.includes("/management/shipments?page=1&pageSize=100"),
-      ).toBe(true);
+      expect(url).toContain("/audit-events");
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer fictitious-token",
       );
@@ -279,9 +292,9 @@ describe("portal gerencial", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia/auditoria");
 
     expect(
-      await screen.findByText("Aún no hay movimientos de cargamentos"),
+      await screen.findByText("No hay actividad para mostrar"),
     ).toBeInTheDocument();
-    expect(dataRequests).toHaveLength(2);
+    expect(dataRequests).toHaveLength(1);
   });
 
   it("permite cerrar la sesion desde el menu gerencial", async () => {
@@ -313,6 +326,7 @@ function renderPortal(
     profile: {
       profileId: "a1000000-0000-4000-8000-000000000001",
       organizationId: "30000000-0000-4000-8000-000000000001",
+      displayName: "Lucía",
       role,
       permissions: role === "JEFE_EMPRESA" ? ["audit.read_redacted"] : [],
       expiresAt: "2026-10-09T01:00:00Z",
@@ -352,6 +366,49 @@ function emptyPage(): Response {
       headers: { "Content-Type": "application/json" },
     },
   );
+}
+
+function portalResponse(input: RequestInfo | URL): Response {
+  const url = requestUrl(input);
+  if (url.includes("/management/freshness")) return freshnessResponse();
+  if (url.includes("/management/gold-summary"))
+    return new Response(
+      JSON.stringify({
+        totalShipments: 1,
+        registeredShipments: 0,
+        excludedShipments: 1,
+        coveragePercentage: 0,
+        totalGoldGrams: 0,
+        includedCajuelas: 0,
+        gramsPerCajuela: null,
+        suppliers: [],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  if (url.includes("/audit-events"))
+    return new Response(
+      JSON.stringify({
+        items: [
+          {
+            id: "audit-1",
+            actorDisplayName: "Responsable Uno",
+            action: "sync.ingest",
+            entityType: "production_sweep",
+            entityId: "60000000-0000-4000-8000-000000000001",
+            result: "SUCCEEDED",
+            reasonCode: null,
+            occurredAt: "2026-10-12T15:30:00.000Z",
+            recordedAt: "2026-10-12T15:30:01.000Z",
+          },
+        ],
+        page: 1,
+        pageSize: 3,
+        total: 1,
+        totalPages: 1,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  return managementPage();
 }
 
 function managementPage(

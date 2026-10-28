@@ -52,12 +52,6 @@ const primaryNavigation = [
     labelEn: "Workers",
     icon: "◷",
   },
-  {
-    to: "/gerencia/inventario",
-    label: "Inventario",
-    labelEn: "Inventory",
-    icon: "□",
-  },
 ] as const;
 
 const futureNavigation = [
@@ -90,7 +84,6 @@ const pageTitles: Record<string, readonly [string, string]> = {
   "/gerencia/usuarios": ["Usuarios", "Users"],
   "/gerencia/estadisticas": ["Estadísticas", "Statistics"],
   "/gerencia/trabajadores": ["Trabajadores", "Workers"],
-  "/gerencia/inventario": ["Inventario", "Inventory"],
   "/gerencia/reportes": ["Reportes", "Reports"],
   "/gerencia/configuracion": ["Configuración", "Settings"],
 };
@@ -210,13 +203,6 @@ export function PortalLayout() {
               {tr("Datos centrales protegidos", "Protected central data")}
             </span>
             <LanguageSwitcher compact />
-            <NavLink
-              className="icon-button"
-              to="/estado"
-              aria-label={tr("Ver estado del sistema", "View system status")}
-            >
-              ↻
-            </NavLink>
           </div>
         </header>
         {!online && (

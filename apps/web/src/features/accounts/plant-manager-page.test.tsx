@@ -39,12 +39,20 @@ describe("gestion de usuarios de planta", () => {
     );
     await user.type(screen.getByLabelText("PIN de elevación"), "123456");
     await user.type(screen.getByLabelText("Confirmar PIN"), "123456");
-    await user.click(
-      await screen.findByRole("checkbox", { name: "Estación central" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "CREAR CUENTA PENDIENTE" }),
-    );
+    expect(
+      screen.queryByRole("combobox", { name: "Idioma inicial" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "Planta" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "Estación central" }),
+    ).not.toBeInTheDocument();
+    const createButton = screen.getByRole("button", {
+      name: "CREAR CUENTA PENDIENTE",
+    });
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
 
     expect(
       await screen.findByRole("status", { name: "Notificación de éxito" }),
@@ -93,12 +101,11 @@ describe("gestion de usuarios de planta", () => {
     );
     await user.type(screen.getByLabelText("PIN de elevación"), "123456");
     await user.type(screen.getByLabelText("Confirmar PIN"), "123456");
-    await user.click(
-      await screen.findByRole("checkbox", { name: "Estación central" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "CREAR CUENTA PENDIENTE" }),
-    );
+    const createButton = screen.getByRole("button", {
+      name: "CREAR CUENTA PENDIENTE",
+    });
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
 
     expect(
       await screen.findByText("Las contraseñas no coinciden."),

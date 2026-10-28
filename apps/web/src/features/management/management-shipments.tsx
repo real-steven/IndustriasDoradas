@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import type {
   ManagementShipment,
   ManagementSweepMercury,
@@ -18,11 +18,11 @@ import {
   useManagementShipmentFilterOptions,
   useManagementShipments,
   useManagementShipmentSweeps,
-  useRecentManagementShipments,
   useShipmentAuditEvents,
   type AuditEvent,
   type ShipmentFilters,
 } from "./management-shipments-data";
+import { managerAuditAction } from "./management-audit-labels";
 import { requestErrorMessage } from "../../api/http";
 import { useLanguage } from "../../i18n/language-context";
 
@@ -38,9 +38,16 @@ export function ShipmentsFeature() {
     if (value.length === 0) next.delete(key);
     else next.set(key, value);
     next.delete("page");
-    if (key === "period" && value !== "date") next.delete("date");
-    if (key === "period" && value === "date" && !next.has("date"))
-      next.set("date", filters.date);
+    if (key === "period" && value !== "date") {
+      next.delete("date");
+      next.delete("to");
+    }
+    if (key === "period" && value === "date") {
+      if (!next.has("date")) next.set("date", filters.date);
+      if (!next.has("to")) next.set("to", filters.toDate);
+    }
+    if (key === "date" && value > filters.toDate) next.set("to", value);
+    if (key === "to" && value < filters.date) next.set("date", value);
     setSearchParams(next);
   };
 
@@ -429,97 +436,243 @@ export function ShipmentDetailFeature() {
 
 export function ShipmentAuditFeature() {
   const { language, tr } = useLanguage();
-  const audit = useShipmentAuditEvents();
-  const shipments = useRecentManagementShipments();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("search")?.trim() ?? "";
+  const fromDate = auditDate(searchParams.get("from"));
+  const toDate = auditDate(searchParams.get("to"));
+  const requestedPage = Number(searchParams.get("page") ?? "1");
+  const page =
+    Number.isSafeInteger(requestedPage) && requestedPage > 0
+      ? requestedPage
+      : 1;
+  const [draftSearch, setDraftSearch] = useState(search);
+  const audit = useShipmentAuditEvents({
+    search,
+    fromDate,
+    toDate,
+    page,
+    pageSize: 12,
+  });
 
-  if (audit.isPending || shipments.isPending)
-    return (
-      <ShipmentState title={tr("Consultando auditoría", "Loading audit")}>
-        {tr(
-          "Espere mientras se agrupan los movimientos.",
-          "Please wait while changes are grouped.",
-        )}
-      </ShipmentState>
-    );
-  if (
-    audit.isError ||
-    shipments.isError ||
-    audit.data === undefined ||
-    shipments.data === undefined
-  )
-    return (
-      <ShipmentState
-        title={tr(
-          "No se pudo consultar la auditoría",
-          "Audit could not be loaded",
-        )}
-        error
-      >
-        {requestErrorMessage(
-          audit.error ?? shipments.error,
-          undefined,
-          language,
-        )}
-      </ShipmentState>
-    );
+  const update = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.length === 0) next.delete(key);
+    else next.set(key, value);
+    next.delete("page");
+    setSearchParams(next);
+  };
 
-  const shipmentById = new Map(
-    shipments.data.items.map((shipment) => [shipment.shipmentId, shipment]),
-  );
-  const grouped = groupAudit(audit.data.items);
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    update("search", draftSearch.trim());
+  };
 
-  if (grouped.length === 0)
-    return (
-      <ShipmentState
-        title={tr(
-          "Aún no hay movimientos de cargamentos",
-          "There are no shipment changes yet",
-        )}
-      >
-        {tr(
-          "La consulta central respondió correctamente, pero no devolvió cambios auditados de cargamentos.",
-          "The central query responded successfully, but returned no audited shipment changes.",
-        )}
-      </ShipmentState>
-    );
+  const clear = () => {
+    setDraftSearch("");
+    setSearchParams(new URLSearchParams());
+  };
 
   return (
-    <div className="audit-groups">
-      {grouped.map(([shipmentId, events]) => {
-        const shipment = shipmentById.get(shipmentId);
-        return (
-          <article className="audit-group" key={shipmentId}>
-            <header>
-              <div>
-                <span>
-                  {tr("CARGAMENTO", "SHIPMENT")} {shortShipmentId(shipmentId)}
-                </span>
-                <h3>
-                  {shipment?.productionLineName ??
-                    tr("Cargamento operativo", "Operational shipment")}
-                </h3>
-                <p>
-                  {shipment === undefined
-                    ? tr(
-                        "Detalle disponible desde la ficha trazable",
-                        "Details available from the traceability record",
-                      )
-                    : `${shipment.supplierName} · ${shipment.cajuelaTotal} ${tr("cajuelas", "cajuelas")}`}
-                </p>
-              </div>
-              <Link
-                className="secondary-link"
-                to={`/gerencia/cargamentos/${shipmentId}`}
-              >
-                {tr("ABRIR CARGAMENTO →", "OPEN SHIPMENT →")}
-              </Link>
-            </header>
-            <AuditEventList events={events} />
-          </article>
-        );
-      })}
+    <div className="manager-audit">
+      <form className="audit-filters" onSubmit={submitSearch}>
+        <label className="audit-search">
+          <span>{tr("Buscar actividad", "Search activity")}</span>
+          <input
+            type="search"
+            value={draftSearch}
+            placeholder={tr(
+              "Persona, acción o referencia",
+              "Person, action, or reference",
+            )}
+            onChange={(event) => setDraftSearch(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>{tr("Desde", "From")}</span>
+          <input
+            type="date"
+            value={fromDate ?? ""}
+            max={toDate}
+            onChange={(event) => update("from", event.target.value)}
+          />
+        </label>
+        <label>
+          <span>{tr("Hasta", "To")}</span>
+          <input
+            type="date"
+            value={toDate ?? ""}
+            min={fromDate}
+            onChange={(event) => update("to", event.target.value)}
+          />
+        </label>
+        <div className="audit-filter-actions">
+          <button type="submit" className="primary-button">
+            {tr("BUSCAR", "SEARCH")}
+          </button>
+          <button type="button" className="secondary" onClick={clear}>
+            {tr("LIMPIAR", "CLEAR")}
+          </button>
+        </div>
+      </form>
+
+      {audit.isPending ? (
+        <ShipmentState title={tr("Consultando auditoría", "Loading audit")}>
+          {tr(
+            "Espere mientras se consulta la actividad importante.",
+            "Please wait while important activity is loaded.",
+          )}
+        </ShipmentState>
+      ) : audit.isError || audit.data === undefined ? (
+        <ShipmentState
+          title={tr(
+            "No se pudo consultar la auditoría",
+            "Audit could not be loaded",
+          )}
+          error
+        >
+          {requestErrorMessage(audit.error, undefined, language)}
+        </ShipmentState>
+      ) : audit.data.items.length === 0 ? (
+        <ShipmentState
+          title={tr("No hay actividad para mostrar", "No activity to show")}
+        >
+          {tr(
+            "Pruebe otro texto o amplíe el rango de fechas.",
+            "Try another search or broaden the date range.",
+          )}
+        </ShipmentState>
+      ) : (
+        <>
+          <div className="audit-list" aria-live="polite">
+            {audit.data.items.map((event) => (
+              <ManagerAuditEvent key={event.id} event={event} />
+            ))}
+          </div>
+          <AuditPagination
+            page={audit.data.page}
+            totalPages={audit.data.totalPages}
+            total={audit.data.total}
+            searchParams={searchParams}
+            setSearchParams={setSearchParams}
+          />
+        </>
+      )}
     </div>
   );
+}
+
+function ManagerAuditEvent({ event }: { event: AuditEvent }) {
+  const { language, tr } = useLanguage();
+
+  return (
+    <article className="manager-audit-event">
+      <div className="audit-event-main">
+        <span className={`audit-result ${event.result.toLowerCase()}`}>
+          {managerAuditResult(event.result, language)}
+        </span>
+        <div>
+          <h3>{managerAuditAction(event, language)}</h3>
+          <p>
+            {tr("Realizado por", "Performed by")}{" "}
+            <strong>{event.actorDisplayName ?? tr("Sistema", "System")}</strong>
+          </p>
+        </div>
+      </div>
+      <dl className="audit-event-context">
+        <div>
+          <dt>{tr("Fecha y hora", "Date and time")}</dt>
+          <dd>{formatCostaRicaDateTime(event.occurredAt, language)}</dd>
+        </div>
+        <div>
+          <dt>{tr("Área", "Area")}</dt>
+          <dd>{managerAuditArea(event.entityType, language)}</dd>
+        </div>
+        {event.entityId !== null && (
+          <div>
+            <dt>{tr("Referencia", "Reference")}</dt>
+            <dd>{shortShipmentId(event.entityId)}</dd>
+          </div>
+        )}
+      </dl>
+    </article>
+  );
+}
+
+function AuditPagination({
+  page,
+  totalPages,
+  total,
+  searchParams,
+  setSearchParams,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  searchParams: URLSearchParams;
+  setSearchParams(this: void, params: URLSearchParams): void;
+}) {
+  const { tr } = useLanguage();
+  const go = (nextPage: number) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextPage === 1) next.delete("page");
+    else next.set("page", String(nextPage));
+    setSearchParams(next);
+  };
+
+  return (
+    <nav
+      className="history-pagination audit-pagination"
+      aria-label={tr("Páginas de auditoría", "Audit pages")}
+    >
+      <span>
+        {total}{" "}
+        {total === 1
+          ? tr("actividad", "activity")
+          : tr("actividades", "activities")}
+      </span>
+      <button type="button" disabled={page <= 1} onClick={() => go(page - 1)}>
+        {tr("← Anterior", "← Previous")}
+      </button>
+      <span>
+        {tr("Página", "Page")} {page} {tr("de", "of")} {Math.max(totalPages, 1)}
+      </span>
+      <button
+        type="button"
+        disabled={totalPages === 0 || page >= totalPages}
+        onClick={() => go(page + 1)}
+      >
+        {tr("Siguiente →", "Next →")}
+      </button>
+    </nav>
+  );
+}
+
+function auditDate(value: string | null): string | undefined {
+  if (value === null || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return undefined;
+  return value;
+}
+
+function managerAuditArea(entityType: string, language: "es" | "en"): string {
+  const es = language === "es";
+  if (entityType.includes("worker") || entityType.includes("attendance"))
+    return es ? "Trabajadores" : "Workers";
+  if (entityType.includes("user_profile")) return es ? "Usuarios" : "Users";
+  if (entityType.includes("shipment") || entityType.includes("production"))
+    return es ? "Operación" : "Operations";
+  if (entityType.includes("supplier")) return es ? "Proveedores" : "Suppliers";
+  if (entityType.includes("inventory")) return es ? "Inventario" : "Inventory";
+  return es ? "Sistema" : "System";
+}
+
+function managerAuditResult(
+  result: AuditEvent["result"],
+  language: "es" | "en",
+): string {
+  if (result === "SUCCEEDED")
+    return language === "es" ? "Completado" : "Completed";
+  if (result === "REJECTED")
+    return language === "es" ? "Rechazado" : "Rejected";
+  return language === "es" ? "No completado" : "Not completed";
 }
 
 function ShipmentFiltersPanel({
@@ -566,20 +719,31 @@ function ShipmentFiltersPanel({
           <option value="previous">
             {tr("Semana anterior", "Previous week")}
           </option>
-          <option value="date">
-            {tr("Fecha específica", "Specific date")}
-          </option>
+          <option value="date">{tr("Rango de fechas", "Date range")}</option>
+          <option value="all">{tr("Mostrar todo", "All")}</option>
         </select>
       </label>
       {filters.period === "date" && (
-        <label>
-          {tr("Fecha en Costa Rica", "Date in Costa Rica")}
-          <input
-            type="date"
-            value={filters.date}
-            onChange={(event) => update("date", event.target.value)}
-          />
-        </label>
+        <>
+          <label>
+            {tr("Desde", "From")}
+            <input
+              type="date"
+              max={filters.toDate}
+              value={filters.date}
+              onChange={(event) => update("date", event.target.value)}
+            />
+          </label>
+          <label>
+            {tr("Hasta", "To")}
+            <input
+              type="date"
+              min={filters.date}
+              value={filters.toDate}
+              onChange={(event) => update("to", event.target.value)}
+            />
+          </label>
+        </>
       )}
       <FilterSelect
         label={tr("Línea", "Line")}
@@ -777,17 +941,6 @@ function groupSweeps(items: ManagementSweepMercury[]) {
     } else group.components.push(item);
   }
   return [...groups.values()];
-}
-
-function groupAudit(items: AuditEvent[]): [string, AuditEvent[]][] {
-  const groups = new Map<string, AuditEvent[]>();
-  for (const event of items) {
-    if (event.entityType !== "shipment" || event.entityId === null) continue;
-    const events = groups.get(event.entityId) ?? [];
-    events.push(event);
-    groups.set(event.entityId, events);
-  }
-  return [...groups.entries()];
 }
 
 function uniqueOptions(items: [string, string][]): [string, string][] {

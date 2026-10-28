@@ -11,10 +11,14 @@ Guía de ejecución del Sistema de Gestión de Producción Minera. Cubre 17 sema
 | 4 | [Barridas y mercurio](sprint-04-barridas.md) | 2 | Alertas, barridas reales, mercurio por rastra y sincronización operacional completa | 3 |
 | 5 | [Web gerencial](sprint-05-web.md) | 2 | Portal de `JEFE_EMPRESA`, cargamentos, auditoría y oro total opcional por cargamento | 4.11 |
 | 6 | [Trabajadores y asistencia](sprint-06-asistencia.md) | 2 | Check-in/out local-first, incidencias y horas; fotografía aplazada para el MVP | 1, 3, 5 |
-| 7 | [Inventario y mantenimiento básico](sprint-07-inventario.md) | 2 | Kardex, revisiones y vida útil de componentes sin inferir consumo de mercurio | 1, 3–5 |
+| 7 | [Inventario y mantenimiento básico](sprint-07-inventario.md) | 2 | Implementación anterior deshabilitada; pendiente rediseño como inventario convencional | 1, 3–5 |
 | 8 | [Indicadores, reportes y entrega](sprint-08-entrega.md) | 2 | Comparación de proveedores, Excel, despliegue y recuperación | 5; 6–7 solo si cerraron |
 
 **Transición 6 → 7:** el cierre técnico automatizado de Sprint 6 está aprobado.
+El 2026-10-27 el equipo decidió no adoptar la experiencia construida en Sprint
+7 y pidió un inventario convencional. Sus superficies Web y Desktop quedaron
+deshabilitadas de forma reversible; la persistencia y el historial se conservan
+hasta definir el reemplazo.
 El 2026-10-23 se autorizó conservar MAN-01–MAN-06 como deuda de aceptación
 manual. El levantamiento 7.1 y el kardex/revisiones 7.2 están cerrados. El
 dominio puro de componentes y novedades 7.3 quedó implementado el 2026-10-26,

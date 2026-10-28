@@ -86,10 +86,9 @@ export function useRecordShipmentGold(shipmentId: string | null) {
 
 function goldQuery(filters: ShipmentFilters): string {
   const range = shipmentDateRange(filters);
-  const params = new URLSearchParams({
-    fromUtc: range.fromUtc,
-    toUtc: range.toUtc,
-  });
+  const params = new URLSearchParams();
+  if (range.fromUtc !== undefined) params.set("fromUtc", range.fromUtc);
+  if (range.toUtc !== undefined) params.set("toUtc", range.toUtc);
   if (filters.productionLineId !== undefined)
     params.set("productionLineId", filters.productionLineId);
   if (filters.supplierId !== undefined)

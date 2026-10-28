@@ -28,7 +28,6 @@
         <DataTemplate DataType="{x:Type viewModels:AuditViewModel}"><views:AuditView /></DataTemplate>
         <DataTemplate DataType="{x:Type viewModels:SettingsViewModel}"><views:SettingsView /></DataTemplate>
         <DataTemplate DataType="{x:Type viewModels:AttendancePreviewViewModel}"><views:AttendancePreviewView /></DataTemplate>
-        <DataTemplate DataType="{x:Type viewModels:InventoryViewModel}"><views:InventoryView /></DataTemplate>
 
         <Style x:Key="NavButtonStyle" TargetType="Button"
                BasedOn="{StaticResource {x:Type Button}}">
@@ -166,20 +165,6 @@
                                 <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsAttendancePage}" Value="True">
-                                            <Setter Property="Background" Value="{StaticResource NavyBrush}" />
-                                            <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
-                                            <Setter Property="Foreground" Value="White" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                        <Button AutomationProperties.Name="Ir a inventario" Command="{Binding ShowInventoryCommand}"
-                                Content="▦  INVENTARIO" ToolTip="Movimientos y conteos físicos">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsInventoryPage}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource NavyBrush}" />
                                             <Setter Property="BorderBrush" Value="{StaticResource NavyBrush}" />
                                             <Setter Property="Foreground" Value="White" />

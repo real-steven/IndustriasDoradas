@@ -243,7 +243,6 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<AuditViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
         builder.Services.AddSingleton<AttendancePreviewViewModel>();
-        builder.Services.AddSingleton<InventoryViewModel>();
         builder.Services.AddSingleton<StationViewModel>();
         builder.Services.AddSingleton<OperationViewModel>();
         builder.Services.AddSingleton<MainWindowViewModel>();

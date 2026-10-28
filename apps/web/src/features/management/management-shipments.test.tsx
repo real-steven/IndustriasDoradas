@@ -32,12 +32,29 @@ describe("historial gerencial de cargamentos", () => {
     expect(filters).toMatchObject({
       period: "date",
       date: "2026-10-08",
+      toDate: "2026-10-08",
       page: 2,
     });
     expect(shipmentDateRange(filters)).toEqual({
       fromUtc: "2026-10-08T06:00:00.000Z",
       toUtc: "2026-10-09T06:00:00.000Z",
     });
+  });
+
+  it("convierte un rango inclusivo y permite consultar todo el historial", () => {
+    const rangeFilters = parseShipmentFilters(
+      new URLSearchParams("period=date&date=2026-10-01&to=2026-10-08"),
+    );
+
+    expect(shipmentDateRange(rangeFilters)).toEqual({
+      fromUtc: "2026-10-01T06:00:00.000Z",
+      toUtc: "2026-10-09T06:00:00.000Z",
+    });
+    expect(
+      shipmentDateRange(
+        parseShipmentFilters(new URLSearchParams("period=all")),
+      ),
+    ).toEqual({});
   });
 
   it("conserva filtros y pagina en la URL y los envia a la API", async () => {
@@ -107,27 +124,25 @@ describe("historial gerencial de cargamentos", () => {
     ).toHaveAttribute("href", expect.stringContaining("period=previous"));
   });
 
-  it("agrupa la auditoria por cargamento y abre su ficha", async () => {
+  it("presenta la auditoria como actividad gerencial comprensible", async () => {
     const transport = vi.fn<typeof fetch>((input) => {
       const url = new URL(requestUrl(input), "http://localhost");
       if (url.pathname.endsWith("/audit-events"))
         return Promise.resolve(auditPage());
-      if (url.pathname.endsWith("/management/shipments"))
-        return Promise.resolve(shipmentPage());
       throw new Error(`Unexpected request ${url.pathname}`);
     });
     vi.stubGlobal("fetch", transport);
 
     renderPortal("/gerencia/auditoria");
 
-    expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
-    expect(screen.getByText("Línea 1")).toBeInTheDocument();
-    expect(
-      screen.getByText("Proveedor Norte · 280 cajuelas"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /ABRIR CARGAMENTO/u }),
-    ).toHaveAttribute("href", `/gerencia/cargamentos/${SHIPMENT_ID}`);
+    const event = (
+      await screen.findByText("La planta sincronizó un cargamento")
+    ).closest("article");
+    expect(event).not.toBeNull();
+    if (event === null) throw new Error("Expected an audit event");
+    expect(within(event).getByText("Realizado por")).toBeInTheDocument();
+    expect(within(event).getByText("Operación")).toBeInTheDocument();
+    expect(screen.queryByText("Cambios auditados")).not.toBeInTheDocument();
   });
 });
 

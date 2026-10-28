@@ -67,15 +67,11 @@ describe("recorrido gerencial de aceptación", () => {
       await screen.findByRole("heading", { name: "Buenos días, Lucía." }),
     ).toBeInTheDocument();
     expect(await screen.findByText("1 línea activa")).toBeInTheDocument();
-    const summaryLine = screen
-      .getByRole("heading", { name: "Línea 1" })
-      .closest("article");
-    expect(summaryLine).not.toBeNull();
-    if (summaryLine === null) throw new Error("Expected summary line");
-    expect(within(summaryLine).getByText("260")).toBeInTheDocument();
+    expect(screen.getByText("Cajuelas en proceso")).toBeInTheDocument();
+    expect(screen.getByText("260")).toBeInTheDocument();
     expect(
-      within(summaryLine).getByText("Proveedor Norte"),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Línea 1" }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Operación" }));
     expect(
@@ -144,11 +140,13 @@ describe("recorrido gerencial de aceptación", () => {
     expect(screen.getAllByText("1,25 g").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("link", { name: "Auditoría" }));
-    expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
-    expect(screen.getAllByText("business.mutation")).toHaveLength(2);
     expect(
-      screen.getByRole("link", { name: /ABRIR CARGAMENTO/u }),
-    ).toHaveAttribute("href", `/gerencia/cargamentos/${SHIPMENT_ID}`);
+      await screen.findAllByText("Se actualizó un cargamento"),
+    ).toHaveLength(2);
+    expect(screen.queryByText("business.mutation")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /ABRIR CARGAMENTO/u }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: /Estadísticas/u }));
     expect(
@@ -243,6 +241,7 @@ function createManagementApi(): {
         json({
           profileId: PROFILE_ID,
           organizationId: ORGANIZATION_ID,
+          displayName: "Lucía",
           role: "JEFE_EMPRESA",
           permissions: [
             "management.read",

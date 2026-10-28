@@ -6,7 +6,6 @@ import {
   AuditPage,
   DashboardPage,
   GoldPage,
-  InventoryPage,
   OperationPage,
   ShipmentDetailPage,
   ShipmentsPage,
@@ -61,7 +60,10 @@ export function App() {
               />
             }
           />
-          <Route path="inventario" element={<InventoryPage />} />
+          <Route
+            path="inventario"
+            element={<Navigate to="/gerencia" replace />}
+          />
           <Route
             path="configuracion"
             element={

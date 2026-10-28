@@ -25,6 +25,9 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       pageSize: number;
       search?: string;
       result?: AuditListItem["result"];
+      fromUtc?: string;
+      toUtc?: string;
+      routine?: "include" | "exclude";
     },
   ): Promise<PageResponse<AuditListItem>> {
     const parameters = new URLSearchParams({
@@ -37,11 +40,27 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
     });
     if (query.result !== undefined)
       parameters.set("result", `eq.${query.result}`);
-    if (query.search?.trim())
-      parameters.set(
-        "or",
-        `(action.ilike.*${this.escape(query.search)}*,entity_type.ilike.*${this.escape(query.search)}*)`,
-      );
+    if (query.fromUtc !== undefined)
+      parameters.set("occurred_at", `gte.${query.fromUtc}`);
+    if (query.toUtc !== undefined)
+      parameters.append("occurred_at", `lt.${query.toUtc}`);
+    if (query.routine === "exclude") parameters.set("action", "neq.access.api");
+    if (query.search?.trim()) {
+      const search = this.escape(query.search);
+      const clauses = [
+        `action.ilike.*${search}*`,
+        `entity_type.ilike.*${search}*`,
+        `actor_display_name.ilike.*${search}*`,
+        `reason_code.ilike.*${search}*`,
+        ...(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+          query.search.trim(),
+        )
+          ? [`entity_id.eq.${search}`]
+          : []),
+        ...this.managerSearchAliases(query.search),
+      ];
+      parameters.set("or", `(${clauses.join(",")})`);
+    }
     const response = await fetch(`${this.restUrl}/audit_events?${parameters}`, {
       headers: {
         Accept: "application/json",
@@ -115,5 +134,22 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
   }
   private escape(value: string): string {
     return value.trim().replace(/[\\%_(),]/gu, (match) => `\\${match}`);
+  }
+
+  private managerSearchAliases(value: string): string[] {
+    const normalized = value.trim().toLocaleLowerCase("es");
+    if (/oro|gold/u.test(normalized))
+      return ["changed_fields.cs.{gold_amount_grams}"];
+    if (/trabajador|empleado|worker/u.test(normalized))
+      return ["entity_type.ilike.*worker*"];
+    if (/usuario|cuenta|user|account/u.test(normalized))
+      return ["entity_type.ilike.*user_profile*"];
+    if (/proveedor|supplier/u.test(normalized))
+      return ["entity_type.ilike.*supplier*"];
+    if (/cargamento|shipment/u.test(normalized))
+      return ["entity_type.eq.shipment"];
+    if (/inventario|inventory/u.test(normalized))
+      return ["entity_type.ilike.*inventory*"];
+    return [];
   }
 }

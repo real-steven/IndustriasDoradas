@@ -47,24 +47,6 @@ public sealed class MainWindowViewModelTests
     }
 
     [TestMethod]
-    public async Task InventoryNavigationIsAvailable()
-    {
-        HomeViewModel home = new();
-        DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
-        var inventory = new InventoryViewModel();
-        using MainWindowViewModel viewModel = new(
-            home, diagnostics, null, null, null, null, null, new WpfUiDispatcher(),
-            inventory: inventory);
-
-        await viewModel.ShowInventoryCommand.ExecuteAsync(null);
-
-        Assert.AreSame(inventory, viewModel.CurrentPage);
-        Assert.IsTrue(viewModel.IsInventoryPage);
-        Assert.AreEqual("Inventario", viewModel.CurrentPageTitle);
-        StringAssert.Contains(inventory.Status, "inventario");
-    }
-
-    [TestMethod]
     public async Task AdministrativeCorrectionNotificationOpensAuditAndDismissesItself()
     {
         HomeViewModel home = new();

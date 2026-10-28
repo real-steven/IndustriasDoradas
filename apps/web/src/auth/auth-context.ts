@@ -5,6 +5,7 @@ export type RoleCode = "JEFE_EMPRESA" | "ADMINISTRADOR" | "JEFE_PLANTA";
 export interface ApplicationSession {
   profileId: string;
   organizationId: string;
+  displayName?: string;
   role: RoleCode;
   permissions: string[];
   expiresAt: string;
