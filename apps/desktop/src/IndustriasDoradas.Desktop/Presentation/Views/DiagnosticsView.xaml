@@ -92,11 +92,16 @@
                         <Button Command="{Binding CreateRecoveryCopyCommand}" Content="🔒  CREAR RESPALDO DE LA ESTACIÓN" />
                         <Button Margin="8,0,0,0" Command="{Binding ExportDiagnosticReportCommand}"
                                 Content="🔒  GENERAR INFORME PARA SOPORTE" />
+                        <Button Margin="8,0,0,0" Command="{Binding OpenSupportFolderCommand}"
+                                Content="📁  ABRIR CARPETA DE SOPORTE"
+                                ToolTip="{Binding SupportFolderPath}" />
                     </WrapPanel>
                     <TextBlock Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}"
                                Text="{Binding RecoveryCopyStatus}" TextWrapping="Wrap" />
                     <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
                                Text="{Binding DiagnosticReportStatus}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
+                               Text="{Binding SupportFolderStatus}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

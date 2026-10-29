@@ -23,12 +23,13 @@ public sealed record AttendanceWorkerStatus(
     public Guid Id => Worker.Id;
     public string Name => Worker.Name;
     public string CategoryLabel => Worker.Category == "JEFE_PLANTA" ? "Jefe de planta" : "Operario";
-    public string DisplayName => $"{Name} · {CategoryLabel}";
+    public string DisplayName => Worker.DisplayName;
     public string StateColor => IsPresent ? "#178449" : "#71808A";
 }
 
 public sealed class AttendancePreviewViewModel : ObservableObject
 {
+    private const int WorkerPageSize = 5;
     private static readonly TimeZoneInfo CostaRicaTimeZone = TimeZoneInfo.CreateCustomTimeZone(
         "America/Costa_Rica",
         TimeSpan.FromHours(-6),
@@ -40,16 +41,23 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     private readonly IProtectedStationStore? stationStore;
     private readonly TimeProvider timeProvider;
     private readonly IPlantManagerModeAccessor? managerMode;
+    private readonly ILocalOperationDashboardRepository? operationDashboard;
     private ProtectedStationState? station;
     private AttendanceWorkerStatus? selectedWorker;
     private string status = "Cargando el registro local de asistencia…";
     private string correctionReason = string.Empty;
     private DateTime? correctionDate;
     private string correctionTime = string.Empty;
+    private string workerSearchText = string.Empty;
     private bool isBusy;
+    private bool isCorrectionPanelOpen;
     private int presentCount;
     private int openShiftCount;
     private int incidentCount;
+    private int currentWorkerPage;
+    private int filteredWorkerCount;
+    private string responsibilityWarning = string.Empty;
+    private string responsibilityWarningKey = string.Empty;
 
     public AttendancePreviewViewModel()
         : this(null, null, null, TimeProvider.System, null)
@@ -62,20 +70,33 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         ILocalCatalogRepository? catalogs,
         IProtectedStationStore? stationStore,
         TimeProvider timeProvider,
-        IPlantManagerModeAccessor? managerMode)
+        IPlantManagerModeAccessor? managerMode,
+        ILocalOperationDashboardRepository? operationDashboard = null)
     {
         this.attendance = attendance;
         this.catalogs = catalogs;
         this.stationStore = stationStore;
         this.timeProvider = timeProvider;
         this.managerMode = managerMode;
+        this.operationDashboard = operationDashboard;
         CheckInCommand = new AsyncRelayCommand(CheckInAsync, CanCheckIn);
         CheckOutCommand = new AsyncRelayCommand(CheckOutAsync, CanCheckOut);
         CorrectOpenShiftCommand = new AsyncRelayCommand(CorrectOpenShiftAsync, CanCorrectOpenShift);
+        ToggleCorrectionPanelCommand = new RelayCommand(
+            ToggleCorrectionPanel,
+            () => IsManagerMode && !IsBusy);
+        CloseCorrectionPanelCommand = new RelayCommand(() => IsCorrectionPanelOpen = false);
+        PreviousWorkerPageCommand = new RelayCommand(
+            PreviousWorkerPage,
+            () => currentWorkerPage > 0);
+        NextWorkerPageCommand = new RelayCommand(
+            NextWorkerPage,
+            () => (currentWorkerPage + 1) * WorkerPageSize < filteredWorkerCount);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
     }
 
     public ObservableCollection<AttendanceWorkerStatus> Workers { get; } = [];
+    public ObservableCollection<AttendanceWorkerStatus> VisibleWorkers { get; } = [];
 
     public AttendanceWorkerStatus? SelectedWorker
     {
@@ -133,6 +154,23 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
     public string CorrectionValidationMessage => CorrectionMessage();
 
+    public string WorkerSearchText
+    {
+        get => workerSearchText;
+        set
+        {
+            if (!SetProperty(ref workerSearchText, value ?? string.Empty)) return;
+            currentWorkerPage = 0;
+            ApplyWorkerFilter();
+        }
+    }
+
+    public bool IsCorrectionPanelOpen
+    {
+        get => isCorrectionPanelOpen;
+        set => SetProperty(ref isCorrectionPanelOpen, value);
+    }
+
     public bool IsBusy
     {
         get => isBusy;
@@ -140,6 +178,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         {
             if (!SetProperty(ref isBusy, value)) return;
             RefreshCommand.NotifyCanExecuteChanged();
+            ToggleCorrectionPanelCommand.NotifyCanExecuteChanged();
             NotifyCommands();
         }
     }
@@ -162,22 +201,50 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         private set => SetProperty(ref incidentCount, value);
     }
 
+    public string ResponsibilityWarning
+    {
+        get => responsibilityWarning;
+        private set
+        {
+            if (!SetProperty(ref responsibilityWarning, value)) return;
+            OnPropertyChanged(nameof(HasResponsibilityWarning));
+        }
+    }
+
+    public string ResponsibilityWarningKey
+    {
+        get => responsibilityWarningKey;
+        private set => SetProperty(ref responsibilityWarningKey, value);
+    }
+
+    public bool HasResponsibilityWarning => !string.IsNullOrWhiteSpace(ResponsibilityWarning);
+
     public string SelectedWorkerSummary => SelectedWorker is null
         ? "Seleccione su nombre antes de registrar una marca."
-        : $"{SelectedWorker.Name} · {SelectedWorker.CategoryLabel} · {SelectedWorker.State} · {SelectedWorker.LastMark}";
+        : $"{SelectedWorker.DisplayName} · {SelectedWorker.State} · {SelectedWorker.LastMark}";
+
+    public string WorkerPageDescription => filteredWorkerCount == 0
+        ? "Sin resultados"
+        : $"{currentWorkerPage * WorkerPageSize + 1}–{Math.Min((currentWorkerPage + 1) * WorkerPageSize, filteredWorkerCount)} de {filteredWorkerCount}";
 
     public bool IsManagerMode => managerMode?.IsActive == true;
 
     public IAsyncRelayCommand CheckInCommand { get; }
     public IAsyncRelayCommand CheckOutCommand { get; }
     public IAsyncRelayCommand CorrectOpenShiftCommand { get; }
+    public IRelayCommand ToggleCorrectionPanelCommand { get; }
+    public IRelayCommand CloseCorrectionPanelCommand { get; }
+    public IRelayCommand PreviousWorkerPageCommand { get; }
+    public IRelayCommand NextWorkerPageCommand { get; }
     public IAsyncRelayCommand RefreshCommand { get; }
 
     public Task InitializeAsync() => RefreshAsync();
 
     public void RefreshManagerMode()
     {
+        if (!IsManagerMode) IsCorrectionPanelOpen = false;
         OnPropertyChanged(nameof(IsManagerMode));
+        ToggleCorrectionPanelCommand.NotifyCanExecuteChanged();
         NotifyCorrectionState();
     }
 
@@ -195,10 +262,12 @@ public sealed class AttendancePreviewViewModel : ObservableObject
             if (station is null || station.IsClosed)
             {
                 Workers.Clear();
+                VisibleWorkers.Clear();
                 SelectedWorker = null;
                 PresentCount = 0;
                 OpenShiftCount = 0;
                 IncidentCount = 0;
+                ClearResponsibilityWarning();
                 Status = "Abra la estación para consultar y registrar asistencia.";
                 return;
             }
@@ -238,12 +307,14 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
             Workers.Clear();
             foreach (AttendanceWorkerStatus worker in statuses) Workers.Add(worker);
+            ApplyWorkerFilter();
             SelectedWorker = selectedId.HasValue
                 ? Workers.FirstOrDefault(item => item.Id == selectedId.Value)
                 : null;
             PresentCount = Workers.Count(item => item.IsPresent);
             OpenShiftCount = PresentCount;
             IncidentCount = totalIncidents;
+            await RefreshResponsibilityWarningAsync().ConfigureAwait(true);
             OnPropertyChanged(nameof(IsManagerMode));
             Status = Workers.Count == 0
                 ? "No hay trabajadores activos disponibles en el catálogo local."
@@ -309,6 +380,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 AuthorizationFrom(station))).ConfigureAwait(true);
             CorrectionReason = string.Empty;
             await RefreshCoreAsync(workerId).ConfigureAwait(true);
+            IsCorrectionPanelOpen = false;
             DateTimeOffset localExit = TimeZoneInfo.ConvertTime(occurredAt, CostaRicaTimeZone);
             Status = $"Jornada de {workerName} cerrada a las {localExit:dd/MM/yyyy HH:mm} mediante corrección auditada.";
         }).ConfigureAwait(true);
@@ -351,13 +423,66 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
         Workers.Clear();
         foreach (AttendanceWorkerStatus worker in statuses) Workers.Add(worker);
+        ApplyWorkerFilter();
         SelectedWorker = selectedId.HasValue
             ? Workers.FirstOrDefault(item => item.Id == selectedId.Value)
             : null;
         PresentCount = Workers.Count(item => item.IsPresent);
         OpenShiftCount = PresentCount;
         IncidentCount = totalIncidents;
+        await RefreshResponsibilityWarningAsync().ConfigureAwait(true);
         OnPropertyChanged(nameof(IsManagerMode));
+    }
+
+    private async Task RefreshResponsibilityWarningAsync()
+    {
+        if (operationDashboard is null || station is null)
+        {
+            ClearResponsibilityWarning();
+            return;
+        }
+
+        try
+        {
+            HashSet<Guid> presentWorkerIds = Workers
+                .Where(worker => worker.IsPresent)
+                .Select(worker => worker.Id)
+                .ToHashSet();
+            LocalOperationDashboardSnapshot[] absentResponsibilities = (await operationDashboard
+                    .ListAsync(station.Authorization.StationId)
+                    .ConfigureAwait(true))
+                .Where(snapshot => snapshot.IsReady &&
+                    snapshot.Session is not null &&
+                    !presentWorkerIds.Contains(snapshot.Session.ResponsibleWorkerId))
+                .OrderBy(snapshot => snapshot.LineName)
+                .ToArray();
+
+            if (absentResponsibilities.Length == 0)
+            {
+                ClearResponsibilityWarning();
+                return;
+            }
+
+            ResponsibilityWarningKey = string.Join(
+                '|',
+                absentResponsibilities.Select(snapshot =>
+                    $"{snapshot.LineId:D}:{snapshot.Session!.ResponsibleWorkerId:D}"));
+            ResponsibilityWarning = absentResponsibilities.Length == 1
+                ? $"Atención: {absentResponsibilities[0].ResponsibleName ?? "El responsable"} " +
+                  $"está fuera de planta y continúa asignado a {absentResponsibilities[0].LineName}."
+                : $"Atención: {absentResponsibilities.Length} líneas activas tienen responsables fuera de planta.";
+        }
+        catch (Exception exception) when (exception is IOException or SqliteException or InvalidOperationException)
+        {
+            // Una lectura secundaria del tablero no debe impedir registrar la asistencia.
+            ClearResponsibilityWarning();
+        }
+    }
+
+    private void ClearResponsibilityWarning()
+    {
+        ResponsibilityWarningKey = string.Empty;
+        ResponsibilityWarning = string.Empty;
     }
 
     private bool CanCheckIn() =>
@@ -399,6 +524,50 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CorrectionValidationMessage));
         CorrectOpenShiftCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ToggleCorrectionPanel() => IsCorrectionPanelOpen = !IsCorrectionPanelOpen;
+
+    private void PreviousWorkerPage()
+    {
+        if (currentWorkerPage == 0) return;
+        currentWorkerPage--;
+        ApplyWorkerFilter();
+    }
+
+    private void NextWorkerPage()
+    {
+        if ((currentWorkerPage + 1) * WorkerPageSize >= filteredWorkerCount) return;
+        currentWorkerPage++;
+        ApplyWorkerFilter();
+    }
+
+    private void ApplyWorkerFilter()
+    {
+        string search = WorkerSearchText.Trim();
+        AttendanceWorkerStatus[] filtered = Workers
+            .Where(worker => string.IsNullOrEmpty(search) ||
+                worker.DisplayName.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
+                worker.CategoryLabel.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
+                worker.State.Contains(search, StringComparison.CurrentCultureIgnoreCase))
+            .ToArray();
+        filteredWorkerCount = filtered.Length;
+        int lastPage = filteredWorkerCount == 0
+            ? 0
+            : (filteredWorkerCount - 1) / WorkerPageSize;
+        currentWorkerPage = Math.Min(currentWorkerPage, lastPage);
+
+        VisibleWorkers.Clear();
+        foreach (AttendanceWorkerStatus worker in filtered
+                     .Skip(currentWorkerPage * WorkerPageSize)
+                     .Take(WorkerPageSize))
+        {
+            VisibleWorkers.Add(worker);
+        }
+
+        OnPropertyChanged(nameof(WorkerPageDescription));
+        PreviousWorkerPageCommand.NotifyCanExecuteChanged();
+        NextWorkerPageCommand.NotifyCanExecuteChanged();
     }
 
     private void PrepareCorrectionMoment(AttendanceWorkerStatus? worker)

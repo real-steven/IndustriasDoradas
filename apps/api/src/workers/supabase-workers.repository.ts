@@ -253,10 +253,7 @@ export class SupabaseWorkersRepository implements WorkersRepository {
       plantId: this.string(row, "plant_id"),
       sourceRequestId: this.string(row, "source_request_id"),
       userProfileId: this.nullableString(row, "user_profile_id"),
-      category:
-        row.user_profile_id === null || row.user_profile_id === undefined
-          ? "OPERARIO"
-          : "JEFE_PLANTA",
+      category: this.category(row, "category"),
       name: this.string(row, "name"),
       email: this.nullableString(row, "email"),
       phone: this.nullableString(row, "phone"),
@@ -286,6 +283,14 @@ export class SupabaseWorkersRepository implements WorkersRepository {
     const value = row[key];
     if (typeof value !== "boolean")
       throw new SupabaseDataError("INVALID_ROW", key);
+    return value;
+  }
+
+  private category(row: DatabaseRow, key: string): WorkerItem["category"] {
+    const value = this.string(row, key);
+    if (value !== "OPERARIO" && value !== "JEFE_PLANTA") {
+      throw new SupabaseDataError("INVALID_ROW", key);
+    }
     return value;
   }
 

@@ -100,6 +100,7 @@ export interface PageCatalog { items: CatalogItem[]; page: number; pageSize: num
 export interface Account { id: string; organizationId: string; displayName: string; preferredLocale: "es" | "en"; accountStatus: AccountStatus; roleCode: RoleCode; provisioningMethod: AccountProvisioningMethod; statusReason: string | null; isActive: boolean; createdAt: string; updatedAt: string }
 export interface PageAccount { items: Account[]; page: number; pageSize: number; total: number; totalPages: number }
 export interface CreatePlantManagerInput { displayName: string; email: string; password: string; pin: string; plantId: string; stationIds: string[]; preferredLocale: "es" | "en" }
+export interface CreateWorkerRequestInput { plantId: string; name: string; email?: string; phone?: string }
 export interface ManagementFilters { page?: number; pageSize?: number; fromUtc?: string; toUtc?: string; plantId?: string; productionLineId?: string; supplierId?: string; responsibleWorkerId?: string; shipmentId?: string }
 export interface ManagementFreshness { cursor: string; hasChanges: boolean; effectiveAtUtc: string | null; serverTimeUtc: string; pollAfterSeconds: number }
 export interface Worker { id: string; organizationId: string; plantId: string; sourceRequestId: string; userProfileId: string | null; category: "OPERARIO" | "JEFE_PLANTA"; name: string; email: string | null; phone: string | null; status: "PROVISIONAL" | "PROVISIONAL_VENCIDO" | "ACTIVO" | "RECHAZADO"; statusChangedAt: string; isActive: boolean; deactivatedAt: string | null }

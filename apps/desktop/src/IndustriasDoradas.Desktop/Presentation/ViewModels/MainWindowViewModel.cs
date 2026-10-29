@@ -13,9 +13,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private object currentPage;
     private readonly ISyncStatusNotifier? syncStatusNotifier;
     private readonly IUiDispatcher uiDispatcher;
+    private readonly DateTimeOffset correctionNotificationStartedAt = DateTimeOffset.UtcNow;
     private bool isRefreshingAfterSync;
     private bool isRefreshRequestedAfterSync;
+    private bool correctionNotificationsReady;
     private string? dismissedCorrectionNotificationKey;
+    private string? dismissedResponsibilityWarningKey;
 
     public MainWindowViewModel(HomeViewModel home, DiagnosticsViewModel diagnostics)
         : this(home, diagnostics, null, null, null, null, null)
@@ -106,20 +109,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         DismissCorrectionNotificationCommand = new RelayCommand(
             DismissCorrectionNotification,
             () => Diagnostics.HasCorrections);
+        DismissResponsibilityWarningCommand = new RelayCommand(
+            DismissResponsibilityWarning,
+            () => Attendance?.HasResponsibilityWarning == true);
+        ShowStationResponsibilityCommand = new AsyncRelayCommand(
+            ShowStationResponsibilityAsync,
+            () => Station is not null && Attendance?.HasResponsibilityWarning == true);
         ShowSettingsCommand = new RelayCommand(
             () => CurrentPage = Settings!,
             CanShowSettings);
         ShowAttendanceCommand = new RelayCommand(
             () => CurrentPage = Attendance!,
             () => Attendance is not null);
-        ShowStationCommand = new RelayCommand(
-            () => CurrentPage = Station!,
+        ShowStationCommand = new AsyncRelayCommand(
+            ShowStationAsync,
             () => Station is not null);
         ShowOperationCommand = new AsyncRelayCommand(
             ShowOperationAsync,
             () => Operation is not null);
         if (Station is not null) Station.PropertyChanged += OnStationPropertyChanged;
         Diagnostics.PropertyChanged += OnDiagnosticsPropertyChanged;
+        if (Attendance is not null) Attendance.PropertyChanged += OnAttendancePropertyChanged;
         if (syncStatusNotifier is not null)
         {
             syncStatusNotifier.Changed += OnSyncStatusChanged;
@@ -179,17 +189,26 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand ShowAuditCommand { get; }
     public IAsyncRelayCommand ShowAuditCorrectionsCommand { get; }
     public IRelayCommand DismissCorrectionNotificationCommand { get; }
+    public IRelayCommand DismissResponsibilityWarningCommand { get; }
+    public IAsyncRelayCommand ShowStationResponsibilityCommand { get; }
     public IRelayCommand ShowSettingsCommand { get; }
     public IRelayCommand ShowAttendanceCommand { get; }
-    public IRelayCommand ShowStationCommand { get; }
+    public IAsyncRelayCommand ShowStationCommand { get; }
     public IRelayCommand ShowOperationCommand { get; }
-    public bool HasCorrectionNotification => Diagnostics.HasCorrections &&
+    public bool HasCorrectionNotification => correctionNotificationsReady &&
+        LatestCorrection()?.OccurredAt > correctionNotificationStartedAt &&
         (Station is null || Station.IsPlantManager) &&
         !string.Equals(
             dismissedCorrectionNotificationKey,
             CurrentCorrectionNotificationKey(),
             StringComparison.Ordinal);
     public string CorrectionNotification => Diagnostics.CorrectionNotification;
+    public bool HasResponsibilityWarning => Attendance?.HasResponsibilityWarning == true &&
+        !string.Equals(
+            dismissedResponsibilityWarningKey,
+            Attendance.ResponsibilityWarningKey,
+            StringComparison.Ordinal);
+    public string ResponsibilityWarning => Attendance?.ResponsibilityWarning ?? string.Empty;
 
     public async Task InitializeAsync()
     {
@@ -222,6 +241,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         await Diagnostics.RefreshAsync();
+        EstablishCorrectionNotificationBaseline();
     }
 
     public void RecordActivity() => Station?.RecordActivity();
@@ -238,6 +258,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (Operation is null) return;
         await Operation.RefreshAsync();
         CurrentPage = Operation;
+    }
+
+    private async Task ShowStationAsync()
+    {
+        if (Station is null) return;
+        await Station.RefreshPreparationAsync();
+        CurrentPage = Station;
     }
 
     private async Task ShowAuditAsync()
@@ -265,8 +292,39 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private string CurrentCorrectionNotificationKey() => string.Join(
         '|',
-        Diagnostics.Corrections.Select(item =>
-            $"{item.OccurredAt.ToUniversalTime().Ticks}:{item.Action}:{item.EntityType}:{item.Reason}"));
+        Diagnostics.Corrections
+            .OrderByDescending(item => item.OccurredAt)
+            .Take(1)
+            .Select(item =>
+                $"{item.OccurredAt.ToUniversalTime().Ticks}:{item.Action}:{item.EntityType}:{item.Reason}"));
+
+    private AdministrativeCorrectionDiagnostic? LatestCorrection() => Diagnostics.Corrections
+        .OrderByDescending(item => item.OccurredAt)
+        .FirstOrDefault();
+
+    private void EstablishCorrectionNotificationBaseline()
+    {
+        dismissedCorrectionNotificationKey = CurrentCorrectionNotificationKey();
+        correctionNotificationsReady = true;
+        OnPropertyChanged(nameof(HasCorrectionNotification));
+        DismissCorrectionNotificationCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task ShowStationResponsibilityAsync()
+    {
+        if (Station is null) return;
+        DismissResponsibilityWarning();
+        await Station.RefreshPreparationAsync();
+        CurrentPage = Station;
+    }
+
+    private void DismissResponsibilityWarning()
+    {
+        dismissedResponsibilityWarningKey = Attendance?.ResponsibilityWarningKey;
+        OnPropertyChanged(nameof(HasResponsibilityWarning));
+        DismissResponsibilityWarningCommand.NotifyCanExecuteChanged();
+        ShowStationResponsibilityCommand.NotifyCanExecuteChanged();
+    }
 
     private void OnStationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -314,6 +372,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         DismissCorrectionNotificationCommand.NotifyCanExecuteChanged();
     }
 
+    private void OnAttendancePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (
+            nameof(AttendancePreviewViewModel.HasResponsibilityWarning) or
+            nameof(AttendancePreviewViewModel.ResponsibilityWarning) or
+            nameof(AttendancePreviewViewModel.ResponsibilityWarningKey))) return;
+        OnPropertyChanged(nameof(HasResponsibilityWarning));
+        OnPropertyChanged(nameof(ResponsibilityWarning));
+        DismissResponsibilityWarningCommand.NotifyCanExecuteChanged();
+        ShowStationResponsibilityCommand.NotifyCanExecuteChanged();
+    }
+
     private void OnSyncStatusChanged(object? sender, SyncStatusNotification notification)
     {
         if (!notification.HasDataChanges) return;
@@ -358,6 +428,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (Station is not null) Station.PropertyChanged -= OnStationPropertyChanged;
         Diagnostics.PropertyChanged -= OnDiagnosticsPropertyChanged;
+        if (Attendance is not null) Attendance.PropertyChanged -= OnAttendancePropertyChanged;
         if (syncStatusNotifier is not null)
         {
             syncStatusNotifier.Changed -= OnSyncStatusChanged;

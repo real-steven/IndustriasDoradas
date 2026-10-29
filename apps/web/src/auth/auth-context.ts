@@ -10,11 +10,16 @@ export interface ApplicationSession {
   permissions: string[];
   expiresAt: string;
 }
+export interface FoundSession {
+  email: string;
+}
 export interface AuthState {
   session: Session | null;
   profile: ApplicationSession | null;
+  foundSession: FoundSession | null;
   loading: boolean;
   error: string | null;
+  continueFoundSession(): Promise<void>;
   signIn(email: string, password: string): Promise<void>;
   recover(email: string): Promise<void>;
   signOut(): Promise<void>;

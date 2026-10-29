@@ -98,8 +98,10 @@ public sealed class SqliteOperationDashboardRepository(
                    session.responsible_worker_id, session.started_at_utc,
                    session.updated_at_utc, session.status,
                    line.name, supplier.name, shipment.started_at_utc,
-                   responsible.name, assignment.assigned_at_utc,
-                   previous_worker.name, previous_assignment.unassigned_at_utc,
+                   responsible.name,
+                   assignment.assigned_at_utc,
+                   previous_worker.name,
+                   previous_assignment.unassigned_at_utc,
                    COALESCE(counter.total, 0),
                    COALESCE((
                        SELECT SUM(sweep.cajuela_count)

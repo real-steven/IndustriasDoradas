@@ -83,6 +83,33 @@ describe("LoginPage", () => {
     expect(JSON.stringify(window.localStorage)).not.toContain("clave-privada");
   });
 
+  it("asks before opening a session found in the browser", async () => {
+    const user = userEvent.setup();
+    const continueFoundSession = vi.fn(() => Promise.resolve());
+    const signOut = vi.fn(() => Promise.resolve());
+    renderLogin({
+      foundSession: { email: "lucia@example.com" },
+      continueFoundSession,
+      signOut,
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Sesión disponible" }),
+    ).toBeVisible();
+    expect(screen.getByText("lucia@example.com")).toBeVisible();
+    expect(screen.queryByLabelText("CONTRASEÑA")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "CONTINUAR CON ESTA CUENTA →",
+      }),
+    );
+    expect(continueFoundSession).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "USAR OTRA CUENTA" }));
+    expect(signOut).toHaveBeenCalledOnce();
+  });
+
   it("translates the complete login without reloading", async () => {
     const user = userEvent.setup();
     const auth = createAuth();
@@ -126,8 +153,10 @@ function createAuth(overrides: Partial<AuthState> = {}): AuthState {
   return {
     session: null,
     profile: null,
+    foundSession: null,
     loading: false,
     error: null,
+    continueFoundSession: vi.fn(() => Promise.resolve()),
     signIn: vi.fn(() => Promise.resolve()),
     recover: vi.fn(() => Promise.resolve()),
     signOut: vi.fn(() => Promise.resolve()),

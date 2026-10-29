@@ -17,6 +17,7 @@ import {
   useAttendanceHours,
   useAttendanceWorkers,
 } from "./attendance-data";
+import { workerDisplayName } from "../workers/worker-display";
 
 export function AttendanceFeature() {
   const { language, locale, tr } = useLanguage();
@@ -95,7 +96,7 @@ export function AttendanceFeature() {
               <option value="">{tr("Todos", "All workers")}</option>
               {(workers.data?.items ?? []).map((worker) => (
                 <option key={worker.id} value={worker.id}>
-                  {worker.name} · {categoryLabel(worker, language)}
+                  {workerDisplayName(worker.name)}
                 </option>
               ))}
             </select>
@@ -263,7 +264,7 @@ function AttendanceQueryState({
             {workerRows.map(({ worker, summary }) => (
               <article className="attendance-worker-row" key={worker.id}>
                 <div>
-                  <strong>{worker.name}</strong>
+                  <strong>{workerDisplayName(worker.name)}</strong>
                   <span>
                     {categoryLabel(worker, language)} ·{" "}
                     {statusLabel(worker, language)}

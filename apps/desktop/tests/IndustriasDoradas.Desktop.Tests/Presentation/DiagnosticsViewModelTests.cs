@@ -26,6 +26,21 @@ public sealed class DiagnosticsViewModelTests
     }
 
     [TestMethod]
+    public void SupportFolderUsesStableDocumentsLocation()
+    {
+        DiagnosticsViewModel viewModel = new(
+            new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
+            new StubLocalDiagnostics(Healthy()));
+
+        string expected = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "IndustriasDoradas");
+
+        Assert.AreEqual(expected, viewModel.SupportFolderPath);
+        Assert.IsTrue(viewModel.OpenSupportFolderCommand.CanExecute(null));
+    }
+
+    [TestMethod]
     public async Task RefreshAsyncExposesDetailsWhenApiIsAvailable()
     {
         DateTimeOffset checkedAt = new(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);

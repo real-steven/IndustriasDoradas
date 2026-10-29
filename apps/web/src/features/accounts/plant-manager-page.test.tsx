@@ -112,6 +112,38 @@ describe("gestion de usuarios de planta", () => {
     ).toBeInTheDocument();
     expect(api.creationBody).toBeNull();
   });
+
+  it("registra un operario con el rol seleccionado y muestra el prefijo OP", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi();
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage();
+
+    await user.selectOptions(
+      await screen.findByLabelText("Rol de la persona"),
+      "OPERARIO",
+    );
+    await user.type(screen.getByLabelText("Nombre completo"), "Mario Planta");
+    await user.type(
+      screen.getByLabelText("Correo de contacto (opcional)"),
+      "mario@example.invalid",
+    );
+    await user.type(screen.getByLabelText("Teléfono (opcional)"), "8888-0000");
+    await user.click(
+      screen.getByRole("button", { name: "REGISTRAR OPERARIO" }),
+    );
+
+    expect(
+      await screen.findByRole("status", { name: "Notificación de éxito" }),
+    ).toHaveTextContent("Operario registrado con estado pendiente");
+    expect(api.operatorCreationBody).toEqual({
+      name: "Mario Planta",
+      plantId: PLANT_ID,
+      email: "mario@example.invalid",
+      phone: "8888-0000",
+    });
+    expect(await screen.findByText("Mario Planta")).toBeInTheDocument();
+  });
 });
 
 function renderPage() {
@@ -124,8 +156,10 @@ function renderPage() {
       permissions: ["plant_managers.manage", "organization_catalogs.read"],
       expiresAt: "2027-01-01T00:00:00.000Z",
     },
+    foundSession: null,
     loading: false,
     error: null,
+    continueFoundSession: vi.fn(),
     signIn: vi.fn(),
     recover: vi.fn(),
     signOut: vi.fn(),
@@ -150,10 +184,13 @@ function renderPage() {
 function createAccountsApi(): {
   fetch: typeof fetch;
   creationBody: Record<string, unknown> | null;
+  operatorCreationBody: Record<string, unknown> | null;
   approvalCount: () => number;
 } {
   let account: Record<string, unknown> | null = null;
   let creationBody: Record<string, unknown> | null = null;
+  let operatorCreationBody: Record<string, unknown> | null = null;
+  let operators: Record<string, unknown>[] = [];
   let approvals = 0;
   const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
     const url = new URL(requestUrl(input), "http://localhost");
@@ -178,6 +215,29 @@ function createAccountsApi(): {
       );
     if (url.pathname.endsWith("/accounts") && method === "GET")
       return Promise.resolve(page(account === null ? [] : [account]));
+    if (url.pathname.endsWith("/workers") && method === "GET")
+      return Promise.resolve(page(operators));
+    if (url.pathname.endsWith("/worker-requests") && method === "POST") {
+      if (typeof init?.body !== "string") throw new Error("Expected body");
+      operatorCreationBody = JSON.parse(init.body) as Record<string, unknown>;
+      const operator = {
+        id: WORKER_ID,
+        organizationId: ORGANIZATION_ID,
+        plantId: PLANT_ID,
+        sourceRequestId: REQUEST_ID,
+        userProfileId: null,
+        category: "OPERARIO",
+        name: "Mario Planta",
+        email: "mario@example.invalid",
+        phone: "8888-0000",
+        status: "PROVISIONAL",
+        statusChangedAt: "2026-10-28T12:00:00.000Z",
+        isActive: true,
+        deactivatedAt: null,
+      };
+      operators = [operator];
+      return Promise.resolve(json(operator, 201));
+    }
     if (
       url.pathname.endsWith("/accounts/plant-managers") &&
       method === "POST"
@@ -201,6 +261,9 @@ function createAccountsApi(): {
     fetch,
     get creationBody() {
       return creationBody;
+    },
+    get operatorCreationBody() {
+      return operatorCreationBody;
     },
     approvalCount: () => approvals,
   };
@@ -252,3 +315,5 @@ const ORGANIZATION_ID = "30000000-0000-4000-8000-000000000001";
 const PLANT_ID = "31000000-0000-4000-8000-000000000001";
 const STATION_ID = "34000000-0000-4000-8000-000000000001";
 const ACCOUNT_ID = "a1000000-0000-4000-8000-000000000099";
+const WORKER_ID = "b1000000-0000-4000-8000-000000000099";
+const REQUEST_ID = "b0000000-0000-4000-8000-000000000099";

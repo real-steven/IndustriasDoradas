@@ -4,8 +4,9 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Configuration;
-using System.Globalization;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private static readonly JsonSerializerOptions DiagnosticJsonOptions = new() { WriteIndented = true };
     private readonly IHealthService healthService;
     private readonly ILocalDatabaseDiagnostics localDiagnostics;
+    private readonly string supportFolderPath;
     private readonly SynchronizationContext? uiContext;
     private HealthState state = HealthState.NotChecked;
     private string statusTitle = "Sin comprobar";
@@ -35,6 +37,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private string lastSynchronization = "—";
     private string clockDeviation = "—";
     private string diagnosticReportStatus = "No se ha generado un informe para soporte.";
+    private string supportFolderStatus = "Los respaldos e informes se guardan en la carpeta de soporte.";
     private IReadOnlyList<SyncFailureDiagnostic> failures = [];
     private IReadOnlyList<AdministrativeCorrectionDiagnostic> corrections = [];
     private int failedReviewCount;
@@ -64,6 +67,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     {
         this.healthService = healthService;
         this.localDiagnostics = localDiagnostics;
+        supportFolderPath = GetSupportFolderPath();
         uiContext = SynchronizationContext.Current;
         this.stationViewModel = stationViewModel;
         StationOptions configuredStation = stationOptions.Value;
@@ -81,6 +85,9 @@ public sealed class DiagnosticsViewModel : ObservableObject
         ExportDiagnosticReportCommand = new AsyncRelayCommand(
             ExportDiagnosticReportAsync,
             () => CanUseProtectedActions && !IsExportingReport);
+        OpenSupportFolderCommand = new RelayCommand(
+            OpenSupportFolder,
+            () => CanUseProtectedActions);
         statusNotifier.Changed += OnSyncStatusChanged;
         if (stationViewModel is not null)
         {
@@ -134,6 +141,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public IAsyncRelayCommand RefreshCommand { get; }
     public IAsyncRelayCommand CreateRecoveryCopyCommand { get; }
     public IAsyncRelayCommand ExportDiagnosticReportCommand { get; }
+    public IRelayCommand OpenSupportFolderCommand { get; }
     public string Station => stationCode;
     public string StationCode => stationCode;
     public string StationName => stationName;
@@ -142,6 +150,8 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public string LastSynchronization { get => lastSynchronization; private set => SetProperty(ref lastSynchronization, value); }
     public string ClockDeviation { get => clockDeviation; private set => SetProperty(ref clockDeviation, value); }
     public string DiagnosticReportStatus { get => diagnosticReportStatus; private set => SetProperty(ref diagnosticReportStatus, value); }
+    public string SupportFolderPath => supportFolderPath;
+    public string SupportFolderStatus { get => supportFolderStatus; private set => SetProperty(ref supportFolderStatus, value); }
     public IReadOnlyList<SyncFailureDiagnostic> Failures { get => failures; private set => SetProperty(ref failures, value); }
     public int FailedReviewCount
     {
@@ -164,9 +174,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public bool HasCorrections => Corrections.Count > 0;
     public bool CanUseProtectedActions => stationViewModel?.IsPlantManager ?? true;
     public string CorrectionNotification => HasCorrections
-        ? Corrections.Count == 1
-            ? "1 corrección administrativa recibida."
-            : $"{Corrections.Count} correcciones administrativas recibidas."
+        ? "Corrección disponible en auditoría."
         : string.Empty;
     public LocalDatabaseHealthState LocalState
     {
@@ -271,8 +279,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
         try
         {
             string directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "IndustriasDoradas",
+                SupportFolderPath,
                 "Diagnostico");
             Directory.CreateDirectory(directory);
             string path = Path.Combine(directory,
@@ -365,8 +372,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
         IsCreatingCopy = true;
         try
         {
-            string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            string directory = Path.Combine(documents, "IndustriasDoradas", "Recuperacion");
+            string directory = Path.Combine(SupportFolderPath, "Recuperacion");
             string path = await localDiagnostics.CreateConsistentCopyAsync(directory).ConfigureAwait(true);
             RecoveryCopyStatus = $"Respaldo de la estación creado: {path}";
         }
@@ -379,6 +385,30 @@ public sealed class DiagnosticsViewModel : ObservableObject
             IsCreatingCopy = false;
         }
     }
+
+    private void OpenSupportFolder()
+    {
+        string directory = SupportFolderPath;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(directory, "Recuperacion"));
+            Directory.CreateDirectory(Path.Combine(directory, "Diagnostico"));
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = directory,
+                UseShellExecute = true,
+            });
+            SupportFolderStatus = $"Carpeta de soporte abierta: {directory}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        {
+            SupportFolderStatus = $"No se pudo abrir la carpeta de soporte: {directory}";
+        }
+    }
+
+    private static string GetSupportFolderPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        "IndustriasDoradas");
 
     private static string FormatBytes(long bytes)
     {
@@ -395,5 +425,6 @@ public sealed class DiagnosticsViewModel : ObservableObject
         OnPropertyChanged(nameof(CanUseProtectedActions));
         CreateRecoveryCopyCommand.NotifyCanExecuteChanged();
         ExportDiagnosticReportCommand.NotifyCanExecuteChanged();
+        OpenSupportFolderCommand.NotifyCanExecuteChanged();
     }
 }

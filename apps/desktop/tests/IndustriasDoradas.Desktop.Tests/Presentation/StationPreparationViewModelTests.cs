@@ -2,6 +2,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
+using IndustriasDoradas.Desktop.Domain.Attendance;
 using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
@@ -374,7 +375,48 @@ public sealed class StationPreparationViewModelTests
         Assert.AreEqual(StationMode.PlantManager, viewModel.Mode);
         Assert.AreEqual(0, viewModel.Workers.Count);
         Assert.IsFalse(viewModel.PrepareLineCommand.CanExecute(null));
-        StringAssert.Contains(viewModel.Status, "No hay responsables activos asignados a esta planta");
+        StringAssert.Contains(viewModel.Status, "No hay responsables con entrada registrada en planta");
+    }
+
+    [TestMethod]
+    public async Task ResponsibleSelectorOnlyIncludesWorkersCurrentlyInPlant()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var attendance = new MemoryAttendanceRepository();
+        attendance.SeedCheckIn(WorkerId);
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, Snapshot()),
+            catalogs,
+            new MemoryStationSequences(),
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(
+                catalogs,
+                sessions,
+                new RecordingOperationRepository(sessions),
+                time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time,
+            dashboard: null,
+            sweepHandler: null,
+            sharedManagerMode: null,
+            mercuryHandler: null,
+            attendance: attendance);
+
+        await viewModel.InitializeAsync();
+
+        Assert.HasCount(1, viewModel.Workers);
+        Assert.AreEqual(WorkerId, viewModel.Workers[0].Id);
+        Assert.AreEqual("Marta", viewModel.Workers[0].DisplayName);
     }
 
     private static ProtectedStationState State() => new(
@@ -473,6 +515,33 @@ public sealed class StationPreparationViewModelTests
         public Task<CachedSupplier?> FindSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default) => Task.FromResult(suppliers.SingleOrDefault(item => item.Id == supplierId));
         public Task<CachedWorker?> FindWorkerAsync(Guid workerId, CancellationToken cancellationToken = default) => Task.FromResult(workers.SingleOrDefault(item => item.Id == workerId));
         public Task<CachedProductionLine?> FindLineAsync(Guid lineId, CancellationToken cancellationToken = default) => Task.FromResult(lines.SingleOrDefault(item => item.Id == lineId));
+    }
+
+    private sealed class MemoryAttendanceRepository : ILocalAttendanceRepository
+    {
+        private readonly List<AttendanceEvent> events = [];
+
+        public void SeedCheckIn(Guid workerId) => events.Add(AttendanceEvent.CheckIn(
+            Guid.NewGuid(),
+            OrganizationId,
+            PlantId,
+            StationId,
+            workerId,
+            events.Count + 1,
+            Now,
+            Now));
+
+        public Task<LocalAttendanceRegistration> RecordAsync(
+            RecordLocalAttendanceMutation mutation,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<AttendanceEvent>> ListForWorkerAsync(
+            Guid organizationId,
+            Guid workerId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AttendanceEvent>>(events
+                .Where(item => item.OrganizationId == organizationId && item.WorkerId == workerId)
+                .ToArray());
     }
 
     private sealed class MemorySessions : ILocalOperationalSessionRepository

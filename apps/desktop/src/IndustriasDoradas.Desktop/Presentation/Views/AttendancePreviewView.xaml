@@ -104,8 +104,10 @@
             </Setter>
         </Style>
     </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource SoftCanvasBrush}">
-        <StackPanel Margin="34,26,34,42" MaxWidth="1380" HorizontalAlignment="Center">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalContentAlignment="Stretch"
+                  Background="{StaticResource SoftCanvasBrush}">
+        <StackPanel Margin="34,26,34,42" MaxWidth="1380" HorizontalAlignment="Stretch">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -159,7 +161,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="7*" />
                     <ColumnDefinition Width="14" />
-                    <ColumnDefinition Width="5*" />
+                    <ColumnDefinition Width="390" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Padding="26" Style="{StaticResource SurfaceCardStyle}">
@@ -188,6 +190,8 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="10" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="10" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Button Grid.Column="0" MinHeight="62" Background="#EAF8F0"
                                     BorderBrush="#AAD8BC" Foreground="#147A42"
@@ -197,6 +201,69 @@
                                     BorderBrush="#BED0D9" Foreground="#244A5C"
                                     Command="{Binding CheckOutCommand}"
                                     Content="←  REGISTRAR SALIDA" />
+                            <Grid Grid.Column="4">
+                                <Button x:Name="CorrectionButton" MinWidth="132" MinHeight="62"
+                                        Background="#FFF8E9" BorderBrush="#E1BD72" Foreground="#815D17"
+                                        Command="{Binding ToggleCorrectionPanelCommand}"
+                                        Content="⚙  CORREGIR SALIDA"
+                                        AutomationProperties.Name="Corregir salida olvidada"
+                                        ToolTip="Corregir una salida olvidada con Modo Jefe de Planta" />
+                                <Popup IsOpen="{Binding IsCorrectionPanelOpen, Mode=TwoWay}"
+                                       Placement="Bottom" PlacementTarget="{Binding ElementName=CorrectionButton}"
+                                       HorizontalOffset="-330" VerticalOffset="7"
+                                       AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade">
+                                    <Border Width="440" Padding="20" Background="White"
+                                            BorderBrush="#C8D8DF" BorderThickness="1" CornerRadius="14">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock FontSize="18" FontWeight="Bold"
+                                                               Text="Corregir salida olvidada" />
+                                                    <TextBlock Margin="0,4,20,0" Foreground="{StaticResource MutedBrush}"
+                                                               Text="Disponible únicamente con Modo Jefe de Planta. La corrección quedará auditada."
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Width="34" Height="34" Padding="0"
+                                                        Command="{Binding CloseCorrectionPanelCommand}"
+                                                        Content="×" ToolTip="Cerrar" />
+                                            </Grid>
+                                            <Grid Margin="0,16,0,12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="110" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock FontSize="11" FontWeight="Bold" Text="FECHA REAL DE SALIDA" />
+                                                    <DatePicker MinHeight="42" Margin="0,7,0,0" Padding="8,4"
+                                                                SelectedDate="{Binding CorrectionDate, UpdateSourceTrigger=PropertyChanged}"
+                                                                AutomationProperties.Name="Fecha real de salida" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock FontSize="11" FontWeight="Bold" Text="HORA (24 H)" />
+                                                    <TextBox MinHeight="42" Margin="0,7,0,0" Padding="10"
+                                                             VerticalContentAlignment="Center" MaxLength="5"
+                                                             Text="{Binding CorrectionTime, UpdateSourceTrigger=PropertyChanged}"
+                                                             AutomationProperties.Name="Hora real de salida" />
+                                                </StackPanel>
+                                            </Grid>
+                                            <TextBlock FontSize="11" FontWeight="Bold" Text="MOTIVO OBLIGATORIO" />
+                                            <TextBox MinHeight="64" Margin="0,7,0,10" Padding="10"
+                                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                                     Text="{Binding CorrectionReason, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Margin="0,0,0,10" Foreground="{StaticResource MutedBrush}"
+                                                       FontSize="11" TextWrapping="Wrap"
+                                                       Text="{Binding CorrectionValidationMessage}" />
+                                            <Button MinHeight="46" Command="{Binding CorrectOpenShiftCommand}"
+                                                    Content="CERRAR JORNADA CON CORRECCIÓN" />
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                            </Grid>
                         </Grid>
 
                         <TextBlock Margin="0,15,0,0" Foreground="{StaticResource MutedBrush}"
@@ -205,16 +272,32 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel Grid.Column="2">
-                    <Border Padding="22" Style="{StaticResource SurfaceCardStyle}" CornerRadius="16">
-                        <StackPanel>
-                            <TextBlock FontSize="19" FontWeight="Bold" Text="Estado del personal" />
-                            <TextBlock Margin="0,5,0,14" Foreground="{StaticResource MutedBrush}"
-                                       Text="Resumen local de cada trabajador." />
-                            <ItemsControl ItemsSource="{Binding Workers}">
+                <Border Grid.Column="2" Width="390" Height="610" Padding="22" VerticalAlignment="Top"
+                        Style="{StaticResource SurfaceCardStyle}" CornerRadius="16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="390" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" FontSize="19" FontWeight="Bold" Text="Estado del personal" />
+                        <TextBlock Grid.Row="1" Margin="0,5,0,10" Foreground="{StaticResource MutedBrush}"
+                                   Text="Resumen local de cada trabajador." />
+                        <TextBlock Grid.Row="2" Margin="0,0,0,5" FontSize="10" FontWeight="Bold"
+                                   Foreground="{StaticResource MutedBrush}" Text="BUSCAR PERSONAL" />
+                        <TextBox Grid.Row="3" MinHeight="38" Margin="0,0,0,12" Padding="11,7"
+                                 VerticalContentAlignment="Center"
+                                 Text="{Binding WorkerSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="Buscar personal"
+                                 ToolTip="Buscar por nombre, rol o estado" />
+                        <ItemsControl Grid.Row="4" Height="390" ItemsSource="{Binding VisibleWorkers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Margin="0,0,0,8" Padding="13" Background="#F7F9FA"
+                                        <Border Height="70" Margin="0,0,0,8" Padding="13,9"
+                                                Background="#F7F9FA"
                                                 BorderBrush="#DCE6EA" BorderThickness="1" CornerRadius="11">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
@@ -222,64 +305,46 @@
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel>
-                                                    <TextBlock FontWeight="Bold" Text="{Binding Name}" />
+                                                    <TextBlock FontWeight="Bold" Text="{Binding DisplayName}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding DisplayName}" />
                                                     <TextBlock Margin="0,2,0,0" Foreground="#2F7EA4"
                                                                FontSize="10" FontWeight="SemiBold"
-                                                               Text="{Binding CategoryLabel}" />
+                                                               Text="{Binding CategoryLabel}"
+                                                               TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Margin="0,3,0,0" Foreground="{StaticResource MutedBrush}"
-                                                               FontSize="11" Text="{Binding LastMark}" />
+                                                               FontSize="11" Text="{Binding LastMark}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding LastMark}" />
                                                 </StackPanel>
                                                 <TextBlock Grid.Column="1" Margin="12,0,0,0"
                                                            VerticalAlignment="Center"
                                                            Foreground="{Binding StateColor}"
-                                                           FontWeight="Bold" Text="{Binding State}" />
+                                                           FontWeight="Bold" Text="{Binding State}"
+                                                           TextWrapping="NoWrap" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Margin="0,14,0,0" Padding="22" Style="{StaticResource SurfaceCardStyle}"
-                            CornerRadius="16">
-                        <StackPanel>
-                            <TextBlock FontSize="19" FontWeight="Bold" Text="Corregir salida olvidada" />
-                            <TextBlock Margin="0,6,0,12" Foreground="{StaticResource MutedBrush}"
-                                       Text="Disponible únicamente con Modo Jefe de Planta. Indique cuándo salió realmente; la entrada original no se edita."
-                                       TextWrapping="Wrap" />
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="10" />
-                                    <ColumnDefinition Width="110" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock FontSize="11" FontWeight="Bold" Text="FECHA REAL DE SALIDA" />
-                                    <DatePicker MinHeight="42" Margin="0,7,0,0" Padding="8,4"
-                                                SelectedDate="{Binding CorrectionDate, UpdateSourceTrigger=PropertyChanged}"
-                                                AutomationProperties.Name="Fecha real de salida" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock FontSize="11" FontWeight="Bold" Text="HORA (24 H)" />
-                                    <TextBox MinHeight="42" Margin="0,7,0,0" Padding="10"
-                                             VerticalContentAlignment="Center" MaxLength="5"
-                                             Text="{Binding CorrectionTime, UpdateSourceTrigger=PropertyChanged}"
-                                             AutomationProperties.Name="Hora real de salida" />
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock FontSize="11" FontWeight="Bold" Text="MOTIVO OBLIGATORIO" />
-                            <TextBox MinHeight="64" Margin="0,7,0,10" Padding="10"
-                                     AcceptsReturn="True" TextWrapping="Wrap"
-                                     Text="{Binding CorrectionReason, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBlock Margin="0,0,0,10" Foreground="{StaticResource MutedBrush}"
-                                       FontSize="11" TextWrapping="Wrap"
-                                       Text="{Binding CorrectionValidationMessage}" />
-                            <Button MinHeight="46" Command="{Binding CorrectOpenShiftCommand}"
-                                    Content="CERRAR JORNADA CON CORRECCIÓN" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                        </ItemsControl>
+                        <Grid Grid.Row="5" Margin="0,3,0,0" VerticalAlignment="Bottom">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button MinWidth="38" MinHeight="32" Padding="8,3"
+                                    Command="{Binding PreviousWorkerPageCommand}"
+                                    Content="‹" ToolTip="Página anterior" />
+                            <TextBlock Grid.Column="1" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}"
+                                       FontSize="11" Text="{Binding WorkerPageDescription}" />
+                            <Button Grid.Column="2" MinWidth="38" MinHeight="32" Padding="8,3"
+                                    Command="{Binding NextWorkerPageCommand}"
+                                    Content="›" ToolTip="Página siguiente" />
+                        </Grid>
+                    </Grid>
+                </Border>
             </Grid>
         </StackPanel>
     </ScrollViewer>

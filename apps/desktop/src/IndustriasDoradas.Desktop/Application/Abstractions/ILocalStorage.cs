@@ -17,7 +17,10 @@ public sealed record CachedWorker(
     string Name,
     bool IsActive,
     DateTimeOffset UpdatedAt,
-    string Category = "OPERARIO");
+    string Category = "OPERARIO")
+{
+    public string DisplayName => Name;
+}
 
 public sealed record CachedProductionLine(
     Guid Id,

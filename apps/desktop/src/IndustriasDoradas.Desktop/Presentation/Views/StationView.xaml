@@ -356,7 +356,7 @@
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="RESPONSABLE PRINCIPAL O NUEVO RESPONSABLE" />
-                                    <ComboBox Style="{StaticResource StationComboBoxStyle}" DisplayMemberPath="Name"
+                                    <ComboBox Style="{StaticResource StationComboBoxStyle}" DisplayMemberPath="DisplayName"
                                               ItemsSource="{Binding Workers}" SelectedItem="{Binding SelectedWorker}"
                                               AutomationProperties.Name="Responsable principal" />
                                 </StackPanel>

@@ -311,33 +311,62 @@
                         Click="OnShowHeader" Content="⌄  MOSTRAR MENÚ"
                         Background="White" BorderBrush="#D6E1E6" Foreground="{StaticResource NavyBrush}"
                         FontSize="11" FontWeight="Bold" />
-                <Border Panel.ZIndex="25" HorizontalAlignment="Right" VerticalAlignment="Top"
-                        Margin="0,16,22,0" Padding="13,9"
-                        Background="#FFF5D7" BorderBrush="#E4D39D" BorderThickness="1"
-                        CornerRadius="12"
-                        Visibility="{Binding HasCorrectionNotification, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" Foreground="#76500A"
-                                   FontWeight="SemiBold" Text="{Binding CorrectionNotification}" />
-                        <Button Grid.Column="1" Margin="14,0,0,0" Padding="11,6"
-                                Background="White" BorderBrush="#D7BF78" Foreground="#76500A"
-                                FontSize="10" FontWeight="Bold"
-                                Command="{Binding ShowAuditCorrectionsCommand}"
-                                Content="ABRIR AUDITORÍA"
-                                AutomationProperties.Name="Abrir auditoría de correcciones" />
-                        <Button Grid.Column="2" Width="30" Height="30" Margin="7,0,0,0" Padding="0"
-                                Background="Transparent" BorderBrush="Transparent" Foreground="#76500A"
-                                FontSize="14" FontWeight="Bold"
-                                Command="{Binding DismissCorrectionNotificationCommand}"
-                                Content="✕" ToolTip="Cerrar notificación"
-                                AutomationProperties.Name="Cerrar notificación de correcciones" />
-                    </Grid>
-                </Border>
+                <StackPanel Panel.ZIndex="25" HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Margin="0,16,22,0">
+                    <Border Margin="0,0,0,8" Padding="13,9"
+                            Background="#FFF0EA" BorderBrush="#E6B7A4" BorderThickness="1"
+                            CornerRadius="12"
+                            Visibility="{Binding HasResponsibilityWarning, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock MaxWidth="450" VerticalAlignment="Center" Foreground="#85402B"
+                                       FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Text="{Binding ResponsibilityWarning}" />
+                            <Button Grid.Column="1" Margin="14,0,0,0" Padding="11,6"
+                                    Background="White" BorderBrush="#DCA38D" Foreground="#85402B"
+                                    FontSize="10" FontWeight="Bold"
+                                    Command="{Binding ShowStationResponsibilityCommand}"
+                                    Content="IR A ESTACIÓN"
+                                    AutomationProperties.Name="Ir a la línea con responsable ausente" />
+                            <Button Grid.Column="2" Width="30" Height="30" Margin="7,0,0,0" Padding="0"
+                                    Background="Transparent" BorderBrush="Transparent" Foreground="#85402B"
+                                    FontSize="14" FontWeight="Bold"
+                                    Command="{Binding DismissResponsibilityWarningCommand}"
+                                    Content="✕" ToolTip="Cerrar notificación"
+                                    AutomationProperties.Name="Cerrar aviso de responsable ausente" />
+                        </Grid>
+                    </Border>
+                    <Border Padding="13,9"
+                            Background="#FFF5D7" BorderBrush="#E4D39D" BorderThickness="1"
+                            CornerRadius="12"
+                            Visibility="{Binding HasCorrectionNotification, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" Foreground="#76500A"
+                                       FontWeight="SemiBold" Text="{Binding CorrectionNotification}" />
+                            <Button Grid.Column="1" Margin="14,0,0,0" Padding="11,6"
+                                    Background="White" BorderBrush="#D7BF78" Foreground="#76500A"
+                                    FontSize="10" FontWeight="Bold"
+                                    Command="{Binding ShowAuditCorrectionsCommand}"
+                                    Content="ABRIR AUDITORÍA"
+                                    AutomationProperties.Name="Abrir auditoría de correcciones" />
+                            <Button Grid.Column="2" Width="30" Height="30" Margin="7,0,0,0" Padding="0"
+                                    Background="Transparent" BorderBrush="Transparent" Foreground="#76500A"
+                                    FontSize="14" FontWeight="Bold"
+                                    Command="{Binding DismissCorrectionNotificationCommand}"
+                                    Content="✕" ToolTip="Cerrar notificación"
+                                    AutomationProperties.Name="Cerrar notificación de correcciones" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </Grid>
         </Grid>
 

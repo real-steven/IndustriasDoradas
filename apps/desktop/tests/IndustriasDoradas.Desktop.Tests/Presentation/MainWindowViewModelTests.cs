@@ -50,6 +50,7 @@ public sealed class MainWindowViewModelTests
     public async Task AdministrativeCorrectionNotificationOpensAuditAndDismissesItself()
     {
         HomeViewModel home = new();
+        var localDiagnostics = new StubLocalDiagnostics();
         var health = new LocalDatabaseHealth(
             LocalDatabaseHealthState.Healthy,
             LocalDatabaseHealthIssue.None,
@@ -63,12 +64,14 @@ public sealed class MainWindowViewModelTests
             [
                 new AdministrativeCorrectionDiagnostic(
                     "Administrador", "ADMINISTRADOR", "CAMBIO_AUTORIZADO", "business.mutation",
-                    "supplier", DateTimeOffset.UtcNow, ["name: A → B"]),
+                    "supplier", DateTimeOffset.UtcNow.AddMinutes(1), ["name: A → B"]),
             ]);
-        DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics(health));
+        DiagnosticsViewModel diagnostics = new(new StubHealthService(), localDiagnostics);
         var audit = new AuditViewModel(diagnostics);
         MainWindowViewModel viewModel = new(home, diagnostics, null, null, audit);
 
+        await viewModel.InitializeAsync();
+        localDiagnostics.Result = health;
         await diagnostics.RefreshAsync();
 
         Assert.IsTrue(viewModel.HasCorrectionNotification);
@@ -83,6 +86,7 @@ public sealed class MainWindowViewModelTests
     public async Task AdministrativeCorrectionNotificationCanBeDismissedWithoutNavigation()
     {
         HomeViewModel home = new();
+        var localDiagnostics = new StubLocalDiagnostics();
         var health = new LocalDatabaseHealth(
             LocalDatabaseHealthState.Healthy,
             LocalDatabaseHealthIssue.None,
@@ -96,16 +100,52 @@ public sealed class MainWindowViewModelTests
             [
                 new AdministrativeCorrectionDiagnostic(
                     "Jefe de planta", "JEFE_PLANTA", "CORRECCION_CAJUELA", "production.correction",
-                    "production_event", DateTimeOffset.UtcNow, ["total: 1 → 0"]),
+                    "production_event", DateTimeOffset.UtcNow.AddMinutes(1), ["total: 1 → 0"]),
             ]);
-        DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics(health));
+        DiagnosticsViewModel diagnostics = new(new StubHealthService(), localDiagnostics);
         MainWindowViewModel viewModel = new(home, diagnostics);
+        await viewModel.InitializeAsync();
+        localDiagnostics.Result = health;
         await diagnostics.RefreshAsync();
 
         viewModel.DismissCorrectionNotificationCommand.Execute(null);
 
         Assert.IsFalse(viewModel.HasCorrectionNotification);
         Assert.AreSame(home, viewModel.CurrentPage);
+    }
+
+    [TestMethod]
+    public async Task HistoricalCorrectionReceivedLaterDoesNotCreateNotification()
+    {
+        HomeViewModel home = new();
+        var localDiagnostics = new StubLocalDiagnostics();
+        DiagnosticsViewModel diagnostics = new(new StubHealthService(), localDiagnostics);
+        MainWindowViewModel viewModel = new(home, diagnostics);
+        await viewModel.InitializeAsync();
+        localDiagnostics.Result = new LocalDatabaseHealth(
+            LocalDatabaseHealthState.Healthy,
+            LocalDatabaseHealthIssue.None,
+            0,
+            1024,
+            null,
+            DateTimeOffset.UtcNow,
+            "Correcto.",
+            "Sin acción.",
+            Corrections:
+            [
+                new AdministrativeCorrectionDiagnostic(
+                    "Jefe de planta",
+                    "JEFE_PLANTA",
+                    "CORRECCION_ANTIGUA",
+                    "production.correction",
+                    "production_event",
+                    DateTimeOffset.UtcNow.AddDays(-10),
+                    ["total: 1 → 0"]),
+            ]);
+
+        await diagnostics.RefreshAsync();
+
+        Assert.IsFalse(viewModel.HasCorrectionNotification);
     }
 
     private sealed class StubHealthService : IHealthService
@@ -116,8 +156,10 @@ public sealed class MainWindowViewModelTests
 
     private sealed class StubLocalDiagnostics(LocalDatabaseHealth? result = null) : ILocalDatabaseDiagnostics
     {
+        public LocalDatabaseHealth? Result { get; set; } = result;
+
         public Task<LocalDatabaseHealth> InspectAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(result ?? new LocalDatabaseHealth(
+            Task.FromResult(Result ?? new LocalDatabaseHealth(
                 LocalDatabaseHealthState.Healthy,
                 LocalDatabaseHealthIssue.None,
                 0,

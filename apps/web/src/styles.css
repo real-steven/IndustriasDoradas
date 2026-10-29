@@ -486,6 +486,60 @@ button.auth-recovery:hover {
   border-radius: 9px;
   letter-spacing: 0.025em;
 }
+.auth-found-session {
+  display: grid;
+}
+.auth-found-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  border: 1px solid #c7e4d3;
+  border-radius: 11px;
+  padding: 15px;
+  background: #effaf4;
+}
+.auth-found-account > span {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #27a765;
+  box-shadow: 0 0 0 5px rgb(39 167 101 / 12%);
+}
+.auth-found-account > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.auth-found-account small {
+  color: #54816a;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.auth-found-account strong {
+  overflow: hidden;
+  color: #174c34;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.auth-switch-account {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  border: 1px solid #cbdbe2;
+  border-radius: 9px;
+  color: var(--navy);
+  background: #f5f8fa;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+button.auth-switch-account:hover:not(:disabled) {
+  border-color: #7da8ba;
+  background: #eaf3f7;
+}
 .auth-secure-note {
   margin: 25px 0 0;
   color: #718691;

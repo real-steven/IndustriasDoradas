@@ -58,6 +58,12 @@ export interface CreatePlantManagerInput {
   stationIds: string[];
   preferredLocale: "es" | "en";
 }
+export interface CreateWorkerRequestInput {
+  plantId: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
 export interface ManagementFilters {
   page?: number;
   pageSize?: number;

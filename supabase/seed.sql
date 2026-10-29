@@ -1,5 +1,5 @@
 -- Seed de desarrollo completamente ficticio e idempotente.
--- No crea usuarios de Auth, credenciales, PIN, trabajadores ni datos reales.
+-- Incluye catálogos y personal de demostración sin contraseñas ni PIN utilizables.
 
 set search_path = app, public;
 
@@ -65,6 +65,7 @@ with assignments (role_code, permission_code) as (
     ('JEFE_EMPRESA', 'attendance.correct'),
     ('JEFE_EMPRESA', 'attendance.pay_rates.read'),
     ('JEFE_EMPRESA', 'attendance.pay_rates.manage'),
+    ('JEFE_EMPRESA', 'workers.request'),
     ('JEFE_EMPRESA', 'inventory.manage'),
     ('JEFE_EMPRESA', 'gold_deliveries.confirm'),
     ('JEFE_EMPRESA', 'profile.locale_update'),
@@ -268,13 +269,158 @@ set
 
 insert into app.suppliers (id, organization_id, name, email, phone)
 values
-  ('35000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'Proveedor ficticio 1', 'proveedor1@example.invalid', '+506 0000-0001'),
-  ('35000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Proveedor ficticio 2', 'proveedor2@example.invalid', '+506 0000-0002'),
-  ('35000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000001', 'Proveedor ficticio 3', 'proveedor3@example.invalid', '+506 0000-0003')
+  ('35000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'Proveedor Jesús', 'jesus@example.invalid', '+506 0000-0001'),
+  ('35000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Proveedor Francisco', 'francisco@example.invalid', '+506 0000-0002'),
+  ('35000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000001', 'Proveedor Lucía', 'lucia@example.invalid', '+506 0000-0003'),
+  ('35000000-0000-4000-8000-000000000004', '30000000-0000-4000-8000-000000000001', 'Proveedor Norte', 'norte@example.invalid', '+506 0000-0004'),
+  ('35000000-0000-4000-8000-000000000005', '30000000-0000-4000-8000-000000000001', 'Proveedor Sur', 'sur@example.invalid', '+506 0000-0005')
 on conflict (id) do update
 set
   name = excluded.name,
   email = excluded.email,
   phone = excluded.phone,
+  is_active = true,
+  deactivated_at = null;
+
+-- Perfil técnico sin credenciales de acceso: permite relacionar las solicitudes
+-- ficticias con un solicitante válido sin crear una contraseña compartida.
+insert into auth.users (id, email)
+values (
+  '36000000-0000-4000-8000-000000000001',
+  'gerencia.seed@example.invalid'
+)
+on conflict (id) do update
+set email = excluded.email;
+
+insert into app.user_profiles (
+  id,
+  organization_id,
+  auth_user_id,
+  role_id,
+  display_name,
+  preferred_locale,
+  account_status
+)
+select
+  '36100000-0000-4000-8000-000000000001',
+  '30000000-0000-4000-8000-000000000001',
+  '36000000-0000-4000-8000-000000000001',
+  roles.id,
+  'Gerencia ficticia de seed',
+  'es',
+  'ACTIVE'
+from app.roles
+where roles.code = 'JEFE_EMPRESA'
+on conflict (id) do update
+set
+  display_name = excluded.display_name,
+  preferred_locale = excluded.preferred_locale,
+  account_status = excluded.account_status,
+  is_active = true,
+  deactivated_at = null;
+
+with demo_workers (
+  request_id,
+  worker_id,
+  category,
+  name,
+  email,
+  ordinal
+) as (
+  values
+    ('37000000-0000-4000-8000-000000000001'::uuid, '37100000-0000-4000-8000-000000000001'::uuid, 'OPERARIO', 'Carlos Méndez', 'carlos.mendez@example.invalid', 1),
+    ('37000000-0000-4000-8000-000000000002'::uuid, '37100000-0000-4000-8000-000000000002'::uuid, 'OPERARIO', 'Daniela Rojas', 'daniela.rojas@example.invalid', 2),
+    ('37000000-0000-4000-8000-000000000003'::uuid, '37100000-0000-4000-8000-000000000003'::uuid, 'OPERARIO', 'Esteban Vargas', 'esteban.vargas@example.invalid', 3),
+    ('37000000-0000-4000-8000-000000000004'::uuid, '37100000-0000-4000-8000-000000000004'::uuid, 'OPERARIO', 'Fernanda Solís', 'fernanda.solis@example.invalid', 4),
+    ('37000000-0000-4000-8000-000000000005'::uuid, '37100000-0000-4000-8000-000000000005'::uuid, 'OPERARIO', 'Gabriel Jiménez', 'gabriel.jimenez@example.invalid', 5),
+    ('37000000-0000-4000-8000-000000000006'::uuid, '37100000-0000-4000-8000-000000000006'::uuid, 'OPERARIO', 'Karla Mora', 'karla.mora@example.invalid', 6),
+    ('37000000-0000-4000-8000-000000000007'::uuid, '37100000-0000-4000-8000-000000000007'::uuid, 'OPERARIO', 'Luis Araya', 'luis.araya@example.invalid', 7),
+    ('37000000-0000-4000-8000-000000000008'::uuid, '37100000-0000-4000-8000-000000000008'::uuid, 'OPERARIO', 'Mariana Chaves', 'mariana.chaves@example.invalid', 8),
+    ('37000000-0000-4000-8000-000000000009'::uuid, '37100000-0000-4000-8000-000000000009'::uuid, 'OPERARIO', 'Óscar Salazar', 'oscar.salazar@example.invalid', 9),
+    ('37000000-0000-4000-8000-000000000010'::uuid, '37100000-0000-4000-8000-000000000010'::uuid, 'OPERARIO', 'Valeria Castro', 'valeria.castro@example.invalid', 10),
+    ('37000000-0000-4000-8000-000000000011'::uuid, '37100000-0000-4000-8000-000000000011'::uuid, 'JEFE_PLANTA', 'Steven Demo', 'steven.demo@example.invalid', 11),
+    ('37000000-0000-4000-8000-000000000012'::uuid, '37100000-0000-4000-8000-000000000012'::uuid, 'JEFE_PLANTA', 'Daniela Demo', 'daniela.demo@example.invalid', 12),
+    ('37000000-0000-4000-8000-000000000013'::uuid, '37100000-0000-4000-8000-000000000013'::uuid, 'JEFE_PLANTA', 'Henry Demo', 'henry.demo@example.invalid', 13),
+    ('37000000-0000-4000-8000-000000000014'::uuid, '37100000-0000-4000-8000-000000000014'::uuid, 'JEFE_PLANTA', 'Lucía Demo', 'lucia.demo@example.invalid', 14),
+    ('37000000-0000-4000-8000-000000000015'::uuid, '37100000-0000-4000-8000-000000000015'::uuid, 'JEFE_PLANTA', 'Marco Demo', 'marco.demo@example.invalid', 15)
+)
+insert into app.worker_requests (
+  id,
+  organization_id,
+  plant_id,
+  requested_by_profile_id,
+  requested_name,
+  requested_email,
+  status,
+  requested_at,
+  review_due_at,
+  resolved_by_profile_id,
+  resolved_at
+)
+select
+  demo_workers.request_id,
+  '30000000-0000-4000-8000-000000000001',
+  '31000000-0000-4000-8000-000000000001',
+  '36100000-0000-4000-8000-000000000001',
+  demo_workers.name,
+  demo_workers.email,
+  'APPROVED',
+  '2026-10-28T12:00:00Z'::timestamptz + make_interval(mins => demo_workers.ordinal),
+  '2026-10-31T12:00:00Z'::timestamptz + make_interval(mins => demo_workers.ordinal),
+  '36100000-0000-4000-8000-000000000001',
+  '2026-10-28T12:00:00Z'::timestamptz + make_interval(mins => demo_workers.ordinal)
+from demo_workers
+on conflict (id) do update
+set
+  requested_name = excluded.requested_name,
+  requested_email = excluded.requested_email,
+  status = 'APPROVED',
+  resolved_by_profile_id = excluded.resolved_by_profile_id,
+  resolved_at = excluded.resolved_at;
+
+with demo_workers (request_id, worker_id, category, name, email) as (
+  values
+    ('37000000-0000-4000-8000-000000000001'::uuid, '37100000-0000-4000-8000-000000000001'::uuid, 'OPERARIO', 'Carlos Méndez', 'carlos.mendez@example.invalid'),
+    ('37000000-0000-4000-8000-000000000002'::uuid, '37100000-0000-4000-8000-000000000002'::uuid, 'OPERARIO', 'Daniela Rojas', 'daniela.rojas@example.invalid'),
+    ('37000000-0000-4000-8000-000000000003'::uuid, '37100000-0000-4000-8000-000000000003'::uuid, 'OPERARIO', 'Esteban Vargas', 'esteban.vargas@example.invalid'),
+    ('37000000-0000-4000-8000-000000000004'::uuid, '37100000-0000-4000-8000-000000000004'::uuid, 'OPERARIO', 'Fernanda Solís', 'fernanda.solis@example.invalid'),
+    ('37000000-0000-4000-8000-000000000005'::uuid, '37100000-0000-4000-8000-000000000005'::uuid, 'OPERARIO', 'Gabriel Jiménez', 'gabriel.jimenez@example.invalid'),
+    ('37000000-0000-4000-8000-000000000006'::uuid, '37100000-0000-4000-8000-000000000006'::uuid, 'OPERARIO', 'Karla Mora', 'karla.mora@example.invalid'),
+    ('37000000-0000-4000-8000-000000000007'::uuid, '37100000-0000-4000-8000-000000000007'::uuid, 'OPERARIO', 'Luis Araya', 'luis.araya@example.invalid'),
+    ('37000000-0000-4000-8000-000000000008'::uuid, '37100000-0000-4000-8000-000000000008'::uuid, 'OPERARIO', 'Mariana Chaves', 'mariana.chaves@example.invalid'),
+    ('37000000-0000-4000-8000-000000000009'::uuid, '37100000-0000-4000-8000-000000000009'::uuid, 'OPERARIO', 'Óscar Salazar', 'oscar.salazar@example.invalid'),
+    ('37000000-0000-4000-8000-000000000010'::uuid, '37100000-0000-4000-8000-000000000010'::uuid, 'OPERARIO', 'Valeria Castro', 'valeria.castro@example.invalid'),
+    ('37000000-0000-4000-8000-000000000011'::uuid, '37100000-0000-4000-8000-000000000011'::uuid, 'JEFE_PLANTA', 'Steven Demo', 'steven.demo@example.invalid'),
+    ('37000000-0000-4000-8000-000000000012'::uuid, '37100000-0000-4000-8000-000000000012'::uuid, 'JEFE_PLANTA', 'Daniela Demo', 'daniela.demo@example.invalid'),
+    ('37000000-0000-4000-8000-000000000013'::uuid, '37100000-0000-4000-8000-000000000013'::uuid, 'JEFE_PLANTA', 'Henry Demo', 'henry.demo@example.invalid'),
+    ('37000000-0000-4000-8000-000000000014'::uuid, '37100000-0000-4000-8000-000000000014'::uuid, 'JEFE_PLANTA', 'Lucía Demo', 'lucia.demo@example.invalid'),
+    ('37000000-0000-4000-8000-000000000015'::uuid, '37100000-0000-4000-8000-000000000015'::uuid, 'JEFE_PLANTA', 'Marco Demo', 'marco.demo@example.invalid')
+)
+insert into app.workers (
+  id,
+  organization_id,
+  plant_id,
+  source_request_id,
+  category,
+  name,
+  email,
+  status
+)
+select
+  demo_workers.worker_id,
+  '30000000-0000-4000-8000-000000000001',
+  '31000000-0000-4000-8000-000000000001',
+  demo_workers.request_id,
+  demo_workers.category,
+  demo_workers.name,
+  demo_workers.email,
+  'ACTIVO'
+from demo_workers
+on conflict (id) do update
+set
+  category = excluded.category,
+  name = excluded.name,
+  email = excluded.email,
+  status = 'ACTIVO',
   is_active = true,
   deactivated_at = null;

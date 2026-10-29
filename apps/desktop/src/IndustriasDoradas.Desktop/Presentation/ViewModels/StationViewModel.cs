@@ -7,6 +7,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
+using IndustriasDoradas.Desktop.Domain.Attendance;
 using IndustriasDoradas.Desktop.Domain.Production;
 using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
@@ -80,6 +81,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly LocalOperationService operations;
     private readonly TimeProvider timeProvider;
     private readonly ILocalOperationDashboardRepository? dashboard;
+    private readonly ILocalAttendanceRepository? attendance;
     private readonly RecordProductionSweepHandler? sweepHandler;
     private readonly PlantManagerModeState? sharedManagerMode;
     private readonly RecordMercuryMovementHandler? mercuryHandler;
@@ -98,6 +100,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private string draft = string.Empty;
     private IReadOnlyList<CachedSupplier> suppliers = [];
     private IReadOnlyList<CachedWorker> workers = [];
+    private readonly Dictionary<Guid, string> knownWorkerNames = [];
     private IReadOnlyList<CachedProductionLine> lines = [];
     private IReadOnlyList<StationLineStatus> lineStatuses = [];
     private CachedSupplier? selectedSupplier;
@@ -185,13 +188,15 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         ILocalOperationDashboardRepository? dashboard,
         RecordProductionSweepHandler? sweepHandler,
         PlantManagerModeState? sharedManagerMode,
-        RecordMercuryMovementHandler? mercuryHandler)
+        RecordMercuryMovementHandler? mercuryHandler,
+        ILocalAttendanceRepository? attendance = null)
     {
         this.coordinator = coordinator;
         this.catalogs = catalogs;
         this.operations = operations;
         this.timeProvider = timeProvider;
         this.dashboard = dashboard;
+        this.attendance = attendance;
         this.sweepHandler = sweepHandler;
         this.sharedManagerMode = sharedManagerMode;
         this.mercuryHandler = mercuryHandler;
@@ -594,6 +599,9 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     }, "No se pudo solicitar la recuperación.");
 
     public void RecordActivity() => modeController.RecordActivity();
+    public Task RefreshPreparationAsync() => state is null
+        ? Task.CompletedTask
+        : LoadPreparationCatalogsAsync();
     public void Dispose() { idleTimer.Stop(); idleTimer.Tick -= OnIdleTick; GC.SuppressFinalize(this); }
 
     private Task CloseStationAsync() => RunAsync(async () =>
@@ -724,7 +732,21 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
         if (state is null) return;
         Suppliers = await catalogs.ListActiveSuppliersAsync(state.Session.OrganizationId).ConfigureAwait(true);
-        Workers = await catalogs.ListActiveWorkersAsync(state.Session.OrganizationId).ConfigureAwait(true);
+        IReadOnlyList<CachedWorker> activeWorkers = await catalogs
+            .ListActiveWorkersAsync(state.Session.OrganizationId)
+            .ConfigureAwait(true);
+        Guid? previousWorkerId = SelectedWorker?.Id;
+        knownWorkerNames.Clear();
+        foreach (CachedWorker worker in activeWorkers)
+        {
+            knownWorkerNames[worker.Id] = worker.Name;
+        }
+        Workers = attendance is null
+            ? activeWorkers
+            : await ListPresentWorkersAsync(activeWorkers).ConfigureAwait(true);
+        SelectedWorker = previousWorkerId.HasValue
+            ? Workers.FirstOrDefault(worker => worker.Id == previousWorkerId.Value)
+            : null;
         Guid? previousLineId = SelectedLine?.Id;
         Lines = await catalogs.ListActiveLinesAsync(
             state.Session.OrganizationId,
@@ -753,8 +775,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         else if (Workers.Count == 0)
         {
             Status =
-                "No hay responsables activos asignados a esta planta. " +
-                "Deben solicitarse y aprobarse en el catálogo antes de preparar un cargamento.";
+                "No hay responsables con entrada registrada en planta. " +
+                "El trabajador debe marcar su entrada antes de asumir una línea.";
         }
         else if (previousLineBecameUnavailable)
         {
@@ -770,6 +792,27 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         NotifyOperationCommands();
     }
 
+    private async Task<IReadOnlyList<CachedWorker>> ListPresentWorkersAsync(
+        IReadOnlyList<CachedWorker> activeWorkers)
+    {
+        if (attendance is null || state is null) return activeWorkers;
+        var presentWorkers = new List<CachedWorker>(activeWorkers.Count);
+        foreach (CachedWorker worker in activeWorkers)
+        {
+            IReadOnlyList<AttendanceEvent> events = await attendance
+                .ListForWorkerAsync(state.Session.OrganizationId, worker.Id)
+                .ConfigureAwait(true);
+            AttendanceProjection projection = AttendanceProjectionService.Project(
+                events,
+                timeProvider.GetUtcNow());
+            if (projection.Shifts.Any(shift => shift.Status == AttendanceShiftStatus.Open))
+            {
+                presentWorkers.Add(worker);
+            }
+        }
+        return presentWorkers;
+    }
+
     private async Task PrepareLineAsync()
     {
         if (state is null || pilotLine is null || SelectedSupplier is null || SelectedWorker is null) return;
@@ -782,7 +825,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 OperationAuthority.From(state)).ConfigureAwait(true);
             PreparationSummary =
                 $"{pilotLine.Name} · {SelectedSupplier.Name} · inicio automático al confirmar · " +
-                $"responsable {SelectedWorker.Name}.";
+                $"responsable {SelectedWorker.DisplayName}.";
             Status = "Revise el resumen y confirme para dejar la línea lista.";
             NotifyOperationCommands();
         }, "No se pudo preparar el cargamento con el contexto seleccionado.").ConfigureAwait(true);
@@ -821,7 +864,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 OperationAuthority.From(state)).ConfigureAwait(true);
             string currentName = WorkerName(preparedRelief.ExpectedSession.ResponsibleWorkerId);
             ManagementSummary =
-                $"Relevo pendiente: {currentName} → {SelectedWorker.Name}. " +
+                $"Relevo pendiente: {currentName} → {SelectedWorker.DisplayName}. " +
                 "La línea y el responsable actual no cambiarán hasta confirmar.";
             Status = "Revise y confirme el relevo de responsable.";
             NotifyOperationCommands();
@@ -920,7 +963,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         preparedFinalSweep = null;
         PreparationSummary = SelectedLine is null || SelectedSupplier is null || SelectedWorker is null
             ? "Seleccione línea, proveedor y responsable para preparar el cargamento."
-            : $"{PilotLineName} · {SelectedSupplier.Name} · responsable {SelectedWorker.Name}.";
+            : $"{PilotLineName} · {SelectedSupplier.Name} · responsable {SelectedWorker.DisplayName}.";
         NotifyOperationCommands();
     }
 
@@ -1216,7 +1259,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         Status = $"{(string.IsNullOrWhiteSpace(feature) ? "Esta función" : feature)} estará disponible próximamente.";
 
     private string WorkerName(Guid workerId) =>
-        Workers.FirstOrDefault(worker => worker.Id == workerId)?.Name ?? "responsable registrado";
+        Workers.FirstOrDefault(worker => worker.Id == workerId)?.Name ??
+        (knownWorkerNames.TryGetValue(workerId, out string? name) ? name : "responsable registrado");
 
     private string LineName(Guid lineId) =>
         Lines.FirstOrDefault(line => line.Id == lineId)?.Name ?? "Línea registrada";

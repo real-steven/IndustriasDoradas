@@ -36,6 +36,24 @@ describe("AuthProvider privacy", () => {
     );
   });
 
+  it("keeps an initial stored session closed until the user confirms it", async () => {
+    const harness = createSupabaseHarness();
+    const queryClient = testQueryClient();
+    const transport = sessionTransport();
+    vi.stubGlobal("fetch", transport);
+
+    renderAuth(harness.client, queryClient);
+
+    expect(await screen.findByText(ACCOUNT_EMAIL)).toBeInTheDocument();
+    expect(transport).not.toHaveBeenCalled();
+    expect(screen.queryByText(PROFILE_ID)).not.toBeInTheDocument();
+
+    await openFoundSession();
+
+    expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
+    expect(transport).toHaveBeenCalledOnce();
+  });
+
   it("stops loading when application session validation never finishes", async () => {
     vi.useFakeTimers();
     const harness = createSupabaseHarness();
@@ -46,11 +64,14 @@ describe("AuthProvider privacy", () => {
     );
 
     renderAuth(harness.client, queryClient);
+    await act(() => Promise.resolve());
+    expect(screen.getByText(ACCOUNT_EMAIL)).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "Continuar prueba" }).click());
     expect(screen.getByText("loading")).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(apiRequestTimeoutMs));
 
-    expect(screen.getByText("signed-out")).toBeInTheDocument();
+    expect(screen.getByText(ACCOUNT_EMAIL)).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "No fue posible comprobar la sesión",
     );
@@ -65,6 +86,7 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", sessionTransport());
 
     renderAuth(harness.client, queryClient);
+    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
 
     act(() => {
@@ -85,6 +107,7 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", sessionTransport());
 
     renderAuth(harness.client, queryClient);
+    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cerrar prueba" }));
 
@@ -104,6 +127,7 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", sessionTransport());
 
     renderAuth(harness.client, queryClient);
+    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
 
     act(() => {
@@ -123,6 +147,7 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", transport);
 
     renderAuth(harness.client, queryClient);
+    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
 
     act(() => harness.emit("TOKEN_REFRESHED", authSession("refreshed-token")));
@@ -141,14 +166,29 @@ function AuthProbe() {
   return (
     <div>
       <span>
-        {auth.loading ? "loading" : (auth.profile?.profileId ?? "signed-out")}
+        {auth.loading
+          ? "loading"
+          : (auth.profile?.profileId ??
+            auth.foundSession?.email ??
+            "signed-out")}
       </span>
       {auth.error !== null && <p role="alert">{auth.error}</p>}
+      {auth.foundSession !== null && (
+        <button type="button" onClick={() => void auth.continueFoundSession()}>
+          Continuar prueba
+        </button>
+      )}
       <button type="button" onClick={() => void auth.signOut()}>
         Cerrar prueba
       </button>
     </div>
   );
+}
+
+async function openFoundSession(): Promise<void> {
+  const user = userEvent.setup();
+  expect(await screen.findByText(ACCOUNT_EMAIL)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Continuar prueba" }));
 }
 
 function renderAuth(client: SupabaseClient, queryClient: QueryClient): void {
@@ -208,7 +248,7 @@ function authSession(accessToken = "fictitious-token"): Session {
     expires_in: 3600,
     expires_at: 1_800_000_000,
     refresh_token: "fictitious-refresh-token",
-    user: { id: USER_ID },
+    user: { id: USER_ID, email: ACCOUNT_EMAIL },
   } as Session;
 }
 
@@ -238,3 +278,4 @@ function testQueryClient(): QueryClient {
 const USER_ID = "90000000-0000-4000-8000-000000000001";
 const PROFILE_ID = "a1000000-0000-4000-8000-000000000001";
 const ORGANIZATION_ID = "30000000-0000-4000-8000-000000000001";
+const ACCOUNT_EMAIL = "lucia@example.com";

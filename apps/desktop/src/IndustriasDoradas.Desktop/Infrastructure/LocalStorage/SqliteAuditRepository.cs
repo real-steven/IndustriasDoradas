@@ -201,7 +201,8 @@ public sealed class SqliteAuditRepository(
     {
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT assignment.worker_id, worker.name,
+            SELECT assignment.worker_id,
+                   worker.name,
                    assignment.assigned_at_utc, assignment.unassigned_at_utc
             FROM responsibility_assignments AS assignment
             INNER JOIN cached_workers AS worker ON worker.id = assignment.worker_id

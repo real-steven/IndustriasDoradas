@@ -85,6 +85,35 @@ export function LoginPage() {
     }
   }
 
+  async function continueFoundSession() {
+    setBusy(true);
+    setFeedback(null);
+    try {
+      await auth.continueFoundSession();
+    } catch {
+      setFeedback({
+        kind: "error",
+        text: tr(
+          "No se pudo abrir la sesión encontrada.",
+          "The saved session could not be opened.",
+        ),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function switchAccount() {
+    setBusy(true);
+    setFeedback(null);
+    try {
+      await auth.signOut();
+      setEmail("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main id="contenido-principal" className="auth-page">
       <section className="auth-window" aria-labelledby="login-title">
@@ -136,84 +165,152 @@ export function LoginPage() {
           <div className="auth-language">
             <LanguageSwitcher compact />
           </div>
-          <header>
-            <p className="eyebrow">
-              {tr("ACCESO PROTEGIDO", "PROTECTED ACCESS")}
-            </p>
-            <h1 id="login-title">{tr("Bienvenido", "Welcome")}</h1>
-            <p>
-              {tr(
-                "Ingrese sus credenciales gerenciales para consultar la operación de la planta.",
-                "Enter your management credentials to review plant operations.",
-              )}
-            </p>
-          </header>
+          {auth.foundSession === null ? (
+            <>
+              <header>
+                <p className="eyebrow">
+                  {tr("ACCESO PROTEGIDO", "PROTECTED ACCESS")}
+                </p>
+                <h1 id="login-title">{tr("Bienvenido", "Welcome")}</h1>
+                <p>
+                  {tr(
+                    "Ingrese sus credenciales gerenciales para consultar la operación de la planta.",
+                    "Enter your management credentials to review plant operations.",
+                  )}
+                </p>
+              </header>
 
-          <form onSubmit={(event) => void submit(event)} className="auth-form">
-            <label htmlFor="email">{tr("CORREO", "EMAIL")}</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={busy}
-              required
-            />
-
-            <label htmlFor="password">{tr("CONTRASEÑA", "PASSWORD")}</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              disabled={busy}
-              required
-            />
-
-            <div className="auth-form-options">
-              <label className="auth-remember">
+              <form
+                onSubmit={(event) => void submit(event)}
+                className="auth-form"
+              >
+                <label htmlFor="email">{tr("CORREO", "EMAIL")}</label>
                 <input
-                  type="checkbox"
-                  checked={rememberEmail}
-                  onChange={(event) => setRememberEmail(event.target.checked)}
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   disabled={busy}
+                  required
                 />
-                <span>{tr("Recordar correo", "Remember email")}</span>
-              </label>
-              <button
-                type="button"
-                className="auth-recovery"
-                disabled={busy}
-                onClick={() => void recover()}
-              >
-                {tr("¿Olvidó su contraseña?", "Forgot your password?")}
-              </button>
-            </div>
 
-            {(auth.error !== null || feedback !== null) && (
-              <p
-                role={
-                  auth.error !== null || feedback?.kind === "error"
-                    ? "alert"
-                    : "status"
-                }
-                className={`auth-feedback${auth.error !== null || feedback?.kind === "error" ? " error" : ""}`}
-              >
-                {translateKnownMessage(
-                  auth.error ?? feedback?.text ?? "",
-                  language,
+                <label htmlFor="password">{tr("CONTRASEÑA", "PASSWORD")}</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  disabled={busy}
+                  required
+                />
+
+                <div className="auth-form-options">
+                  <label className="auth-remember">
+                    <input
+                      type="checkbox"
+                      checked={rememberEmail}
+                      onChange={(event) =>
+                        setRememberEmail(event.target.checked)
+                      }
+                      disabled={busy}
+                    />
+                    <span>{tr("Recordar correo", "Remember email")}</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="auth-recovery"
+                    disabled={busy}
+                    onClick={() => void recover()}
+                  >
+                    {tr("¿Olvidó su contraseña?", "Forgot your password?")}
+                  </button>
+                </div>
+
+                {(auth.error !== null || feedback !== null) && (
+                  <p
+                    role={
+                      auth.error !== null || feedback?.kind === "error"
+                        ? "alert"
+                        : "status"
+                    }
+                    className={`auth-feedback${auth.error !== null || feedback?.kind === "error" ? " error" : ""}`}
+                  >
+                    {translateKnownMessage(
+                      auth.error ?? feedback?.text ?? "",
+                      language,
+                    )}
+                  </p>
                 )}
-              </p>
-            )}
 
-            <button className="auth-submit" disabled={busy} type="submit">
-              {busy
-                ? tr("INGRESANDO…", "SIGNING IN…")
-                : tr("INGRESAR AL PORTAL →", "ENTER PORTAL →")}
-            </button>
-          </form>
+                <button className="auth-submit" disabled={busy} type="submit">
+                  {busy
+                    ? tr("INGRESANDO…", "SIGNING IN…")
+                    : tr("INGRESAR AL PORTAL →", "ENTER PORTAL →")}
+                </button>
+              </form>
+            </>
+          ) : (
+            <section className="auth-found-session" aria-live="polite">
+              <header>
+                <p className="eyebrow">
+                  {tr("SESIÓN ENCONTRADA", "SESSION FOUND")}
+                </p>
+                <h1 id="login-title">
+                  {tr("Sesión disponible", "Session available")}
+                </h1>
+                <p>
+                  {tr(
+                    "Encontramos una sesión guardada en este navegador. Confirme si desea continuar.",
+                    "We found a saved session in this browser. Confirm whether you want to continue.",
+                  )}
+                </p>
+              </header>
+
+              <div className="auth-found-account">
+                <span aria-hidden="true" />
+                <div>
+                  <small>{tr("CUENTA GERENCIAL", "MANAGEMENT ACCOUNT")}</small>
+                  <strong>{auth.foundSession.email}</strong>
+                </div>
+              </div>
+
+              {(auth.error !== null || feedback !== null) && (
+                <p
+                  role="alert"
+                  className={`auth-feedback${auth.error !== null || feedback?.kind === "error" ? " error" : ""}`}
+                >
+                  {translateKnownMessage(
+                    auth.error ?? feedback?.text ?? "",
+                    language,
+                  )}
+                </p>
+              )}
+
+              <button
+                className="auth-submit"
+                disabled={busy || auth.loading}
+                type="button"
+                onClick={() => void continueFoundSession()}
+              >
+                {busy || auth.loading
+                  ? tr("ABRIENDO SESIÓN…", "OPENING SESSION…")
+                  : tr(
+                      "CONTINUAR CON ESTA CUENTA →",
+                      "CONTINUE WITH THIS ACCOUNT →",
+                    )}
+              </button>
+              <button
+                className="auth-switch-account"
+                disabled={busy || auth.loading}
+                type="button"
+                onClick={() => void switchAccount()}
+              >
+                {tr("USAR OTRA CUENTA", "USE ANOTHER ACCOUNT")}
+              </button>
+            </section>
+          )}
 
           <p className="auth-secure-note">
             <span aria-hidden="true">🔒</span>{" "}

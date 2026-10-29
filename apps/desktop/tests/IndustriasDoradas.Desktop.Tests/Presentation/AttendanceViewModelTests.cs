@@ -2,6 +2,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Attendance;
+using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 
 namespace IndustriasDoradas.Desktop.Tests.Presentation;
@@ -123,7 +124,108 @@ public sealed class AttendanceViewModelTests
             null);
 
         Assert.AreEqual("Jefe de planta", status.CategoryLabel);
-        Assert.AreEqual("Jefe de planta de prueba · Jefe de planta", status.DisplayName);
+        Assert.AreEqual("Jefe de planta de prueba", status.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task PersonnelStatusShowsFiveWorkersPerPageAndSupportsSearch()
+    {
+        CachedWorker[] workers = Enumerable.Range(1, 12)
+            .Select(index => new CachedWorker(
+                Guid.NewGuid(),
+                OrganizationId,
+                $"Operario {index:00}",
+                true,
+                Now))
+            .ToArray();
+        var viewModel = new AttendancePreviewViewModel(
+            new MemoryAttendanceRepository(),
+            new MemoryCatalogRepository(workers),
+            new MemoryStationStore(),
+            new MutableTimeProvider(Now),
+            new PlantManagerModeState());
+
+        await viewModel.InitializeAsync();
+
+        Assert.HasCount(5, viewModel.VisibleWorkers);
+        Assert.AreEqual("1–5 de 12", viewModel.WorkerPageDescription);
+        Assert.IsTrue(viewModel.NextWorkerPageCommand.CanExecute(null));
+        viewModel.NextWorkerPageCommand.Execute(null);
+        Assert.AreEqual("6–10 de 12", viewModel.WorkerPageDescription);
+
+        viewModel.WorkerSearchText = "Operario 11";
+        Assert.HasCount(1, viewModel.VisibleWorkers);
+        Assert.AreEqual("Operario 11", viewModel.VisibleWorkers[0].DisplayName);
+        Assert.AreEqual("1–1 de 1", viewModel.WorkerPageDescription);
+    }
+
+    [TestMethod]
+    public void ForgottenExitPanelRequiresElevatedPlantManagerMode()
+    {
+        var mode = new PlantManagerModeState();
+        AttendancePreviewViewModel viewModel = Create(
+            new MemoryAttendanceRepository(),
+            new MutableTimeProvider(Now),
+            mode);
+
+        Assert.IsFalse(viewModel.ToggleCorrectionPanelCommand.CanExecute(null));
+        mode.SetActive(true);
+        viewModel.RefreshManagerMode();
+        Assert.IsTrue(viewModel.ToggleCorrectionPanelCommand.CanExecute(null));
+
+        viewModel.ToggleCorrectionPanelCommand.Execute(null);
+        Assert.IsTrue(viewModel.IsCorrectionPanelOpen);
+
+        mode.SetActive(false);
+        viewModel.RefreshManagerMode();
+        Assert.IsFalse(viewModel.IsCorrectionPanelOpen);
+    }
+
+    [TestMethod]
+    public async Task CheckOutWarnsWhenWorkerStillOwnsAnActiveLine()
+    {
+        var repository = new MemoryAttendanceRepository();
+        await repository.RecordAsync(Mutation(Guid.NewGuid(), AttendanceEventType.CheckIn, Now));
+        var session = new LocalOperationalSession(
+            StationId,
+            OrganizationId,
+            PlantId,
+            Guid.Parse("43000000-0000-4000-8000-000000000001"),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            WorkerId,
+            Now,
+            Now,
+            LineFeedCycleStatus.Active);
+        var dashboard = new MemoryOperationDashboardRepository(new LocalOperationDashboardSnapshot(
+            session,
+            session.LineId,
+            "Línea morada",
+            "Proveedor",
+            Now,
+            "Operario de prueba",
+            Now,
+            null,
+            null,
+            10,
+            0));
+        var viewModel = new AttendancePreviewViewModel(
+            repository,
+            new MemoryCatalogRepository(),
+            new MemoryStationStore(),
+            new MutableTimeProvider(Now.AddHours(1)),
+            new PlantManagerModeState(),
+            dashboard);
+
+        await viewModel.InitializeAsync();
+        Assert.IsFalse(viewModel.HasResponsibilityWarning);
+        viewModel.SelectedWorker = viewModel.Workers.Single();
+
+        await viewModel.CheckOutCommand.ExecuteAsync(null);
+
+        Assert.IsTrue(viewModel.HasResponsibilityWarning);
+        StringAssert.Contains(viewModel.ResponsibilityWarning, "Línea morada");
+        StringAssert.Contains(viewModel.ResponsibilityWarning, "fuera de planta");
     }
 
     private static AttendancePreviewViewModel Create(
@@ -209,16 +311,27 @@ public sealed class AttendanceViewModelTests
     {
         private static readonly CachedWorker Worker =
             new(WorkerId, OrganizationId, "Operario de prueba", true, Now);
+        private readonly IReadOnlyList<CachedWorker> workers;
+
+        public MemoryCatalogRepository()
+            : this([Worker])
+        {
+        }
+
+        public MemoryCatalogRepository(IReadOnlyList<CachedWorker> workers)
+        {
+            this.workers = workers;
+        }
 
         public Task<IReadOnlyList<CachedWorker>> ListActiveWorkersAsync(
             Guid organizationId,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<CachedWorker>>([Worker]);
+            Task.FromResult(workers);
 
         public Task<CachedWorker?> FindWorkerAsync(
             Guid workerId,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<CachedWorker?>(Worker);
+            Task.FromResult(workers.FirstOrDefault(worker => worker.Id == workerId));
 
         public Task UpsertSupplierAsync(CachedSupplier supplier, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
@@ -250,6 +363,19 @@ public sealed class AttendanceViewModelTests
             Guid lineId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<CachedProductionLine?>(null);
+    }
+
+    private sealed class MemoryOperationDashboardRepository(
+        LocalOperationDashboardSnapshot snapshot) : ILocalOperationDashboardRepository
+    {
+        public Task<LocalOperationDashboardSnapshot> GetAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) => Task.FromResult(snapshot);
+
+        public Task<IReadOnlyList<LocalOperationDashboardSnapshot>> ListAsync(
+            Guid stationId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<LocalOperationDashboardSnapshot>>([snapshot]);
     }
 
     private sealed class MemoryStationStore : IProtectedStationStore

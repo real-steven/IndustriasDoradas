@@ -110,7 +110,7 @@
                                 <TextBlock FontSize="11" FontWeight="Bold" Text="RESPONSABLE OPCIONAL" />
                                 <ComboBox MinHeight="42" Margin="0,6,0,12" Padding="10,5"
                                           ItemsSource="{Binding Workers}" SelectedItem="{Binding SelectedWorker}"
-                                          DisplayMemberPath="Name" />
+                                          DisplayMemberPath="DisplayName" />
                             </StackPanel>
                             <StackPanel Visibility="{Binding RequiresReason, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <TextBlock FontSize="11" FontWeight="Bold" Text="MOTIVO OBLIGATORIO" />

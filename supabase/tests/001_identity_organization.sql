@@ -29,8 +29,8 @@ begin
   end if;
 
   select count(*) into actual_count from app.role_permissions;
-  if actual_count <> 25 then
-    raise exception 'expected 25 fixed role permission assignments, found %', actual_count;
+  if actual_count <> 26 then
+    raise exception 'expected 26 fixed role permission assignments, found %', actual_count;
   end if;
 
   select count(*) into actual_count from app.production_lines;
@@ -66,8 +66,8 @@ begin
   end if;
 
   select count(*) into actual_count from app.suppliers;
-  if actual_count <> 3 then
-    raise exception 'expected three fictitious suppliers, found %', actual_count;
+  if actual_count <> 5 then
+    raise exception 'expected five fictitious suppliers, found %', actual_count;
   end if;
 
   if exists (
@@ -241,7 +241,7 @@ begin
     ) values (
       '93000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
-      '  PROVEEDOR FICTICIO 1  '
+      '  PROVEEDOR JESÚS  '
     );
     raise exception 'normalized duplicate supplier name must be rejected';
   exception
