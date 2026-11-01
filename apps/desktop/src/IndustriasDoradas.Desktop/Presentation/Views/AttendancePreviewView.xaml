@@ -103,6 +103,49 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="AttendanceWorkerListItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Height" Value="70" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Padding" Value="13,9" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="#F7F9FA" />
+            <Setter Property="BorderBrush" Value="#DCE6EA" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+            <Setter Property="AutomationProperties.HelpText"
+                    Value="Seleccionar este trabajador para registrar asistencia" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="WorkerCard"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="11">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="WorkerCard" Property="Background" Value="#F0F7FA" />
+                                <Setter TargetName="WorkerCard" Property="BorderBrush" Value="#9DC6D8" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="WorkerCard" Property="Background" Value="#E8F4F9" />
+                                <Setter TargetName="WorkerCard" Property="BorderBrush" Value="#2F7EA4" />
+                                <Setter TargetName="WorkerCard" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="WorkerCard" Property="BorderBrush" Value="#2F7EA4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalContentAlignment="Stretch"
@@ -130,7 +173,7 @@
                            TextWrapping="Wrap" />
             </Border>
 
-            <UniformGrid Margin="-6,18,-6,0" Columns="3">
+            <UniformGrid Margin="-6,18,-6,0" Columns="2">
                 <Border Margin="6" Padding="18" Background="#EFFAF4" CornerRadius="14">
                     <StackPanel>
                         <TextBlock Foreground="#3D6B51" FontSize="11" FontWeight="Bold"
@@ -139,22 +182,49 @@
                                    FontWeight="Bold" Text="{Binding PresentCount}" />
                     </StackPanel>
                 </Border>
-                <Border Margin="6" Padding="18" Background="#F2F7FA" CornerRadius="14">
-                    <StackPanel>
-                        <TextBlock Foreground="#526A78" FontSize="11" FontWeight="Bold"
-                                   Text="JORNADAS ABIERTAS" />
-                        <TextBlock Margin="0,5,0,0" FontSize="28" FontWeight="Bold"
-                                   Text="{Binding OpenShiftCount}" />
-                    </StackPanel>
-                </Border>
-                <Border Margin="6" Padding="18" Background="#FFF8E9" CornerRadius="14">
+                <Button Margin="6" Padding="18" Background="#FFF8E9" BorderBrush="#E5C476"
+                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                        Command="{Binding DataContext.ShowAttendanceIncidentsCommand,
+                                          RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                        AutomationProperties.Name="Abrir incidencias de asistencia en auditoría"
+                        AutomationProperties.HelpText="Requiere Modo Jefe de Planta">
                     <StackPanel>
                         <TextBlock Foreground="#815D17" FontSize="11" FontWeight="Bold"
                                    Text="INCIDENCIAS" />
                         <TextBlock Margin="0,5,0,0" Foreground="#9A6500" FontSize="28"
                                    FontWeight="Bold" Text="{Binding IncidentCount}" />
+                        <TextBlock Margin="0,8,0,0" Foreground="#8A5A00" FontSize="10"
+                                   FontWeight="Bold" Text="🔒  REQUIERE MODO JEFE">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsPlantManager,
+                                                                       RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                     Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Margin="0,8,0,0" Foreground="#8A5A00" FontSize="10"
+                                   FontWeight="Bold" Text="ABRIR EN AUDITORÍA  →">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsPlantManager,
+                                                                       RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                     Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
-                </Border>
+                </Button>
             </UniformGrid>
 
             <Grid Margin="0,18,0,0">
@@ -293,40 +363,44 @@
                                  Text="{Binding WorkerSearchText, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Buscar personal"
                                  ToolTip="Buscar por nombre, rol o estado" />
-                        <ItemsControl Grid.Row="4" Height="390" ItemsSource="{Binding VisibleWorkers}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Height="70" Margin="0,0,0,8" Padding="13,9"
-                                                Background="#F7F9FA"
-                                                BorderBrush="#DCE6EA" BorderThickness="1" CornerRadius="11">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="Bold" Text="{Binding DisplayName}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding DisplayName}" />
-                                                    <TextBlock Margin="0,2,0,0" Foreground="#2F7EA4"
-                                                               FontSize="10" FontWeight="SemiBold"
-                                                               Text="{Binding CategoryLabel}"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Margin="0,3,0,0" Foreground="{StaticResource MutedBrush}"
-                                                               FontSize="11" Text="{Binding LastMark}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding LastMark}" />
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="1" Margin="12,0,0,0"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{Binding StateColor}"
-                                                           FontWeight="Bold" Text="{Binding State}"
-                                                           TextWrapping="NoWrap" />
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <ListBox Grid.Row="4" Height="390"
+                                 Padding="0" Background="Transparent" BorderThickness="0"
+                                 ItemsSource="{Binding VisibleWorkers}"
+                                 SelectedItem="{Binding SelectedWorker, Mode=TwoWay}"
+                                 SelectionMode="Single"
+                                 ItemContainerStyle="{StaticResource AttendanceWorkerListItemStyle}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                 AutomationProperties.Name="Seleccionar personal desde su estado">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid AutomationProperties.Name="{Binding DisplayName}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="Bold" Text="{Binding DisplayName}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding DisplayName}" />
+                                            <TextBlock Margin="0,2,0,0" Foreground="#2F7EA4"
+                                                       FontSize="10" FontWeight="SemiBold"
+                                                       Text="{Binding CategoryLabel}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Margin="0,3,0,0" Foreground="{StaticResource MutedBrush}"
+                                                       FontSize="11" Text="{Binding LastMark}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding LastMark}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Margin="12,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{Binding StateColor}"
+                                                   FontWeight="Bold" Text="{Binding State}"
+                                                   TextWrapping="NoWrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                         <Grid Grid.Row="5" Margin="0,3,0,0" VerticalAlignment="Bottom">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />

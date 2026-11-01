@@ -23,10 +23,10 @@ public sealed class DiagnosticsViewModelTests
         DiagnosticsViewModel viewModel = new(
             new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
             new StubLocalDiagnostics(Healthy()),
-            Options.Create(new StationOptions { Id = stationId, Name = "Estación Avangares" }),
+            Options.Create(new StationOptions { Id = stationId, Name = "Estación Abangares" }),
             new SyncStatusNotifier());
 
-        Assert.AreEqual("Estación Avangares", viewModel.StationName);
+        Assert.AreEqual("Estación Abangares", viewModel.StationName);
         Assert.AreEqual(stationId.ToString("D"), viewModel.StationCode);
     }
 

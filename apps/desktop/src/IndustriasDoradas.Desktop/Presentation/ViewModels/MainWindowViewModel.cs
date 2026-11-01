@@ -106,6 +106,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ShowAuditCorrectionsCommand = new AsyncRelayCommand(
             ShowAuditCorrectionsAsync,
             CanShowAuditCorrections);
+        ShowAttendanceIncidentsCommand = new AsyncRelayCommand(
+            ShowAttendanceIncidentsAsync,
+            CanShowAttendanceIncidents);
         DismissCorrectionNotificationCommand = new RelayCommand(
             DismissCorrectionNotification,
             () => Diagnostics.HasCorrections);
@@ -188,6 +191,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public IRelayCommand ShowDiagnosticsCommand { get; }
     public IAsyncRelayCommand ShowAuditCommand { get; }
     public IAsyncRelayCommand ShowAuditCorrectionsCommand { get; }
+    public IAsyncRelayCommand ShowAttendanceIncidentsCommand { get; }
     public IRelayCommand DismissCorrectionNotificationCommand { get; }
     public IRelayCommand DismissResponsibilityWarningCommand { get; }
     public IAsyncRelayCommand ShowStationResponsibilityCommand { get; }
@@ -248,6 +252,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private static bool CanShowDiagnostics() => true;
     private bool CanShowAudit() => Audit is not null;
+    private bool CanShowAttendanceIncidents() => Audit is not null &&
+        (Station is null || Station.IsPlantManager);
     private bool CanShowAuditCorrections() => Audit is not null &&
         (Station is null || Station.IsPlantManager);
     private bool CanShowSettings() => Settings is not null &&
@@ -280,6 +286,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         await Audit.RefreshAsync();
         Audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
         DismissCorrectionNotification();
+        CurrentPage = Audit;
+    }
+
+    private async Task ShowAttendanceIncidentsAsync()
+    {
+        if (!CanShowAttendanceIncidents()) return;
+        await ShowAttendanceAuditAsync();
+    }
+
+    private async Task ShowAttendanceAuditAsync()
+    {
+        if (Audit is null) return;
+        await Audit.RefreshAsync();
+        Audit.SelectCategoryCommand.Execute(AuditCategory.Attendance);
         CurrentPage = Audit;
     }
 
@@ -354,6 +374,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ShowDiagnosticsCommand.NotifyCanExecuteChanged();
             ShowAuditCommand.NotifyCanExecuteChanged();
             ShowAuditCorrectionsCommand.NotifyCanExecuteChanged();
+            ShowAttendanceIncidentsCommand.NotifyCanExecuteChanged();
             ShowSettingsCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(HasCorrectionNotification));
             if (!CanShowSettings() && ReferenceEquals(CurrentPage, Settings))

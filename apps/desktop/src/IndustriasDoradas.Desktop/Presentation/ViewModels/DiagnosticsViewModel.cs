@@ -75,7 +75,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
             ? "No configurado"
             : configuredStation.Id.ToString("D");
         stationName = string.IsNullOrWhiteSpace(configuredStation.Name)
-            ? "Estación Avangares"
+            ? "Estación Abangares"
             : configuredStation.Name.Trim();
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         CreateRecoveryCopyCommand = new AsyncRelayCommand(
