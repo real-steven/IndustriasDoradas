@@ -62,7 +62,8 @@ public sealed class StationApi(HttpClient httpClient) : IStationApi
                 item.PlantId ?? throw new InvalidOperationException("La línea no indicó su planta."),
                 item.Name,
                 item.IsActive,
-                item.UpdatedAt)).ToArray());
+                item.UpdatedAt,
+                item.DisplayOrder)).ToArray());
     }
 
     private async Task<T> GetAsync<T>(string path, string accessToken, CancellationToken cancellationToken)
@@ -103,7 +104,8 @@ public sealed class StationApi(HttpClient httpClient) : IStationApi
         string Name,
         bool IsActive,
         Guid? PlantId,
-        DateTimeOffset UpdatedAt);
+        DateTimeOffset UpdatedAt,
+        int DisplayOrder = 1);
     private sealed record WorkerApiItem(
         Guid Id,
         Guid OrganizationId,

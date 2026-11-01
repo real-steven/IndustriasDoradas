@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import type {
   ManagementShipment,
   ManagementSweepMercury,
@@ -13,6 +13,7 @@ import {
 import {
   formatCostaRicaDateTime,
   parseShipmentFilters,
+  resolveShipmentReference,
   shortShipmentId,
   useManagementShipment,
   useManagementShipmentFilterOptions,
@@ -22,16 +23,29 @@ import {
   type AuditEvent,
   type ShipmentFilters,
 } from "./management-shipments-data";
-import { managerAuditAction } from "./management-audit-labels";
+import {
+  managerAuditAction,
+  managerAuditArea,
+  managerAuditResult,
+} from "./management-audit-labels";
+import { ManagementAuditDetail } from "./management-audit-detail";
 import { requestErrorMessage } from "../../api/http";
 import { useLanguage } from "../../i18n/language-context";
 
 export function ShipmentsFeature() {
   const { language, tr } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
-  const filters = parseShipmentFilters(searchParams);
+  const requestedFilters = parseShipmentFilters(searchParams);
+  const filterOptions = useManagementShipmentFilterOptions(requestedFilters);
+  const shipmentId = resolveShipmentReference(
+    requestedFilters.shipmentReference,
+    filterOptions.data?.items ?? [],
+  );
+  const filters: ShipmentFilters = {
+    ...requestedFilters,
+    ...(shipmentId === undefined ? {} : { shipmentId }),
+  };
   const shipments = useManagementShipments(filters);
-  const filterOptions = useManagementShipmentFilterOptions(filters);
 
   const update = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -563,38 +577,60 @@ export function ShipmentAuditFeature() {
 
 function ManagerAuditEvent({ event }: { event: AuditEvent }) {
   const { language, tr } = useLanguage();
+  const [detailOpen, setDetailOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const closeDetail = () => {
+    setDetailOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  };
 
   return (
-    <article className="manager-audit-event">
-      <div className="audit-event-main">
-        <span className={`audit-result ${event.result.toLowerCase()}`}>
-          {managerAuditResult(event.result, language)}
-        </span>
-        <div>
-          <h3>{managerAuditAction(event, language)}</h3>
-          <p>
-            {tr("Realizado por", "Performed by")}{" "}
-            <strong>{event.actorDisplayName ?? tr("Sistema", "System")}</strong>
-          </p>
-        </div>
-      </div>
-      <dl className="audit-event-context">
-        <div>
-          <dt>{tr("Fecha y hora", "Date and time")}</dt>
-          <dd>{formatCostaRicaDateTime(event.occurredAt, language)}</dd>
-        </div>
-        <div>
-          <dt>{tr("Área", "Area")}</dt>
-          <dd>{managerAuditArea(event.entityType, language)}</dd>
-        </div>
-        {event.entityId !== null && (
+    <>
+      <article className="manager-audit-event">
+        <div className="audit-event-main">
+          <span className={`audit-result ${event.result.toLowerCase()}`}>
+            {managerAuditResult(event.result, language)}
+          </span>
           <div>
-            <dt>{tr("Referencia", "Reference")}</dt>
-            <dd>{shortShipmentId(event.entityId)}</dd>
+            <h3>{managerAuditAction(event, language)}</h3>
+            <p>
+              {tr("Realizado por", "Performed by")}{" "}
+              <strong>
+                {event.actorDisplayName ?? tr("Sistema", "System")}
+              </strong>
+            </p>
           </div>
-        )}
-      </dl>
-    </article>
+        </div>
+        <dl className="audit-event-context">
+          <div>
+            <dt>{tr("Fecha y hora", "Date and time")}</dt>
+            <dd>{formatCostaRicaDateTime(event.occurredAt, language)}</dd>
+          </div>
+          <div>
+            <dt>{tr("Área", "Area")}</dt>
+            <dd>{managerAuditArea(event.entityType, language)}</dd>
+          </div>
+          {event.entityId !== null && (
+            <div>
+              <dt>{tr("Referencia", "Reference")}</dt>
+              <dd>{shortShipmentId(event.entityId)}</dd>
+            </div>
+          )}
+        </dl>
+        <button
+          ref={triggerRef}
+          type="button"
+          className="secondary audit-detail-trigger"
+          onClick={() => setDetailOpen(true)}
+        >
+          {tr("ABRIR DETALLE", "OPEN DETAILS")}
+        </button>
+      </article>
+      {detailOpen && (
+        <ManagementAuditDetail event={event} close={closeDetail} />
+      )}
+    </>
   );
 }
 
@@ -652,29 +688,6 @@ function auditDate(value: string | null): string | undefined {
   return value;
 }
 
-function managerAuditArea(entityType: string, language: "es" | "en"): string {
-  const es = language === "es";
-  if (entityType.includes("worker") || entityType.includes("attendance"))
-    return es ? "Trabajadores" : "Workers";
-  if (entityType.includes("user_profile")) return es ? "Usuarios" : "Users";
-  if (entityType.includes("shipment") || entityType.includes("production"))
-    return es ? "Operación" : "Operations";
-  if (entityType.includes("supplier")) return es ? "Proveedores" : "Suppliers";
-  if (entityType.includes("inventory")) return es ? "Inventario" : "Inventory";
-  return es ? "Sistema" : "System";
-}
-
-function managerAuditResult(
-  result: AuditEvent["result"],
-  language: "es" | "en",
-): string {
-  if (result === "SUCCEEDED")
-    return language === "es" ? "Completado" : "Completed";
-  if (result === "REJECTED")
-    return language === "es" ? "Rechazado" : "Rejected";
-  return language === "es" ? "No completado" : "Not completed";
-}
-
 function ShipmentFiltersPanel({
   filters,
   items,
@@ -709,6 +722,17 @@ function ShipmentFiltersPanel({
       className="shipment-filters"
       aria-label={tr("Filtros de cargamentos", "Shipment filters")}
     >
+      <label className="shipment-reference-filter">
+        {tr("Buscar por ID", "Search by ID")}
+        <input
+          type="search"
+          value={filters.shipmentReference}
+          placeholder={tr("Ej. 22B1CC83", "E.g. 22B1CC83")}
+          autoComplete="off"
+          maxLength={36}
+          onChange={(event) => update("shipment", event.target.value)}
+        />
+      </label>
       <label>
         {tr("Período", "Period")}
         <select

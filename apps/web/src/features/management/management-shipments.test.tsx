@@ -1,6 +1,13 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -64,13 +71,27 @@ describe("historial gerencial de cargamentos", () => {
     vi.stubGlobal("fetch", transport);
 
     renderPortal(
-      `/gerencia/cargamentos?period=date&date=2026-10-08&line=${LINE_ID}&supplier=${SUPPLIER_ID}&responsible=${WORKER_ID}&page=2`,
+      `/gerencia/cargamentos?period=date&date=2026-10-08&shipment=42000000&line=${LINE_ID}&supplier=${SUPPLIER_ID}&responsible=${WORKER_ID}&page=2`,
     );
 
     expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: "Buscar por ID" }),
+    ).toHaveValue("42000000");
+    await waitFor(() => {
+      expect(
+        transport.mock.calls.some(([input]) => {
+          const candidate = new URL(requestUrl(input), "http://localhost");
+          return candidate.searchParams.get("shipmentId") === SHIPMENT_ID;
+        }),
+      ).toBe(true);
+    });
     const pagedRequest = transport.mock.calls.find(([input]) => {
       const candidate = new URL(requestUrl(input), "http://localhost");
-      return candidate.searchParams.get("page") === "2";
+      return (
+        candidate.searchParams.get("page") === "2" &&
+        candidate.searchParams.get("shipmentId") === SHIPMENT_ID
+      );
     });
     const request = new URL(requestUrl(pagedRequest?.[0]), "http://localhost");
     expect(request.searchParams.get("page")).toBe("2");
@@ -82,6 +103,7 @@ describe("historial gerencial de cargamentos", () => {
     expect(request.searchParams.get("productionLineId")).toBe(LINE_ID);
     expect(request.searchParams.get("supplierId")).toBe(SUPPLIER_ID);
     expect(request.searchParams.get("responsibleWorkerId")).toBe(WORKER_ID);
+    expect(request.searchParams.get("shipmentId")).toBe(SHIPMENT_ID);
     expect(screen.getByText("Página 2 de 3")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /ABRIR DETALLE/u }),
@@ -125,6 +147,7 @@ describe("historial gerencial de cargamentos", () => {
   });
 
   it("presenta la auditoria como actividad gerencial comprensible", async () => {
+    const user = userEvent.setup();
     const transport = vi.fn<typeof fetch>((input) => {
       const url = new URL(requestUrl(input), "http://localhost");
       if (url.pathname.endsWith("/audit-events"))
@@ -136,13 +159,35 @@ describe("historial gerencial de cargamentos", () => {
     renderPortal("/gerencia/auditoria");
 
     const event = (
-      await screen.findByText("La planta sincronizó un cargamento")
+      await screen.findByText("La planta envió información de un cargamento")
     ).closest("article");
     expect(event).not.toBeNull();
     if (event === null) throw new Error("Expected an audit event");
     expect(within(event).getByText("Realizado por")).toBeInTheDocument();
-    expect(within(event).getByText("Operación")).toBeInTheDocument();
+    expect(within(event).getByText("Producción")).toBeInTheDocument();
     expect(screen.queryByText("Cambios auditados")).not.toBeInTheDocument();
+
+    await user.click(
+      within(event).getByRole("button", { name: "ABRIR DETALLE" }),
+    );
+
+    const detail = screen.getByRole("dialog", {
+      name: "Detalle de actividad",
+    });
+    expect(
+      within(detail).getByText("Sincronización de planta"),
+    ).toBeInTheDocument();
+    expect(within(detail).getByText("Qué cambió")).toBeInTheDocument();
+    expect(within(detail).getByText("Antes: Pendiente")).toBeInTheDocument();
+    expect(within(detail).getByText("Después: Aprobado")).toBeInTheDocument();
+    expect(
+      within(detail).queryByText("Registrado en el sistema"),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(detail).getByRole("button", { name: "Cerrar detalle" }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -268,11 +313,14 @@ function auditPage(): Response {
       {
         id: "d1000000-0000-4000-8000-000000000001",
         actorDisplayName: "Responsable Uno",
+        origin: "SYNC",
         action: "sync.ingest",
         entityType: "shipment",
         entityId: SHIPMENT_ID,
         result: "SUCCEEDED",
         reasonCode: null,
+        changedFields: ["status"],
+        changes: { status: { before: "PENDING", after: "APPROVED" } },
         occurredAt: "2026-10-08T18:00:00.000Z",
         recordedAt: "2026-10-08T18:00:05.000Z",
       },

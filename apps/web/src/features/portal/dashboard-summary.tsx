@@ -21,6 +21,7 @@ const allShipmentFilters: ShipmentFilters = {
   period: "all",
   date: "",
   toDate: "",
+  shipmentReference: "",
   page: 1,
 };
 

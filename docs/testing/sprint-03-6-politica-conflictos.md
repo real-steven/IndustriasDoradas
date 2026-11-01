@@ -40,7 +40,7 @@ La migración mantiene las funciones en el esquema privado `app`, usa
 
 ## Resultado de la pausa manual
 
-La validación manual fue aprobada con la Línea ficticia 1:
+La validación manual fue aprobada con la Línea morada:
 
 1. Con la API detenida y la línea desactivada centralmente, una cajuela local
    pasó de pendiente a revisión al recuperar conexión: revisión aumentó de 30

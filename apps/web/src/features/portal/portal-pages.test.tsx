@@ -102,7 +102,7 @@ describe("portal gerencial", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
     expect(
-      screen.getByText("La planta registró una barrida"),
+      screen.getByText("La planta registró una barrida de producción"),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Línea 1" }),

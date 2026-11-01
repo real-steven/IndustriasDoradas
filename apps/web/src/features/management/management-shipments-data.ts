@@ -15,6 +15,8 @@ export interface ShipmentFilters {
   period: ShipmentPeriod;
   date: string;
   toDate: string;
+  shipmentReference: string;
+  shipmentId?: string;
   productionLineId?: string;
   supplierId?: string;
   responsibleWorkerId?: string;
@@ -82,6 +84,7 @@ export function parseShipmentFilters(params: URLSearchParams): ShipmentFilters {
     period,
     date,
     toDate,
+    shipmentReference: params.get("shipment")?.trim() ?? "",
     productionLineId: optional(params.get("line")),
     supplierId: optional(params.get("supplier")),
     responsibleWorkerId: optional(params.get("responsible")),
@@ -120,6 +123,7 @@ export function useManagementShipmentFilterOptions(
     period: filters.period,
     date: filters.date,
     toDate: filters.toDate,
+    shipmentReference: "",
     page: 1,
   };
   const query = shipmentQuery(optionFilters, 100);
@@ -268,6 +272,28 @@ export function shortShipmentId(value: string): string {
   return value.slice(0, 8).toUpperCase();
 }
 
+export function resolveShipmentReference(
+  reference: string,
+  items: ManagementShipment[],
+): string | undefined {
+  const requested = reference.trim();
+  if (requested.length === 0) return undefined;
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      requested,
+    )
+  )
+    return requested;
+
+  const normalized = requested.replaceAll("-", "").toLowerCase();
+  const matches = items.filter((item) =>
+    item.shipmentId.replaceAll("-", "").toLowerCase().startsWith(normalized),
+  );
+  return matches.length === 1
+    ? matches[0]?.shipmentId
+    : "00000000-0000-4000-8000-000000000000";
+}
+
 function shipmentQuery(filters: ShipmentFilters, pageSize: number): string {
   const dates = shipmentDateRange(filters);
   const params = new URLSearchParams({
@@ -282,6 +308,8 @@ function shipmentQuery(filters: ShipmentFilters, pageSize: number): string {
     params.set("supplierId", filters.supplierId);
   if (filters.responsibleWorkerId !== undefined)
     params.set("responsibleWorkerId", filters.responsibleWorkerId);
+  if (filters.shipmentId !== undefined)
+    params.set("shipmentId", filters.shipmentId);
   return params.toString();
 }
 

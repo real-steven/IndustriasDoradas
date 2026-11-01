@@ -2148,7 +2148,7 @@ td {
 }
 .manager-audit-event {
   display: grid;
-  grid-template-columns: minmax(280px, 1.5fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(280px, 1.5fr) minmax(360px, 1fr) auto;
   align-items: center;
   gap: 18px;
   padding: 14px 16px;
@@ -2206,6 +2206,142 @@ td {
   overflow-wrap: anywhere;
   font-size: 0.64rem;
   font-weight: 750;
+}
+.audit-detail-trigger {
+  white-space: nowrap;
+}
+.audit-detail-layer {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  background: rgb(8 30 42 / 55%);
+}
+.audit-detail-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  background: white;
+  box-shadow: 0 24px 70px rgb(8 30 42 / 30%);
+}
+.audit-detail-dialog > header,
+.audit-detail-dialog > footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.audit-detail-dialog > header h2 {
+  margin-bottom: 4px;
+}
+.audit-detail-dialog > header p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.audit-detail-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 11px;
+  padding: 12px 14px;
+  background: #f4f7f8;
+}
+.audit-detail-result p,
+.audit-detail-reason p,
+.audit-detail-dialog > footer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+.audit-detail-section {
+  display: grid;
+  gap: 10px;
+}
+.audit-detail-section h3 {
+  margin: 0;
+  font-size: 0.76rem;
+}
+.audit-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--line);
+}
+.audit-detail-summary > div {
+  min-width: 0;
+  padding: 12px;
+  background: #fbfcfd;
+}
+.audit-detail-summary dt {
+  color: var(--muted);
+  font-size: 0.52rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+.audit-detail-summary dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+.audit-detail-reason {
+  border-left: 4px solid var(--gold);
+  border-radius: 8px;
+  padding: 11px 13px;
+  background: #fff8e9;
+}
+.audit-change-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.audit-change-list li {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+}
+.audit-change-list li > strong {
+  font-size: 0.66rem;
+}
+.audit-change-list li > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.audit-change-list li > div span:not([aria-hidden]) {
+  overflow-wrap: anywhere;
+  border-radius: 7px;
+  padding: 8px;
+  background: #f4f7f8;
+}
+.audit-detail-dialog > footer {
+  align-items: center;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
 }
 .audit-pagination > span:first-child {
   margin-right: auto;
@@ -2345,6 +2481,11 @@ td {
 .account-list {
   display: grid;
   gap: 10px;
+}
+.account-show-more {
+  justify-self: center;
+  min-width: 150px;
+  margin-top: 4px;
 }
 .account-card {
   display: grid;
@@ -3361,6 +3502,7 @@ td {
   .audit-filters,
   .manager-audit-event,
   .audit-event-context,
+  .audit-detail-summary,
   .account-form-grid {
     grid-template-columns: 1fr;
   }
@@ -3394,6 +3536,40 @@ td {
   .audit-filter-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+  .audit-detail-trigger {
+    width: 100%;
+  }
+  .audit-detail-layer {
+    place-items: end stretch;
+    padding: 0;
+  }
+  .audit-detail-dialog {
+    width: 100%;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 16px 16px 0 0;
+    padding: max(18px, env(safe-area-inset-top))
+      max(15px, env(safe-area-inset-right))
+      max(18px, env(safe-area-inset-bottom))
+      max(15px, env(safe-area-inset-left));
+  }
+  .audit-change-list li > div {
+    grid-template-columns: 1fr;
+  }
+  .audit-change-list li > div span[aria-hidden] {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+  .audit-detail-dialog > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .audit-detail-dialog > footer button {
+    width: 100%;
   }
   .gold-editor {
     width: 100%;

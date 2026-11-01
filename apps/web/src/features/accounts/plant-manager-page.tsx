@@ -28,6 +28,8 @@ interface PlantManagerForm {
   pinConfirmation: string;
 }
 
+const accountListBatchSize = 5;
+
 const emptyForm: PlantManagerForm = {
   role: "JEFE_PLANTA",
   displayName: "",
@@ -59,7 +61,15 @@ export function PlantManagerPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [suspensionReason, setSuspensionReason] = useState("");
+  const [visibleManagerCount, setVisibleManagerCount] =
+    useState(accountListBatchSize);
+  const [visibleOperatorCount, setVisibleOperatorCount] =
+    useState(accountListBatchSize);
   const dismissSuccess = useCallback(() => setSuccess(null), []);
+  const managerAccounts = managers.data?.items ?? [];
+  const operatorAccounts = (workers.data?.items ?? []).filter(
+    (worker) => worker.category === "OPERARIO",
+  );
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -399,7 +409,7 @@ export function PlantManagerPage() {
             </div>
           )}
           <div className="account-list">
-            {managers.data?.items.map((account) => (
+            {managerAccounts.slice(0, visibleManagerCount).map((account) => (
               <article className="account-card" key={account.id}>
                 <header>
                   <div>
@@ -496,6 +506,19 @@ export function PlantManagerPage() {
                 )}
               </article>
             ))}
+            {visibleManagerCount < managerAccounts.length && (
+              <button
+                type="button"
+                className="secondary account-show-more"
+                onClick={() =>
+                  setVisibleManagerCount(
+                    (current) => current + accountListBatchSize,
+                  )
+                }
+              >
+                {tr("VER MÁS", "SHOW MORE")}
+              </button>
+            )}
           </div>
         </section>
       </section>
@@ -522,31 +545,42 @@ export function PlantManagerPage() {
           </p>
         )}
         <div className="account-list">
-          {(workers.data?.items ?? [])
-            .filter((worker) => worker.category === "OPERARIO")
-            .map((worker) => (
-              <article className="account-card" key={worker.id}>
-                <header>
-                  <div>
-                    <h3>{workerDisplayName(worker.name)}</h3>
-                    <p>
-                      {worker.email ??
-                        worker.phone ??
-                        tr("Sin contacto", "No contact")}
-                    </p>
-                  </div>
-                  <span
-                    className={`account-status ${worker.isActive ? "active" : "suspended"}`}
-                  >
-                    {worker.status === "PROVISIONAL"
-                      ? tr("PENDIENTE", "PENDING")
-                      : worker.isActive
-                        ? tr("ACTIVO", "ACTIVE")
-                        : tr("INACTIVO", "INACTIVE")}
-                  </span>
-                </header>
-              </article>
-            ))}
+          {operatorAccounts.slice(0, visibleOperatorCount).map((worker) => (
+            <article className="account-card" key={worker.id}>
+              <header>
+                <div>
+                  <h3>{workerDisplayName(worker.name)}</h3>
+                  <p>
+                    {worker.email ??
+                      worker.phone ??
+                      tr("Sin contacto", "No contact")}
+                  </p>
+                </div>
+                <span
+                  className={`account-status ${worker.isActive ? "active" : "suspended"}`}
+                >
+                  {worker.status === "PROVISIONAL"
+                    ? tr("PENDIENTE", "PENDING")
+                    : worker.isActive
+                      ? tr("ACTIVO", "ACTIVE")
+                      : tr("INACTIVO", "INACTIVE")}
+                </span>
+              </header>
+            </article>
+          ))}
+          {visibleOperatorCount < operatorAccounts.length && (
+            <button
+              type="button"
+              className="secondary account-show-more"
+              onClick={() =>
+                setVisibleOperatorCount(
+                  (current) => current + accountListBatchSize,
+                )
+              }
+            >
+              {tr("VER MÁS", "SHOW MORE")}
+            </button>
+          )}
         </div>
       </section>
     </div>

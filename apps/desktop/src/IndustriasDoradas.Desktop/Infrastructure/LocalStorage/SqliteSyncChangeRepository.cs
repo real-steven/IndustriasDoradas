@@ -326,16 +326,19 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                 break;
             case "PRODUCTION_LINE":
                 await ExecuteAsync(connection, transaction, """
-                    INSERT INTO cached_production_lines(id, organization_id, plant_id, name, is_active, updated_at_utc)
-                    VALUES ($id, $organizationId, $plantId, $name, $active, $updated)
+                    INSERT INTO cached_production_lines(
+                        id, organization_id, plant_id, name, is_active, updated_at_utc, display_order)
+                    VALUES ($id, $organizationId, $plantId, $name, $active, $updated, $displayOrder)
                     ON CONFLICT(id) DO UPDATE SET organization_id=excluded.organization_id,
                         plant_id=excluded.plant_id, name=excluded.name,
-                        is_active=excluded.is_active, updated_at_utc=excluded.updated_at_utc;
+                        is_active=excluded.is_active, updated_at_utc=excluded.updated_at_utc,
+                        display_order=excluded.display_order;
                     """, cancellationToken,
                     ("$id", Text(payload, "id")), ("$organizationId", Text(payload, "organization_id")),
                     ("$plantId", Text(payload, "plant_id")), ("$name", Text(payload, "name")),
                     ("$active", Bool(payload, "is_active") ? 1 : 0),
-                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc))).ConfigureAwait(false);
+                    ("$updated", Timestamp(payload, "updated_at", change.ChangedAtUtc)),
+                    ("$displayOrder", Integer(payload, "display_order"))).ConfigureAwait(false);
                 break;
             case "LINE_COMPONENT":
                 await ExecuteAsync(connection, transaction, """

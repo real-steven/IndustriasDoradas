@@ -1,6 +1,12 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -144,6 +150,61 @@ describe("gestion de usuarios de planta", () => {
     });
     expect(await screen.findByText("Mario Planta")).toBeInTheDocument();
   });
+
+  it("muestra jefaturas y operarios en bloques acumulables de cinco", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi({
+      managers: Array.from({ length: 6 }, (_, index) =>
+        plantManagerFixture(index + 1),
+      ),
+      operators: Array.from({ length: 12 }, (_, index) =>
+        operatorFixture(index + 1),
+      ),
+    });
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage();
+
+    const managersHeading = await screen.findByRole("heading", {
+      name: "Jefes de planta",
+    });
+    const managersSection = managersHeading.closest("section");
+    if (managersSection === null) throw new Error("Managers section missing");
+    const managersList = within(managersSection);
+    expect(await managersList.findByText("Jefe listado 5")).toBeInTheDocument();
+    expect(managersList.queryByText("Jefe listado 6")).not.toBeInTheDocument();
+
+    const operatorsHeading = screen.getByRole("heading", { name: "Operarios" });
+    const operatorsSection = operatorsHeading.closest("section");
+    if (operatorsSection === null) throw new Error("Operators section missing");
+    const operatorsList = within(operatorsSection);
+    expect(
+      await operatorsList.findByText("Operario listado 5"),
+    ).toBeInTheDocument();
+    expect(
+      operatorsList.queryByText("Operario listado 6"),
+    ).not.toBeInTheDocument();
+
+    await user.click(operatorsList.getByRole("button", { name: "VER MÁS" }));
+    expect(operatorsList.getByText("Operario listado 10")).toBeInTheDocument();
+    expect(
+      operatorsList.queryByText("Operario listado 11"),
+    ).not.toBeInTheDocument();
+    expect(
+      operatorsList.getByRole("button", { name: "VER MÁS" }),
+    ).toBeInTheDocument();
+
+    await user.click(operatorsList.getByRole("button", { name: "VER MÁS" }));
+    expect(operatorsList.getByText("Operario listado 12")).toBeInTheDocument();
+    expect(
+      operatorsList.queryByRole("button", { name: "VER MÁS" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(managersList.getByRole("button", { name: "VER MÁS" }));
+    expect(managersList.getByText("Jefe listado 6")).toBeInTheDocument();
+    expect(
+      managersList.queryByRole("button", { name: "VER MÁS" }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 function renderPage() {
@@ -181,7 +242,12 @@ function renderPage() {
   );
 }
 
-function createAccountsApi(): {
+function createAccountsApi(
+  seed: {
+    managers?: Record<string, unknown>[];
+    operators?: Record<string, unknown>[];
+  } = {},
+): {
   fetch: typeof fetch;
   creationBody: Record<string, unknown> | null;
   operatorCreationBody: Record<string, unknown> | null;
@@ -190,7 +256,8 @@ function createAccountsApi(): {
   let account: Record<string, unknown> | null = null;
   let creationBody: Record<string, unknown> | null = null;
   let operatorCreationBody: Record<string, unknown> | null = null;
-  let operators: Record<string, unknown>[] = [];
+  const managers = seed.managers ?? [];
+  let operators: Record<string, unknown>[] = [...(seed.operators ?? [])];
   let approvals = 0;
   const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
     const url = new URL(requestUrl(input), "http://localhost");
@@ -214,7 +281,9 @@ function createAccountsApi(): {
         page([{ id: STATION_ID, name: "Estación central", isActive: true }]),
       );
     if (url.pathname.endsWith("/accounts") && method === "GET")
-      return Promise.resolve(page(account === null ? [] : [account]));
+      return Promise.resolve(
+        page(account === null ? managers : [account, ...managers]),
+      );
     if (url.pathname.endsWith("/workers") && method === "GET")
       return Promise.resolve(page(operators));
     if (url.pathname.endsWith("/worker-requests") && method === "POST") {
@@ -282,6 +351,32 @@ function plantManager(status: "PENDING_APPROVAL" | "ACTIVE") {
     isActive: true,
     createdAt: "2026-10-18T12:00:00.000Z",
     updatedAt: "2026-10-18T12:00:00.000Z",
+  };
+}
+
+function plantManagerFixture(index: number) {
+  return {
+    ...plantManager("ACTIVE"),
+    id: `a2000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    displayName: `Jefe listado ${index}`,
+  };
+}
+
+function operatorFixture(index: number) {
+  return {
+    id: `45000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    organizationId: ORGANIZATION_ID,
+    plantId: PLANT_ID,
+    sourceRequestId: REQUEST_ID,
+    userProfileId: null,
+    category: "OPERARIO",
+    name: `Operario listado ${index}`,
+    email: `operario${index}@example.invalid`,
+    phone: null,
+    status: "ACTIVO",
+    statusChangedAt: "2026-10-28T12:00:00.000Z",
+    isActive: true,
+    deactivatedAt: null,
   };
 }
 
