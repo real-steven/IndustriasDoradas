@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Threading;
 using System.ComponentModel;
@@ -13,6 +14,13 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer clockTimer;
     private readonly DispatcherTimer headerTimer;
     private readonly DispatcherTimer noticeTimer;
+    private Rect windowedBounds;
+    private WindowState windowedState;
+    private WindowStyle windowedStyle;
+    private ResizeMode windowedResizeMode;
+    private SizeToContent windowedSizeToContent;
+    private bool windowedTopmost;
+    private bool isFullScreen;
 
     public MainWindow(MainWindowViewModel viewModel)
     {
@@ -29,6 +37,7 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         PreviewKeyDown += OnActivity;
+        PreviewKeyDown += OnWindowPreviewKeyDown;
         PreviewMouseDown += OnActivity;
         PreviewTouchDown += OnActivity;
         UpdateWindowPresentation();
@@ -67,6 +76,10 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainWindowViewModel.IsApplicationUnlocked))
         {
+            if (!viewModel.IsApplicationUnlocked && isFullScreen)
+            {
+                ExitFullScreen(restorePreviousWindow: false);
+            }
             if (viewModel.IsApplicationUnlocked && viewModel.Station?.WasSessionRestored == true)
             {
                 SessionRestoreNotice.Visibility = Visibility.Visible;
@@ -85,6 +98,16 @@ public partial class MainWindow : Window
 
     private void UpdateWindowPresentation()
     {
+        if (isFullScreen)
+        {
+            SizeToContent = SizeToContent.Manual;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Maximized;
+            Topmost = true;
+            return;
+        }
+
         if (!viewModel.IsApplicationUnlocked)
         {
             WindowState = WindowState.Normal;
@@ -149,12 +172,106 @@ public partial class MainWindow : Window
         RestartHeaderTimer();
     }
 
+    private void OnToggleFullScreen(object sender, RoutedEventArgs e)
+    {
+        ToggleFullScreen();
+    }
+
+    private void ToggleFullScreen()
+    {
+        if (isFullScreen)
+        {
+            ExitFullScreen();
+            return;
+        }
+
+        EnterFullScreen();
+    }
+
+    private void EnterFullScreen()
+    {
+        if (isFullScreen || !viewModel.IsApplicationUnlocked) return;
+        windowedBounds = RestoreBounds;
+        windowedState = WindowState;
+        windowedStyle = WindowStyle;
+        windowedResizeMode = ResizeMode;
+        windowedSizeToContent = SizeToContent;
+        windowedTopmost = Topmost;
+        isFullScreen = true;
+
+        SizeToContent = SizeToContent.Manual;
+        WindowState = WindowState.Normal;
+        WindowStyle = WindowStyle.None;
+        ResizeMode = ResizeMode.NoResize;
+        Topmost = true;
+        WindowState = WindowState.Maximized;
+        FullScreenButton.Content = "↙  SALIR";
+        FullScreenButton.ToolTip = "Salir de pantalla completa (F11 o Esc)";
+        AutomationProperties.SetName(FullScreenButton, "Salir de pantalla completa");
+        FloatingFullScreenExitButton.Visibility = Visibility.Collapsed;
+    }
+
+    private void ExitFullScreen(bool restorePreviousWindow = true)
+    {
+        if (!isFullScreen) return;
+        isFullScreen = false;
+        WindowState = WindowState.Normal;
+        Topmost = restorePreviousWindow && windowedTopmost;
+        WindowStyle = restorePreviousWindow ? windowedStyle : WindowStyle.SingleBorderWindow;
+        ResizeMode = restorePreviousWindow ? windowedResizeMode : ResizeMode.CanResize;
+        SizeToContent = restorePreviousWindow ? windowedSizeToContent : SizeToContent.Manual;
+
+        if (restorePreviousWindow && windowedSizeToContent == SizeToContent.Manual)
+        {
+            Left = windowedBounds.Left;
+            Top = windowedBounds.Top;
+            Width = windowedBounds.Width;
+            Height = windowedBounds.Height;
+        }
+
+        if (restorePreviousWindow)
+        {
+            WindowState = windowedState;
+        }
+
+        FullScreenButton.Content = "⛶";
+        FullScreenButton.ToolTip = "Pantalla completa (F11)";
+        AutomationProperties.SetName(FullScreenButton, "Activar pantalla completa");
+        FloatingFullScreenExitButton.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F11)
+        {
+            ToggleFullScreen();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Escape) return;
+        if (ElevationOverlay.Visibility == Visibility.Visible)
+        {
+            HeaderPinBox.Clear();
+            ElevationOverlay.Visibility = Visibility.Collapsed;
+            e.Handled = true;
+            return;
+        }
+
+        if (!isFullScreen) return;
+        ExitFullScreen();
+        e.Handled = true;
+    }
+
     private void CollapseHeader()
     {
         if (!viewModel.IsOperationPage) return;
         HeaderPanel.Visibility = Visibility.Collapsed;
         HeaderRow.Height = new GridLength(0);
         ShowHeaderButton.Visibility = Visibility.Visible;
+        FloatingFullScreenExitButton.Visibility = isFullScreen
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void ExpandHeader()
@@ -162,6 +279,7 @@ public partial class MainWindow : Window
         HeaderPanel.Visibility = Visibility.Visible;
         HeaderRow.Height = new GridLength(76);
         ShowHeaderButton.Visibility = Visibility.Collapsed;
+        FloatingFullScreenExitButton.Visibility = Visibility.Collapsed;
     }
 
     private void OnElevationClick(object sender, RoutedEventArgs e)
@@ -224,6 +342,7 @@ public partial class MainWindow : Window
     {
         if (viewModel.Station is null) return;
         MessageBoxResult result = MessageBox.Show(
+            this,
             "¿Cerrar la estación y volver al inicio de sesión?",
             "Cerrar estación",
             MessageBoxButton.YesNo,
@@ -240,6 +359,7 @@ public partial class MainWindow : Window
         headerTimer.Stop();
         noticeTimer.Stop();
         viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        PreviewKeyDown -= OnWindowPreviewKeyDown;
         clockTimer.Tick -= OnClockTick;
         headerTimer.Tick -= OnHeaderTimerTick;
         noticeTimer.Tick -= OnNoticeTimerTick;
