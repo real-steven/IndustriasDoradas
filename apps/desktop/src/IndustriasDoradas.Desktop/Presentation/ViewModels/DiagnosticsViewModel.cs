@@ -249,9 +249,12 @@ public sealed class DiagnosticsViewModel : ObservableObject
         LocalRecoveryInstruction = local.State == LocalDatabaseHealthState.Healthy
             ? pendingSynchronization == 0
                 ? "Todos los datos de este equipo están sincronizados."
-                : "Los datos pendientes están guardados y se enviarán automáticamente al recuperar la conexión."
+                : local.FailedReviewOutboxCount > 0
+                    ? "Hay cambios locales rechazados. Revise las incidencias de sincronización antes de continuar."
+                    : "Los datos pendientes están guardados y se enviarán automáticamente al recuperar la conexión."
             : local.RecoveryInstruction;
-        PendingOperations = $"{pendingSynchronization} pendientes · " +
+        PendingOperations = $"{local.PendingOutboxCount} pendientes · " +
+            $"{local.FailedReviewOutboxCount} por revisar · " +
             $"{local.SyncedOutboxCount} sincronizados";
         AvailableSpace = local.AvailableFreeBytes < 0
             ? "No disponible"

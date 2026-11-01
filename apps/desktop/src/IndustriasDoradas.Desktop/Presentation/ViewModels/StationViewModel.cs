@@ -9,8 +9,9 @@ using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Attendance;
 using IndustriasDoradas.Desktop.Domain.Production;
-using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
 
@@ -85,11 +86,18 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly RecordProductionSweepHandler? sweepHandler;
     private readonly PlantManagerModeState? sharedManagerMode;
     private readonly RecordMercuryMovementHandler? mercuryHandler;
+    private readonly InitialSynchronizationCoordinator? initialSynchronization;
     private readonly DispatcherTimer idleTimer;
     private bool isClosingForIdle;
     private bool isMaintainingSession;
     private bool wasSessionRestored;
     private bool isApplicationUnlocked;
+    private bool isInitialSyncActive;
+    private int initialSyncProgress = 5;
+    private bool isInitialSyncIndeterminate;
+    private string initialSyncStatus = "Preparando el almacenamiento local…";
+    private string initialSyncCompletionMessage = "La estación está lista.";
+    private bool isSessionSynchronized;
     private LoginSessionState loginSessionState = LoginSessionState.Checking;
     private DateTimeOffset nextSessionMaintenanceAt = DateTimeOffset.MinValue;
     private ProtectedStationState? state;
@@ -179,6 +187,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
     }
 
+    [ActivatorUtilitiesConstructor]
     public StationViewModel(
         StationCoordinator coordinator,
         ILocalCatalogRepository catalogs,
@@ -189,7 +198,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         RecordProductionSweepHandler? sweepHandler,
         PlantManagerModeState? sharedManagerMode,
         RecordMercuryMovementHandler? mercuryHandler,
-        ILocalAttendanceRepository? attendance = null)
+        ILocalAttendanceRepository? attendance = null,
+        InitialSynchronizationCoordinator? initialSynchronization = null)
     {
         this.coordinator = coordinator;
         this.catalogs = catalogs;
@@ -200,6 +210,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         this.sweepHandler = sweepHandler;
         this.sharedManagerMode = sharedManagerMode;
         this.mercuryHandler = mercuryHandler;
+        this.initialSynchronization = initialSynchronization;
         modeController = new PrivilegeModeController(
             timeProvider,
             TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds),
@@ -301,7 +312,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     }
     public bool HasRestorableSession => state is not null && !IsApplicationUnlocked &&
         LoginSessionState == LoginSessionState.Available;
-    public bool NeedsCredentials => !IsBusy && LoginSessionState != LoginSessionState.Checking;
+    public bool NeedsCredentials => !IsBusy && !IsInitialSyncActive &&
+        LoginSessionState != LoginSessionState.Checking;
     public string LoginActionLabel => HasRestorableSession
         ? "ABRIR SESIÓN  →"
         : "ABRIR ESTACIÓN  →";
@@ -337,7 +349,32 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         get => wasSessionRestored;
         private set => SetProperty(ref wasSessionRestored, value);
     }
-    public bool CanInteract => !IsBusy;
+    public bool IsInitialSyncActive
+    {
+        get => isInitialSyncActive;
+        private set
+        {
+            if (!SetProperty(ref isInitialSyncActive, value)) return;
+            OnPropertyChanged(nameof(CanInteract));
+            OnPropertyChanged(nameof(NeedsCredentials));
+        }
+    }
+    public int InitialSyncProgress
+    {
+        get => initialSyncProgress;
+        private set => SetProperty(ref initialSyncProgress, value);
+    }
+    public bool InitialSyncIndeterminate
+    {
+        get => isInitialSyncIndeterminate;
+        private set => SetProperty(ref isInitialSyncIndeterminate, value);
+    }
+    public string InitialSyncStatus
+    {
+        get => initialSyncStatus;
+        private set => SetProperty(ref initialSyncStatus, value);
+    }
+    public bool CanInteract => !IsBusy && !IsInitialSyncActive;
     public bool HasActiveOperation => IsSelectedLineActive;
     public bool CanPrepareNewShipment => IsPlantManager && SelectedLine is not null && !IsSelectedLineActive;
     public bool CanManageActiveOperation => IsPlantManager && HasActiveOperation;
@@ -485,40 +522,75 @@ public sealed class StationViewModel : ObservableObject, IDisposable
 
     public async Task InitializeAsync()
     {
+        BeginInitialSynchronization("Comprobando la sesión protegida…", 12, true);
         LoginSessionState = LoginSessionState.Checking;
         IsApplicationUnlocked = false;
-        StationResumeResult resume = await coordinator
-            .InspectResumeAsync(networkAvailable: true)
-            .ConfigureAwait(true);
-        state = resume.State;
-        WasSessionRestored = state is not null;
-        OnPropertyChanged(nameof(IsStationOpen));
-        CloseStationCommand.NotifyCanExecuteChanged();
-        if (state is not null)
+        isSessionSynchronized = false;
+        initialSyncCompletionMessage = "La estación está lista.";
+        try
         {
-            LoginSessionState = LoginSessionState.Available;
-            StationSessionStatus = "Estación con sesión protegida restaurada, encontrada y lista para continuar.";
-            Status = "Sesión abierta encontrada. Presione Abrir sesión para entrar al sistema.";
-            await LoadPreparationCatalogsAsync().ConfigureAwait(true);
-            return;
-        }
+            StationResumeResult resume = await coordinator
+                .InspectResumeAsync(networkAvailable: true)
+                .ConfigureAwait(true);
+            state = resume.State;
+            WasSessionRestored = state is not null;
+            OnPropertyChanged(nameof(IsStationOpen));
+            CloseStationCommand.NotifyCanExecuteChanged();
+            if (state is not null)
+            {
+                LoginSessionState = LoginSessionState.Available;
+                StationSessionStatus =
+                    "Estación con sesión protegida restaurada, encontrada y lista para continuar.";
+                bool ready = await SynchronizeSessionAsync().ConfigureAwait(true);
+                if (ready)
+                {
+                    await LoadPreparationCatalogsAsync().ConfigureAwait(true);
+                    Status = initialSyncCompletionMessage;
+                }
+                else
+                {
+                    Status = InitialSyncStatus;
+                }
+                return;
+            }
 
-        LoginSessionState = resume.Status switch
+            LoginSessionState = resume.Status switch
+            {
+                StationResumeStatus.Closed => LoginSessionState.Closed,
+                StationResumeStatus.ExpiredOrRevoked => LoginSessionState.Expired,
+                _ => LoginSessionState.NotFound,
+            };
+            StationSessionStatus = LoginSessionTitle;
+            Status = LoginSessionDescription;
+        }
+        finally
         {
-            StationResumeStatus.Closed => LoginSessionState.Closed,
-            StationResumeStatus.ExpiredOrRevoked => LoginSessionState.Expired,
-            _ => LoginSessionState.NotFound,
-        };
-        StationSessionStatus = LoginSessionTitle;
-        Status = LoginSessionDescription;
+            EndInitialSynchronization();
+        }
     }
 
     public void EnterRestoredSession()
     {
         if (!HasRestorableSession) return;
-        IsApplicationUnlocked = true;
-        OpenOperationMode(
-            "Sesión protegida restaurada. No necesita autenticarse nuevamente; Modo Operación activo.");
+        if (initialSynchronization is not null && !isSessionSynchronized)
+        {
+            Status = "Debe actualizar la copia local antes de abrir la sesión.";
+            return;
+        }
+        UnlockRestoredSession();
+    }
+
+    public async Task EnterRestoredSessionAsync()
+    {
+        if (!HasRestorableSession) return;
+        if (!isSessionSynchronized && !await SynchronizeSessionAsync().ConfigureAwait(true))
+        {
+            Status = InitialSyncStatus;
+            return;
+        }
+
+        await LoadPreparationCatalogsAsync().ConfigureAwait(true);
+        UnlockRestoredSession();
     }
 
     public async Task SignInAsync(string email, string password)
@@ -529,13 +601,20 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             Status = "Abriendo y validando la estación…";
             state = await coordinator.SignInAsync(email, password).ConfigureAwait(true);
             WasSessionRestored = false;
+            isSessionSynchronized = false;
+            initialSyncCompletionMessage = "La estación está lista.";
             LoginSessionState = LoginSessionState.Available;
-            IsApplicationUnlocked = true;
             OnPropertyChanged(nameof(IsStationOpen));
             CloseStationCommand.NotifyCanExecuteChanged();
             StationSessionStatus = "Estación abierta mediante autenticación reciente.";
+            if (!await SynchronizeSessionAsync().ConfigureAwait(true))
+            {
+                Status = InitialSyncStatus;
+                return;
+            }
             await LoadPreparationCatalogsAsync().ConfigureAwait(true);
-            OpenOperationMode("Estación abierta. Modo Operación activo.");
+            IsApplicationUnlocked = true;
+            OpenOperationMode(SynchronizedOperationMessage());
         }, "No se pudo abrir la estación.").ConfigureAwait(true);
 
         if (state is null)
@@ -609,6 +688,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         await coordinator.CloseSessionAsync().ConfigureAwait(true);
         state = null;
         WasSessionRestored = false;
+        isSessionSynchronized = false;
+        initialSyncCompletionMessage = "La estación está lista.";
         IsApplicationUnlocked = false;
         LoginSessionState = LoginSessionState.Closed;
         modeController.CloseStation();
@@ -633,6 +714,64 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         Mode = modeController.Mode;
         nextSessionMaintenanceAt = timeProvider.GetUtcNow();
         Status = message;
+    }
+
+    private void UnlockRestoredSession()
+    {
+        IsApplicationUnlocked = true;
+        OpenOperationMode(SynchronizedOperationMessage());
+    }
+
+    private string SynchronizedOperationMessage() =>
+        $"{initialSyncCompletionMessage.TrimEnd('.')} · Modo Operación activo.";
+
+    private async Task<bool> SynchronizeSessionAsync()
+    {
+        if (initialSynchronization is null)
+        {
+            isSessionSynchronized = true;
+            initialSyncCompletionMessage = "La estación está lista.";
+            return true;
+        }
+
+        BeginInitialSynchronization("Preparando la sincronización inicial…", 25, false);
+        try
+        {
+            var progress = new Progress<InitialSynchronizationProgress>(
+                ApplyInitialSynchronizationProgress);
+            InitialSynchronizationResult result = await initialSynchronization
+                .SynchronizeAsync(progress)
+                .ConfigureAwait(true);
+            isSessionSynchronized = result.CanContinue;
+            initialSyncCompletionMessage = result.Message;
+            InitialSyncStatus = result.Message;
+            return result.CanContinue;
+        }
+        finally
+        {
+            EndInitialSynchronization();
+        }
+    }
+
+    private void BeginInitialSynchronization(string message, int percent, bool isIndeterminate)
+    {
+        InitialSyncStatus = message;
+        InitialSyncProgress = percent;
+        InitialSyncIndeterminate = isIndeterminate;
+        IsInitialSyncActive = true;
+    }
+
+    private void ApplyInitialSynchronizationProgress(InitialSynchronizationProgress progress)
+    {
+        InitialSyncStatus = progress.Message;
+        InitialSyncProgress = progress.Percent;
+        InitialSyncIndeterminate = progress.IsIndeterminate;
+    }
+
+    private void EndInitialSynchronization()
+    {
+        IsInitialSyncActive = false;
+        InitialSyncIndeterminate = false;
     }
     private void ExitManagerMode()
     {

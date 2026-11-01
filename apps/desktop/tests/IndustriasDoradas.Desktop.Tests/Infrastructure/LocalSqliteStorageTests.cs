@@ -64,8 +64,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(24L, result.CurrentVersion);
-        Assert.AreEqual(24, result.AppliedCount);
+        Assert.AreEqual(25L, result.CurrentVersion);
+        Assert.AreEqual(25, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -74,7 +74,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(24L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(25L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -89,8 +89,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(24L, result.CurrentVersion);
-        Assert.AreEqual(5, result.AppliedCount);
+        Assert.AreEqual(25L, result.CurrentVersion);
+        Assert.AreEqual(6, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_workers;"));
         Assert.AreEqual(9L, await ScalarLongAsync(connection, """
@@ -365,7 +365,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(23, result.AppliedCount);
+        Assert.AreEqual(24, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -385,8 +385,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(24L, result.CurrentVersion);
-        Assert.AreEqual(13, result.AppliedCount);
+        Assert.AreEqual(25L, result.CurrentVersion);
+        Assert.AreEqual(14, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -654,7 +654,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(24L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(25L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -804,7 +804,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(22, result.AppliedCount);
+        Assert.AreEqual(23, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -1080,6 +1080,54 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task IncrementalPullReconcilesActiveCentralOperationForDesktopViews()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        Guid shipmentId = Guid.NewGuid();
+        Guid feedCycleId = Guid.NewGuid();
+        Guid assignmentId = Guid.NewGuid();
+        using JsonDocument shipment = JsonDocument.Parse($$"""
+            {"id":"{{shipmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{StationId:D}}",
+             "production_line_id":"{{LineId:D}}","supplier_id":"{{SupplierId:D}}",
+             "feed_cycle_id":"{{feedCycleId:D}}","started_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{StartedAt:O}}","completed_at_utc":null,"status":"ACTIVE"}
+            """);
+        using JsonDocument assignment = JsonDocument.Parse($$"""
+            {"id":"{{assignmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "shipment_id":"{{shipmentId:D}}","worker_id":"{{SecondWorkerId:D}}",
+             "assigned_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{StartedAt.AddMinutes(1):O}}","ended_at_utc":null}
+            """);
+        var page = new SyncPullPage(
+            1,
+            null,
+            "cursor-active-operation",
+            false,
+            StartedAt.AddMinutes(1),
+            [
+                new SyncChange(Guid.NewGuid(), 1, "SHIPMENT", shipmentId, 1, "UPSERT",
+                    StartedAt, 1, shipment.RootElement.Clone()),
+                new SyncChange(Guid.NewGuid(), 2, "RESPONSIBILITY_ASSIGNMENT", assignmentId,
+                    2, "UPSERT", StartedAt.AddMinutes(1), 1, assignment.RootElement.Clone()),
+            ]);
+
+        await new SqliteSyncChangeRepository(database.Factory).ApplyPageAsync(page);
+
+        IReadOnlyList<LocalOperationalSession> sessions = await database.Sessions()
+            .ListActiveAsync(StationId);
+        IReadOnlyList<LocalOperationDashboardSnapshot> dashboard = await database.Dashboard()
+            .ListAsync(StationId);
+        Assert.HasCount(1, sessions);
+        Assert.AreEqual(shipmentId, sessions[0].ShipmentId);
+        Assert.AreEqual(SecondWorkerId, sessions[0].ResponsibleWorkerId);
+        Assert.HasCount(1, dashboard.Where(item => item.IsReady));
+        Assert.AreEqual("María", dashboard.Single(item => item.IsReady).ResponsibleName);
+    }
+
+    [TestMethod]
     public async Task IncrementalPullReconstructsRemoteShipmentSweepAndMercury()
     {
         await using var database = new TestDatabase();
@@ -1196,8 +1244,8 @@ public sealed class LocalSqliteStorageTests
         IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
             .ListRastrasAsync(OrganizationId, LineId);
 
-        Assert.AreEqual(24L, result.CurrentVersion);
-        Assert.AreEqual(11, result.AppliedCount);
+        Assert.AreEqual(25L, result.CurrentVersion);
+        Assert.AreEqual(12, result.AppliedCount);
         Assert.HasCount(1, rastras);
         Assert.AreEqual(rastraId, rastras[0].Id);
     }

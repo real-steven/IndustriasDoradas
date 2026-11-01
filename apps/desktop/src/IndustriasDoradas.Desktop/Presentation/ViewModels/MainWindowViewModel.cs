@@ -218,14 +218,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
-            if (Operation is not null)
-            {
-                await Operation.InitializeAsync();
-            }
-
             if (Station is not null)
             {
                 await Station.InitializeAsync();
+            }
+
+            if (Operation is not null)
+            {
+                await Operation.InitializeAsync();
             }
 
             if (Audit is not null)

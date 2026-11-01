@@ -372,6 +372,17 @@ public interface ILocalOutboxRepository
         CancellationToken cancellationToken = default);
 }
 
+public sealed record LocalSynchronizationQueueState(
+    int PendingCount,
+    int FailedReviewCount,
+    int SynchronizedCount);
+
+public interface ILocalSynchronizationReadiness
+{
+    Task<LocalSynchronizationQueueState> ReadAsync(
+        CancellationToken cancellationToken = default);
+}
+
 public interface ILocalStationSequenceStore
 {
     Task EnsureNextAsync(

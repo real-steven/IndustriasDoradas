@@ -12,6 +12,7 @@ public sealed class SyncOptions
     public int LeaseSeconds { get; init; } = 60;
     public int BaseRetrySeconds { get; init; } = 2;
     public int MaximumRetrySeconds { get; init; } = 300;
+    public int InitialSyncTimeoutSeconds { get; init; } = 60;
     public double JitterRatio { get; init; } = 0.25;
 
     public bool IsValid() =>
@@ -23,5 +24,6 @@ public sealed class SyncOptions
         LeaseSeconds is >= 15 and <= 600 &&
         BaseRetrySeconds is >= 1 and <= 60 &&
         MaximumRetrySeconds >= BaseRetrySeconds && MaximumRetrySeconds <= 3600 &&
+        InitialSyncTimeoutSeconds is >= 15 and <= 300 &&
         JitterRatio is >= 0 and <= 1;
 }

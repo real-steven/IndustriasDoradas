@@ -383,6 +383,42 @@
             </Grid>
         </Grid>
 
+        <Grid Panel.ZIndex="200" Background="#F3F7F9"
+              Visibility="{Binding Station.IsInitialSyncActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Width="570" Padding="38" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="White" BorderBrush="#D7E3E8" BorderThickness="1" CornerRadius="24">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="8" Opacity="0.14" Color="#173B50" />
+                </Border.Effect>
+                <StackPanel>
+                    <Border Width="78" Height="78" HorizontalAlignment="Center"
+                            CornerRadius="22" ClipToBounds="True">
+                        <Image Source="pack://application:,,,/Assets/logo-industrias-doradas.png"
+                               Stretch="UniformToFill"
+                               AutomationProperties.Name="Logo de Industrias Doradas" />
+                    </Border>
+                    <TextBlock Margin="0,20,0,0" HorizontalAlignment="Center"
+                               Foreground="#176A8A" FontSize="11" FontWeight="Bold"
+                               Text="PREPARANDO ESTACIÓN" />
+                    <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center"
+                               Foreground="{StaticResource Ink900Brush}" FontSize="28" FontWeight="Bold"
+                               Text="Actualizando datos locales" />
+                    <TextBlock Margin="18,10,18,0" MinHeight="42" HorizontalAlignment="Center"
+                               Foreground="{StaticResource MutedBrush}" FontSize="14"
+                               TextAlignment="Center" TextWrapping="Wrap"
+                               Text="{Binding Station.InitialSyncStatus}" />
+                    <ProgressBar Height="12" Margin="0,22,0,0" Minimum="0" Maximum="100"
+                                 Value="{Binding Station.InitialSyncProgress, Mode=OneWay}"
+                                 IsIndeterminate="{Binding Station.InitialSyncIndeterminate}"
+                                 Foreground="#D89B18" Background="#E8EFF2"
+                                 AutomationProperties.Name="Progreso de sincronización inicial" />
+                    <TextBlock Margin="0,15,0,0" HorizontalAlignment="Center"
+                               Foreground="#6E7F88" FontSize="11" TextAlignment="Center"
+                               Text="Espere un momento. No cierre la aplicación durante esta preparación." />
+                </StackPanel>
+            </Border>
+        </Grid>
+
         <Grid x:Name="ElevationOverlay" Panel.ZIndex="100" Visibility="Collapsed"
               Background="#A6162F40">
             <Border Width="450" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center"

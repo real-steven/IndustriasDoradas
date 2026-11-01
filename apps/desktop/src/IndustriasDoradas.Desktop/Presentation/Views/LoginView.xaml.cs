@@ -33,7 +33,7 @@ public partial class LoginView : UserControl
         if (ViewModel is null) return;
         if (ViewModel.HasRestorableSession && string.IsNullOrWhiteSpace(PasswordBox.Password))
         {
-            ViewModel.EnterRestoredSession();
+            await ViewModel.EnterRestoredSessionAsync();
             return;
         }
 

@@ -43,6 +43,8 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
         using SqliteTransaction transaction = connection.BeginTransaction();
         foreach (SyncChange change in page.Changes)
             await ApplyChangeAsync(connection, transaction, change, cancellationToken).ConfigureAwait(false);
+        await ReconcileOperationalSessionsAsync(connection, transaction, cancellationToken)
+            .ConfigureAwait(false);
 
         await using SqliteCommand cursor = connection.CreateCommand();
         cursor.Transaction = transaction;
@@ -370,13 +372,18 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                 break;
             case "SHIPMENT":
                 await ExecuteAsync(connection, transaction, """
-                    INSERT INTO cached_shipments(id, organization_id, supplier_id, line_id, feed_cycle_id,
-                        started_at_utc, completed_at_utc, status)
-                    VALUES ($id, $organizationId, $supplierId, $lineId, $cycleId, $started, $completed, $status)
+                    INSERT INTO cached_shipments(
+                        id, organization_id, supplier_id, line_id, feed_cycle_id,
+                        started_at_utc, completed_at_utc, status,
+                        plant_id, station_id, is_centrally_confirmed)
+                    VALUES (
+                        $id, $organizationId, $supplierId, $lineId, $cycleId,
+                        $started, $completed, $status, $plantId, $stationId, 1)
                     ON CONFLICT(id) DO UPDATE SET supplier_id=excluded.supplier_id,
                         line_id=excluded.line_id, feed_cycle_id=excluded.feed_cycle_id,
                         started_at_utc=excluded.started_at_utc, completed_at_utc=excluded.completed_at_utc,
-                        status=excluded.status;
+                        status=excluded.status, plant_id=excluded.plant_id,
+                        station_id=excluded.station_id, is_centrally_confirmed=1;
                     """, cancellationToken,
                     ("$id", Text(payload, "id")), ("$organizationId", Text(payload, "organization_id")),
                     ("$supplierId", Text(payload, "supplier_id")),
@@ -384,7 +391,9 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$cycleId", Text(payload, "feed_cycle_id")),
                     ("$started", Timestamp(payload, "started_at_utc", change.ChangedAtUtc)),
                     ("$completed", NullableText(payload, "completed_at_utc") ?? (object)DBNull.Value),
-                    ("$status", Text(payload, "status"))).ConfigureAwait(false);
+                    ("$status", Text(payload, "status")),
+                    ("$plantId", Text(payload, "plant_id")),
+                    ("$stationId", Text(payload, "station_id"))).ConfigureAwait(false);
                 break;
             case "RESPONSIBILITY_ASSIGNMENT":
                 await ExecuteAsync(connection, transaction, """
@@ -711,6 +720,91 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             ("$version", change.EntityVersion), ("$action", change.Action), ("$payload", payload),
             ("$hash", hash), ("$changed", SqliteLocalStorageConverters.Timestamp(change.ChangedAtUtc)))
             .ConfigureAwait(false);
+
+    private static async Task ReconcileOperationalSessionsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        string reconciledAt = SqliteLocalStorageConverters.Timestamp(DateTimeOffset.UtcNow);
+        await ExecuteAsync(connection, transaction, """
+            UPDATE operational_sessions
+            SET status = 'COMPLETED',
+                updated_at_utc = COALESCE((
+                    SELECT shipment.completed_at_utc
+                    FROM cached_shipments AS shipment
+                    WHERE shipment.id = operational_sessions.shipment_id
+                      AND shipment.is_centrally_confirmed = 1
+                      AND shipment.status = 'COMPLETED'), $reconciledAt)
+            WHERE status = 'ACTIVE'
+              AND EXISTS (
+                  SELECT 1
+                  FROM cached_shipments AS shipment
+                  WHERE shipment.id = operational_sessions.shipment_id
+                    AND shipment.is_centrally_confirmed = 1
+                    AND shipment.status = 'COMPLETED');
+            """, cancellationToken, ("$reconciledAt", reconciledAt)).ConfigureAwait(false);
+
+        await ExecuteAsync(connection, transaction, """
+            UPDATE operational_sessions
+            SET status = 'COMPLETED', updated_at_utc = $reconciledAt
+            WHERE status = 'ACTIVE'
+              AND EXISTS (
+                  SELECT 1
+                  FROM cached_shipments AS central
+                  WHERE central.line_id = operational_sessions.line_id
+                    AND central.id <> operational_sessions.shipment_id
+                    AND central.status = 'ACTIVE'
+                    AND central.is_centrally_confirmed = 1)
+               OR (
+                  status = 'ACTIVE'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM cached_shipments AS accepted
+                      WHERE accepted.id = operational_sessions.shipment_id
+                        AND accepted.is_centrally_confirmed = 1)
+                  AND EXISTS (
+                      SELECT 1 FROM outbox_messages AS rejected
+                      WHERE rejected.aggregate_id = operational_sessions.shipment_id
+                        AND rejected.operation_type = 'OPERATION_STARTED'
+                        AND rejected.state = 'FAILED_REVIEW'));
+            """, cancellationToken, ("$reconciledAt", reconciledAt)).ConfigureAwait(false);
+
+        await ExecuteAsync(connection, transaction, """
+            INSERT INTO operational_sessions(
+                station_id, organization_id, plant_id, line_id, shipment_id,
+                feed_cycle_id, responsible_worker_id, started_at_utc,
+                updated_at_utc, status)
+            SELECT shipment.station_id, shipment.organization_id, shipment.plant_id,
+                   shipment.line_id, shipment.id, shipment.feed_cycle_id,
+                   assignment.worker_id, shipment.started_at_utc,
+                   assignment.assigned_at_utc, 'ACTIVE'
+            FROM cached_shipments AS shipment
+            INNER JOIN responsibility_assignments AS assignment
+                ON assignment.id = (
+                    SELECT current_assignment.id
+                    FROM responsibility_assignments AS current_assignment
+                    WHERE current_assignment.shipment_id = shipment.id
+                      AND current_assignment.feed_cycle_id = shipment.feed_cycle_id
+                      AND current_assignment.line_id = shipment.line_id
+                      AND current_assignment.unassigned_at_utc IS NULL
+                    ORDER BY current_assignment.assigned_at_utc DESC,
+                             current_assignment.id DESC
+                    LIMIT 1)
+            WHERE shipment.status = 'ACTIVE'
+              AND shipment.is_centrally_confirmed = 1
+              AND shipment.plant_id IS NOT NULL
+              AND shipment.station_id IS NOT NULL
+            ON CONFLICT(station_id, line_id) DO UPDATE SET
+                organization_id = excluded.organization_id,
+                plant_id = excluded.plant_id,
+                shipment_id = excluded.shipment_id,
+                feed_cycle_id = excluded.feed_cycle_id,
+                responsible_worker_id = excluded.responsible_worker_id,
+                started_at_utc = excluded.started_at_utc,
+                updated_at_utc = excluded.updated_at_utc,
+                status = 'ACTIVE';
+            """, cancellationToken).ConfigureAwait(false);
+    }
 
     private static string LineComponentType(JsonElement payload)
     {

@@ -112,7 +112,7 @@ public sealed class DiagnosticsViewModelTests
 
         Assert.AreEqual(LocalDatabaseHealthState.Attention, viewModel.LocalState);
         Assert.AreEqual(
-            "10 pendientes · 11 sincronizados",
+            "7 pendientes · 3 por revisar · 11 sincronizados",
             viewModel.PendingOperations);
         Assert.AreEqual("90 MB libres", viewModel.AvailableSpace);
         StringAssert.Contains(viewModel.LocalRecoveryInstruction, "Libere espacio");
