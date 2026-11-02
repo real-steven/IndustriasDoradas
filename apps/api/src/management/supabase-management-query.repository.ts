@@ -8,6 +8,8 @@ import type {
   ManagementPageQuery,
   ManagementQueryRepository,
   ManagementShipment,
+  ManagementStatisticsDailyFact,
+  ManagementStatisticsQuery,
   ManagementSweepMercury,
 } from "./management.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
@@ -66,6 +68,23 @@ const SWEEP_SELECT = [
   "remainder_grams",
   "has_input_record",
   "has_remainder_record",
+].join(",");
+
+const STATISTICS_SELECT = [
+  "local_date",
+  "plant_id",
+  "production_line_id",
+  "production_line_name",
+  "production_line_order",
+  "supplier_id",
+  "supplier_name",
+  "completed_shipments",
+  "total_cajuelas",
+  "sweep_count",
+  "gold_shipments",
+  "gold_grams",
+  "gold_cajuelas",
+  "duration_seconds",
 ].join(",");
 
 @Injectable()
@@ -166,6 +185,41 @@ export class SupabaseManagementQueryRepository implements ManagementQueryReposit
     return this.page("management_sweep_mercury", parameters, query, (row) =>
       this.sweep(row),
     );
+  }
+
+  async listStatisticsFacts(
+    organizationId: string,
+    query: Omit<ManagementStatisticsQuery, "bucket" | "comparePrevious">,
+  ): Promise<ManagementStatisticsDailyFact[]> {
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${organizationId}`,
+      local_date: `gte.${this.costaRicaDate(query.fromUtc)}`,
+      order:
+        "local_date.asc,production_line_order.asc,production_line_id.asc,supplier_id.asc",
+      select: STATISTICS_SELECT,
+    });
+    parameters.append("local_date", `lt.${this.costaRicaDate(query.toUtc)}`);
+    this.optionalEquality(parameters, "plant_id", query.plantId);
+    this.optionalEquality(
+      parameters,
+      "production_line_id",
+      query.productionLineId,
+    );
+    this.optionalEquality(parameters, "supplier_id", query.supplierId);
+
+    const facts: ManagementStatisticsDailyFact[] = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      parameters.set("limit", String(pageSize));
+      parameters.set("offset", String(offset));
+      const response = await this.request(
+        `management_statistics_daily?${parameters}`,
+      );
+      const rows = (await response.json()) as Row[];
+      facts.push(...rows.map((row) => this.statisticsFact(row)));
+      if (rows.length < pageSize) break;
+    }
+    return facts;
   }
 
   private baseParameters(
@@ -330,6 +384,37 @@ export class SupabaseManagementQueryRepository implements ManagementQueryReposit
       hasInputRecord: this.booleanOrFalse(row, "has_input_record"),
       hasRemainderRecord: this.booleanOrFalse(row, "has_remainder_record"),
     };
+  }
+
+  private statisticsFact(row: Row): ManagementStatisticsDailyFact {
+    return {
+      localDate: this.string(row, "local_date"),
+      plantId: this.string(row, "plant_id"),
+      productionLineId: this.string(row, "production_line_id"),
+      productionLineName: this.string(row, "production_line_name"),
+      productionLineOrder: this.number(row, "production_line_order"),
+      supplierId: this.string(row, "supplier_id"),
+      supplierName: this.string(row, "supplier_name"),
+      completedShipments: this.number(row, "completed_shipments"),
+      totalCajuelas: this.number(row, "total_cajuelas"),
+      sweepCount: this.number(row, "sweep_count"),
+      goldShipments: this.number(row, "gold_shipments"),
+      goldGrams: this.number(row, "gold_grams"),
+      goldCajuelas: this.number(row, "gold_cajuelas"),
+      durationSeconds: this.number(row, "duration_seconds"),
+    };
+  }
+
+  private costaRicaDate(value: string): string {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: "America/Costa_Rica",
+      year: "numeric",
+    }).formatToParts(new Date(value));
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((candidate) => candidate.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
   }
 
   private string(row: Row, key: string): string {

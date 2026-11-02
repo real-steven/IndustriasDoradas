@@ -1,6 +1,8 @@
-import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform, Type, type TransformFnParams } from "class-transformer";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsBoolean,
+  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -10,6 +12,8 @@ import {
   Max,
   Min,
 } from "class-validator";
+
+import type { StatisticsBucket } from "./management.contracts";
 
 export class ManagementFreshnessQueryDto {
   @ApiPropertyOptional({
@@ -67,4 +71,44 @@ export class ManagementQueryDto extends ManagementPageQueryDto {
   @IsOptional()
   @IsUUID()
   shipmentId?: string;
+}
+
+export class ManagementStatisticsQueryDto {
+  @ApiProperty({ format: "date-time" })
+  @IsISO8601({ strict: true, strictSeparator: true })
+  fromUtc!: string;
+
+  @ApiProperty({ format: "date-time" })
+  @IsISO8601({ strict: true, strictSeparator: true })
+  toUtc!: string;
+
+  @ApiPropertyOptional({ default: "day", enum: ["day", "week", "month"] })
+  @IsOptional()
+  @IsIn(["day", "week", "month"])
+  bucket: StatisticsBucket = "day";
+
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  plantId?: string;
+
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  productionLineId?: string;
+
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string;
+
+  @ApiPropertyOptional({ default: false, type: Boolean })
+  @Transform(({ value }: TransformFnParams): unknown => {
+    const candidate: unknown = value;
+    if (candidate === true || candidate === "true") return true;
+    if (candidate === false || candidate === "false") return false;
+    return candidate;
+  })
+  @IsBoolean()
+  comparePrevious = false;
 }

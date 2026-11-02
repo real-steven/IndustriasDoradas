@@ -5,7 +5,9 @@ import {
   ManagementFreshnessQueryDto,
   ManagementPageQueryDto,
   ManagementQueryDto,
+  ManagementStatisticsQueryDto,
 } from "./management.dto";
+import type { ManagementStatisticsResponse } from "./management.contracts";
 import { ManagementService } from "./management.service";
 import { RequireOrganizationParam, RequireRoles } from "../auth/auth.metadata";
 
@@ -41,6 +43,14 @@ export class ManagementController {
     @Query() query: ManagementQueryDto,
   ) {
     return this.management.listShipments(organizationId, query);
+  }
+
+  @Get("statistics")
+  statistics(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Query() query: ManagementStatisticsQueryDto,
+  ): Promise<ManagementStatisticsResponse> {
+    return this.management.statistics(organizationId, query);
   }
 
   @Get("shipments/:shipmentId")

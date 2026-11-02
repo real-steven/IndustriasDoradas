@@ -28,7 +28,8 @@ public sealed record CachedProductionLine(
     Guid PlantId,
     string Name,
     bool IsActive,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    int DisplayOrder = 1);
 
 public sealed record CachedLineComponent(
     Guid Id,
@@ -250,8 +251,9 @@ public sealed record LocalCompletedShipmentAudit(
     int SweepCount,
     int SweptCajuelas,
     int CorrectionCount,
-      int MercuryRecordedSweepCount,
-    IReadOnlyList<LocalResponsibilityAudit> Responsibilities);
+    int MercuryRecordedSweepCount,
+    IReadOnlyList<LocalResponsibilityAudit> Responsibilities,
+    int DisplayOrder = 1);
 
 public sealed record LocalCajuelaCorrectionAudit(
     Guid ReversalEventId,
@@ -367,6 +369,17 @@ public interface ILocalOutboxRepository
         DateTimeOffset now,
         Func<int, TimeSpan> retryDelay,
         bool permanent,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record LocalSynchronizationQueueState(
+    int PendingCount,
+    int FailedReviewCount,
+    int SynchronizedCount);
+
+public interface ILocalSynchronizationReadiness
+{
+    Task<LocalSynchronizationQueueState> ReadAsync(
         CancellationToken cancellationToken = default);
 }
 

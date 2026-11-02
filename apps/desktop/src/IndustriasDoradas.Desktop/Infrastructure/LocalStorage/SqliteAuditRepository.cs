@@ -82,7 +82,8 @@ public sealed class SqliteAuditRepository(
                                          AND NOT EXISTS (
                                              SELECT 1 FROM mercury_movements AS replacement
                                              WHERE replacement.organization_id = movement.organization_id
-                                               AND replacement.supersedes_movement_id = movement.id))))), 0)
+                                               AND replacement.supersedes_movement_id = movement.id))))), 0),
+                   line.display_order
             FROM cached_shipments AS shipment
             INNER JOIN cached_production_lines AS line ON line.id = shipment.line_id
             INNER JOIN cached_suppliers AS supplier ON supplier.id = shipment.supplier_id
@@ -108,7 +109,8 @@ public sealed class SqliteAuditRepository(
                 reader.GetInt32(7),
                 reader.GetInt32(8),
                 reader.GetInt32(9),
-                reader.GetInt32(10)));
+                reader.GetInt32(10),
+                reader.GetInt32(11)));
         }
 
         await reader.DisposeAsync().ConfigureAwait(false);
@@ -130,7 +132,8 @@ public sealed class SqliteAuditRepository(
                 row.SweptCajuelas,
                 row.CorrectionCount,
                 row.MercuryRecordedSweepCount,
-                responsibilities));
+                responsibilities,
+                row.DisplayOrder));
         }
         return results;
     }
@@ -238,5 +241,6 @@ public sealed class SqliteAuditRepository(
         int SweepCount,
         int SweptCajuelas,
         int CorrectionCount,
-        int MercuryRecordedSweepCount);
+        int MercuryRecordedSweepCount,
+        int DisplayOrder);
 }

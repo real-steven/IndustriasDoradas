@@ -239,6 +239,11 @@
                             <TextBlock x:Name="HeaderDate" HorizontalAlignment="Right"
                                        Foreground="{StaticResource MutedBrush}" FontSize="9" Text="—" />
                         </StackPanel>
+                        <Button x:Name="FullScreenButton" MinWidth="40" Margin="0,0,7,0"
+                                Style="{StaticResource HeaderActionStyle}"
+                                Click="OnToggleFullScreen" Content="⛶"
+                                ToolTip="Pantalla completa (F11)"
+                                AutomationProperties.Name="Activar pantalla completa" />
                         <Button Margin="0,0,7,0" Click="OnElevationClick">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource HeaderActionStyle}">
@@ -305,12 +310,20 @@
 
             <Grid Grid.Row="1">
                 <ContentControl Content="{Binding CurrentPage}" Focusable="False" />
-                <Button x:Name="ShowHeaderButton" Panel.ZIndex="30" Visibility="Collapsed"
-                        HorizontalAlignment="Center" VerticalAlignment="Top"
-                        Margin="0,-1,0,0" Padding="15,5" MinHeight="31"
-                        Click="OnShowHeader" Content="⌄  MOSTRAR MENÚ"
-                        Background="White" BorderBrush="#D6E1E6" Foreground="{StaticResource NavyBrush}"
-                        FontSize="11" FontWeight="Bold" />
+                <StackPanel Panel.ZIndex="30" Orientation="Horizontal"
+                            HorizontalAlignment="Center" VerticalAlignment="Top">
+                    <Button x:Name="ShowHeaderButton" Visibility="Collapsed"
+                            Margin="0,-1,0,0" Padding="15,5" MinHeight="31"
+                            Click="OnShowHeader" Content="⌄  MOSTRAR MENÚ"
+                            Background="White" BorderBrush="#D6E1E6" Foreground="{StaticResource NavyBrush}"
+                            FontSize="11" FontWeight="Bold" />
+                    <Button x:Name="FloatingFullScreenExitButton" Visibility="Collapsed"
+                            Width="40" Height="32" MinHeight="0" Margin="7,-1,0,0" Padding="0"
+                            Background="#173B50" BorderBrush="#173B50" Foreground="White"
+                            FontSize="16" Click="OnToggleFullScreen" Content="↙"
+                            ToolTip="Salir de pantalla completa (F11 o Esc)"
+                            AutomationProperties.Name="Salir de pantalla completa" />
+                </StackPanel>
                 <StackPanel Panel.ZIndex="25" HorizontalAlignment="Right" VerticalAlignment="Top"
                             Margin="0,16,22,0">
                     <Border Margin="0,0,0,8" Padding="13,9"
@@ -368,6 +381,42 @@
                     </Border>
                 </StackPanel>
             </Grid>
+        </Grid>
+
+        <Grid Panel.ZIndex="200" Background="#F3F7F9"
+              Visibility="{Binding Station.IsInitialSyncActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Width="570" Padding="38" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="White" BorderBrush="#D7E3E8" BorderThickness="1" CornerRadius="24">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="8" Opacity="0.14" Color="#173B50" />
+                </Border.Effect>
+                <StackPanel>
+                    <Border Width="78" Height="78" HorizontalAlignment="Center"
+                            CornerRadius="22" ClipToBounds="True">
+                        <Image Source="pack://application:,,,/Assets/logo-industrias-doradas.png"
+                               Stretch="UniformToFill"
+                               AutomationProperties.Name="Logo de Industrias Doradas" />
+                    </Border>
+                    <TextBlock Margin="0,20,0,0" HorizontalAlignment="Center"
+                               Foreground="#176A8A" FontSize="11" FontWeight="Bold"
+                               Text="PREPARANDO ESTACIÓN" />
+                    <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center"
+                               Foreground="{StaticResource Ink900Brush}" FontSize="28" FontWeight="Bold"
+                               Text="Actualizando datos locales" />
+                    <TextBlock Margin="18,10,18,0" MinHeight="42" HorizontalAlignment="Center"
+                               Foreground="{StaticResource MutedBrush}" FontSize="14"
+                               TextAlignment="Center" TextWrapping="Wrap"
+                               Text="{Binding Station.InitialSyncStatus}" />
+                    <ProgressBar Height="12" Margin="0,22,0,0" Minimum="0" Maximum="100"
+                                 Value="{Binding Station.InitialSyncProgress, Mode=OneWay}"
+                                 IsIndeterminate="{Binding Station.InitialSyncIndeterminate}"
+                                 Foreground="#D89B18" Background="#E8EFF2"
+                                 AutomationProperties.Name="Progreso de sincronización inicial" />
+                    <TextBlock Margin="0,15,0,0" HorizontalAlignment="Center"
+                               Foreground="#6E7F88" FontSize="11" TextAlignment="Center"
+                               Text="Espere un momento. No cierre la aplicación durante esta preparación." />
+                </StackPanel>
+            </Border>
         </Grid>
 
         <Grid x:Name="ElevationOverlay" Panel.ZIndex="100" Visibility="Collapsed"

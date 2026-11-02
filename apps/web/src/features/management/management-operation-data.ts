@@ -10,6 +10,8 @@ import type {
   PageManagementOperationLine,
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
+import { cachePolicy } from "../../app/cache-policy";
+import { scopedQueryKey } from "../../app/query-keys";
 import { useAuth } from "../../auth/auth-context";
 import type { Language } from "../../i18n/language-context";
 
@@ -29,7 +31,7 @@ export function useManagementOperation(): ManagementOperationQuery {
   const profileId = auth.profile?.profileId ?? "";
 
   return useQuery({
-    queryKey: ["management-operation", profileId, organizationId],
+    queryKey: scopedQueryKey("management-operation", profileId, organizationId),
     enabled: auth.session !== null && auth.profile !== null,
     queryFn: ({ signal }) =>
       apiRequest<PageManagementOperationLine>(
@@ -37,6 +39,7 @@ export function useManagementOperation(): ManagementOperationQuery {
         token,
         { signal },
       ),
+    ...cachePolicy.live,
   });
 }
 
@@ -50,7 +53,7 @@ export function useManagementFreshness(): ManagementFreshnessQuery {
   const cursors = useRef(new Map<string, string>());
 
   const query = useQuery({
-    queryKey: ["management-freshness", profileId, organizationId],
+    queryKey: scopedQueryKey("management-freshness", profileId, organizationId),
     enabled: auth.session !== null && auth.profile !== null,
     queryFn: ({ signal }) => {
       const parameters = new URLSearchParams();
@@ -67,6 +70,9 @@ export function useManagementFreshness(): ManagementFreshnessQuery {
       (current.state.data?.pollAfterSeconds ?? 30) * 1000,
     refetchIntervalInBackground: false,
     staleTime: 25_000,
+    gcTime: cachePolicy.live.gcTime,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   useEffect(() => {
@@ -82,21 +88,29 @@ export function useManagementFreshness(): ManagementFreshnessQuery {
       "management-shipments-audit",
       "management-shipment",
       "management-shipment-sweeps",
+      "management-statistics",
       "shipment-audit",
       "gold-summary",
+      "gold-history",
       "attendance-hours",
       "attendance-workers",
       "inventory-stock",
+      "inventory-action-stock",
       "inventory-movements",
+      "inventory-action-movements",
       "inventory-reviews",
       "inventory-components",
+      "inventory-component-options",
+      "inventory-novelties",
     ];
     void Promise.all(
       affectedKeys.map((queryKey) =>
-        queryClient.invalidateQueries({ queryKey: [queryKey] }),
+        queryClient.invalidateQueries({
+          queryKey: scopedQueryKey(queryKey, profileId, organizationId),
+        }),
       ),
     );
-  }, [query.data, queryClient, scope]);
+  }, [organizationId, profileId, query.data, queryClient, scope]);
 
   return query;
 }

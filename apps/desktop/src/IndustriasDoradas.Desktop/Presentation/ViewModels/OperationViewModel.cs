@@ -814,7 +814,8 @@ public sealed class OperationViewModel : ObservableObject
 
     private static string FormatOutboxStatus(LocalOperationDashboardSnapshot? snapshot) => snapshot is null
         ? "Sin líneas disponibles"
-        : $"{checked(snapshot.PendingOutboxCount + snapshot.FailedReviewOutboxCount)} pendientes · " +
+        : $"{snapshot.PendingOutboxCount} pendientes · " +
+          $"{snapshot.FailedReviewOutboxCount} por revisar · " +
           $"{snapshot.SyncedOutboxCount} sincronizados";
 
     private static LocalOperationDashboardSnapshot WithoutOutboxCounts(

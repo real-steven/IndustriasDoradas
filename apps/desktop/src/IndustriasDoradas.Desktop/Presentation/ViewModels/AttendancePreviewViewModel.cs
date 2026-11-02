@@ -52,7 +52,6 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     private bool isBusy;
     private bool isCorrectionPanelOpen;
     private int presentCount;
-    private int openShiftCount;
     private int incidentCount;
     private int currentWorkerPage;
     private int filteredWorkerCount;
@@ -189,12 +188,6 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         private set => SetProperty(ref presentCount, value);
     }
 
-    public int OpenShiftCount
-    {
-        get => openShiftCount;
-        private set => SetProperty(ref openShiftCount, value);
-    }
-
     public int IncidentCount
     {
         get => incidentCount;
@@ -265,7 +258,6 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 VisibleWorkers.Clear();
                 SelectedWorker = null;
                 PresentCount = 0;
-                OpenShiftCount = 0;
                 IncidentCount = 0;
                 ClearResponsibilityWarning();
                 Status = "Abra la estación para consultar y registrar asistencia.";
@@ -312,7 +304,6 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 ? Workers.FirstOrDefault(item => item.Id == selectedId.Value)
                 : null;
             PresentCount = Workers.Count(item => item.IsPresent);
-            OpenShiftCount = PresentCount;
             IncidentCount = totalIncidents;
             await RefreshResponsibilityWarningAsync().ConfigureAwait(true);
             OnPropertyChanged(nameof(IsManagerMode));
@@ -428,7 +419,6 @@ public sealed class AttendancePreviewViewModel : ObservableObject
             ? Workers.FirstOrDefault(item => item.Id == selectedId.Value)
             : null;
         PresentCount = Workers.Count(item => item.IsPresent);
-        OpenShiftCount = PresentCount;
         IncidentCount = totalIncidents;
         await RefreshResponsibilityWarningAsync().ConfigureAwait(true);
         OnPropertyChanged(nameof(IsManagerMode));

@@ -282,6 +282,7 @@ describe("API smoke (e2e)", () => {
         total: 0,
         totalPages: 0,
       }),
+      listStatisticsFacts: jest.fn().mockResolvedValue([]),
     };
     sync = {
       findPushStationScope: jest.fn(),

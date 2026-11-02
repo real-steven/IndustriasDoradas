@@ -19,6 +19,7 @@ import {
   ShipmentsFeature,
 } from "../management/management-shipments";
 import { DashboardSummary } from "./dashboard-summary";
+import { StatisticsFeature } from "../statistics/statistics";
 
 function usePortalFreshness(): ManagementFreshnessQuery {
   return useOutletContext<{ freshness: ManagementFreshnessQuery }>().freshness;
@@ -172,6 +173,23 @@ export function AuditPage() {
         </header>
         <ShipmentAuditFeature />
       </section>
+    </PortalPage>
+  );
+}
+
+export function StatisticsPage() {
+  const { tr } = useLanguage();
+
+  return (
+    <PortalPage
+      title={tr("Estadísticas", "Statistics")}
+      eyebrow={tr("ANÁLISIS GERENCIAL", "MANAGEMENT ANALYTICS")}
+      description={tr(
+        "Compare producción, líneas y proveedores con cobertura visible de los resultados de oro.",
+        "Compare production, lines, and suppliers with visible gold-result coverage.",
+      )}
+    >
+      <StatisticsFeature />
     </PortalPage>
   );
 }

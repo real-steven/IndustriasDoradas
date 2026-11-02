@@ -64,14 +64,15 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
         UpsertAsync(
             """
             INSERT INTO cached_production_lines(
-                id, organization_id, plant_id, name, is_active, updated_at_utc)
-            VALUES ($id, $organizationId, $plantId, $name, $isActive, $updatedAtUtc)
+                id, organization_id, plant_id, name, is_active, updated_at_utc, display_order)
+            VALUES ($id, $organizationId, $plantId, $name, $isActive, $updatedAtUtc, $displayOrder)
             ON CONFLICT(id) DO UPDATE SET
                 organization_id = excluded.organization_id,
                 plant_id = excluded.plant_id,
                 name = excluded.name,
                 is_active = excluded.is_active,
-                updated_at_utc = excluded.updated_at_utc;
+                updated_at_utc = excluded.updated_at_utc,
+                display_order = excluded.display_order;
             """,
             command =>
             {
@@ -83,6 +84,7 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
                 command.Parameters.AddWithValue("$name", SqliteLocalStorageConverters.Text(line.Name, nameof(line)));
                 command.Parameters.AddWithValue("$isActive", line.IsActive ? 1 : 0);
                 command.Parameters.AddWithValue("$updatedAtUtc", SqliteLocalStorageConverters.Timestamp(line.UpdatedAt));
+                command.Parameters.AddWithValue("$displayOrder", line.DisplayOrder);
             },
             cancellationToken);
 
@@ -160,7 +162,8 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
         await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT line.id, line.organization_id, line.plant_id, line.name, line.is_active, line.updated_at_utc
+            SELECT line.id, line.organization_id, line.plant_id, line.name, line.is_active,
+                   line.updated_at_utc, line.display_order
             FROM cached_production_lines AS line
             WHERE line.organization_id = $organizationId
               AND line.plant_id = $plantId
@@ -174,7 +177,7 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
                     AND json_extract(scope.payload_json, '$.production_line_id') = line.id
                     AND json_extract(scope.payload_json, '$.is_active') = 1
               )
-            ORDER BY line.name COLLATE NOCASE, line.id;
+            ORDER BY line.display_order, line.id;
             """;
         command.Parameters.AddWithValue(
             "$organizationId",
@@ -191,7 +194,8 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
                 Guid.Parse(reader.GetString(2)),
                 reader.GetString(3),
                 reader.GetInt64(4) == 1,
-                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(5))));
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(5)),
+                reader.GetInt32(6)));
         }
 
         return result;
@@ -259,7 +263,7 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
             .ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, organization_id, plant_id, name, is_active, updated_at_utc
+            SELECT id, organization_id, plant_id, name, is_active, updated_at_utc, display_order
             FROM cached_production_lines
             WHERE id = $id;
             """;
@@ -273,7 +277,8 @@ public sealed class SqliteCatalogRepository(ILocalSqliteConnectionFactory connec
                 Guid.Parse(reader.GetString(2)),
                 reader.GetString(3),
                 reader.GetInt64(4) == 1,
-                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(5)))
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(5)),
+                reader.GetInt32(6))
             : null;
     }
 

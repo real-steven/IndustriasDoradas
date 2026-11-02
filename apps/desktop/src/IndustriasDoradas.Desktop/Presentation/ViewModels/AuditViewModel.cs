@@ -91,6 +91,7 @@ public sealed record AuditPeriodOption(AuditPeriodMode Mode, string Name);
 public sealed class AuditViewModel : ObservableObject
 {
     private static readonly TimeSpan CostaRicaOffset = TimeSpan.FromHours(-6);
+    private static readonly string[] LineAccents = ["#8959DD", "#35ADDD", "#ED70A9", "#F19B2C"];
     private readonly DiagnosticsViewModel diagnostics;
     private readonly StationViewModel? station;
     private readonly ILocalAuditRepository? localAudit;
@@ -345,18 +346,11 @@ public sealed class AuditViewModel : ObservableObject
                 .ListCompletedShipmentsAsync().ConfigureAwait(true);
             Guid? selectedLineId = SelectedLine?.LineId;
             Guid? selectedShipmentId = SelectedShipment?.ShipmentId;
-            string[] accents = ["#8959DD", "#35ADDD", "#ED70A9", "#F19B2C"];
-            var groupedLines = shipments
-                .GroupBy(item => new { item.LineId, item.LineName })
-                .OrderBy(group => group.Key.LineName, StringComparer.CurrentCultureIgnoreCase)
-                .ToArray();
-            Dictionary<Guid, string> accentsByLine = groupedLines
-                .Select((group, index) => new
-                {
-                    group.Key.LineId,
-                    Accent = accents[index % accents.Length],
-                })
-                .ToDictionary(item => item.LineId, item => item.Accent);
+            Dictionary<Guid, string> accentsByLine = shipments
+                .GroupBy(item => item.LineId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => AccentForDisplayOrder(group.First().DisplayOrder));
             allCompletedShipments = shipments
                 .Select(item => ToViewModel(item, accentsByLine[item.LineId]))
                 .ToArray();
@@ -383,8 +377,15 @@ public sealed class AuditViewModel : ObservableObject
             .Where(item => IsWithinPeriod(item.Source.CompletedAt, start, endExclusive))
             .ToArray();
         ShipmentLines = CompletedShipments
-            .GroupBy(item => new { item.Source.LineId, item.LineName, item.AccentColor })
-            .OrderBy(group => group.Key.LineName, StringComparer.CurrentCultureIgnoreCase)
+            .GroupBy(item => new
+            {
+                item.Source.LineId,
+                item.LineName,
+                item.AccentColor,
+                item.Source.DisplayOrder,
+            })
+            .OrderBy(group => group.Key.DisplayOrder)
+            .ThenBy(group => group.Key.LineId)
             .Select(group => new AuditLineFilterViewModel(
                 group.Key.LineId,
                 group.Key.LineName,
@@ -420,6 +421,9 @@ public sealed class AuditViewModel : ObservableObject
             Status = $"{FilteredShipmentCountDescription} en {PeriodDescription.ToLowerInvariant()}.";
         }
     }
+
+    private static string AccentForDisplayOrder(int displayOrder) =>
+        LineAccents[(Math.Max(displayOrder, 1) - 1) % LineAccents.Length];
 
     private (DateTime? Start, DateTime? EndExclusive) SelectedPeriodRange()
     {

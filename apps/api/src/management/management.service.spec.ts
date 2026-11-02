@@ -14,6 +14,7 @@ describe("ManagementService", () => {
       listShipments: jest.fn(),
       findShipment: jest.fn(),
       listShipmentSweeps: jest.fn(),
+      listStatisticsFacts: jest.fn(),
     };
     service = new ManagementService(repository);
   });

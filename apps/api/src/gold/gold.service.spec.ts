@@ -28,6 +28,7 @@ describe("GoldService", () => {
       listShipments: jest.fn(),
       findShipment: jest.fn(),
       listShipmentSweeps: jest.fn(),
+      listStatisticsFacts: jest.fn(),
     };
     auditEvents = { insert: jest.fn().mockResolvedValue(undefined) };
     service = new GoldService(

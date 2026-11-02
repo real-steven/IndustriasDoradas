@@ -239,7 +239,7 @@ public sealed class SqliteOperationDashboardRepository(
                     AND json_extract(scope.payload_json, '$.production_line_id') = line.id
                     AND json_extract(scope.payload_json, '$.is_active') = 1
               )
-            ORDER BY line.name COLLATE NOCASE, line.id
+            ORDER BY line.display_order, line.id
             LIMIT 4;
             """;
         command.Parameters.AddWithValue("$stationId", stationId);

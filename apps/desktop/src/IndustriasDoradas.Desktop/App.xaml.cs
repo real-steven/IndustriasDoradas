@@ -41,6 +41,8 @@ public partial class App : System.Windows.Application
         catch (Exception exception) when (
             exception is OptionsValidationException or InvalidOperationException or IOException or SqliteException)
         {
+            Console.Error.WriteLine(exception);
+            WriteStartupDiagnostic(exception);
             string message;
             if (exception is OptionsValidationException)
             {
@@ -64,6 +66,27 @@ public partial class App : System.Windows.Application
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Shutdown(-1);
+        }
+    }
+
+    private static void WriteStartupDiagnostic(Exception exception)
+    {
+        try
+        {
+            string directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "IndustriasDoradas",
+                "diagnostics");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "startup-error.log");
+            File.WriteAllText(
+                path,
+                $"{DateTimeOffset.Now:O}{Environment.NewLine}{exception}");
+        }
+        catch (Exception diagnosticException) when (
+            diagnosticException is IOException or UnauthorizedAccessException)
+        {
+            // El diagnóstico es auxiliar y nunca debe reemplazar el error de inicio original.
         }
     }
 
@@ -201,6 +224,8 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<SqliteOutboxRepository>();
         builder.Services.AddSingleton<ILocalOutboxRepository>(services =>
             services.GetRequiredService<SqliteOutboxRepository>());
+        builder.Services.AddSingleton<ILocalSynchronizationReadiness>(services =>
+            services.GetRequiredService<SqliteOutboxRepository>());
         builder.Services.AddSingleton<ILocalStationSequenceStore>(services =>
             services.GetRequiredService<SqliteOutboxRepository>());
         builder.Services.AddSingleton<ILocalSyncChangeRepository, SqliteSyncChangeRepository>();
@@ -234,6 +259,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<OutboxSyncProcessor>();
         builder.Services.AddHostedService<OutboxSyncWorker>();
         builder.Services.AddSingleton<IncrementalPullProcessor>();
+        builder.Services.AddSingleton<InitialSynchronizationCoordinator>();
         builder.Services.AddHostedService<IncrementalPullWorker>();
         builder.Services.AddHostedService<IncrementalPullSignalWorker>();
 

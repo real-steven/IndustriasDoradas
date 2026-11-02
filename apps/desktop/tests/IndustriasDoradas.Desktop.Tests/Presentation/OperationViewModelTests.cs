@@ -55,7 +55,7 @@ public sealed class OperationViewModelTests
         Assert.AreEqual(1, cajuelas.RegisterCalls);
         Assert.AreEqual(8, viewModel.Line.Total);
         StringAssert.Contains(viewModel.LastResult, "guardada localmente");
-        Assert.AreEqual("2 pendientes · 0 sincronizados", viewModel.PendingStatus);
+        Assert.AreEqual("2 pendientes · 0 por revisar · 0 sincronizados", viewModel.PendingStatus);
         Assert.AreEqual(OperationFeedbackKind.Success, feedback.LastKind);
     }
 
@@ -90,7 +90,7 @@ public sealed class OperationViewModelTests
 
         Assert.AreEqual(0, collectionChanges);
         Assert.AreEqual(7, viewModel.Line.Total);
-        Assert.AreEqual("2 pendientes · 0 sincronizados", viewModel.PendingStatus);
+        Assert.AreEqual("2 pendientes · 0 por revisar · 0 sincronizados", viewModel.PendingStatus);
     }
 
     [TestMethod]

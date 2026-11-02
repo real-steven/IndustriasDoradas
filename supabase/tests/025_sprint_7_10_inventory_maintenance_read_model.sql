@@ -20,7 +20,7 @@ begin
 
   if novelty.is_open
      or novelty.duration_minutes <> 105
-     or novelty.line_name <> 'Linea ficticia 1'
+     or novelty.line_name <> 'Línea morada'
      or novelty.opened_by_display_name is null
      or novelty.closed_by_display_name is null then
     raise exception 'management novelty must preserve scope, actors and 105-minute duration';

@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import type {
   GoldResultEntry,
@@ -6,6 +12,8 @@ import type {
   RecordShipmentGoldInput,
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
+import { cachePolicy } from "../../app/cache-policy";
+import { scopedQueryKey } from "../../app/query-keys";
 import { useAuth } from "../../auth/auth-context";
 import {
   shipmentDateRange,
@@ -20,13 +28,16 @@ export function useGoldSummary(filters: ShipmentFilters) {
   const query = goldQuery(filters);
 
   return useQuery({
-    queryKey: ["gold-summary", profileId, organizationId, query],
+    queryKey: scopedQueryKey("gold-summary", profileId, organizationId, query),
     enabled: auth.session !== null && auth.profile !== null,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiRequest<GoldSummary>(
         `/organizations/${encodeURIComponent(organizationId)}/management/gold-summary?${query}`,
         token,
+        { signal },
       ),
+    placeholderData: keepPreviousData,
+    ...cachePolicy.live,
   });
 }
 
@@ -37,17 +48,24 @@ export function useGoldHistory(shipmentId: string | null) {
   const profileId = auth.profile?.profileId ?? "";
 
   return useQuery({
-    queryKey: ["gold-history", profileId, organizationId, shipmentId ?? ""],
+    queryKey: scopedQueryKey(
+      "gold-history",
+      profileId,
+      organizationId,
+      shipmentId ?? "",
+    ),
     enabled:
       auth.session !== null &&
       auth.profile !== null &&
       shipmentId !== null &&
       shipmentId.length > 0,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiRequest<GoldResultEntry[]>(
         `/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId ?? "")}/gold-results`,
         token,
+        { signal },
       ),
+    ...cachePolicy.history,
   });
 }
 
@@ -56,6 +74,7 @@ export function useRecordShipmentGold(shipmentId: string | null) {
   const queryClient = useQueryClient();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
 
   return useMutation({
     mutationFn: (input: RecordShipmentGoldInput) => {
@@ -68,19 +87,63 @@ export function useRecordShipmentGold(shipmentId: string | null) {
     },
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["gold-summary"] }),
-        queryClient.invalidateQueries({ queryKey: ["gold-history"] }),
-        queryClient.invalidateQueries({ queryKey: ["management-shipments"] }),
-        queryClient.invalidateQueries({ queryKey: ["management-shipment"] }),
+        invalidateScoped(
+          queryClient,
+          "gold-summary",
+          profileId,
+          organizationId,
+        ),
+        invalidateScoped(
+          queryClient,
+          "gold-history",
+          profileId,
+          organizationId,
+        ),
+        invalidateScoped(
+          queryClient,
+          "management-shipments",
+          profileId,
+          organizationId,
+        ),
+        invalidateScoped(
+          queryClient,
+          "management-shipment",
+          profileId,
+          organizationId,
+        ),
         queryClient.invalidateQueries({
-          queryKey: ["management-shipment-filter-options"],
+          queryKey: scopedQueryKey(
+            "management-shipment-filter-options",
+            profileId,
+            organizationId,
+          ),
         }),
         queryClient.invalidateQueries({
-          queryKey: ["management-shipments-audit"],
+          queryKey: scopedQueryKey(
+            "management-shipments-audit",
+            profileId,
+            organizationId,
+          ),
         }),
-        queryClient.invalidateQueries({ queryKey: ["shipment-audit"] }),
+        invalidateScoped(
+          queryClient,
+          "shipment-audit",
+          profileId,
+          organizationId,
+        ),
       ]);
     },
+  });
+}
+
+function invalidateScoped(
+  queryClient: QueryClient,
+  name: string,
+  profileId: string,
+  organizationId: string,
+) {
+  return queryClient.invalidateQueries({
+    queryKey: scopedQueryKey(name, profileId, organizationId),
   });
 }
 

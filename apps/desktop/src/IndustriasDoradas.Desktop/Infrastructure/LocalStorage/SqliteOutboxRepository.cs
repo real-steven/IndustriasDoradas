@@ -4,8 +4,30 @@ using Microsoft.Data.Sqlite;
 namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 
 public sealed class SqliteOutboxRepository(ILocalSqliteConnectionFactory connectionFactory)
-    : ILocalOutboxRepository, ILocalStationSequenceStore
+    : ILocalOutboxRepository, ILocalStationSequenceStore, ILocalSynchronizationReadiness
 {
+    public async Task<LocalSynchronizationQueueState> ReadAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await connectionFactory.OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                COALESCE(SUM(CASE WHEN state IN ('PENDING', 'SYNCING') THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'FAILED_REVIEW' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state = 'SYNCED' THEN 1 ELSE 0 END), 0)
+            FROM outbox_messages;
+            """;
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        return new LocalSynchronizationQueueState(
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2));
+    }
+
     public async Task EnsureNextAsync(
         Guid stationId,
         long nextSequence,

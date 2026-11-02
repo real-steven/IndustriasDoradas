@@ -1,8 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { PageCatalog } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
+import { cachePolicy, type CachePolicy } from "../../app/cache-policy";
+import { scopedQueryKey } from "../../app/query-keys";
 import { useAuth } from "../../auth/auth-context";
 
 export type InventoryView =
@@ -286,6 +293,7 @@ export function useInventoryPlants() {
     ["inventory-plants"],
     "/plants?page=1&pageSize=100&state=active",
     true,
+    cachePolicy.catalog,
   );
 }
 
@@ -294,6 +302,7 @@ export function useInventoryItemTypes(enabled: boolean) {
     ["inventory-item-types"],
     "/inventory/item-types?page=1&pageSize=100&state=active",
     enabled,
+    cachePolicy.catalog,
   );
 }
 
@@ -302,6 +311,7 @@ export function useInventoryUnits(enabled: boolean) {
     ["inventory-units"],
     "/inventory/units?page=1&pageSize=100&state=active",
     enabled,
+    cachePolicy.catalog,
   );
 }
 
@@ -310,6 +320,7 @@ export function useInventoryItems(plantId: string, enabled: boolean) {
     ["inventory-items", plantId],
     `/inventory/plants/${encodeURIComponent(plantId)}/items?page=1&pageSize=100&state=active`,
     enabled && plantId.length > 0,
+    cachePolicy.catalog,
   );
 }
 
@@ -318,6 +329,7 @@ export function useInventoryLines(plantId: string, enabled: boolean) {
     ["inventory-lines", plantId],
     `/plants/${encodeURIComponent(plantId)}/lines?page=1&pageSize=100&state=active`,
     enabled && plantId.length > 0,
+    cachePolicy.catalog,
   );
 }
 
@@ -326,6 +338,7 @@ export function useInventoryComponentTypes(enabled: boolean) {
     ["inventory-component-types"],
     "/component-types",
     enabled,
+    cachePolicy.catalog,
   );
 }
 
@@ -334,6 +347,7 @@ export function useInventoryLineComponents(lineId: string, enabled: boolean) {
     ["inventory-line-components", lineId],
     `/lines/${encodeURIComponent(lineId)}/components?page=1&pageSize=100&state=active`,
     enabled && lineId.length > 0,
+    cachePolicy.catalog,
   );
 }
 
@@ -342,6 +356,7 @@ export function useInventoryActionStock(plantId: string, enabled: boolean) {
     ["inventory-action-stock", plantId],
     `/inventory/plants/${encodeURIComponent(plantId)}/stock?page=1&pageSize=100&state=active`,
     enabled && plantId.length > 0,
+    cachePolicy.live,
   );
 }
 
@@ -361,6 +376,7 @@ export function useInventoryActionMovements(
     ["inventory-action-movements", plantId, inventoryItemId],
     `/inventory/plants/${encodeURIComponent(plantId)}/movements?${query}`,
     enabled && plantId.length > 0 && inventoryItemId.length > 0,
+    cachePolicy.history,
   );
 }
 
@@ -401,6 +417,7 @@ export function useReverseInventoryMovement(plantId: string) {
   const queryClient = useQueryClient();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
   return useMutation({
     mutationFn: ({
       movementId,
@@ -419,7 +436,8 @@ export function useReverseInventoryMovement(plantId: string) {
           body: JSON.stringify({ reason, occurredAtUtc }),
         },
       ),
-    onSuccess: async () => invalidateInventoryActions(queryClient),
+    onSuccess: async () =>
+      invalidateInventoryActions(queryClient, profileId, organizationId),
   });
 }
 
@@ -440,6 +458,8 @@ export function useInventoryStock(filters: InventoryFilters, plantId: string) {
     ["inventory-stock", plantId, query.toString()],
     `/inventory/plants/${encodeURIComponent(plantId)}/stock?${query}`,
     filters.view === "stock" && plantId.length > 0,
+    cachePolicy.live,
+    true,
   );
 }
 
@@ -461,6 +481,8 @@ export function useInventoryMovements(
     filters.view === "kardex" &&
       plantId.length > 0 &&
       filters.inventoryItemId !== undefined,
+    cachePolicy.history,
+    true,
   );
 }
 
@@ -481,6 +503,8 @@ export function useInventoryReviews(
     ["inventory-reviews", plantId, query.toString()],
     `/inventory/plants/${encodeURIComponent(plantId)}/reviews?${query}`,
     filters.view === "reviews" && plantId.length > 0,
+    cachePolicy.history,
+    true,
   );
 }
 
@@ -500,6 +524,8 @@ export function useRastraComponentHistory(
     ["inventory-components", plantId, query.toString()],
     `/inventory/plants/${encodeURIComponent(plantId)}/component-changes?${query}`,
     filters.view === "components" && plantId.length > 0,
+    cachePolicy.history,
+    true,
   );
 }
 
@@ -519,6 +545,7 @@ export function useRastraComponentOptions(
     ["inventory-component-options", plantId, rastraId],
     `/inventory/plants/${encodeURIComponent(plantId)}/component-changes?${query}`,
     enabled && plantId.length > 0 && rastraId.length > 0,
+    cachePolicy.history,
   );
 }
 
@@ -533,6 +560,7 @@ export function useOperationalNoveltyCategories(enabled: boolean) {
     ["inventory-novelty-categories"],
     "/inventory/novelty-categories",
     enabled,
+    cachePolicy.catalog,
   );
 }
 
@@ -550,6 +578,8 @@ export function useOperationalNovelties(
     ["inventory-novelties", plantId, query.toString()],
     `/inventory/plants/${encodeURIComponent(plantId)}/novelties?${query}`,
     filters.view === "novelties" && plantId.length > 0,
+    cachePolicy.live,
+    true,
   );
 }
 
@@ -564,6 +594,7 @@ export function useCloseOperationalNovelty(plantId: string) {
   const queryClient = useQueryClient();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
   return useMutation({
     mutationFn: ({
       noveltyId,
@@ -577,7 +608,8 @@ export function useCloseOperationalNovelty(plantId: string) {
         token,
         { method: "POST", body: JSON.stringify({ occurredAtUtc }) },
       ),
-    onSuccess: async () => invalidateInventoryMaintenance(queryClient),
+    onSuccess: async () =>
+      invalidateInventoryMaintenance(queryClient, profileId, organizationId),
   });
 }
 
@@ -596,13 +628,21 @@ function useInventoryQuery<T>(
   key: readonly unknown[],
   path: string,
   enabled: boolean,
+  policy: CachePolicy,
+  preservePreviousData = false,
 ) {
   const auth = useAuth();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
   const profileId = auth.profile?.profileId ?? "";
+  const [name, ...details] = key;
   return useQuery({
-    queryKey: [...key, profileId, organizationId],
+    queryKey: scopedQueryKey(
+      String(name),
+      profileId,
+      organizationId,
+      ...details,
+    ),
     enabled: enabled && auth.session !== null && auth.profile !== null,
     queryFn: ({ signal }) =>
       apiRequest<T>(
@@ -610,6 +650,8 @@ function useInventoryQuery<T>(
         token,
         { signal },
       ),
+    ...(preservePreviousData ? { placeholderData: keepPreviousData } : {}),
+    ...policy,
   });
 }
 
@@ -621,6 +663,7 @@ function useInventoryMutation<TInput>(
   const queryClient = useQueryClient();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
   return useMutation({
     mutationFn: (input: TInput) =>
       apiRequest<InventoryCatalogEntry>(
@@ -629,7 +672,15 @@ function useInventoryMutation<TInput>(
         { method: "POST", body: JSON.stringify(input) },
       ),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: invalidationKey });
+      const [name, ...details] = invalidationKey;
+      await queryClient.invalidateQueries({
+        queryKey: scopedQueryKey(
+          String(name),
+          profileId,
+          organizationId,
+          ...details,
+        ),
+      });
     },
   });
 }
@@ -639,6 +690,7 @@ function useInventoryActionMutation<TInput>(path: string) {
   const queryClient = useQueryClient();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
   return useMutation({
     mutationFn: (input: TInput) =>
       apiRequest<unknown>(
@@ -646,7 +698,8 @@ function useInventoryActionMutation<TInput>(path: string) {
         token,
         { method: "POST", body: JSON.stringify(input) },
       ),
-    onSuccess: async () => invalidateInventoryActions(queryClient),
+    onSuccess: async () =>
+      invalidateInventoryActions(queryClient, profileId, organizationId),
   });
 }
 
@@ -655,6 +708,7 @@ function useInventoryMaintenanceMutation<TInput>(path: string) {
   const queryClient = useQueryClient();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
   return useMutation({
     mutationFn: (input: TInput) =>
       apiRequest<unknown>(
@@ -662,33 +716,50 @@ function useInventoryMaintenanceMutation<TInput>(path: string) {
         token,
         { method: "POST", body: JSON.stringify(input) },
       ),
-    onSuccess: async () => invalidateInventoryMaintenance(queryClient),
+    onSuccess: async () =>
+      invalidateInventoryMaintenance(queryClient, profileId, organizationId),
   });
 }
 
-async function invalidateInventoryActions(queryClient: QueryClient) {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["inventory-stock"] }),
-    queryClient.invalidateQueries({ queryKey: ["inventory-action-stock"] }),
-    queryClient.invalidateQueries({ queryKey: ["inventory-movements"] }),
-    queryClient.invalidateQueries({
-      queryKey: ["inventory-action-movements"],
-    }),
-    queryClient.invalidateQueries({ queryKey: ["inventory-reviews"] }),
-    queryClient.invalidateQueries({ queryKey: ["inventory-assignments"] }),
-    queryClient.invalidateQueries({ queryKey: ["management-freshness"] }),
-  ]);
+async function invalidateInventoryActions(
+  queryClient: QueryClient,
+  profileId: string,
+  organizationId: string,
+) {
+  await Promise.all(
+    [
+      "inventory-stock",
+      "inventory-action-stock",
+      "inventory-movements",
+      "inventory-action-movements",
+      "inventory-reviews",
+      "inventory-assignments",
+      "management-freshness",
+    ].map((name) =>
+      queryClient.invalidateQueries({
+        queryKey: scopedQueryKey(name, profileId, organizationId),
+      }),
+    ),
+  );
 }
 
-async function invalidateInventoryMaintenance(queryClient: QueryClient) {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["inventory-components"] }),
-    queryClient.invalidateQueries({
-      queryKey: ["inventory-component-options"],
-    }),
-    queryClient.invalidateQueries({ queryKey: ["inventory-novelties"] }),
-    queryClient.invalidateQueries({ queryKey: ["management-freshness"] }),
-  ]);
+async function invalidateInventoryMaintenance(
+  queryClient: QueryClient,
+  profileId: string,
+  organizationId: string,
+) {
+  await Promise.all(
+    [
+      "inventory-components",
+      "inventory-component-options",
+      "inventory-novelties",
+      "management-freshness",
+    ].map((name) =>
+      queryClient.invalidateQueries({
+        queryKey: scopedQueryKey(name, profileId, organizationId),
+      }),
+    ),
+  );
 }
 
 function optional(value: string | null): string | undefined {

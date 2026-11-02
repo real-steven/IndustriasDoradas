@@ -9,6 +9,7 @@ import {
   OperationPage,
   ShipmentDetailPage,
   ShipmentsPage,
+  StatisticsPage,
   WorkersPage,
   UpcomingPage,
 } from "../features/portal/portal-pages";
@@ -35,18 +36,7 @@ export function App() {
           />
           <Route path="auditoria" element={<AuditPage />} />
           <Route path="usuarios" element={<PlantManagerPage />} />
-          <Route
-            path="estadisticas"
-            element={
-              <UpcomingPage
-                title={tr("Estadísticas", "Statistics")}
-                description={tr(
-                  "Comparación de proveedores, líneas y períodos con cobertura de datos visible.",
-                  "Comparison of suppliers, lines, and periods with visible data coverage.",
-                )}
-              />
-            }
-          />
+          <Route path="estadisticas" element={<StatisticsPage />} />
           <Route path="trabajadores" element={<WorkersPage />} />
           <Route
             path="reportes"

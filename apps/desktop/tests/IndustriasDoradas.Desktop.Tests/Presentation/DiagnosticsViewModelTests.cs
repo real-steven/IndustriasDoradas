@@ -11,6 +11,11 @@ namespace IndustriasDoradas.Desktop.Tests.Presentation;
 [TestClass]
 public sealed class DiagnosticsViewModelTests
 {
+    private static readonly string[] ExpectedAuditLineNames =
+        ["Línea morada", "Línea celeste", "Línea rosada", "Línea naranja"];
+    private static readonly string[] ExpectedAuditLineAccents =
+        ["#8959DD", "#35ADDD", "#ED70A9", "#F19B2C"];
+
     [TestMethod]
     public void ConfiguredStationExposesFriendlyNameAndTechnicalCode()
     {
@@ -18,10 +23,10 @@ public sealed class DiagnosticsViewModelTests
         DiagnosticsViewModel viewModel = new(
             new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
             new StubLocalDiagnostics(Healthy()),
-            Options.Create(new StationOptions { Id = stationId, Name = "Estación Avangares" }),
+            Options.Create(new StationOptions { Id = stationId, Name = "Estación Abangares" }),
             new SyncStatusNotifier());
 
-        Assert.AreEqual("Estación Avangares", viewModel.StationName);
+        Assert.AreEqual("Estación Abangares", viewModel.StationName);
         Assert.AreEqual(stationId.ToString("D"), viewModel.StationCode);
     }
 
@@ -107,7 +112,7 @@ public sealed class DiagnosticsViewModelTests
 
         Assert.AreEqual(LocalDatabaseHealthState.Attention, viewModel.LocalState);
         Assert.AreEqual(
-            "10 pendientes · 11 sincronizados",
+            "7 pendientes · 3 por revisar · 11 sincronizados",
             viewModel.PendingOperations);
         Assert.AreEqual("90 MB libres", viewModel.AvailableSpace);
         StringAssert.Contains(viewModel.LocalRecoveryInstruction, "Libere espacio");
@@ -185,6 +190,38 @@ public sealed class DiagnosticsViewModelTests
 
         Assert.IsTrue(audit.HasSelectedShipment);
         Assert.AreEqual(firstLineId, audit.SelectedShipment!.Source.LineId);
+    }
+
+    [TestMethod]
+    public async Task AuditUsesProductionLineOrderForColorsAndPosition()
+    {
+        Guid purpleLineId = Guid.NewGuid();
+        Guid cyanLineId = Guid.NewGuid();
+        Guid pinkLineId = Guid.NewGuid();
+        Guid orangeLineId = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        LocalCompletedShipmentAudit[] shipments =
+        [
+            Shipment(cyanLineId, "Línea celeste", "Proveedor B", now.AddHours(-2), now, 2),
+            Shipment(orangeLineId, "Línea naranja", "Proveedor D", now.AddHours(-2), now, 4),
+            Shipment(purpleLineId, "Línea morada", "Proveedor A", now.AddHours(-2), now, 1),
+            Shipment(pinkLineId, "Línea rosada", "Proveedor C", now.AddHours(-2), now, 3),
+        ];
+        DiagnosticsViewModel diagnostics = new(
+            new StubHealthService(SystemHealth.Available("api", now)),
+            new StubLocalDiagnostics(Healthy()));
+        AuditViewModel audit = new(diagnostics, null, new StubAuditRepository(shipments));
+        audit.SelectedPeriodOption = audit.PeriodOptions.Single(option =>
+            option.Mode == AuditPeriodMode.AllHistory);
+
+        await audit.InitializeAsync();
+
+        CollectionAssert.AreEqual(
+            ExpectedAuditLineNames,
+            audit.ShipmentLines.Select(line => line.LineName).ToArray());
+        CollectionAssert.AreEqual(
+            ExpectedAuditLineAccents,
+            audit.ShipmentLines.Select(line => line.AccentColor).ToArray());
     }
 
     [TestMethod]
@@ -275,7 +312,8 @@ public sealed class DiagnosticsViewModelTests
         string lineName,
         string supplierName,
         DateTimeOffset startedAt,
-        DateTimeOffset completedAt) =>
+        DateTimeOffset completedAt,
+        int displayOrder = 1) =>
         new(
             Guid.NewGuid(),
             lineId,
@@ -288,7 +326,8 @@ public sealed class DiagnosticsViewModelTests
             100,
             0,
             0,
-            []);
+            [],
+            displayOrder);
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
