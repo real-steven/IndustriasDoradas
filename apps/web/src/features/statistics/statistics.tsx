@@ -1,7 +1,7 @@
 import { useMemo, type PropsWithChildren } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Area,pas
+  Area,
   AreaChart,
   Bar,
   BarChart,
