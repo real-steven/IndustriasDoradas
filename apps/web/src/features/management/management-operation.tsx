@@ -9,8 +9,7 @@ import {
   type ManagementFreshnessQuery,
   type ManagementOperationQuery,
 } from "./management-operation-data";
-
-const lineAccents = ["purple", "cyan", "pink", "orange"] as const;
+import { lineAccent } from "./line-accent";
 
 export function OperationLinesPanel({
   query,
@@ -192,9 +191,7 @@ function OperationLineCard({
   stale: boolean;
 }) {
   const { language, locale, tr } = useLanguage();
-  const accent =
-    lineAccents[Math.abs(line.productionLineOrder - 1) % lineAccents.length] ??
-    lineAccents[0];
+  const accent = lineAccent(line.productionLineOrder);
 
   return (
     <article className={`line-card ${accent}${stale ? " stale" : ""}`}>

@@ -52,15 +52,15 @@ const primaryNavigation = [
     labelEn: "Workers",
     icon: "◷",
   },
-] as const;
-
-const futureNavigation = [
   {
     to: "/gerencia/estadisticas",
     label: "Estadísticas",
     labelEn: "Statistics",
     icon: "⌁",
   },
+] as const;
+
+const futureNavigation = [
   {
     to: "/gerencia/reportes",
     label: "Reportes",

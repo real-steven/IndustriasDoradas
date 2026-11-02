@@ -88,6 +88,7 @@ export function useManagementFreshness(): ManagementFreshnessQuery {
       "management-shipments-audit",
       "management-shipment",
       "management-shipment-sweeps",
+      "management-statistics",
       "shipment-audit",
       "gold-summary",
       "gold-history",

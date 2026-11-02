@@ -83,6 +83,72 @@ export interface ManagementFreshness {
   pollAfterSeconds: number;
 }
 
+export type StatisticsBucket = "day" | "week" | "month";
+
+export interface ManagementStatisticsQuery {
+  fromUtc: string;
+  toUtc: string;
+  bucket: StatisticsBucket;
+  plantId?: string;
+  productionLineId?: string;
+  supplierId?: string;
+  comparePrevious: boolean;
+}
+
+export interface ManagementStatisticsDailyFact {
+  localDate: string;
+  plantId: string;
+  productionLineId: string;
+  productionLineName: string;
+  productionLineOrder: number;
+  supplierId: string;
+  supplierName: string;
+  completedShipments: number;
+  totalCajuelas: number;
+  sweepCount: number;
+  goldShipments: number;
+  goldGrams: number;
+  goldCajuelas: number;
+  durationSeconds: number;
+}
+
+export interface ManagementStatisticsMetrics {
+  completedShipments: number;
+  totalCajuelas: number;
+  sweepCount: number;
+  goldShipments: number;
+  totalGoldGrams: number;
+  includedCajuelas: number;
+  gramsPerCajuela: number | null;
+  goldCoveragePercentage: number;
+  averageShipmentHours: number | null;
+}
+
+export interface ManagementStatisticsBreakdown extends ManagementStatisticsMetrics {
+  id: string;
+  name: string;
+  displayOrder?: number;
+}
+
+export interface ManagementStatisticsPoint extends ManagementStatisticsMetrics {
+  bucketStart: string;
+}
+
+export interface ManagementStatisticsResponse {
+  generatedAtUtc: string;
+  period: {
+    fromUtc: string;
+    toUtc: string;
+    bucket: StatisticsBucket;
+  };
+  summary: ManagementStatisticsMetrics;
+  previousSummary: ManagementStatisticsMetrics | null;
+  timeline: ManagementStatisticsPoint[];
+  previousTimeline: ManagementStatisticsPoint[];
+  productionLines: ManagementStatisticsBreakdown[];
+  suppliers: ManagementStatisticsBreakdown[];
+}
+
 export interface ManagementQueryRepository {
   findLatestChange(
     organizationId: string,
@@ -104,4 +170,8 @@ export interface ManagementQueryRepository {
     shipmentId: string,
     query: ManagementPageQuery,
   ): Promise<PageResponse<ManagementSweepMercury>>;
+  listStatisticsFacts(
+    organizationId: string,
+    query: Omit<ManagementStatisticsQuery, "bucket" | "comparePrevious">,
+  ): Promise<ManagementStatisticsDailyFact[]>;
 }

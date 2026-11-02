@@ -3806,3 +3806,250 @@ td {
     border: 2px solid CanvasText;
   }
 }
+
+.statistics-feature {
+  display: grid;
+  gap: 20px;
+}
+
+.statistics-filters > header,
+.statistics-chart > header,
+.statistics-coverage > header,
+.statistics-table > header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.statistics-filter-grid {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  margin-top: 18px;
+}
+
+.statistics-filter-grid label {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 7px;
+  letter-spacing: 0.04em;
+}
+
+.statistics-filter-grid input[type="date"],
+.statistics-filter-grid select {
+  min-height: 44px;
+}
+
+.statistics-filter-grid .statistics-compare {
+  align-items: center;
+  align-self: center;
+  display: flex;
+  font-size: 0.78rem;
+  gap: 9px;
+  letter-spacing: 0;
+  min-height: 44px;
+}
+
+.statistics-compare input {
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.statistics-range,
+.statistics-updated {
+  color: var(--muted);
+  font-size: 0.76rem;
+  margin: 14px 0 0;
+}
+
+.statistics-kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.statistics-kpis article {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgb(10 49 64 / 5%);
+  display: grid;
+  gap: 8px;
+  min-height: 135px;
+  padding: 18px;
+}
+
+.statistics-kpis span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.statistics-kpis strong {
+  color: var(--ink);
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+  line-height: 1.05;
+}
+
+.statistics-kpis small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.statistics-kpis small.positive {
+  color: #08783f;
+}
+
+.statistics-kpis small.negative {
+  color: #b23a34;
+}
+
+.statistics-chart-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.statistics-chart {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statistics-chart .recharts-responsive-container {
+  margin-top: 18px;
+}
+
+.statistics-chart .recharts-text,
+.statistics-chart .recharts-legend-item-text {
+  fill: var(--muted);
+  font-size: 0.72rem;
+}
+
+.statistics-coverage > strong {
+  color: var(--ink);
+  display: block;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  margin-top: 28px;
+}
+
+.statistics-coverage-bar {
+  background: #e7edf0;
+  border-radius: 999px;
+  height: 13px;
+  margin: 15px 0;
+  overflow: hidden;
+}
+
+.statistics-coverage-bar span {
+  background: linear-gradient(90deg, #c78a08, #e7b847);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.statistics-coverage > p {
+  color: var(--muted);
+}
+
+.statistics-coverage dl {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 24px 0 0;
+}
+
+.statistics-coverage dl div {
+  background: #f4f8f9;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.statistics-coverage dt {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.statistics-coverage dd {
+  color: var(--ink);
+  font-size: 1.2rem;
+  font-weight: 900;
+  margin: 5px 0 0;
+}
+
+.statistics-table table {
+  min-width: 780px;
+  width: 100%;
+}
+
+.statistics-table th,
+.statistics-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 13px 12px;
+  text-align: right;
+}
+
+.statistics-table th:first-child,
+.statistics-table td:first-child {
+  text-align: left;
+}
+
+.statistics-table thead th {
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.statistics-table tbody th {
+  color: var(--ink);
+}
+
+.statistics-table td small {
+  color: #9a6500;
+  display: block;
+  font-size: 0.65rem;
+  margin-top: 3px;
+}
+
+@media (max-width: 1180px) {
+  .statistics-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statistics-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 880px) {
+  .statistics-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .statistics-filters > header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .statistics-filter-grid,
+  .statistics-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .statistics-kpis article {
+    min-height: 0;
+  }
+
+  .statistics-coverage dl {
+    grid-template-columns: 1fr;
+  }
+}

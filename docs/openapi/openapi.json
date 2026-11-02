@@ -7064,6 +7064,131 @@
         "tags": ["Management"]
       }
     },
+    "/api/v1/organizations/{organizationId}/management/statistics": {
+      "get": {
+        "operationId": "ManagementController_statistics",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "enum": ["day", "week", "month"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "comparePrevious",
+            "required": false,
+            "schema": { "default": false, "type": "boolean" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Management"]
+      }
+    },
     "/api/v1/organizations/{organizationId}/plants": {
       "get": {
         "operationId": "CatalogsController_listPlants",

@@ -150,14 +150,15 @@ describe("recorrido gerencial de aceptación", () => {
 
     await user.click(screen.getByRole("link", { name: /Estadísticas/u }));
     expect(
-      await screen.findByRole("heading", { name: "Módulo reservado" }),
+      await screen.findByRole("heading", { name: "Período y alcance" }),
     ).toBeInTheDocument();
     const main = document.getElementById("contenido-gerencial");
     expect(main).not.toBeNull();
     if (main === null) throw new Error("Expected manager content");
-    expect(within(main).getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
-    expect(within(main).queryByRole("button")).not.toBeInTheDocument();
-    expect(within(main).queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      within(main).getByText("Cargamentos finalizados"),
+    ).toBeInTheDocument();
+    expect(within(main).queryByText("PRÓXIMAMENTE")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
     expect(
@@ -304,6 +305,9 @@ function createManagementApi(): {
     if (url.pathname.endsWith("/management/gold-summary"))
       return Promise.resolve(json(goldSummary(goldEntries)));
 
+    if (url.pathname.endsWith("/management/statistics"))
+      return Promise.resolve(json(statisticsResponse([])));
+
     if (url.pathname.endsWith("/management/shipments")) {
       const pageSize = Number(url.searchParams.get("pageSize") ?? "10");
       return Promise.resolve(page([shipment(goldEntries)], pageSize));
@@ -402,6 +406,45 @@ function goldSummary(entries: GoldResultEntry[]) {
         gramsPerCajuela: current === undefined ? null : amount / 260,
       },
     ],
+  };
+}
+
+function statisticsResponse(entries: GoldResultEntry[]) {
+  const current = entries[0];
+  const completedShipments = current === undefined ? 0 : 1;
+  const goldShipments = current === undefined ? 0 : 1;
+  const totalGoldGrams = current?.amountGrams ?? 0;
+  const metrics = {
+    completedShipments,
+    totalCajuelas: completedShipments * 260,
+    sweepCount: completedShipments,
+    goldShipments,
+    totalGoldGrams,
+    includedCajuelas: goldShipments * 260,
+    gramsPerCajuela: current === undefined ? null : current.amountGrams / 260,
+    goldCoveragePercentage: goldShipments * 100,
+    averageShipmentHours: completedShipments === 0 ? null : 4,
+  };
+  return {
+    generatedAtUtc: "2026-10-13T18:05:00.000Z",
+    period: {
+      fromUtc: "2026-10-01T06:00:00.000Z",
+      toUtc: "2026-11-01T06:00:00.000Z",
+      bucket: "day",
+    },
+    summary: metrics,
+    previousSummary: metrics,
+    timeline: [{ bucketStart: "2026-10-13", ...metrics }],
+    previousTimeline: [{ bucketStart: "2026-09-13", ...metrics }],
+    productionLines: [
+      {
+        id: LINE_ID,
+        name: "Línea 1",
+        displayOrder: 1,
+        ...metrics,
+      },
+    ],
+    suppliers: [{ id: SUPPLIER_ID, name: "Proveedor Norte", ...metrics }],
   };
 }
 
