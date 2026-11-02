@@ -1,10 +1,16 @@
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 
 import type {
   AttendanceHours,
   PageWorker,
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
+import { cachePolicy } from "../../app/cache-policy";
+import { scopedQueryKey } from "../../app/query-keys";
 import { useAuth } from "../../auth/auth-context";
 import type { Language } from "../../i18n/language-context";
 
@@ -73,12 +79,12 @@ export function useAttendanceHours(
     parameters.set("workerId", filters.workerId);
 
   return useQuery({
-    queryKey: [
+    queryKey: scopedQueryKey(
       "attendance-hours",
       profileId,
       organizationId,
       parameters.toString(),
-    ],
+    ),
     enabled: auth.session !== null && auth.profile !== null,
     queryFn: ({ signal }) =>
       apiRequest<AttendanceHours>(
@@ -86,6 +92,8 @@ export function useAttendanceHours(
         token,
         { signal },
       ),
+    placeholderData: keepPreviousData,
+    ...cachePolicy.live,
   });
 }
 
@@ -96,7 +104,7 @@ export function useAttendanceWorkers(): AttendanceWorkersQuery {
   const profileId = auth.profile?.profileId ?? "";
 
   return useQuery({
-    queryKey: ["attendance-workers", profileId, organizationId],
+    queryKey: scopedQueryKey("attendance-workers", profileId, organizationId),
     enabled: auth.session !== null && auth.profile !== null,
     queryFn: ({ signal }) =>
       apiRequest<PageWorker>(
@@ -104,6 +112,7 @@ export function useAttendanceWorkers(): AttendanceWorkersQuery {
         token,
         { signal },
       ),
+    ...cachePolicy.personnel,
   });
 }
 

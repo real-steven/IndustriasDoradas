@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
 import { ApiConnectionError, ApiRequestError } from "../api/http";
+import { cachePolicy } from "./cache-policy";
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -8,9 +9,7 @@ export function createQueryClient(): QueryClient {
       queries: {
         retry: shouldRetryQuery,
         retryDelay: 500,
-        staleTime: 15_000,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: true,
+        ...cachePolicy.standard,
       },
     },
   });

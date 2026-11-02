@@ -10,62 +10,84 @@ import type {
   Worker,
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
+import { cachePolicy } from "../../app/cache-policy";
+import { scopedQueryKey } from "../../app/query-keys";
 import { useAuth } from "../../auth/auth-context";
 
 export function usePlantManagers() {
   const request = useAccountRequest();
   return useQuery({
-    queryKey: ["plant-managers", request.profileId, request.organizationId],
+    queryKey: scopedQueryKey(
+      "plant-managers",
+      request.profileId,
+      request.organizationId,
+    ),
     enabled: request.enabled,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiRequest<PageAccount>(
         `/organizations/${encodeURIComponent(request.organizationId)}/accounts?page=1&pageSize=100&roleCode=JEFE_PLANTA`,
         request.token,
+        { signal },
       ),
+    ...cachePolicy.personnel,
   });
 }
 
 export function usePlantWorkers() {
   const request = useAccountRequest();
   return useQuery({
-    queryKey: ["plant-workers", request.profileId, request.organizationId],
+    queryKey: scopedQueryKey(
+      "plant-workers",
+      request.profileId,
+      request.organizationId,
+    ),
     enabled: request.enabled,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiRequest<PageWorker>(
         `/organizations/${encodeURIComponent(request.organizationId)}/workers?page=1&pageSize=100&state=all`,
         request.token,
+        { signal },
       ),
+    ...cachePolicy.personnel,
   });
 }
 
 export function useAccountPlants() {
   const request = useAccountRequest();
   return useQuery({
-    queryKey: ["account-plants", request.profileId, request.organizationId],
+    queryKey: scopedQueryKey(
+      "account-plants",
+      request.profileId,
+      request.organizationId,
+    ),
     enabled: request.enabled,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiRequest<PageCatalog>(
         `/organizations/${encodeURIComponent(request.organizationId)}/plants?page=1&pageSize=100&state=active`,
         request.token,
+        { signal },
       ),
+    ...cachePolicy.catalog,
   });
 }
 
 export function useAccountStations(plantId: string) {
   const request = useAccountRequest();
   return useQuery({
-    queryKey: [
+    queryKey: scopedQueryKey(
       "account-stations",
       request.profileId,
       request.organizationId,
       plantId,
-    ],
+    ),
     enabled: request.enabled && plantId.length > 0,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiRequest<PageCatalog>(
         `/organizations/${encodeURIComponent(request.organizationId)}/plants/${encodeURIComponent(plantId)}/stations?page=1&pageSize=100&state=active`,
         request.token,
+        { signal },
       ),
+    ...cachePolicy.catalog,
   });
 }
 
@@ -80,7 +102,13 @@ export function useCreatePlantManager() {
         { method: "POST", body: JSON.stringify(input) },
       ),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["plant-managers"] });
+      await queryClient.invalidateQueries({
+        queryKey: scopedQueryKey(
+          "plant-managers",
+          request.profileId,
+          request.organizationId,
+        ),
+      });
     },
   });
 }
@@ -97,8 +125,20 @@ export function useCreateOperator() {
       ),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["plant-workers"] }),
-        queryClient.invalidateQueries({ queryKey: ["attendance-workers"] }),
+        queryClient.invalidateQueries({
+          queryKey: scopedQueryKey(
+            "plant-workers",
+            request.profileId,
+            request.organizationId,
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: scopedQueryKey(
+            "attendance-workers",
+            request.profileId,
+            request.organizationId,
+          ),
+        }),
       ]);
     },
   });
@@ -126,7 +166,13 @@ export function useGovernPlantManager() {
         },
       ),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["plant-managers"] });
+      await queryClient.invalidateQueries({
+        queryKey: scopedQueryKey(
+          "plant-managers",
+          request.profileId,
+          request.organizationId,
+        ),
+      });
     },
   });
 }

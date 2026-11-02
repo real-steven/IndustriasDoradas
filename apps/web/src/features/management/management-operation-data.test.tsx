@@ -4,8 +4,12 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { scopedQueryKey } from "../../app/query-keys";
 import { AuthContext, type AuthState } from "../../auth/auth-context";
 import { useManagementFreshness } from "./management-operation-data";
+
+const profileId = "a1000000-0000-4000-8000-000000000001";
+const organizationId = "30000000-0000-4000-8000-000000000001";
 
 describe("frescura gerencial", () => {
   afterEach(() => {
@@ -38,24 +42,25 @@ describe("frescura gerencial", () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    client.setQueryData(["management-operation"], { preserved: true });
+    const operationKey = scopedQueryKey(
+      "management-operation",
+      profileId,
+      organizationId,
+    );
+    client.setQueryData(operationKey, { preserved: true });
 
     const { result } = renderHook(() => useManagementFreshness(), {
       wrapper: wrapper(client),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(client.getQueryState(["management-operation"])?.isInvalidated).toBe(
-      false,
-    );
+    expect(client.getQueryState(operationKey)?.isInvalidated).toBe(false);
 
     await act(async () => {
       await result.current.refetch();
     });
 
     await waitFor(() =>
-      expect(
-        client.getQueryState(["management-operation"])?.isInvalidated,
-      ).toBe(true),
+      expect(client.getQueryState(operationKey)?.isInvalidated).toBe(true),
     );
     const secondUrl = new URL(
       requestUrl(transport.mock.calls[1]?.[0]),
@@ -69,8 +74,8 @@ function wrapper(client: QueryClient) {
   const auth: AuthState = {
     session: { access_token: "fictitious-token" } as Session,
     profile: {
-      profileId: "a1000000-0000-4000-8000-000000000001",
-      organizationId: "30000000-0000-4000-8000-000000000001",
+      profileId,
+      organizationId,
       role: "JEFE_EMPRESA",
       permissions: [],
       expiresAt: "2026-10-13T12:00:00.000Z",

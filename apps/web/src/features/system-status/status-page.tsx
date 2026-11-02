@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { cachePolicy } from "../../app/cache-policy";
 import { useLanguage } from "../../i18n/language-context";
 import { getHealth } from "./health-api";
 
@@ -9,6 +10,8 @@ export function StatusPage() {
     queryKey: ["system", "health"],
     queryFn: ({ signal }) => getHealth(signal),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    ...cachePolicy.health,
   });
 
   return (
