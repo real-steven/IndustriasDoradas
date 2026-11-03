@@ -37,7 +37,7 @@ public sealed class OutboxSyncProcessorTests
         Assert.AreEqual(1, api.CallCount);
         Assert.AreEqual(2, api.LastBatch!.Items.Count);
         Assert.AreEqual(ProfileId, api.LastBatch.Items[0].Authorization.ActorProfileId);
-        Assert.AreEqual("LEGACY_UNAVAILABLE", outbox.LastClaimAuthorization!.StateAtCapture);
+        Assert.AreEqual("VALID", outbox.LastClaimAuthorization!.StateAtCapture);
         Assert.AreEqual("APPLIED", outbox.Completed![0].Status);
         Assert.AreEqual("RETRY_LATER", outbox.Completed[1].Status);
         Assert.IsNull(outbox.Release);

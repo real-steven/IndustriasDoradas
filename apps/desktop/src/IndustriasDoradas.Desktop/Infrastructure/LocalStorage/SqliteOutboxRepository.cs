@@ -6,6 +6,8 @@ namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 public sealed class SqliteOutboxRepository(ILocalSqliteConnectionFactory connectionFactory)
     : ILocalOutboxRepository, ILocalStationSequenceStore, ILocalSynchronizationReadiness
 {
+    public const int DependencyReviewAttemptThreshold = 10;
+
     public async Task<LocalSynchronizationQueueState> ReadAsync(
         CancellationToken cancellationToken = default)
     {
@@ -228,7 +230,14 @@ public sealed class SqliteOutboxRepository(ILocalSqliteConnectionFactory connect
         CancellationToken cancellationToken)
     {
         bool synced = disposition.Status is "APPLIED" or "ALREADY_APPLIED";
-        bool review = disposition.Status == "FAILED_REVIEW";
+        bool exhaustedDependency = disposition.Status == "RETRY_LATER" &&
+            disposition.Code == "DEPENDENCY_NOT_READY" &&
+            attemptCount >= DependencyReviewAttemptThreshold;
+        bool review = disposition.Status == "FAILED_REVIEW" || exhaustedDependency;
+        if (exhaustedDependency)
+        {
+            disposition = disposition with { Code = "ORPHANED_DEPENDENCY" };
+        }
         if (synced && disposition.ReceiptId is null)
         {
             synced = false;

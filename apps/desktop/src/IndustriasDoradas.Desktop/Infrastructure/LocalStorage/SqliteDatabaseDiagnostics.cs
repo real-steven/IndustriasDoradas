@@ -304,7 +304,7 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
     {
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT operation_type, COALESCE(last_error_code, 'UNKNOWN_FAILURE'), attempt_count,
+            SELECT id, operation_type, COALESCE(last_error_code, 'UNKNOWN_FAILURE'), attempt_count,
                    created_at_utc, updated_at_utc
             FROM outbox_messages
             WHERE state = 'FAILED_REVIEW'
@@ -317,8 +317,8 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             result.Add(new SyncFailureDiagnostic(
-                reader.GetString(0), reader.GetString(1), DescribeFailure(reader.GetString(1)), reader.GetInt32(2),
-                ReadTimestamp(reader.GetString(3)), ReadTimestamp(reader.GetString(4))));
+                reader.GetString(1), reader.GetString(2), DescribeFailure(reader.GetString(2)), reader.GetInt32(3),
+                ReadTimestamp(reader.GetString(4)), ReadTimestamp(reader.GetString(5)), Guid.Parse(reader.GetString(0))));
         }
         return result;
     }
@@ -332,10 +332,15 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
         "LINE_OPERATION_CONFLICT" => "Otra estación ya tenía un cargamento activo en la misma línea.",
         "DEPENDENCY_REJECTED" =>
             "Este evento dependía de una operación anterior que fue rechazada; se conservó para revisión.",
+        "ORPHANED_DEPENDENCY" =>
+            "No apareció el registro anterior que este evento necesita. Valide el dato antes de reintentarlo o descartarlo.",
         "STATION_SEQUENCE_CONFLICT" =>
             "La secuencia local ya no coincidía con la aceptada por el servidor.",
         "LEGACY_AUTHORIZATION_UNAVAILABLE" =>
             "El evento pertenece a una versión anterior que no guardaba toda la autorización requerida.",
+        "AUTHORIZATION_EXPIRED_CONTINGENCY" =>
+            "La marca se guardó sin una autorización vigente verificable y el sistema central la rechazó. " +
+            "Si es un dato de prueba, descártelo; si es real, registre nuevamente la marca con una sesión vigente.",
         "DATABASE_CONSTRAINT_VIOLATION" => "El evento contradice una regla de integridad central.",
         "INVALID_EVENT" or "INVALID_LOCAL_PAYLOAD" => "El contenido del evento no cumple el contrato de sincronización.",
         "AUTH_REFRESH_REQUIRED" => "La sesión debe renovarse con conexión.",

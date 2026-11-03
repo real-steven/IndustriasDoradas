@@ -25,6 +25,11 @@ public sealed class InitialSynchronizationCoordinator(
     private readonly TimeSpan timeout = TimeSpan.FromSeconds(
         syncOptions.Value.InitialSyncTimeoutSeconds);
 
+    public async Task<bool> HasUsableLocalCopyAsync(
+        CancellationToken cancellationToken = default) =>
+        !string.IsNullOrWhiteSpace(await localChanges.GetCursorAsync(cancellationToken)
+            .ConfigureAwait(false));
+
     public async Task<InitialSynchronizationResult> SynchronizeAsync(
         IProgress<InitialSynchronizationProgress>? progress = null,
         CancellationToken cancellationToken = default)
@@ -93,11 +98,11 @@ public sealed class InitialSynchronizationCoordinator(
             if (queue.PendingCount > 0)
             {
                 return new InitialSynchronizationResult(
-                    false,
+                    true,
                     false,
                     downloadedPages,
-                    $"No se pudo completar el envío de {queue.PendingCount} cambios locales. " +
-                    "Espere unos segundos y vuelva a abrir la sesión.");
+                    $"La estación está disponible. {queue.PendingCount} cambios locales siguen pendientes " +
+                    "y se enviarán en segundo plano; puede revisarlos en Estado.");
             }
 
             progress?.Report(new InitialSynchronizationProgress(

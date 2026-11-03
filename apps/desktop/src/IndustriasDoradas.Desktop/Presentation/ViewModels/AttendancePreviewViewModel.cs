@@ -18,13 +18,26 @@ public sealed record AttendanceWorkerStatus(
     string LastMark,
     int IncidentCount,
     Guid? OpenCheckInId,
-    DateTimeOffset? OpenCheckInAt)
+    DateTimeOffset? OpenCheckInAt,
+    Guid? LatestEventId = null,
+    AttendanceEventType? LatestEventType = null,
+    DateTimeOffset? LatestEventAt = null)
 {
     public Guid Id => Worker.Id;
     public string Name => Worker.Name;
     public string CategoryLabel => Worker.Category == "JEFE_PLANTA" ? "Jefe de planta" : "Operario";
     public string DisplayName => Worker.DisplayName;
     public string StateColor => IsPresent ? "#178449" : "#71808A";
+}
+
+public sealed record AttendanceCorrectionDayOption(string Name, DateTime Date);
+public sealed record AttendanceTimeOption(int Value, string Label);
+
+public enum AttendancePresenceFilter
+{
+    All,
+    InPlant,
+    OutOfPlant,
 }
 
 public sealed class AttendancePreviewViewModel : ObservableObject
@@ -48,7 +61,11 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     private string correctionReason = string.Empty;
     private DateTime? correctionDate;
     private string correctionTime = string.Empty;
+    private int? correctionHour;
+    private int? correctionMinute;
+    private string correctionMeridiem = "a. m.";
     private string workerSearchText = string.Empty;
+    private AttendancePresenceFilter presenceFilter;
     private bool isBusy;
     private bool isCorrectionPanelOpen;
     private int presentCount;
@@ -81,6 +98,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         CheckInCommand = new AsyncRelayCommand(CheckInAsync, CanCheckIn);
         CheckOutCommand = new AsyncRelayCommand(CheckOutAsync, CanCheckOut);
         CorrectOpenShiftCommand = new AsyncRelayCommand(CorrectOpenShiftAsync, CanCorrectOpenShift);
+        ToggleCorrectionMeridiemCommand = new RelayCommand(ToggleCorrectionMeridiem);
         ToggleCorrectionPanelCommand = new RelayCommand(
             ToggleCorrectionPanel,
             () => IsManagerMode && !IsBusy);
@@ -91,6 +109,9 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         NextWorkerPageCommand = new RelayCommand(
             NextWorkerPage,
             () => (currentWorkerPage + 1) * WorkerPageSize < filteredWorkerCount);
+        ShowAllWorkersCommand = new RelayCommand(() => PresenceFilter = AttendancePresenceFilter.All);
+        ShowWorkersInPlantCommand = new RelayCommand(() => PresenceFilter = AttendancePresenceFilter.InPlant);
+        ShowWorkersOutOfPlantCommand = new RelayCommand(() => PresenceFilter = AttendancePresenceFilter.OutOfPlant);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
     }
 
@@ -111,6 +132,10 @@ public sealed class AttendancePreviewViewModel : ObservableObject
             }
             OnPropertyChanged(nameof(SelectedWorkerSummary));
             OnPropertyChanged(nameof(CorrectionValidationMessage));
+            OnPropertyChanged(nameof(CorrectionActionLabel));
+            OnPropertyChanged(nameof(CorrectionTitle));
+            OnPropertyChanged(nameof(CorrectionDateLabel));
+            OnPropertyChanged(nameof(CorrectionSubmitLabel));
             NotifyCommands();
         }
     }
@@ -146,10 +171,75 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         get => correctionTime;
         set
         {
-            if (!SetProperty(ref correctionTime, value)) return;
+            string normalized = new((value ?? string.Empty)
+                .Where(character => char.IsAsciiDigit(character) || character == ':')
+                .Take(5)
+                .ToArray());
+            if (!SetProperty(ref correctionTime, normalized)) return;
             NotifyCorrectionState();
         }
     }
+
+    public IReadOnlyList<AttendanceTimeOption> CorrectionHourOptions { get; } =
+        Enumerable.Range(1, 12).Select(value => new AttendanceTimeOption(
+            value,
+            value.ToString("00", CultureInfo.InvariantCulture))).ToArray();
+    public IReadOnlyList<AttendanceTimeOption> CorrectionMinuteOptions { get; } =
+        Enumerable.Range(0, 60).Select(value => new AttendanceTimeOption(
+            value,
+            value.ToString("00", CultureInfo.InvariantCulture))).ToArray();
+    public int? CorrectionHour
+    {
+        get => correctionHour;
+        set
+        {
+            if (!SetProperty(ref correctionHour, value)) return;
+            UpdateCorrectionTimeFromSelectors();
+        }
+    }
+
+    public int? CorrectionMinute
+    {
+        get => correctionMinute;
+        set
+        {
+            if (!SetProperty(ref correctionMinute, value)) return;
+            UpdateCorrectionTimeFromSelectors();
+        }
+    }
+
+    public string CorrectionMeridiem
+    {
+        get => correctionMeridiem;
+        set
+        {
+            string normalized = value == "p. m." ? "p. m." : "a. m.";
+            if (!SetProperty(ref correctionMeridiem, normalized)) return;
+            UpdateCorrectionTimeFromSelectors();
+        }
+    }
+
+    public IReadOnlyList<AttendanceCorrectionDayOption> CorrectionDayOptions
+    {
+        get
+        {
+            DateTime today = TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), CostaRicaTimeZone).Date;
+            return [new("Hoy", today), new("Ayer", today.AddDays(-1))];
+        }
+    }
+
+    public string CorrectionActionLabel => SelectedWorker?.IsPresent == true
+        ? "⚙  CORREGIR SALIDA"
+        : "⚙  CORREGIR ENTRADA";
+    public string CorrectionTitle => SelectedWorker?.IsPresent == true
+        ? "Corregir salida olvidada"
+        : "Corregir entrada olvidada";
+    public string CorrectionDateLabel => SelectedWorker?.IsPresent == true
+        ? "DÍA REAL DE SALIDA"
+        : "DÍA REAL DE ENTRADA";
+    public string CorrectionSubmitLabel => SelectedWorker?.IsPresent == true
+        ? "CERRAR JORNADA CON CORRECCIÓN"
+        : "ABRIR JORNADA CON CORRECCIÓN";
 
     public string CorrectionValidationMessage => CorrectionMessage();
 
@@ -163,6 +253,23 @@ public sealed class AttendancePreviewViewModel : ObservableObject
             ApplyWorkerFilter();
         }
     }
+
+    public AttendancePresenceFilter PresenceFilter
+    {
+        get => presenceFilter;
+        set
+        {
+            if (!SetProperty(ref presenceFilter, value)) return;
+            currentWorkerPage = 0;
+            OnPropertyChanged(nameof(IsShowingAllWorkers));
+            OnPropertyChanged(nameof(IsShowingWorkersInPlant));
+            OnPropertyChanged(nameof(IsShowingWorkersOutOfPlant));
+            ApplyWorkerFilter();
+        }
+    }
+    public bool IsShowingAllWorkers => PresenceFilter == AttendancePresenceFilter.All;
+    public bool IsShowingWorkersInPlant => PresenceFilter == AttendancePresenceFilter.InPlant;
+    public bool IsShowingWorkersOutOfPlant => PresenceFilter == AttendancePresenceFilter.OutOfPlant;
 
     public bool IsCorrectionPanelOpen
     {
@@ -225,10 +332,14 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     public IAsyncRelayCommand CheckInCommand { get; }
     public IAsyncRelayCommand CheckOutCommand { get; }
     public IAsyncRelayCommand CorrectOpenShiftCommand { get; }
+    public IRelayCommand ToggleCorrectionMeridiemCommand { get; }
     public IRelayCommand ToggleCorrectionPanelCommand { get; }
     public IRelayCommand CloseCorrectionPanelCommand { get; }
     public IRelayCommand PreviousWorkerPageCommand { get; }
     public IRelayCommand NextWorkerPageCommand { get; }
+    public IRelayCommand ShowAllWorkersCommand { get; }
+    public IRelayCommand ShowWorkersInPlantCommand { get; }
+    public IRelayCommand ShowWorkersOutOfPlantCommand { get; }
     public IAsyncRelayCommand RefreshCommand { get; }
 
     public Task InitializeAsync() => RefreshAsync();
@@ -294,7 +405,10 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                         : $"Última marca {Describe(latest.Type)} · {latest.OccurredAt.ToLocalTime():dd/MM HH:mm}",
                     projection.Incidents.Count,
                     open?.CheckIn.ClientEventId,
-                    open?.CheckIn.OccurredAt));
+                    open?.CheckIn.OccurredAt,
+                    latest?.ClientEventId,
+                    latest?.Type,
+                    latest?.OccurredAt));
             }
 
             Workers.Clear();
@@ -333,7 +447,8 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 workerId,
                 type,
                 now,
-                now)).ConfigureAwait(true);
+                now,
+                Authorization: AuthorizationFrom(station, now))).ConfigureAwait(true);
             string message = $"{success} para {workerName}. Guardada en este equipo.";
             await RefreshCoreAsync(workerId).ConfigureAwait(true);
             Status = message;
@@ -342,10 +457,15 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
     private async Task CorrectOpenShiftAsync()
     {
-        if (attendance is null || station is null || SelectedWorker?.OpenCheckInId is not Guid relatedId)
+        if (attendance is null || station is null || SelectedWorker is null)
             return;
         Guid workerId = SelectedWorker.Id;
         string workerName = SelectedWorker.Name;
+        bool isCorrectingExit = SelectedWorker.IsPresent;
+        Guid? relatedId = isCorrectingExit
+            ? SelectedWorker.OpenCheckInId
+            : SelectedWorker.LatestEventId;
+        if (relatedId is null) return;
         string reason = CorrectionReason.Trim();
         if (!TryGetCorrectionMoment(out DateTimeOffset occurredAt, out string validationMessage))
         {
@@ -362,18 +482,22 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 station.Authorization.PlantId,
                 station.Authorization.StationId,
                 workerId,
-                AttendanceEventType.AdjustedCheckOut,
+                isCorrectingExit
+                    ? AttendanceEventType.AdjustedCheckOut
+                    : AttendanceEventType.AdjustedCheckIn,
                 occurredAt,
                 now,
                 station.Session.ProfileId,
                 reason,
-                relatedId,
-                AuthorizationFrom(station))).ConfigureAwait(true);
+                relatedId.Value,
+                AuthorizationFrom(station, now))).ConfigureAwait(true);
             CorrectionReason = string.Empty;
             await RefreshCoreAsync(workerId).ConfigureAwait(true);
             IsCorrectionPanelOpen = false;
-            DateTimeOffset localExit = TimeZoneInfo.ConvertTime(occurredAt, CostaRicaTimeZone);
-            Status = $"Jornada de {workerName} cerrada a las {localExit:dd/MM/yyyy HH:mm} mediante corrección auditada.";
+            DateTimeOffset localMoment = TimeZoneInfo.ConvertTime(occurredAt, CostaRicaTimeZone);
+            Status = isCorrectingExit
+                ? $"Jornada de {workerName} cerrada a las {localMoment:dd/MM/yyyy HH:mm} mediante corrección auditada."
+                : $"Jornada de {workerName} abierta a las {localMoment:dd/MM/yyyy HH:mm} mediante corrección auditada.";
         }).ConfigureAwait(true);
     }
 
@@ -409,7 +533,10 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                     : $"Última marca {Describe(latest.Type)} · {latest.OccurredAt.ToLocalTime():dd/MM HH:mm}",
                 projection.Incidents.Count,
                 open?.CheckIn.ClientEventId,
-                open?.CheckIn.OccurredAt));
+                    open?.CheckIn.OccurredAt,
+                    latest?.ClientEventId,
+                    latest?.Type,
+                    latest?.OccurredAt));
         }
 
         Workers.Clear();
@@ -536,6 +663,12 @@ public sealed class AttendancePreviewViewModel : ObservableObject
     {
         string search = WorkerSearchText.Trim();
         AttendanceWorkerStatus[] filtered = Workers
+            .Where(worker => PresenceFilter switch
+            {
+                AttendancePresenceFilter.InPlant => worker.IsPresent,
+                AttendancePresenceFilter.OutOfPlant => !worker.IsPresent,
+                _ => true,
+            })
             .Where(worker => string.IsNullOrEmpty(search) ||
                 worker.DisplayName.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
                 worker.CategoryLabel.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
@@ -562,17 +695,36 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
     private void PrepareCorrectionMoment(AttendanceWorkerStatus? worker)
     {
-        if (worker?.OpenCheckInId is null)
+        if (worker is null)
         {
             CorrectionDate = null;
-            CorrectionTime = string.Empty;
+            CorrectionHour = null;
+            CorrectionMinute = null;
             return;
         }
 
         DateTimeOffset localNow = TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), CostaRicaTimeZone);
         CorrectionDate = localNow.Date;
-        CorrectionTime = localNow.ToString("HH:mm", CultureInfo.InvariantCulture);
+        CorrectionHour = localNow.Hour % 12 == 0 ? 12 : localNow.Hour % 12;
+        CorrectionMinute = localNow.Minute;
+        CorrectionMeridiem = localNow.Hour >= 12 ? "p. m." : "a. m.";
     }
+
+    private void UpdateCorrectionTimeFromSelectors()
+    {
+        if (CorrectionHour is not int hour || CorrectionMinute is not int minute)
+        {
+            CorrectionTime = string.Empty;
+            return;
+        }
+
+        int hour24 = hour % 12;
+        if (CorrectionMeridiem == "p. m.") hour24 += 12;
+        CorrectionTime = $"{hour24:00}:{minute:00}";
+    }
+
+    private void ToggleCorrectionMeridiem() =>
+        CorrectionMeridiem = CorrectionMeridiem == "p. m." ? "a. m." : "p. m.";
 
     private bool TryGetCorrectionMoment(
         out DateTimeOffset occurredAt,
@@ -581,31 +733,56 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         occurredAt = default;
         if (!IsManagerMode)
         {
-            validationMessage = "Eleve temporalmente el Modo Jefe de Planta para completar una salida olvidada.";
+            validationMessage = "Eleve temporalmente el Modo Jefe de Planta para registrar esta corrección.";
             return false;
         }
 
-        if (SelectedWorker?.OpenCheckInId is null || SelectedWorker.OpenCheckInAt is null)
+        if (SelectedWorker is null)
         {
-            validationMessage = "Seleccione una persona con una jornada abierta.";
+            validationMessage = "Seleccione una persona para corregir su asistencia.";
+            return false;
+        }
+
+        bool isCorrectingExit = SelectedWorker.IsPresent;
+        if (isCorrectingExit &&
+            (SelectedWorker.OpenCheckInId is null || SelectedWorker.OpenCheckInAt is null))
+        {
+            validationMessage = "No se encontró la entrada que debe cerrar esta salida.";
+            return false;
+        }
+        if (!isCorrectingExit &&
+            (SelectedWorker.LatestEventId is null ||
+             SelectedWorker.LatestEventAt is null ||
+             SelectedWorker.LatestEventType is not (AttendanceEventType.CheckOut or AttendanceEventType.AdjustedCheckOut)))
+        {
+            validationMessage = "No existe una salida anterior que permita relacionar la entrada olvidada. Registre una entrada normal.";
             return false;
         }
 
         if (CorrectionDate is null)
         {
-            validationMessage = "Indique la fecha real de salida.";
+            validationMessage = isCorrectingExit
+                ? "Seleccione si la salida real fue hoy o ayer."
+                : "Seleccione si la entrada real fue hoy o ayer.";
+            return false;
+        }
+
+        DateTime today = TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), CostaRicaTimeZone).Date;
+        if (CorrectionDate.Value.Date != today && CorrectionDate.Value.Date != today.AddDays(-1))
+        {
+            validationMessage = "La corrección solo puede registrarse para hoy o ayer.";
             return false;
         }
 
         if (!TimeSpan.TryParseExact(
                 CorrectionTime?.Trim(),
-                ["h\\:mm", "hh\\:mm"],
+                "hh\\:mm",
                 CultureInfo.InvariantCulture,
                 out TimeSpan timeOfDay) ||
             timeOfDay < TimeSpan.Zero ||
             timeOfDay >= TimeSpan.FromDays(1))
         {
-            validationMessage = "Indique la hora real de salida en formato de 24 horas, por ejemplo 17:00.";
+            validationMessage = "Indique una hora válida en formato HH:mm, por ejemplo 07:05 o 17:00.";
             return false;
         }
 
@@ -615,9 +792,14 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         occurredAt = new DateTimeOffset(
             localDateTime,
             CostaRicaTimeZone.GetUtcOffset(localDateTime)).ToUniversalTime();
-        if (occurredAt <= SelectedWorker.OpenCheckInAt.Value)
+        DateTimeOffset relatedMoment = isCorrectingExit
+            ? SelectedWorker.OpenCheckInAt!.Value
+            : SelectedWorker.LatestEventAt!.Value;
+        if (occurredAt <= relatedMoment)
         {
-            validationMessage = "La salida real debe ser posterior a la entrada de la jornada.";
+            validationMessage = isCorrectingExit
+                ? "La salida real debe ser posterior a la entrada de la jornada."
+                : "La entrada real debe ser posterior a la última salida registrada.";
             return false;
         }
 
@@ -629,11 +811,15 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
         if (string.IsNullOrWhiteSpace(CorrectionReason))
         {
-            validationMessage = "Explique por qué se registra manualmente esta salida.";
+            validationMessage = isCorrectingExit
+                ? "Explique por qué se registra manualmente esta salida."
+                : "Explique por qué se registra manualmente esta entrada.";
             return false;
         }
 
-        validationMessage = "La salida se agregará una sola vez y quedará disponible en la auditoría de gerencia.";
+        validationMessage = isCorrectingExit
+            ? "La salida se agregará una sola vez y quedará disponible en la auditoría de gerencia."
+            : "La entrada se agregará una sola vez y quedará disponible en la auditoría de gerencia.";
         return true;
     }
 
@@ -652,11 +838,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         _ => "registrada",
     };
 
-    private static OutboxAuthorizationEvidence AuthorizationFrom(ProtectedStationState state) =>
-        new(
-            state.Session.ProfileId,
-            state.Authorization.PermissionVersion,
-            state.Authorization.ValidatedAt,
-            state.Authorization.OfflineValidUntil,
-            "VALID");
+    private static OutboxAuthorizationEvidence AuthorizationFrom(
+        ProtectedStationState state,
+        DateTimeOffset recordedAt) => OutboxAuthorizationCapture.From(state, recordedAt);
 }

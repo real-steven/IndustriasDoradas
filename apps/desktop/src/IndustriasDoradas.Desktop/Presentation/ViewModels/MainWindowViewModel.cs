@@ -276,17 +276,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private async Task ShowAuditAsync()
     {
         if (Audit is null) return;
-        await Audit.RefreshAsync();
         CurrentPage = Audit;
+        await Audit.RefreshAsync();
     }
 
     private async Task ShowAuditCorrectionsAsync()
     {
         if (Audit is null) return;
-        await Audit.RefreshAsync();
-        Audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
-        DismissCorrectionNotification();
         CurrentPage = Audit;
+        await Audit.SelectCategoryCommand.ExecuteAsync(AuditCategory.Corrections);
+        DismissCorrectionNotification();
     }
 
     private async Task ShowAttendanceIncidentsAsync()
@@ -298,9 +297,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private async Task ShowAttendanceAuditAsync()
     {
         if (Audit is null) return;
-        await Audit.RefreshAsync();
-        Audit.SelectCategoryCommand.Execute(AuditCategory.Attendance);
         CurrentPage = Audit;
+        await Audit.SelectCategoryCommand.ExecuteAsync(AuditCategory.Attendance);
     }
 
     private void DismissCorrectionNotification()

@@ -9,15 +9,31 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using System.Collections.ObjectModel;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
+
+public sealed class SyncFailureReviewItemViewModel(SyncFailureDiagnostic source) : ObservableObject
+{
+    private bool isSelected;
+
+    public SyncFailureDiagnostic Source { get; } = source;
+    public bool IsSelected
+    {
+        get => isSelected;
+        set => SetProperty(ref isSelected, value);
+    }
+}
 
 public sealed class DiagnosticsViewModel : ObservableObject
 {
     private static readonly JsonSerializerOptions DiagnosticJsonOptions = new() { WriteIndented = true };
     private readonly IHealthService healthService;
     private readonly ILocalDatabaseDiagnostics localDiagnostics;
+    private readonly ILocalOutboxReviewService? outboxReview;
+    private readonly OutboxSyncProcessor? outboxProcessor;
     private readonly string supportFolderPath;
     private readonly SynchronizationContext? uiContext;
     private HealthState state = HealthState.NotChecked;
@@ -42,6 +58,8 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private IReadOnlyList<AdministrativeCorrectionDiagnostic> corrections = [];
     private int failedReviewCount;
     private int pullReviewCount;
+    private bool isResolvingFailure;
+    private string reviewActionStatus = "Seleccione Validar y reintentar o Descartar para cada dato pendiente.";
     private bool isCreatingCopy;
     private bool isExportingReport;
     private readonly string stationCode;
@@ -54,7 +72,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
         ILocalDatabaseDiagnostics localDiagnostics,
         IOptions<StationOptions> stationOptions,
         ISyncStatusNotifier statusNotifier)
-        : this(healthService, localDiagnostics, stationOptions, statusNotifier, null)
+        : this(healthService, localDiagnostics, stationOptions, statusNotifier, null, null, null)
     {
     }
 
@@ -63,10 +81,14 @@ public sealed class DiagnosticsViewModel : ObservableObject
         ILocalDatabaseDiagnostics localDiagnostics,
         IOptions<StationOptions> stationOptions,
         ISyncStatusNotifier statusNotifier,
-        StationViewModel? stationViewModel)
+        StationViewModel? stationViewModel,
+        ILocalOutboxReviewService? outboxReview = null,
+        OutboxSyncProcessor? outboxProcessor = null)
     {
         this.healthService = healthService;
         this.localDiagnostics = localDiagnostics;
+        this.outboxReview = outboxReview;
+        this.outboxProcessor = outboxProcessor;
         supportFolderPath = GetSupportFolderPath();
         uiContext = SynchronizationContext.Current;
         this.stationViewModel = stationViewModel;
@@ -88,6 +110,19 @@ public sealed class DiagnosticsViewModel : ObservableObject
         OpenSupportFolderCommand = new RelayCommand(
             OpenSupportFolder,
             () => CanUseProtectedActions);
+        RetryFailureCommand = new AsyncRelayCommand<SyncFailureDiagnostic>(
+            RetryFailureAsync,
+            CanResolveFailure);
+        DiscardFailureCommand = new AsyncRelayCommand<SyncFailureDiagnostic>(
+            DiscardFailureAsync,
+            CanResolveFailure);
+        ToggleAllFailuresCommand = new RelayCommand(ToggleAllFailures, () => FailureSelections.Count > 0);
+        RetrySelectedFailuresCommand = new AsyncRelayCommand(
+            RetrySelectedFailuresAsync,
+            CanResolveSelectedFailures);
+        DiscardSelectedFailuresCommand = new AsyncRelayCommand(
+            DiscardSelectedFailuresAsync,
+            CanResolveSelectedFailures);
         statusNotifier.Changed += OnSyncStatusChanged;
         if (stationViewModel is not null)
         {
@@ -142,6 +177,11 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public IAsyncRelayCommand CreateRecoveryCopyCommand { get; }
     public IAsyncRelayCommand ExportDiagnosticReportCommand { get; }
     public IRelayCommand OpenSupportFolderCommand { get; }
+    public IAsyncRelayCommand<SyncFailureDiagnostic> RetryFailureCommand { get; }
+    public IAsyncRelayCommand<SyncFailureDiagnostic> DiscardFailureCommand { get; }
+    public IRelayCommand ToggleAllFailuresCommand { get; }
+    public IAsyncRelayCommand RetrySelectedFailuresCommand { get; }
+    public IAsyncRelayCommand DiscardSelectedFailuresCommand { get; }
     public string Station => stationCode;
     public string StationCode => stationCode;
     public string StationName => stationName;
@@ -152,7 +192,21 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public string DiagnosticReportStatus { get => diagnosticReportStatus; private set => SetProperty(ref diagnosticReportStatus, value); }
     public string SupportFolderPath => supportFolderPath;
     public string SupportFolderStatus { get => supportFolderStatus; private set => SetProperty(ref supportFolderStatus, value); }
-    public IReadOnlyList<SyncFailureDiagnostic> Failures { get => failures; private set => SetProperty(ref failures, value); }
+    public IReadOnlyList<SyncFailureDiagnostic> Failures
+    {
+        get => failures;
+        private set
+        {
+            if (!SetProperty(ref failures, value)) return;
+            RefreshFailureSelections(value);
+        }
+    }
+    public ObservableCollection<SyncFailureReviewItemViewModel> FailureSelections { get; } = [];
+    public bool HasSelectedFailures => FailureSelections.Any(item => item.IsSelected);
+    public string ToggleAllFailuresLabel => FailureSelections.Count > 0 &&
+        FailureSelections.All(item => item.IsSelected)
+            ? "DESMARCAR TODOS"
+            : "MARCAR TODOS";
     public int FailedReviewCount
     {
         get => failedReviewCount;
@@ -171,6 +225,23 @@ public sealed class DiagnosticsViewModel : ObservableObject
         }
     }
     public int PullReviewCount { get => pullReviewCount; private set => SetProperty(ref pullReviewCount, value); }
+    public bool IsResolvingFailure
+    {
+        get => isResolvingFailure;
+        private set
+        {
+            if (!SetProperty(ref isResolvingFailure, value)) return;
+            RetryFailureCommand.NotifyCanExecuteChanged();
+            DiscardFailureCommand.NotifyCanExecuteChanged();
+            RetrySelectedFailuresCommand.NotifyCanExecuteChanged();
+            DiscardSelectedFailuresCommand.NotifyCanExecuteChanged();
+        }
+    }
+    public string ReviewActionStatus
+    {
+        get => reviewActionStatus;
+        private set => SetProperty(ref reviewActionStatus, value);
+    }
     public bool HasCorrections => Corrections.Count > 0;
     public bool CanUseProtectedActions => stationViewModel?.IsPlantManager ?? true;
     public string CorrectionNotification => HasCorrections
@@ -364,7 +435,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
         {
             await RefreshAsync().ConfigureAwait(true);
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or SqliteException)
         {
             // El siguiente refresco manual vuelve a consultar el estado sin interrumpir la operación.
         }
@@ -379,13 +450,182 @@ public sealed class DiagnosticsViewModel : ObservableObject
             string path = await localDiagnostics.CreateConsistentCopyAsync(directory).ConfigureAwait(true);
             RecoveryCopyStatus = $"Respaldo de la estación creado: {path}";
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or SqliteException)
         {
             RecoveryCopyStatus = "No se pudo crear el respaldo. Conserve los datos actuales y solicite soporte.";
         }
         finally
         {
             IsCreatingCopy = false;
+        }
+    }
+
+    private bool CanResolveFailure(SyncFailureDiagnostic? failure) =>
+        outboxReview is not null && CanUseProtectedActions && !IsResolvingFailure &&
+        failure is not null && failure.OutboxMessageId != Guid.Empty;
+
+    private bool CanResolveSelectedFailures() =>
+        outboxReview is not null && CanUseProtectedActions && !IsResolvingFailure && HasSelectedFailures;
+
+    private void RefreshFailureSelections(IReadOnlyList<SyncFailureDiagnostic> source)
+    {
+        HashSet<Guid> selectedIds = FailureSelections
+            .Where(item => item.IsSelected)
+            .Select(item => item.Source.OutboxMessageId)
+            .ToHashSet();
+        foreach (SyncFailureReviewItemViewModel item in FailureSelections)
+        {
+            item.PropertyChanged -= OnFailureSelectionChanged;
+        }
+        FailureSelections.Clear();
+        foreach (SyncFailureDiagnostic failure in source)
+        {
+            var item = new SyncFailureReviewItemViewModel(failure)
+            {
+                IsSelected = selectedIds.Contains(failure.OutboxMessageId),
+            };
+            item.PropertyChanged += OnFailureSelectionChanged;
+            FailureSelections.Add(item);
+        }
+        NotifyFailureSelectionState();
+    }
+
+    private void OnFailureSelectionChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SyncFailureReviewItemViewModel.IsSelected))
+        {
+            NotifyFailureSelectionState();
+        }
+    }
+
+    private void ToggleAllFailures()
+    {
+        bool select = FailureSelections.Any(item => !item.IsSelected);
+        foreach (SyncFailureReviewItemViewModel item in FailureSelections)
+        {
+            item.IsSelected = select;
+        }
+        NotifyFailureSelectionState();
+    }
+
+    private void NotifyFailureSelectionState()
+    {
+        OnPropertyChanged(nameof(HasSelectedFailures));
+        OnPropertyChanged(nameof(ToggleAllFailuresLabel));
+        ToggleAllFailuresCommand.NotifyCanExecuteChanged();
+        RetrySelectedFailuresCommand.NotifyCanExecuteChanged();
+        DiscardSelectedFailuresCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task RetrySelectedFailuresAsync()
+    {
+        if (outboxReview is null) return;
+        SyncFailureDiagnostic[] selected = FailureSelections
+            .Where(item => item.IsSelected)
+            .Select(item => item.Source)
+            .ToArray();
+        if (selected.Length == 0) return;
+        IsResolvingFailure = true;
+        try
+        {
+            int applied = 0;
+            foreach (SyncFailureDiagnostic failure in selected)
+            {
+                OutboxReviewDecisionResult result = await outboxReview
+                    .RetryAsync(failure.OutboxMessageId).ConfigureAwait(true);
+                if (result.Applied) applied++;
+            }
+            if (applied > 0 && outboxProcessor is not null)
+            {
+                await outboxProcessor.ProcessOnceAsync().ConfigureAwait(true);
+            }
+            ReviewActionStatus = $"{applied} de {selected.Length} dato(s) fueron enviados nuevamente a validación.";
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            ReviewActionStatus = "No se pudieron volver a validar todos los datos seleccionados.";
+        }
+        finally
+        {
+            IsResolvingFailure = false;
+        }
+    }
+
+    private async Task DiscardSelectedFailuresAsync()
+    {
+        if (outboxReview is null) return;
+        SyncFailureDiagnostic[] selected = FailureSelections
+            .Where(item => item.IsSelected)
+            .Select(item => item.Source)
+            .ToArray();
+        if (selected.Length == 0) return;
+        IsResolvingFailure = true;
+        try
+        {
+            int applied = 0;
+            foreach (SyncFailureDiagnostic failure in selected)
+            {
+                OutboxReviewDecisionResult result = await outboxReview
+                    .DiscardAsync(failure.OutboxMessageId).ConfigureAwait(true);
+                if (result.Applied) applied++;
+            }
+            ReviewActionStatus = $"{applied} de {selected.Length} dato(s) fueron descartados de la cola.";
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            ReviewActionStatus = "No se pudieron descartar todos los datos seleccionados.";
+        }
+        finally
+        {
+            IsResolvingFailure = false;
+        }
+    }
+
+    private async Task RetryFailureAsync(SyncFailureDiagnostic? failure)
+    {
+        if (failure is null || outboxReview is null) return;
+        IsResolvingFailure = true;
+        try
+        {
+            OutboxReviewDecisionResult decision = await outboxReview
+                .RetryAsync(failure.OutboxMessageId).ConfigureAwait(true);
+            ReviewActionStatus = decision.Message;
+            if (decision.Applied && outboxProcessor is not null)
+            {
+                await outboxProcessor.ProcessOnceAsync().ConfigureAwait(true);
+            }
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            ReviewActionStatus = "No se pudo volver a validar el evento. Inténtelo nuevamente.";
+        }
+        finally
+        {
+            IsResolvingFailure = false;
+        }
+    }
+
+    private async Task DiscardFailureAsync(SyncFailureDiagnostic? failure)
+    {
+        if (failure is null || outboxReview is null) return;
+        IsResolvingFailure = true;
+        try
+        {
+            OutboxReviewDecisionResult decision = await outboxReview
+                .DiscardAsync(failure.OutboxMessageId).ConfigureAwait(true);
+            ReviewActionStatus = decision.Message;
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            ReviewActionStatus = "No se pudo descartar el evento. Inténtelo nuevamente.";
+        }
+        finally
+        {
+            IsResolvingFailure = false;
         }
     }
 
@@ -429,5 +669,8 @@ public sealed class DiagnosticsViewModel : ObservableObject
         CreateRecoveryCopyCommand.NotifyCanExecuteChanged();
         ExportDiagnosticReportCommand.NotifyCanExecuteChanged();
         OpenSupportFolderCommand.NotifyCanExecuteChanged();
+        RetryFailureCommand.NotifyCanExecuteChanged();
+        DiscardFailureCommand.NotifyCanExecuteChanged();
+        NotifyFailureSelectionState();
     }
 }

@@ -38,6 +38,7 @@ public static class SqliteMigrationCatalog
         Read(23, "production_line_display_order", "023_production_line_display_order.sql"),
         Read(24, "production_line_color_order_backfill", "024_production_line_color_order_backfill.sql"),
         Read(25, "central_operation_reconciliation", "025_central_operation_reconciliation.sql"),
+        Read(26, "outbox_dependency_review", "026_outbox_dependency_review.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

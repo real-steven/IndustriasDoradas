@@ -377,7 +377,7 @@
                             <Border Margin="0,16,0,0" Padding="16" Background="#F7F9FA"
                                     BorderBrush="{StaticResource SoftBorderBrush}" BorderThickness="1"
                                     CornerRadius="13"
-                                    Visibility="{Binding IsSelectedLineActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    Visibility="{Binding CanShowMercuryPanel, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>

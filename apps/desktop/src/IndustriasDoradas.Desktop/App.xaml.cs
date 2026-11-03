@@ -228,6 +228,7 @@ public partial class App : System.Windows.Application
             services.GetRequiredService<SqliteOutboxRepository>());
         builder.Services.AddSingleton<ILocalStationSequenceStore>(services =>
             services.GetRequiredService<SqliteOutboxRepository>());
+        builder.Services.AddSingleton<ILocalOutboxReviewService, SqliteOutboxReviewService>();
         builder.Services.AddSingleton<ILocalSyncChangeRepository, SqliteSyncChangeRepository>();
         builder.Services.AddSingleton<ILocalOperationRepository, SqliteLocalOperationRepository>();
         builder.Services.AddSingleton<ILocalCajuelaRepository, SqliteCajuelaRepository>();

@@ -105,6 +105,88 @@
                 </StackPanel>
             </Border>
 
+            <Border Margin="0,18,0,0" Padding="23" Style="{StaticResource SurfaceCardStyle}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock FontSize="19" FontWeight="Bold"
+                                       Text="Datos pendientes de validación" />
+                            <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
+                                       Text="Eventos que no pudieron confirmar una dependencia. No bloquean la apertura de la estación."
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Padding="12,7" Background="#FFF4D9" CornerRadius="14"
+                                VerticalAlignment="Top">
+                            <TextBlock Foreground="#8A5A00" FontWeight="Bold"
+                                       Text="{Binding FailedReviewCount, StringFormat={}{0} por revisar}" />
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Margin="0,12,0,0" Foreground="#8A5A00" TextWrapping="Wrap"
+                               Text="Validar y reintentar consulta nuevamente el sistema central. Descartar retira el evento de la cola y conserva localmente la decisión técnica." />
+
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button Command="{Binding ToggleAllFailuresCommand}"
+                                Content="{Binding ToggleAllFailuresLabel}" />
+                        <Button Margin="8,0,0,0" Command="{Binding RetrySelectedFailuresCommand}"
+                                Content="↻  VALIDAR SELECCIONADOS" />
+                        <Button Margin="8,0,0,0" Click="OnRequestDiscardSelectedFailures"
+                                IsEnabled="{Binding HasSelectedFailures}"
+                                Content="DESCARTAR SELECCIONADOS" />
+                    </WrapPanel>
+
+                    <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding FailureSelections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,9" Padding="15" Background="#FFFBF2"
+                                        BorderBrush="#EDC36D" BorderThickness="1" CornerRadius="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Margin="0,2,12,0" VerticalAlignment="Top"
+                                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  AutomationProperties.Name="Seleccionar dato pendiente" />
+                                        <StackPanel Grid.Column="1" Margin="0,0,18,0">
+                                            <TextBlock FontWeight="Bold" Text="{Binding Source.OperationDescription}" />
+                                            <TextBlock Margin="0,3,0,0" Foreground="#8A5A00" FontSize="11"
+                                                       Text="{Binding Source.ErrorCode}" />
+                                            <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
+                                                       Text="{Binding Source.Cause}" TextWrapping="Wrap" />
+                                            <WrapPanel Margin="0,7,0,0">
+                                                <TextBlock Foreground="{StaticResource MutedBrush}"
+                                                           Text="{Binding Source.LocalOccurredAt, StringFormat=Registrado: {0:g}}" />
+                                                <TextBlock Margin="15,0,0,0" Foreground="{StaticResource MutedBrush}"
+                                                           Text="{Binding Source.AttemptCount, StringFormat=Intentos: {0}}" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                        <WrapPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <Button Command="{Binding DataContext.RetryFailureCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding Source}"
+                                                    Content="↻  VALIDAR Y REINTENTAR" />
+                                            <Button Margin="8,0,0,0" Click="OnRequestDiscardFailure"
+                                                    IsEnabled="{Binding DataContext.CanUseProtectedActions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Content="DESCARTAR" />
+                                        </WrapPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
+                               Text="{Binding ReviewActionStatus}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                               Text="Estas acciones requieren Modo Jefe de Planta." />
+                </StackPanel>
+            </Border>
+
         </StackPanel>
     </ScrollViewer>
 </UserControl>

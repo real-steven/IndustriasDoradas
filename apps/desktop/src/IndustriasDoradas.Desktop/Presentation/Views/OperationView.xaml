@@ -19,7 +19,7 @@
 
     <Grid Background="{StaticResource SoftCanvasBrush}">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="34,26,34,38" MaxWidth="1380" HorizontalAlignment="Center">
+            <StackPanel Margin="34,30,34,26" MaxWidth="1380" HorizontalAlignment="Center">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -63,7 +63,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="8" Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
+                            <Border Margin="8" MinHeight="400" Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
                                     BorderThickness="1" CornerRadius="19" SnapsToDevicePixels="True">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -71,7 +71,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <Border Background="{Binding AccentColor}" CornerRadius="19,19,0,0" />
-                                    <StackPanel Grid.Row="1" Margin="22,18,22,22">
+                                    <StackPanel Grid.Row="1" Margin="22,20,22,25">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
@@ -85,7 +85,7 @@
                                             </Border>
                                         </Grid>
 
-                                        <Grid Margin="0,15,0,0">
+                                        <Grid Margin="0,17,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
@@ -108,7 +108,7 @@
                                             </Border>
                                         </Grid>
 
-                                        <Grid Margin="0,20,0,10">
+                                        <Grid Margin="0,21,0,11">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                  <ColumnDefinition Width="Auto" />
@@ -154,7 +154,7 @@
                                                        Text="{Binding ProgressEndDescription}" />
                                         </Grid>
 
-                                        <StackPanel Margin="0,19,0,0" Orientation="Horizontal" HorizontalAlignment="Left">
+                                        <StackPanel Margin="0,21,0,0" Orientation="Horizontal" HorizontalAlignment="Left">
                                             <Button Style="{StaticResource OperationActionButton}"
                                                     Background="{StaticResource SuccessSoftBrush}" BorderBrush="#BCDCC9"
                                                     Foreground="#187C43"

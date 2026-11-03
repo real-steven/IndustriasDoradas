@@ -407,8 +407,18 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MercurySweepOption> MercurySweeps
     {
         get => mercurySweeps;
-        private set => SetProperty(ref mercurySweeps, value);
+        private set
+        {
+            if (!SetProperty(ref mercurySweeps, value)) return;
+            OnPropertyChanged(nameof(HasAvailableMercurySweep));
+            OnPropertyChanged(nameof(CanShowMercuryPanel));
+            OnPropertyChanged(nameof(CanRecordMercury));
+            RecordMercuryCommand.NotifyCanExecuteChanged();
+        }
     }
+    public bool HasAvailableMercurySweep => MercurySweeps.Count > 0;
+    public bool CanShowMercuryPanel => IsSelectedLineActive && activeSession is not null &&
+        MercurySweeps.Any(option => option.Source.ShipmentId == activeSession.ShipmentId);
     public MercurySweepOption? SelectedMercurySweep
     {
         get => selectedMercurySweep;
@@ -457,6 +467,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(PilotLineName));
             OnPropertyChanged(nameof(PrepareLineHeader));
             OnPropertyChanged(nameof(IsSelectedLineActive));
+            OnPropertyChanged(nameof(CanShowMercuryPanel));
             OnPropertyChanged(nameof(ContextPanelTitle));
             OnPropertyChanged(nameof(ContextPanelDescription));
             RefreshSelectedActiveSession();
@@ -530,7 +541,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         try
         {
             StationResumeResult resume = await coordinator
-                .InspectResumeAsync(networkAvailable: true)
+                .InspectResumeAsync(networkAvailable: false)
                 .ConfigureAwait(true);
             state = resume.State;
             WasSessionRestored = state is not null;
@@ -541,6 +552,31 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 LoginSessionState = LoginSessionState.Available;
                 StationSessionStatus =
                     "Estación con sesión protegida restaurada, encontrada y lista para continuar.";
+                bool hasLocalCopy = initialSynchronization is not null &&
+                    await initialSynchronization.HasUsableLocalCopyAsync().ConfigureAwait(true);
+                if (hasLocalCopy)
+                {
+                    isSessionSynchronized = true;
+                    initialSyncCompletionMessage =
+                        "Copia local disponible; los datos se actualizarán automáticamente en segundo plano.";
+                    InitialSyncStatus = initialSyncCompletionMessage;
+                    await LoadPreparationCatalogsAsync().ConfigureAwait(true);
+                    Status = initialSyncCompletionMessage;
+                    _ = ValidateRestoredSessionInBackgroundAsync(state);
+                    return;
+                }
+
+                resume = await coordinator
+                    .InspectResumeAsync(networkAvailable: true)
+                    .ConfigureAwait(true);
+                state = resume.State;
+                if (state is null)
+                {
+                    LoginSessionState = LoginSessionState.Expired;
+                    StationSessionStatus = "La sesión guardada ya no es válida.";
+                    Status = "Inicie sesión nuevamente para descargar una copia local completa.";
+                    return;
+                }
                 bool ready = await SynchronizeSessionAsync().ConfigureAwait(true);
                 if (ready)
                 {
@@ -566,6 +602,39 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         finally
         {
             EndInitialSynchronization();
+        }
+    }
+
+    private async Task ValidateRestoredSessionInBackgroundAsync(ProtectedStationState expectedState)
+    {
+        try
+        {
+            ProtectedStationState? refreshed = await coordinator
+                .RefreshAuthorizationAsync(expectedState, refreshCatalogs: false)
+                .ConfigureAwait(true);
+            if (state?.Session.ProfileId != expectedState.Session.ProfileId) return;
+            if (refreshed is not null)
+            {
+                state = refreshed;
+                return;
+            }
+
+            state = null;
+            WasSessionRestored = false;
+            IsApplicationUnlocked = false;
+            LoginSessionState = LoginSessionState.Expired;
+            modeController.CloseStation();
+            Mode = modeController.Mode;
+            StationSessionStatus = "La sesión restaurada fue revocada o venció.";
+            Status = "La sesión ya no es válida. Inicie sesión nuevamente.";
+            OnPropertyChanged(nameof(IsStationOpen));
+            CloseStationCommand.NotifyCanExecuteChanged();
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or OperationCanceledException or
+            InvalidOperationException or UnauthorizedAccessException or IOException or SqliteException)
+        {
+            // La copia local válida continúa disponible. El mantenimiento periódico reintentará la validación.
         }
     }
 
@@ -1171,6 +1240,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanPrepareNewShipment));
         OnPropertyChanged(nameof(CanManageActiveOperation));
         OnPropertyChanged(nameof(IsSelectedLineActive));
+        OnPropertyChanged(nameof(CanShowMercuryPanel));
         OnPropertyChanged(nameof(ContextPanelTitle));
         OnPropertyChanged(nameof(ContextPanelDescription));
         OnPropertyChanged(nameof(CanUseContextActions));

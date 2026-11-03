@@ -6,9 +6,15 @@ namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 public sealed class SqliteAuditRepository(
     ILocalSqliteConnectionFactory connectionFactory) : ILocalAuditRepository
 {
+    public Task<IReadOnlyList<LocalCompletedShipmentAudit>> ListCompletedShipmentsAsync(
+        CancellationToken cancellationToken = default) =>
+        ListCompletedShipmentsAsync(new LocalAuditQuery(null, null), cancellationToken);
+
     public async Task<IReadOnlyList<LocalCompletedShipmentAudit>> ListCompletedShipmentsAsync(
+        LocalAuditQuery query,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(query);
         await using SqliteConnection connection = await connectionFactory
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -92,8 +98,12 @@ public sealed class SqliteAuditRepository(
              AND counter.shipment_id = shipment.id
             WHERE shipment.status = 'COMPLETED'
               AND shipment.completed_at_utc IS NOT NULL
-            ORDER BY shipment.completed_at_utc DESC, shipment.id;
+              AND ($startUtc IS NULL OR shipment.completed_at_utc >= $startUtc)
+              AND ($endUtc IS NULL OR shipment.completed_at_utc < $endUtc)
+            ORDER BY shipment.completed_at_utc DESC, shipment.id
+            LIMIT $limit;
             """;
+        AddQueryParameters(command, query);
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -114,12 +124,14 @@ public sealed class SqliteAuditRepository(
         }
 
         await reader.DisposeAsync().ConfigureAwait(false);
+        IReadOnlyDictionary<Guid, IReadOnlyList<LocalResponsibilityAudit>> responsibilitiesByShipment =
+            await ReadResponsibilitiesAsync(connection, rows.Select(row => row.ShipmentId), cancellationToken)
+                .ConfigureAwait(false);
         var results = new List<LocalCompletedShipmentAudit>(rows.Count);
         foreach (CompletedShipmentRow row in rows)
         {
             IReadOnlyList<LocalResponsibilityAudit> responsibilities =
-                await ReadResponsibilitiesAsync(connection, row.ShipmentId, cancellationToken)
-                    .ConfigureAwait(false);
+                responsibilitiesByShipment.GetValueOrDefault(row.ShipmentId) ?? [];
             results.Add(new LocalCompletedShipmentAudit(
                 row.ShipmentId,
                 row.LineId,
@@ -138,9 +150,15 @@ public sealed class SqliteAuditRepository(
         return results;
     }
 
+    public Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
+        CancellationToken cancellationToken = default) =>
+        ListCajuelaCorrectionsAsync(new LocalAuditQuery(null, null), cancellationToken);
+
     public async Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
+        LocalAuditQuery query,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(query);
         await using SqliteConnection connection = await connectionFactory
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -173,9 +191,13 @@ public sealed class SqliteAuditRepository(
               ON target.client_event_id = correction.target_client_event_id
             INNER JOIN cached_production_lines AS line ON line.id = target.line_id
             LEFT JOIN cached_workers AS actor_worker ON actor_worker.id = correction.actor_id
+            WHERE ($startUtc IS NULL OR correction.confirmed_at_utc >= $startUtc)
+              AND ($endUtc IS NULL OR correction.confirmed_at_utc < $endUtc)
             ORDER BY correction.confirmed_at_utc DESC,
-                     correction.reversal_client_event_id DESC;
+                     correction.reversal_client_event_id DESC
+            LIMIT $limit;
             """;
+        AddQueryParameters(command, query);
         var results = new List<LocalCajuelaCorrectionAudit>();
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -197,37 +219,72 @@ public sealed class SqliteAuditRepository(
         return results;
     }
 
-    private static async Task<IReadOnlyList<LocalResponsibilityAudit>> ReadResponsibilitiesAsync(
+    private static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<LocalResponsibilityAudit>>> ReadResponsibilitiesAsync(
         SqliteConnection connection,
-        Guid shipmentId,
+        IEnumerable<Guid> shipmentIds,
         CancellationToken cancellationToken)
     {
+        Guid[] ids = shipmentIds.Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<LocalResponsibilityAudit>>();
+        }
+
         await using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT assignment.worker_id,
+        string[] parameters = ids.Select((_, index) => $"$shipment{index}").ToArray();
+        command.CommandText = $"""
+            SELECT assignment.shipment_id,
+                   assignment.worker_id,
                    worker.name,
                    assignment.assigned_at_utc, assignment.unassigned_at_utc
             FROM responsibility_assignments AS assignment
             INNER JOIN cached_workers AS worker ON worker.id = assignment.worker_id
-            WHERE assignment.shipment_id = $shipmentId
-            ORDER BY assignment.assigned_at_utc, assignment.id;
+            WHERE assignment.shipment_id IN ({string.Join(", ", parameters)})
+            ORDER BY assignment.shipment_id, assignment.assigned_at_utc, assignment.id;
             """;
-        command.Parameters.AddWithValue("$shipmentId", shipmentId.ToString("D"));
-        var results = new List<LocalResponsibilityAudit>();
+        for (int index = 0; index < ids.Length; index++)
+        {
+            command.Parameters.AddWithValue(parameters[index], ids[index].ToString("D"));
+        }
+
+        var results = new Dictionary<Guid, List<LocalResponsibilityAudit>>();
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            results.Add(new LocalResponsibilityAudit(
-                Guid.Parse(reader.GetString(0)),
-                reader.GetString(1),
-                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(2)),
-                reader.IsDBNull(3)
+            Guid shipmentId = Guid.Parse(reader.GetString(0));
+            if (!results.TryGetValue(shipmentId, out List<LocalResponsibilityAudit>? assignments))
+            {
+                assignments = [];
+                results.Add(shipmentId, assignments);
+            }
+            assignments.Add(new LocalResponsibilityAudit(
+                Guid.Parse(reader.GetString(1)),
+                reader.GetString(2),
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(3)),
+                reader.IsDBNull(4)
                     ? null
-                    : SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(3))));
+                    : SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(4))));
         }
 
-        return results;
+        return results.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<LocalResponsibilityAudit>)pair.Value);
+    }
+
+    private static void AddQueryParameters(SqliteCommand command, LocalAuditQuery query)
+    {
+        command.Parameters.AddWithValue(
+            "$startUtc",
+            query.StartUtc is null
+                ? DBNull.Value
+                : SqliteLocalStorageConverters.Timestamp(query.StartUtc.Value));
+        command.Parameters.AddWithValue(
+            "$endUtc",
+            query.EndExclusiveUtc is null
+                ? DBNull.Value
+                : SqliteLocalStorageConverters.Timestamp(query.EndExclusiveUtc.Value));
+        command.Parameters.AddWithValue("$limit", Math.Clamp(query.Limit, 1, 1000));
     }
 
     private sealed record CompletedShipmentRow(

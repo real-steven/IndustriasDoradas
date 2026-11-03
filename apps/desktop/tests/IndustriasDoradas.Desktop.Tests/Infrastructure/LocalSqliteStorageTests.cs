@@ -64,8 +64,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(25L, result.CurrentVersion);
-        Assert.AreEqual(25, result.AppliedCount);
+        Assert.AreEqual(26L, result.CurrentVersion);
+        Assert.AreEqual(26, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -74,7 +74,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(25L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(26L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -89,8 +89,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(25L, result.CurrentVersion);
-        Assert.AreEqual(6, result.AppliedCount);
+        Assert.AreEqual(26L, result.CurrentVersion);
+        Assert.AreEqual(7, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_workers;"));
         Assert.AreEqual(9L, await ScalarLongAsync(connection, """
@@ -365,7 +365,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(24, result.AppliedCount);
+        Assert.AreEqual(25, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -385,8 +385,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(25L, result.CurrentVersion);
-        Assert.AreEqual(14, result.AppliedCount);
+        Assert.AreEqual(26L, result.CurrentVersion);
+        Assert.AreEqual(15, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -654,7 +654,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(25L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(26L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -804,7 +804,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(23, result.AppliedCount);
+        Assert.AreEqual(24, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -862,6 +862,86 @@ public sealed class LocalSqliteStorageTests
             connection, "SELECT state FROM outbox_messages WHERE id = '50000000-0000-4000-8000-000000000010';"));
         Assert.AreEqual(receiptId.ToString("D"), await ScalarTextAsync(
             connection, "SELECT central_receipt_id FROM outbox_messages WHERE id = '50000000-0000-4000-8000-000000000010';"));
+    }
+
+    [TestMethod]
+    public async Task MissingDependencyStopsRetryingAndMovesToHumanReview()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedContextAsync(database);
+        PendingOutboxMessage message = Outbox(EventId(10), EventId(1));
+        await database.Events().AppendWithOutboxAsync(Added(EventId(1), 1), message);
+        var authorization = new OutboxAuthorizationEvidence(
+            ActorProfileId, 1, StartedAt.AddHours(-1), StartedAt.AddHours(24), "VALID");
+
+        for (int attempt = 1; attempt <= SqliteOutboxRepository.DependencyReviewAttemptThreshold; attempt++)
+        {
+            DateTimeOffset now = StartedAt.AddSeconds(attempt);
+            Guid claimId = Guid.NewGuid();
+            IReadOnlyList<ClaimedOutboxMessage> claimed = await database.Outbox().ClaimAsync(
+                StationId, claimId, 10, now, now.AddMinutes(1), authorization);
+            Assert.HasCount(1, claimed);
+            await database.Outbox().CompleteClaimAsync(
+                claimId,
+                [new(message.Id, "RETRY_LATER", "DEPENDENCY_NOT_READY", null)],
+                now,
+                _ => TimeSpan.Zero);
+        }
+
+        LocalSynchronizationQueueState queue = await database.Outbox().ReadAsync();
+        Assert.AreEqual(0, queue.PendingCount);
+        Assert.AreEqual(1, queue.FailedReviewCount);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual("ORPHANED_DEPENDENCY", await ScalarTextAsync(
+            connection, $"SELECT last_error_code FROM outbox_messages WHERE id = '{message.Id:D}';"));
+    }
+
+    [TestMethod]
+    public async Task PlantManagerCanRetryOrDiscardReviewedOutboxWithoutLosingDecisionAudit()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedContextAsync(database);
+        PendingOutboxMessage message = Outbox(EventId(10), EventId(1));
+        await database.Events().AppendWithOutboxAsync(Added(EventId(1), 1), message);
+        var authorization = new OutboxAuthorizationEvidence(
+            ActorProfileId, 1, StartedAt.AddHours(-1), StartedAt.AddHours(24), "VALID");
+        Guid firstClaim = Guid.NewGuid();
+        await database.Outbox().ClaimAsync(
+            StationId, firstClaim, 10, StartedAt, StartedAt.AddMinutes(1), authorization);
+        await database.Outbox().CompleteClaimAsync(
+            firstClaim,
+            [new(message.Id, "FAILED_REVIEW", "INVALID_EVENT", null)],
+            StartedAt,
+            _ => TimeSpan.Zero);
+        var review = new SqliteOutboxReviewService(
+            database.Factory, new MutableTimeProvider(StartedAt.AddMinutes(1)));
+
+        OutboxReviewDecisionResult retry = await review.RetryAsync(message.Id);
+
+        Assert.IsTrue(retry.Applied);
+        Assert.AreEqual(1, (await database.Outbox().ReadAsync()).PendingCount);
+        Guid secondClaim = Guid.NewGuid();
+        await database.Outbox().ClaimAsync(
+            StationId, secondClaim, 10, StartedAt.AddMinutes(1), StartedAt.AddMinutes(2), authorization);
+        await database.Outbox().CompleteClaimAsync(
+            secondClaim,
+            [new(message.Id, "FAILED_REVIEW", "INVALID_EVENT", null)],
+            StartedAt.AddMinutes(1),
+            _ => TimeSpan.Zero);
+
+        OutboxReviewDecisionResult discard = await review.DiscardAsync(message.Id);
+
+        Assert.IsTrue(discard.Applied);
+        LocalSynchronizationQueueState queue = await database.Outbox().ReadAsync();
+        Assert.AreEqual(0, queue.PendingCount);
+        Assert.AreEqual(0, queue.FailedReviewCount);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(0L, await ScalarLongAsync(
+            connection, $"SELECT COUNT(*) FROM outbox_messages WHERE id = '{message.Id:D}';"));
+        Assert.AreEqual(2L, await ScalarLongAsync(
+            connection, $"SELECT COUNT(*) FROM outbox_review_decisions WHERE outbox_message_id = '{message.Id:D}';"));
     }
 
     [TestMethod]
@@ -1244,8 +1324,8 @@ public sealed class LocalSqliteStorageTests
         IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
             .ListRastrasAsync(OrganizationId, LineId);
 
-        Assert.AreEqual(25L, result.CurrentVersion);
-        Assert.AreEqual(12, result.AppliedCount);
+        Assert.AreEqual(26L, result.CurrentVersion);
+        Assert.AreEqual(13, result.AppliedCount);
         Assert.HasCount(1, rastras);
         Assert.AreEqual(rastraId, rastras[0].Id);
     }
@@ -2113,6 +2193,15 @@ public sealed class LocalSqliteStorageTests
             .ListCompletedShipmentsAsync();
         IReadOnlyList<LocalCajuelaCorrectionAudit> corrections = await database.Audit()
             .ListCajuelaCorrectionsAsync();
+        IReadOnlyList<LocalCompletedShipmentAudit> filteredShipments = await database.Audit()
+            .ListCompletedShipmentsAsync(new LocalAuditQuery(
+                StartedAt.AddMinutes(-1), StartedAt.AddHours(1)));
+        IReadOnlyList<LocalCompletedShipmentAudit> futureShipments = await database.Audit()
+            .ListCompletedShipmentsAsync(new LocalAuditQuery(
+                StartedAt.AddHours(1), StartedAt.AddHours(2)));
+        IReadOnlyList<LocalCajuelaCorrectionAudit> filteredCorrections = await database.Audit()
+            .ListCajuelaCorrectionsAsync(new LocalAuditQuery(
+                StartedAt.AddMinutes(-1), StartedAt.AddHours(1)));
 
         Assert.HasCount(1, shipments);
         Assert.AreEqual("Línea 1", shipments[0].LineName);
@@ -2129,6 +2218,9 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(3, corrections[0].TotalBefore);
         Assert.AreEqual(2, corrections[0].TotalAfter);
         Assert.IsFalse(corrections[0].RequiredPlantManager);
+        Assert.HasCount(1, filteredShipments);
+        Assert.IsEmpty(futureShipments);
+        Assert.HasCount(1, filteredCorrections);
     }
 
     [TestMethod]

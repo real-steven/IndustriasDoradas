@@ -157,7 +157,7 @@ public sealed class AuditViewModel : ObservableObject
         selectedPeriodOption = periodOptions[0];
         selectedFilterDate = TodayInCostaRica();
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
-        SelectCategoryCommand = new RelayCommand<AuditCategory>(SelectCategory);
+        SelectCategoryCommand = new AsyncRelayCommand<AuditCategory>(SelectCategoryAsync);
         SelectLineCommand = new AsyncRelayCommand<AuditLineFilterViewModel>(SelectLineAsync);
         SelectShipmentCommand = new AsyncRelayCommand<AuditShipmentItemViewModel>(SelectShipmentAsync);
         RecordMercuryCommand = new AsyncRelayCommand(RecordMercuryAsync, () => CanEditMercury);
@@ -198,6 +198,7 @@ public sealed class AuditViewModel : ObservableObject
             OnPropertyChanged(nameof(SelectedFilterDate));
             NotifyPeriodChanged();
             ApplyShipmentPeriodFilter();
+            RequestVisibleRefresh();
         }
     }
     public DateTime? SelectedFilterDate
@@ -209,6 +210,7 @@ public sealed class AuditViewModel : ObservableObject
             if (!SetProperty(ref selectedFilterDate, normalized)) return;
             NotifyPeriodChanged();
             ApplyShipmentPeriodFilter();
+            RequestVisibleRefresh();
         }
     }
     public bool IsFilterDateVisible => SelectedPeriodOption.Mode is
@@ -226,6 +228,7 @@ public sealed class AuditViewModel : ObservableObject
             if (!SetProperty(ref completedShipments, value)) return;
             OnPropertyChanged(nameof(HasCompletedShipments));
             OnPropertyChanged(nameof(FilteredShipmentCountDescription));
+            OnPropertyChanged(nameof(VisibleRecordCountDescription));
         }
     }
     public bool HasCompletedShipments => CompletedShipments.Count > 0;
@@ -252,7 +255,11 @@ public sealed class AuditViewModel : ObservableObject
     public IReadOnlyList<AuditCorrectionItemViewModel> CajuelaCorrections
     {
         get => cajuelaCorrections;
-        private set => SetProperty(ref cajuelaCorrections, value);
+        private set
+        {
+            if (!SetProperty(ref cajuelaCorrections, value)) return;
+            OnPropertyChanged(nameof(VisibleRecordCountDescription));
+        }
     }
     public AuditShipmentItemViewModel? SelectedShipment
     {
@@ -313,6 +320,7 @@ public sealed class AuditViewModel : ObservableObject
             OnPropertyChanged(nameof(IsAttendanceCategory));
             OnPropertyChanged(nameof(IsAccessCategory));
             OnPropertyChanged(nameof(IsAdministrationCategory));
+            OnPropertyChanged(nameof(VisibleRecordCountDescription));
         }
     }
     public bool IsOperationCategory => SelectedCategory == AuditCategory.Operation;
@@ -320,12 +328,20 @@ public sealed class AuditViewModel : ObservableObject
     public bool IsAttendanceCategory => SelectedCategory == AuditCategory.Attendance;
     public bool IsAccessCategory => SelectedCategory == AuditCategory.Access;
     public bool IsAdministrationCategory => SelectedCategory == AuditCategory.Administration;
+    public string VisibleRecordCountDescription => SelectedCategory switch
+    {
+        AuditCategory.Operation => FilteredShipmentCountDescription,
+        AuditCategory.Corrections => CajuelaCorrections.Count == 1
+            ? "1 corrección encontrada"
+            : $"{CajuelaCorrections.Count} correcciones encontradas",
+        _ => "Módulo próximo",
+    };
     public string CorrectionCountDescription => Corrections.Count > 0
         ? $"{Corrections.Count} corrección(es) disponible(s) para revisión."
         : "No hay correcciones administrativas registradas para revisar.";
     public string Status { get => status; private set => SetProperty(ref status, value); }
     public IAsyncRelayCommand RefreshCommand { get; }
-    public IRelayCommand<AuditCategory> SelectCategoryCommand { get; }
+    public IAsyncRelayCommand<AuditCategory> SelectCategoryCommand { get; }
     public IAsyncRelayCommand<AuditLineFilterViewModel> SelectLineCommand { get; }
     public IAsyncRelayCommand<AuditShipmentItemViewModel> SelectShipmentCommand { get; }
     public IAsyncRelayCommand RecordMercuryCommand { get; }
@@ -339,11 +355,17 @@ public sealed class AuditViewModel : ObservableObject
     public async Task RefreshAsync()
     {
         Status = "Actualizando los registros disponibles…";
-        await diagnostics.RefreshAsync().ConfigureAwait(true);
-        if (localAudit is not null)
+        if (localAudit is null)
+        {
+            Status = "La auditoría local no está disponible en este equipo.";
+            return;
+        }
+
+        LocalAuditQuery query = SelectedAuditQuery();
+        if (SelectedCategory == AuditCategory.Operation)
         {
             IReadOnlyList<LocalCompletedShipmentAudit> shipments = await localAudit
-                .ListCompletedShipmentsAsync().ConfigureAwait(true);
+                .ListCompletedShipmentsAsync(query).ConfigureAwait(true);
             Guid? selectedLineId = SelectedLine?.LineId;
             Guid? selectedShipmentId = SelectedShipment?.ShipmentId;
             Dictionary<Guid, string> accentsByLine = shipments
@@ -356,14 +378,15 @@ public sealed class AuditViewModel : ObservableObject
                 .ToArray();
             ApplyShipmentPeriodFilter(selectedLineId, selectedShipmentId);
             await RefreshSelectedMercuryAsync().ConfigureAwait(true);
-            CajuelaCorrections = (await localAudit.ListCajuelaCorrectionsAsync()
+        }
+        else if (SelectedCategory == AuditCategory.Corrections)
+        {
+            CajuelaCorrections = (await localAudit.ListCajuelaCorrectionsAsync(query)
                     .ConfigureAwait(true))
                 .Select(ToViewModel)
                 .ToArray();
         }
-        Status = SelectedCategory == AuditCategory.Corrections
-            ? $"{CajuelaCorrections.Count} corrección(es) locales con trazabilidad."
-            : $"{FilteredShipmentCountDescription} en {PeriodDescription.ToLowerInvariant()}.";
+        Status = StatusForSelectedCategory();
     }
 
     private void ApplyShipmentPeriodFilter(
@@ -469,6 +492,7 @@ public sealed class AuditViewModel : ObservableObject
         }
         NotifyPeriodChanged();
         ApplyShipmentPeriodFilter();
+        RequestVisibleRefresh();
     }
 
     private void ResetPeriod()
@@ -479,6 +503,7 @@ public sealed class AuditViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedFilterDate));
         NotifyPeriodChanged();
         ApplyShipmentPeriodFilter();
+        RequestVisibleRefresh();
     }
 
     private void NotifyPeriodChanged()
@@ -528,7 +553,7 @@ public sealed class AuditViewModel : ObservableObject
         Status = $"{VisibleCompletedShipments.Count} cargamento(s) finalizado(s) en {line.LineName}.";
     }
 
-    private void SelectCategory(AuditCategory category)
+    private async Task SelectCategoryAsync(AuditCategory category)
     {
         if (category != AuditCategory.Operation && !CanViewSensitiveAudit)
         {
@@ -537,18 +562,39 @@ public sealed class AuditViewModel : ObservableObject
         }
 
         SelectedCategory = category;
-        Status = category switch
-        {
-            AuditCategory.Operation =>
-                $"{FilteredShipmentCountDescription} en {PeriodDescription.ToLowerInvariant()}.",
-            AuditCategory.Corrections =>
-                $"{CajuelaCorrections.Count} corrección(es) locales con trazabilidad.",
-            AuditCategory.Attendance =>
-                "Asistencia, horas e incidencias estarán disponibles próximamente.",
-            AuditCategory.Access =>
-                "Sesiones y validaciones de seguridad del sistema estarán disponibles próximamente.",
-            _ => "Cambios administrativos estarán disponibles próximamente.",
-        };
+        await RefreshAsync().ConfigureAwait(true);
+        Status = StatusForSelectedCategory();
+    }
+
+    private LocalAuditQuery SelectedAuditQuery()
+    {
+        (DateTime? start, DateTime? endExclusive) = SelectedPeriodRange();
+        DateTimeOffset? startUtc = start is null
+            ? null
+            : new DateTimeOffset(start.Value, CostaRicaOffset).ToUniversalTime();
+        DateTimeOffset? endUtc = endExclusive is null
+            ? null
+            : new DateTimeOffset(endExclusive.Value, CostaRicaOffset).ToUniversalTime();
+        return new LocalAuditQuery(startUtc, endUtc, 200);
+    }
+
+    private string StatusForSelectedCategory() => SelectedCategory switch
+    {
+        AuditCategory.Operation =>
+            $"{FilteredShipmentCountDescription} en {PeriodDescription.ToLowerInvariant()}.",
+        AuditCategory.Corrections =>
+            $"{CajuelaCorrections.Count} corrección(es) locales con trazabilidad.",
+        AuditCategory.Attendance =>
+            "Asistencia, horas e incidencias estarán disponibles próximamente.",
+        AuditCategory.Access =>
+            "Sesiones y validaciones de seguridad del sistema estarán disponibles próximamente.",
+        _ => "Cambios administrativos estarán disponibles próximamente.",
+    };
+
+    private void RequestVisibleRefresh()
+    {
+        if (localAudit is null || RefreshCommand.IsRunning) return;
+        RefreshCommand.Execute(null);
     }
 
     private async Task SelectShipmentAsync(AuditShipmentItemViewModel? shipment)

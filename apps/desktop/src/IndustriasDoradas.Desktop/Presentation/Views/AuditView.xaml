@@ -214,6 +214,44 @@
                 </Button>
             </UniformGrid>
 
+            <Border Margin="0,18,0,0" Padding="16" Background="White"
+                    BorderBrush="{StaticResource SoftBorderBrush}" BorderThickness="1" CornerRadius="12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock FontSize="12" FontWeight="Bold" Text="PERIODO VISIBLE" />
+                        <StackPanel Margin="0,5,0,0" Orientation="Horizontal">
+                            <TextBlock Foreground="#2F7EA4" FontSize="11" FontWeight="SemiBold"
+                                       Text="{Binding PeriodDescription}" />
+                            <TextBlock Margin="10,0,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                                       Text="{Binding VisibleRecordCountDescription}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Width="42" Height="42" MinHeight="0" Padding="0"
+                                FontSize="18" Command="{Binding PreviousPeriodCommand}"
+                                Content="‹" AutomationProperties.Name="Periodo anterior" />
+                        <ComboBox Width="156" Margin="7,0" Style="{StaticResource AuditComboBoxStyle}"
+                                  DisplayMemberPath="Name" ItemsSource="{Binding PeriodOptions}"
+                                  SelectedItem="{Binding SelectedPeriodOption}"
+                                  AutomationProperties.Name="Filtrar auditoría por periodo" />
+                        <Button Width="42" Height="42" MinHeight="0" Padding="0"
+                                FontSize="18" Command="{Binding NextPeriodCommand}"
+                                Content="›" AutomationProperties.Name="Periodo siguiente" />
+                        <DatePicker Width="145" Height="42" Margin="7,0,0,0" Padding="7,4"
+                                    Background="White" BorderBrush="#C8D8DF" BorderThickness="1"
+                                    SelectedDate="{Binding SelectedFilterDate}"
+                                    Visibility="{Binding IsFilterDateVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    AutomationProperties.Name="Fecha del filtro" />
+                        <Button Height="42" MinHeight="0" Margin="7,0,0,0" Padding="12,0"
+                                Command="{Binding ResetPeriodCommand}" Content="ESTA SEMANA" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <Border Margin="0,18,0,0" Padding="24" Style="{StaticResource SurfaceCardStyle}"
                     Visibility="{Binding IsOperationCategory, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
@@ -226,33 +264,6 @@
                             <TextBlock FontSize="20" FontWeight="Bold" Text="Cargamentos finalizados" />
                             <TextBlock Margin="0,7,20,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
                                        Text="Seleccione primero una línea. Después podrá abrir únicamente el cargamento que desea consultar." />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Width="42" Height="42" MinHeight="0" Padding="0"
-                                        FontSize="18" Command="{Binding PreviousPeriodCommand}"
-                                        Content="‹" AutomationProperties.Name="Periodo anterior" />
-                                <ComboBox Width="156" Margin="7,0" Style="{StaticResource AuditComboBoxStyle}"
-                                          DisplayMemberPath="Name" ItemsSource="{Binding PeriodOptions}"
-                                          SelectedItem="{Binding SelectedPeriodOption}"
-                                          AutomationProperties.Name="Filtrar cargamentos por periodo" />
-                                <Button Width="42" Height="42" MinHeight="0" Padding="0"
-                                        FontSize="18" Command="{Binding NextPeriodCommand}"
-                                        Content="›" AutomationProperties.Name="Periodo siguiente" />
-                                <DatePicker Width="145" Height="42" Margin="7,0,0,0" Padding="7,4"
-                                            Background="White" BorderBrush="#C8D8DF" BorderThickness="1"
-                                            SelectedDate="{Binding SelectedFilterDate}"
-                                            Visibility="{Binding IsFilterDateVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                            AutomationProperties.Name="Fecha del filtro" />
-                                <Button Height="42" MinHeight="0" Margin="7,0,0,0" Padding="12,0"
-                                        Command="{Binding ResetPeriodCommand}" Content="ESTA SEMANA" />
-                            </StackPanel>
-                            <StackPanel Margin="0,7,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
-                                <TextBlock Foreground="#2F7EA4" FontSize="10" FontWeight="SemiBold"
-                                           Text="{Binding PeriodDescription}" />
-                                <TextBlock Margin="9,0,0,0" Foreground="{StaticResource MutedBrush}" FontSize="10"
-                                           Text="{Binding FilteredShipmentCountDescription}" />
-                            </StackPanel>
                         </StackPanel>
                     </Grid>
                     <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding ShipmentLines}">

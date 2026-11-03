@@ -23,12 +23,7 @@ public sealed class OutboxSyncProcessor(
 
         DateTimeOffset now = timeProvider.GetUtcNow();
         Guid claimId = Guid.NewGuid();
-        var evidence = new OutboxAuthorizationEvidence(
-            state.Session.ProfileId,
-            state.Authorization.PermissionVersion,
-            state.Authorization.ValidatedAt,
-            state.Authorization.OfflineValidUntil,
-            "LEGACY_UNAVAILABLE");
+        OutboxAuthorizationEvidence evidence = OutboxAuthorizationCapture.From(state, now);
         IReadOnlyList<ClaimedOutboxMessage> claimed = await outbox.ClaimAsync(
             state.Authorization.StationId,
             claimId,

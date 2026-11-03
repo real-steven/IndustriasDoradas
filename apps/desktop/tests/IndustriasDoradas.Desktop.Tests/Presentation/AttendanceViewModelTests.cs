@@ -34,6 +34,7 @@ public sealed class AttendanceViewModelTests
         Assert.IsFalse(first.CheckInCommand.CanExecute(null));
         Assert.IsTrue(first.CheckOutCommand.CanExecute(null));
         Assert.HasCount(1, repository.Events);
+        Assert.AreEqual("VALID", repository.Mutations[0].Authorization?.StateAtCapture);
 
         time.SetUtcNow(Now.AddHours(8));
         AttendancePreviewViewModel restarted = Create(repository, time);
@@ -47,6 +48,7 @@ public sealed class AttendanceViewModelTests
         Assert.AreEqual(0, restarted.PresentCount);
         Assert.HasCount(2, repository.Events);
         Assert.AreEqual(AttendanceEventType.CheckOut, repository.Events[1].Type);
+        Assert.AreEqual("VALID", repository.Mutations[1].Authorization?.StateAtCapture);
         StringAssert.Contains(restarted.Status, "Guardada en este equipo");
     }
 
@@ -77,6 +79,7 @@ public sealed class AttendanceViewModelTests
         Assert.AreEqual("Olvidó registrar la salida al terminar.", correction.CorrectionReason);
         Assert.AreEqual(Now.AddHours(8), correction.OccurredAt);
         Assert.AreEqual(Now.AddHours(9), correction.RecordedAt);
+        Assert.AreEqual("VALID", repository.Mutations[1].Authorization?.StateAtCapture);
         Assert.IsFalse(viewModel.CorrectOpenShiftCommand.CanExecute(null));
         StringAssert.Contains(viewModel.Status, "corrección auditada");
     }
@@ -102,6 +105,36 @@ public sealed class AttendanceViewModelTests
         Assert.IsFalse(viewModel.CorrectOpenShiftCommand.CanExecute(null));
         StringAssert.Contains(viewModel.CorrectionValidationMessage, "futuro");
         Assert.HasCount(1, repository.Events);
+    }
+
+    [TestMethod]
+    public async Task PlantManagerRegistersForgottenEntryForWorkerOutsidePlant()
+    {
+        var repository = new MemoryAttendanceRepository();
+        Guid checkInId = Guid.NewGuid();
+        await repository.RecordAsync(Mutation(checkInId, AttendanceEventType.CheckIn, Now.AddHours(-4)));
+        await repository.RecordAsync(Mutation(Guid.NewGuid(), AttendanceEventType.CheckOut, Now.AddHours(-2)));
+        var mode = new PlantManagerModeState();
+        mode.SetActive(true);
+        var viewModel = Create(repository, new MutableTimeProvider(Now.AddHours(9)), mode);
+        await viewModel.InitializeAsync();
+        viewModel.SelectedWorker = viewModel.Workers.Single();
+
+        Assert.AreEqual("⚙  CORREGIR ENTRADA", viewModel.CorrectionActionLabel);
+        viewModel.CorrectionDate = new DateTime(2026, 10, 17);
+        viewModel.CorrectionTime = "8:00";
+        viewModel.CorrectionReason = "Olvidó marcar al iniciar la jornada.";
+        Assert.IsFalse(viewModel.CorrectOpenShiftCommand.CanExecute(null));
+
+        viewModel.CorrectionTime = "08:00";
+        Assert.IsTrue(viewModel.CorrectOpenShiftCommand.CanExecute(null));
+        await viewModel.CorrectOpenShiftCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(1, viewModel.PresentCount);
+        Assert.HasCount(3, repository.Events);
+        Assert.AreEqual(AttendanceEventType.AdjustedCheckIn, repository.Events[2].Type);
+        Assert.AreEqual(repository.Events[1].ClientEventId, repository.Events[2].RelatedEventId);
+        StringAssert.Contains(viewModel.Status, "abierta");
     }
 
     [TestMethod]
@@ -157,6 +190,60 @@ public sealed class AttendanceViewModelTests
         Assert.HasCount(1, viewModel.VisibleWorkers);
         Assert.AreEqual("Operario 11", viewModel.VisibleWorkers[0].DisplayName);
         Assert.AreEqual("1–1 de 1", viewModel.WorkerPageDescription);
+    }
+
+    [TestMethod]
+    public async Task PersonnelStatusFiltersWorkersByPlantPresence()
+    {
+        CachedWorker[] workers = Enumerable.Range(1, 6)
+            .Select(index => new CachedWorker(
+                Guid.NewGuid(),
+                OrganizationId,
+                $"Operario {index:00}",
+                true,
+                Now))
+            .ToArray();
+        var repository = new MemoryAttendanceRepository();
+        var viewModel = new AttendancePreviewViewModel(
+            repository,
+            new MemoryCatalogRepository(workers),
+            new MemoryStationStore(),
+            new MutableTimeProvider(Now),
+            new PlantManagerModeState());
+        await viewModel.InitializeAsync();
+        viewModel.SelectedWorker = viewModel.Workers[0];
+        await viewModel.CheckInCommand.ExecuteAsync(null);
+
+        viewModel.ShowWorkersInPlantCommand.Execute(null);
+        Assert.HasCount(1, viewModel.VisibleWorkers);
+        Assert.IsTrue(viewModel.VisibleWorkers[0].IsPresent);
+
+        viewModel.ShowWorkersOutOfPlantCommand.Execute(null);
+        Assert.AreEqual("1–5 de 5", viewModel.WorkerPageDescription);
+        Assert.IsTrue(viewModel.VisibleWorkers.All(worker => !worker.IsPresent));
+
+        viewModel.ShowAllWorkersCommand.Execute(null);
+        Assert.AreEqual("1–5 de 6", viewModel.WorkerPageDescription);
+    }
+
+    [TestMethod]
+    public void CorrectionTimeSelectorsAlwaysProduceStrictValidFormat()
+    {
+        AttendancePreviewViewModel viewModel = Create(
+            new MemoryAttendanceRepository(),
+            new MutableTimeProvider(Now));
+
+        Assert.HasCount(12, viewModel.CorrectionHourOptions);
+        Assert.HasCount(60, viewModel.CorrectionMinuteOptions);
+        viewModel.CorrectionHour = 8;
+        viewModel.CorrectionMinute = 8;
+        viewModel.CorrectionMeridiem = "p. m.";
+        Assert.AreEqual("20:08", viewModel.CorrectionTime);
+
+        viewModel.CorrectionHour = 12;
+        viewModel.CorrectionMinute = 0;
+        viewModel.ToggleCorrectionMeridiemCommand.Execute(null);
+        Assert.AreEqual("00:00", viewModel.CorrectionTime);
     }
 
     [TestMethod]
@@ -256,11 +343,13 @@ public sealed class AttendanceViewModelTests
     private sealed class MemoryAttendanceRepository : ILocalAttendanceRepository
     {
         public List<AttendanceEvent> Events { get; } = [];
+        public List<RecordLocalAttendanceMutation> Mutations { get; } = [];
 
         public Task<LocalAttendanceRegistration> RecordAsync(
             RecordLocalAttendanceMutation mutation,
             CancellationToken cancellationToken = default)
         {
+            Mutations.Add(mutation);
             AttendanceEvent result = mutation.EventType switch
             {
                 AttendanceEventType.CheckIn => AttendanceEvent.CheckIn(

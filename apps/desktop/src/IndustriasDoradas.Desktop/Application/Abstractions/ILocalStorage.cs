@@ -267,6 +267,11 @@ public sealed record LocalCajuelaCorrectionAudit(
     DateTimeOffset ConfirmedAt,
     bool RequiredPlantManager);
 
+public sealed record LocalAuditQuery(
+    DateTimeOffset? StartUtc,
+    DateTimeOffset? EndExclusiveUtc,
+    int Limit = 200);
+
 public sealed record LocalOperationDashboardSnapshot(
     LocalOperationalSession? Session,
     Guid LineId,
@@ -383,6 +388,19 @@ public interface ILocalSynchronizationReadiness
         CancellationToken cancellationToken = default);
 }
 
+public sealed record OutboxReviewDecisionResult(bool Applied, string Message);
+
+public interface ILocalOutboxReviewService
+{
+    Task<OutboxReviewDecisionResult> RetryAsync(
+        Guid outboxMessageId,
+        CancellationToken cancellationToken = default);
+
+    Task<OutboxReviewDecisionResult> DiscardAsync(
+        Guid outboxMessageId,
+        CancellationToken cancellationToken = default);
+}
+
 public interface ILocalStationSequenceStore
 {
     Task EnsureNextAsync(
@@ -452,6 +470,16 @@ public interface ILocalAuditRepository
 
     Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LocalCompletedShipmentAudit>> ListCompletedShipmentsAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default) =>
+        ListCompletedShipmentsAsync(cancellationToken);
+
+    Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default) =>
+        ListCajuelaCorrectionsAsync(cancellationToken);
 }
 
 public interface ILocalProductionSweepRepository
@@ -554,7 +582,8 @@ public sealed record SyncFailureDiagnostic(
     string Cause,
     int AttemptCount,
     DateTimeOffset OccurredAt,
-    DateTimeOffset LastAttemptAt)
+    DateTimeOffset LastAttemptAt,
+    Guid OutboxMessageId = default)
 {
     public string OperationDescription => OperationType switch
     {
@@ -562,6 +591,8 @@ public sealed record SyncFailureDiagnostic(
         "OPERATION_COMPLETED" => "Finalización de cargamento",
         "RESPONSIBLE_RELIEVED" => "Cambio de responsable",
         "PRODUCTION_EVENT_CREATED" => "Registro o corrección de cajuela",
+        "MERCURY_MOVEMENT_RECORDED" => "Registro de mercurio",
+        "ATTENDANCE_EVENT_RECORDED" => "Registro de asistencia",
         _ => "Evento operativo",
     };
 
