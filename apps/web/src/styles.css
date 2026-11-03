@@ -130,8 +130,11 @@ button.secondary,
   background: white;
 }
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.65;
+}
+button[aria-busy="true"] {
+  cursor: wait;
 }
 input,
 select,

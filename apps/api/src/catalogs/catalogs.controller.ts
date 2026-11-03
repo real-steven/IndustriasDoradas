@@ -51,6 +51,15 @@ export class CatalogsController {
     return this.catalogs.list("plants", organizationId, query);
   }
 
+  @Get("stations")
+  @RequirePermissions("organization_catalogs.read")
+  listOrganizationStations(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Query() query: PageQueryDto,
+  ) {
+    return this.catalogs.list("stations", organizationId, query);
+  }
+
   @Post("plants")
   @RequirePermissions("organization_catalogs.manage")
   createPlant(

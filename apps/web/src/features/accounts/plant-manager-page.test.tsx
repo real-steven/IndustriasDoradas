@@ -276,9 +276,16 @@ function createAccountsApi(
       return Promise.resolve(
         page([{ id: PLANT_ID, name: "Planta principal", isActive: true }]),
       );
-    if (url.pathname.endsWith(`/plants/${PLANT_ID}/stations`))
+    if (url.pathname.endsWith("/stations"))
       return Promise.resolve(
-        page([{ id: STATION_ID, name: "Estación central", isActive: true }]),
+        page([
+          {
+            id: STATION_ID,
+            plantId: PLANT_ID,
+            name: "Estación central",
+            isActive: true,
+          },
+        ]),
       );
     if (url.pathname.endsWith("/accounts") && method === "GET")
       return Promise.resolve(
