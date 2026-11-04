@@ -147,24 +147,9 @@ public sealed class SqliteAttendanceRepository(
         SqliteConnection connection,
         SqliteTransaction transaction,
         Guid stationId,
-        CancellationToken cancellationToken)
-    {
-        await using SqliteCommand command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            SELECT MAX(
-                COALESCE((SELECT MAX(client_sequence) + 1 FROM attendance_events
-                          WHERE station_id = $stationId), 1),
-                COALESCE((SELECT MAX(station_sequence) + 1 FROM outbox_messages
-                          WHERE station_id = $stationId), 1),
-                COALESCE((SELECT next_sequence FROM station_sequence_state
-                          WHERE station_id = $stationId), 1));
-            """;
-        command.Parameters.AddWithValue("$stationId", stationId.ToString("D"));
-        return Convert.ToInt64(
-            await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
-            CultureInfo.InvariantCulture);
-    }
+        CancellationToken cancellationToken) =>
+        await SqliteLocalSequenceAllocator.NextAsync(
+            connection, transaction, stationId, cancellationToken).ConfigureAwait(false);
 
     private static async Task InsertEventAsync(
         SqliteConnection connection,

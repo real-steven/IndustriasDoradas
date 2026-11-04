@@ -165,28 +165,9 @@ public sealed partial class SqliteCajuelaRepository(ILocalSqliteConnectionFactor
         SqliteConnection connection,
         SqliteTransaction transaction,
         Guid stationId,
-        CancellationToken cancellationToken)
-    {
-        await using SqliteCommand command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            SELECT MAX(
-                COALESCE((
-                    SELECT MAX(client_sequence) + 1
-                    FROM production_events
-                    WHERE station_id = $stationId), 1),
-                COALESCE((
-                    SELECT next_sequence
-                    FROM station_sequence_state
-                    WHERE station_id = $stationId), 1));
-            """;
-        command.Parameters.AddWithValue(
-            "$stationId",
-            SqliteLocalStorageConverters.Id(stationId, nameof(stationId)));
-        return Convert.ToInt64(
-            await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
-            CultureInfo.InvariantCulture);
-    }
+        CancellationToken cancellationToken) =>
+        await SqliteLocalSequenceAllocator.NextAsync(
+            connection, transaction, stationId, cancellationToken).ConfigureAwait(false);
 
     private static async Task InsertEventAsync(
         SqliteConnection connection,

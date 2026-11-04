@@ -64,8 +64,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(26L, result.CurrentVersion);
-        Assert.AreEqual(26, result.AppliedCount);
+        Assert.AreEqual(27L, result.CurrentVersion);
+        Assert.AreEqual(27, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -74,7 +74,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(26L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(27L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -89,8 +89,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(26L, result.CurrentVersion);
-        Assert.AreEqual(7, result.AppliedCount);
+        Assert.AreEqual(27L, result.CurrentVersion);
+        Assert.AreEqual(8, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_workers;"));
         Assert.AreEqual(9L, await ScalarLongAsync(connection, """
@@ -349,11 +349,96 @@ public sealed class LocalSqliteStorageTests
 
         RegisterCajuelaResult result = await handler.ExecuteAsync(handler.CreateCommand(StationId));
 
-        Assert.AreEqual(50L, result.Event.ClientSequence);
+        Assert.AreEqual(51L, result.Event.ClientSequence);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(51L, await ScalarLongAsync(
             connection,
             "SELECT station_sequence FROM outbox_messages WHERE operation_type = 'PRODUCTION_EVENT_CREATED';"));
+    }
+
+    [TestMethod]
+    public async Task RemoteProjectedSequenceDoesNotPoisonNewLocalProductionEvents()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationContext operation = await StartOperationAsync(database.OperationService(time));
+        const long remoteProjectedSequence = 9_059_533_065_527_919_756L;
+        Guid remoteEventId = EventId(99);
+        await using (SqliteConnection connection = await database.Factory.OpenAsync())
+        {
+            await ExecuteWithoutParametersAsync(connection, $"""
+                INSERT INTO production_events(
+                    client_event_id, organization_id, plant_id, station_id, line_id,
+                    feed_cycle_id, shipment_id, responsible_worker_id, event_type,
+                    work_period, occurred_at_utc, recorded_at_utc, client_sequence,
+                    reverses_client_event_id)
+                VALUES (
+                    '{remoteEventId:D}', '{OrganizationId:D}', '{PlantId:D}', '{StationId:D}',
+                    '{operation.Session!.LineId:D}', '{operation.Session.FeedCycleId:D}',
+                    '{operation.Session.ShipmentId:D}', '{operation.Session.ResponsibleWorkerId:D}',
+                    'CAJUELA_ADDED', 'DAY', '{StartedAt:O}', '{StartedAt:O}',
+                    {remoteProjectedSequence}, NULL);
+                """);
+        }
+
+        time.SetUtcNow(StartedAt.AddSeconds(1));
+        RegisterCajuelaResult result = await database.RegisterHandler(time)
+            .ExecuteAsync(database.RegisterHandler(time).CreateCommand(StationId));
+
+        Assert.AreEqual(2L, result.Event.ClientSequence);
+        Assert.IsTrue(result.Event.ClientSequence <= 9_007_199_254_740_991L);
+        await using SqliteConnection verification = await database.Factory.OpenAsync();
+        Assert.AreEqual(result.Event.ClientSequence, await ScalarLongAsync(
+            verification,
+            $"SELECT json_extract(payload_json, '$.clientSequence') FROM outbox_messages " +
+            $"WHERE aggregate_id = '{result.Event.ClientEventId:D}';"));
+    }
+
+    [TestMethod]
+    public async Task UnsafeRejectedSequenceIsRepairedAndRequeuedByMigration()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(26).ToArray());
+        Guid outboxId = EventId(97);
+        Guid aggregateId = EventId(98);
+        const long unsafeSequence = 9_059_533_065_527_919_756L;
+        const long safeStationSequence = 77L;
+        await using (SqliteConnection connection = await database.Factory.OpenAsync())
+        {
+            await ExecuteWithoutParametersAsync(connection, $$"""
+                INSERT INTO outbox_messages(
+                    id, station_id, station_sequence, operation_type, aggregate_type,
+                    aggregate_id, payload_json, state, attempt_count, next_attempt_at_utc,
+                    last_error_code, created_at_utc, updated_at_utc)
+                VALUES (
+                    '{{outboxId:D}}', '{{StationId:D}}', {{safeStationSequence}},
+                    'PRODUCTION_EVENT_CREATED', 'production_event', '{{aggregateId:D}}',
+                    '{"schemaVersion":2,"clientSequence":{{unsafeSequence}},"stationId":"{{StationId:D}}"}',
+                    'FAILED_REVIEW', 1, NULL, 'INVALID_EVENT', '{{StartedAt:O}}', '{{StartedAt:O}}');
+                """);
+        }
+
+        LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
+
+        Assert.AreEqual(27L, result.CurrentVersion);
+        Assert.AreEqual(1, result.AppliedCount);
+        await using SqliteConnection verification = await database.Factory.OpenAsync();
+        Assert.AreEqual(safeStationSequence, await ScalarLongAsync(
+            verification,
+            $"SELECT json_extract(payload_json, '$.clientSequence') FROM outbox_messages " +
+            $"WHERE id = '{outboxId:D}';"));
+        Assert.AreEqual("PENDING", await ScalarTextAsync(
+            verification,
+            $"SELECT state FROM outbox_messages WHERE id = '{outboxId:D}';"));
+        Assert.AreEqual(0L, await ScalarLongAsync(
+            verification,
+            $"SELECT attempt_count FROM outbox_messages WHERE id = '{outboxId:D}';"));
+        Assert.AreEqual(1L, await ScalarLongAsync(
+            verification,
+            $"SELECT COUNT(*) FROM outbox_messages WHERE id = '{outboxId:D}' " +
+            "AND last_error_code IS NULL AND claim_id IS NULL;"));
     }
 
     [TestMethod]
@@ -365,7 +450,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(25, result.AppliedCount);
+        Assert.AreEqual(26, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -385,8 +470,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(26L, result.CurrentVersion);
-        Assert.AreEqual(15, result.AppliedCount);
+        Assert.AreEqual(27L, result.CurrentVersion);
+        Assert.AreEqual(16, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -654,7 +739,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(26L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(27L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -804,7 +889,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(24, result.AppliedCount);
+        Assert.AreEqual(25, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -1449,8 +1534,8 @@ public sealed class LocalSqliteStorageTests
         IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
             .ListRastrasAsync(OrganizationId, LineId);
 
-        Assert.AreEqual(26L, result.CurrentVersion);
-        Assert.AreEqual(13, result.AppliedCount);
+        Assert.AreEqual(27L, result.CurrentVersion);
+        Assert.AreEqual(14, result.AppliedCount);
         Assert.HasCount(1, rastras);
         Assert.AreEqual(rastraId, rastras[0].Id);
     }
@@ -1540,10 +1625,10 @@ public sealed class LocalSqliteStorageTests
                 await ScalarLongAsync(
                     connection,
                     "SELECT COUNT(*) FROM outbox_messages WHERE operation_type = 'PRODUCTION_EVENT_CREATED';"));
-            Assert.AreEqual(1L, await ScalarLongAsync(
+            Assert.AreEqual(2L, await ScalarLongAsync(
                 connection,
                 "SELECT MIN(client_sequence) FROM production_events;"));
-            Assert.AreEqual(pulseCount, await ScalarLongAsync(
+            Assert.AreEqual(pulseCount + 1, await ScalarLongAsync(
                 connection,
                 "SELECT MAX(client_sequence) FROM production_events;"));
         }
@@ -2582,7 +2667,12 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(3L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM production_events WHERE event_type = 'CAJUELA_REVERSED';"));
-        Assert.AreEqual(123L, await ScalarLongAsync(connection, "SELECT MAX(client_sequence) FROM production_events;"));
+        Assert.AreEqual(123L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(DISTINCT client_sequence) FROM production_events;"));
+        Assert.IsTrue(await ScalarLongAsync(
+            connection,
+            "SELECT MAX(client_sequence) FROM production_events;") <= 9_007_199_254_740_991L);
         Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(4L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
         Assert.AreEqual(0L, await ScalarLongAsync(
