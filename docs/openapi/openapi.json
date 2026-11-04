@@ -2679,10 +2679,49 @@
           },
           {
             "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "enum": ["operation", "people", "administration"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_.]*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entityType",
+            "required": false,
+            "schema": {
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "result",
             "required": false,
             "schema": {
               "enum": ["SUCCEEDED", "REJECTED", "FAILED"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "inventory",
+            "required": true,
+            "schema": {
+              "default": "include",
+              "enum": ["include", "exclude"],
               "type": "string"
             }
           },

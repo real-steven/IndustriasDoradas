@@ -165,6 +165,9 @@ describe("historial gerencial de cargamentos", () => {
     if (event === null) throw new Error("Expected an audit event");
     expect(within(event).getByText("Realizado por")).toBeInTheDocument();
     expect(within(event).getByText("Producción")).toBeInTheDocument();
+    expect(
+      within(event).getByRole("link", { name: "VER CARGAMENTO" }),
+    ).toHaveAttribute("href", `/gerencia/cargamentos/${SHIPMENT_ID}`);
     expect(screen.queryByText("Cambios auditados")).not.toBeInTheDocument();
 
     await user.click(
@@ -188,6 +191,23 @@ describe("historial gerencial de cargamentos", () => {
       within(detail).getByRole("button", { name: "Cerrar detalle" }),
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("identifica un cargamento activo sin ofrecer un enlace de detalle", async () => {
+    const transport = vi.fn<typeof fetch>((input) => {
+      const url = new URL(requestUrl(input), "http://localhost");
+      if (url.pathname.endsWith("/audit-events"))
+        return Promise.resolve(auditPage("ACTIVE"));
+      throw new Error(`Unexpected request ${url.pathname}`);
+    });
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal("/gerencia/auditoria");
+
+    expect(await screen.findByText("CARGAMENTO ACTIVO")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "VER CARGAMENTO" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -307,7 +327,9 @@ function sweepPage(): Response {
   });
 }
 
-function auditPage(): Response {
+function auditPage(
+  shipmentStatus: "ACTIVE" | "COMPLETED" = "COMPLETED",
+): Response {
   return json({
     items: [
       {
@@ -317,6 +339,7 @@ function auditPage(): Response {
         action: "sync.ingest",
         entityType: "shipment",
         entityId: SHIPMENT_ID,
+        shipmentStatus,
         result: "SUCCEEDED",
         reasonCode: null,
         changedFields: ["status"],

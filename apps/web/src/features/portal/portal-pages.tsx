@@ -40,10 +40,10 @@ export function OperationPage() {
   return (
     <PortalPage
       title={tr("Operación", "Operations")}
-      eyebrow={tr("SEGUIMIENTO REMOTO", "REMOTE MONITORING")}
+      eyebrow={tr("ESTADO ACTUAL DE LA PLANTA", "CURRENT PLANT STATUS")}
       description={tr(
-        "Consulta la proyección central consolidada; los controles físicos permanecen exclusivamente en desktop.",
-        "Review the consolidated central projection; physical controls remain exclusively in the desktop application.",
+        "Consulte las líneas activas, la producción acumulada, sus responsables y el avance de cada barrida.",
+        "Review active lines, accumulated production, assigned workers, and sweep progress.",
       )}
       actions={
         <OperationRefreshButton query={operation} freshness={freshness} />
@@ -55,17 +55,6 @@ export function OperationPage() {
         <OperationFreshness query={operation} freshness={freshness} />
       </div>
       <OperationLinesPanel query={operation} />
-      <Panel
-        title={tr("Operarios y horas", "Operators and hours")}
-        subtitle={tr("Control de trabajadores", "Workforce control")}
-      >
-        <UpcomingState>
-          {tr(
-            "La creación de operarios, asistencia y horas se implementará en una etapa posterior.",
-            "The creation of operators, attendance, and hours will be implemented at a later stage.",
-          )}
-        </UpcomingState>
-      </Panel>
     </PortalPage>
   );
 }
@@ -165,8 +154,8 @@ export function AuditPage() {
             <h2>{tr("Actividad del sistema", "System activity")}</h2>
             <p>
               {tr(
-                "Los detalles técnicos permanecen ocultos para facilitar la lectura",
-                "Technical details remain hidden to make the history easier to read",
+                "Filtre por acción para separar cargamentos, producción, personal, seguridad y cambios administrativos",
+                "Filter by action to separate shipments, production, personnel, security, and administrative changes",
               )}
             </p>
           </div>

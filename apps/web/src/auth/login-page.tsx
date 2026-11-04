@@ -153,7 +153,7 @@ export function LoginPage() {
             <span aria-hidden="true" />
             <div>
               <strong>
-                {tr("Datos centrales protegidos", "Protected central data")}
+                {tr("Información protegida", "Protected information")}
               </strong>
               <small>
                 {tr(

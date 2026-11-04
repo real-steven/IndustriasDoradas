@@ -77,7 +77,7 @@ describe("recorrido gerencial de aceptación", () => {
     expect(
       await screen.findByRole("heading", { name: "Operación" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("510 cajuelas")).toBeInTheDocument();
+    expect(screen.getByText(/10 de 250 cajuelas/u)).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Cargamentos" }));
     expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
@@ -342,7 +342,7 @@ function operationLine() {
     sweepCount: 1,
     sweptCajuelas: 250,
     cajuelasSinceLastSweep: 10,
-    nextSweepAt: 510,
+    nextSweepAt: 500,
     sweepPending: false,
     lastActivityAtUtc: "2026-10-13T15:30:00.000Z",
   };

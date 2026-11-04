@@ -200,7 +200,7 @@ export function PortalLayout() {
           <div className="topbar-actions">
             <span className="freshness neutral">
               <i aria-hidden="true" />
-              {tr("Datos centrales protegidos", "Protected central data")}
+              {tr("Información protegida", "Protected information")}
             </span>
             <LanguageSwitcher compact />
           </div>

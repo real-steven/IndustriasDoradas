@@ -26,6 +26,7 @@ import {
 import {
   managerAuditAction,
   managerAuditArea,
+  managerAuditOrigin,
   managerAuditResult,
 } from "./management-audit-labels";
 import { ManagementAuditDetail } from "./management-audit-detail";
@@ -196,7 +197,13 @@ export function ShipmentDetailFeature() {
   const location = useLocation();
   const shipment = useManagementShipment(shipmentId);
   const sweeps = useManagementShipmentSweeps(shipmentId);
-  const audit = useShipmentAuditEvents();
+  const audit = useShipmentAuditEvents({
+    search: shipmentId,
+    action: "sync.ingest",
+    entityType: "shipment",
+    page: 1,
+    pageSize: 100,
+  });
 
   if (shipment.isPending)
     return (
@@ -452,6 +459,16 @@ export function ShipmentAuditFeature() {
   const { language, tr } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search")?.trim() ?? "";
+  const requestedAction = selectedAuditActionFilter(searchParams.get("action"));
+  const requestedGroup = selectedAuditGroup(searchParams.get("group"));
+  const actionFilter =
+    requestedGroup === undefined ||
+    requestedAction?.group === requestedGroup.key
+      ? requestedAction
+      : undefined;
+  const selectedGroup =
+    requestedGroup ??
+    auditGroups.find((group) => group.key === actionFilter?.group);
   const fromDate = auditDate(searchParams.get("from"));
   const toDate = auditDate(searchParams.get("to"));
   const requestedPage = Number(searchParams.get("page") ?? "1");
@@ -462,6 +479,13 @@ export function ShipmentAuditFeature() {
   const [draftSearch, setDraftSearch] = useState(search);
   const audit = useShipmentAuditEvents({
     search,
+    ...(selectedGroup === undefined || actionFilter !== undefined
+      ? {}
+      : { category: selectedGroup.key }),
+    ...(actionFilter === undefined ? {} : { action: actionFilter.action }),
+    ...(actionFilter?.entityType === undefined
+      ? {}
+      : { entityType: actionFilter.entityType }),
     fromDate,
     toDate,
     page,
@@ -486,8 +510,116 @@ export function ShipmentAuditFeature() {
     setSearchParams(new URLSearchParams());
   };
 
+  const selectGroup = (group: AuditGroupKey | undefined) => {
+    const next = new URLSearchParams(searchParams);
+    if (group === undefined) next.delete("group");
+    else next.set("group", group);
+    next.delete("action");
+    next.delete("page");
+    setSearchParams(next);
+  };
+
+  const selectAction = (action: string | undefined) => {
+    const next = new URLSearchParams(searchParams);
+    if (action === undefined) next.delete("action");
+    else next.set("action", action);
+    next.delete("page");
+    setSearchParams(next);
+  };
+
   return (
     <div className="manager-audit">
+      <section className="audit-category-panel" aria-labelledby="audit-groups">
+        <header className="audit-category-heading">
+          <div>
+            <h3 id="audit-groups">
+              {tr("Explorar por área", "Browse by area")}
+            </h3>
+            <p>
+              {tr(
+                "Seleccione un grupo y luego refine la actividad que desea consultar.",
+                "Select a group and then refine the activity you want to review.",
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            className={`audit-all-button${selectedGroup === undefined ? " active" : ""}`}
+            aria-pressed={selectedGroup === undefined}
+            onClick={() => selectGroup(undefined)}
+          >
+            {tr("VER TODO", "VIEW ALL")}
+          </button>
+        </header>
+
+        <div className="audit-category-cards" role="group">
+          {auditGroups.map((group) => {
+            const active = selectedGroup?.key === group.key;
+            return (
+              <button
+                key={group.key}
+                type="button"
+                className={`audit-category-card${active ? " active" : ""}`}
+                aria-pressed={active}
+                onClick={() => selectGroup(group.key)}
+              >
+                <span className="audit-category-icon" aria-hidden="true">
+                  {group.icon}
+                </span>
+                <span className="audit-category-copy">
+                  <strong>{tr(group.spanish, group.english)}</strong>
+                  <small>
+                    {tr(group.descriptionSpanish, group.descriptionEnglish)}
+                  </small>
+                </span>
+                <span className="audit-category-state" aria-hidden="true">
+                  {active ? "✓" : "›"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedGroup !== undefined && (
+          <div className="audit-subactions">
+            <span>{tr("Acciones del grupo", "Group actions")}</span>
+            <div
+              className="audit-subaction-chips"
+              role="group"
+              aria-label={tr(
+                `Acciones de ${selectedGroup.spanish}`,
+                `${selectedGroup.english} actions`,
+              )}
+            >
+              <button
+                type="button"
+                className={actionFilter === undefined ? "active" : ""}
+                aria-pressed={actionFilter === undefined}
+                onClick={() => selectAction(undefined)}
+              >
+                {tr("Todo el grupo", "Entire group")}
+              </button>
+              {auditActionFilters
+                .filter((option) => option.group === selectedGroup.key)
+                .map((option) => {
+                  const active = actionFilter?.key === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={active ? "active" : ""}
+                      aria-pressed={active}
+                      onClick={() => selectAction(option.key)}
+                    >
+                      {tr(option.spanish, option.english)}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+      </section>
+
       <form className="audit-filters" onSubmit={submitSearch}>
         <label className="audit-search">
           <span>{tr("Buscar actividad", "Search activity")}</span>
@@ -495,8 +627,8 @@ export function ShipmentAuditFeature() {
             type="search"
             value={draftSearch}
             placeholder={tr(
-              "Persona, acción o referencia",
-              "Person, action, or reference",
+              "ID completo de cargamento, persona o referencia",
+              "Full shipment ID, person, or reference",
             )}
             onChange={(event) => setDraftSearch(event.target.value)}
           />
@@ -599,6 +731,9 @@ function ManagerAuditEvent({ event }: { event: AuditEvent }) {
               <strong>
                 {event.actorDisplayName ?? tr("Sistema", "System")}
               </strong>
+              <span className="audit-origin">
+                {managerAuditOrigin(event.origin, language)}
+              </span>
             </p>
           </div>
         </div>
@@ -618,14 +753,35 @@ function ManagerAuditEvent({ event }: { event: AuditEvent }) {
             </div>
           )}
         </dl>
-        <button
-          ref={triggerRef}
-          type="button"
-          className="secondary audit-detail-trigger"
-          onClick={() => setDetailOpen(true)}
-        >
-          {tr("ABRIR DETALLE", "OPEN DETAILS")}
-        </button>
+        <div className="audit-event-actions">
+          {event.entityType === "shipment" &&
+            event.entityId !== null &&
+            event.result === "SUCCEEDED" &&
+            event.shipmentStatus === "COMPLETED" && (
+              <Link
+                className="secondary-link audit-shipment-link"
+                to={`/gerencia/cargamentos/${event.entityId}`}
+              >
+                {tr("VER CARGAMENTO", "VIEW SHIPMENT")}
+              </Link>
+            )}
+          {event.entityType === "shipment" &&
+            event.entityId !== null &&
+            event.result === "SUCCEEDED" &&
+            event.shipmentStatus === "ACTIVE" && (
+              <span className="audit-shipment-state">
+                {tr("CARGAMENTO ACTIVO", "ACTIVE SHIPMENT")}
+              </span>
+            )}
+          <button
+            ref={triggerRef}
+            type="button"
+            className="secondary audit-detail-trigger"
+            onClick={() => setDetailOpen(true)}
+          >
+            {tr("ABRIR DETALLE", "OPEN DETAILS")}
+          </button>
+        </div>
       </article>
       {detailOpen && (
         <ManagementAuditDetail event={event} close={closeDetail} />
@@ -686,6 +842,156 @@ function AuditPagination({
 function auditDate(value: string | null): string | undefined {
   if (value === null || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return undefined;
   return value;
+}
+
+type AuditGroupKey = "operation" | "people" | "administration";
+
+interface AuditGroupOption {
+  key: AuditGroupKey;
+  icon: string;
+  spanish: string;
+  english: string;
+  descriptionSpanish: string;
+  descriptionEnglish: string;
+}
+
+interface AuditActionFilterOption {
+  key: string;
+  group: AuditGroupKey;
+  spanish: string;
+  english: string;
+  action: string;
+  entityType?: string;
+}
+
+const auditGroups: readonly AuditGroupOption[] = [
+  {
+    key: "operation",
+    icon: "▤",
+    spanish: "Operación de planta",
+    english: "Plant operations",
+    descriptionSpanish: "Cargamentos, producción y movimientos de planta",
+    descriptionEnglish: "Shipments, production, and plant movements",
+  },
+  {
+    key: "people",
+    icon: "♙",
+    spanish: "Personal",
+    english: "People",
+    descriptionSpanish: "Marcaciones y correcciones de asistencia",
+    descriptionEnglish: "Attendance entries and corrections",
+  },
+  {
+    key: "administration",
+    icon: "⚙",
+    spanish: "Seguridad y administración",
+    english: "Security and administration",
+    descriptionSpanish: "Cuentas, permisos y accesos protegidos",
+    descriptionEnglish: "Accounts, permissions, and protected access",
+  },
+];
+
+const auditActionFilters: readonly AuditActionFilterOption[] = [
+  {
+    key: "desktop-shipments",
+    group: "operation",
+    spanish: "Cargamentos del desktop",
+    english: "Desktop shipments",
+    action: "sync.ingest",
+    entityType: "shipment",
+  },
+  {
+    key: "desktop-cajuelas",
+    group: "operation",
+    spanish: "Cajuelas registradas",
+    english: "Recorded cajuelas",
+    action: "sync.ingest",
+    entityType: "production_event",
+  },
+  {
+    key: "desktop-sweeps",
+    group: "operation",
+    spanish: "Barridas de producción",
+    english: "Production sweeps",
+    action: "sync.ingest",
+    entityType: "production_sweep",
+  },
+  {
+    key: "desktop-mercury",
+    group: "operation",
+    spanish: "Movimientos de mercurio",
+    english: "Mercury movements",
+    action: "sync.ingest",
+    entityType: "mercury_movement",
+  },
+  {
+    key: "attendance-recorded",
+    group: "people",
+    spanish: "Marcaciones de asistencia",
+    english: "Attendance entries",
+    action: "attendance.record",
+  },
+  {
+    key: "attendance-corrected",
+    group: "people",
+    spanish: "Correcciones de asistencia",
+    english: "Attendance corrections",
+    action: "attendance.correct",
+  },
+  {
+    key: "account-created",
+    group: "administration",
+    spanish: "Cuentas creadas",
+    english: "Created accounts",
+    action: "account.provision",
+  },
+  {
+    key: "account-status",
+    group: "administration",
+    spanish: "Estados de cuenta",
+    english: "Account status changes",
+    action: "account.governance",
+  },
+  {
+    key: "permissions",
+    group: "administration",
+    spanish: "Cambios de permisos",
+    english: "Permission changes",
+    action: "permission.governance",
+  },
+  {
+    key: "protected-access",
+    group: "administration",
+    spanish: "Accesos protegidos",
+    english: "Protected access",
+    action: "privilege.elevation",
+  },
+  {
+    key: "authorization-blocks",
+    group: "administration",
+    spanish: "Bloqueos por autorización",
+    english: "Authorization blocks",
+    action: "authorization.policy",
+  },
+  {
+    key: "business-changes",
+    group: "administration",
+    spanish: "Cambios administrativos",
+    english: "Administrative changes",
+    action: "business.mutation",
+  },
+];
+
+function selectedAuditGroup(
+  value: string | null,
+): AuditGroupOption | undefined {
+  return auditGroups.find((group) => group.key === value);
+}
+
+function selectedAuditActionFilter(
+  value: string | null,
+): AuditActionFilterOption | undefined {
+  return auditActionFilters.find((option) => option.key === value);
 }
 
 function ShipmentFiltersPanel({

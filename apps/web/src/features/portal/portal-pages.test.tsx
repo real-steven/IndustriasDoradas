@@ -135,7 +135,7 @@ describe("portal gerencial", () => {
       await screen.findByRole("heading", { name: "No hay líneas activas" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/La consulta central respondió correctamente/u),
+      screen.getByText(/No existe ningún cargamento abierto/u),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/No se pudo consultar la operación/u),
@@ -147,17 +147,23 @@ describe("portal gerencial", () => {
       "fetch",
       vi.fn<typeof fetch>(() =>
         Promise.resolve(
-          managementPage({ sweepPending: true, nextSweepAt: 500 }),
+          managementPage({
+            cajuelaTotal: 500,
+            cajuelasSinceLastSweep: 250,
+            sweepPending: true,
+            nextSweepAt: 500,
+          }),
         ),
       ),
     );
 
     renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
 
-    expect(
-      await screen.findByText("Barrida pendiente desde"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("500 cajuelas")).toBeInTheDocument();
+    expect(await screen.findByText("Barrida requerida")).toBeInTheDocument();
+    expect(screen.getByText(/250 de 250 cajuelas/u)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Línea 1 alcanzó la referencia de barrida.",
+    );
   });
 
   it("conserva la ultima respuesta y marca las estaciones como desactualizadas", async () => {
@@ -438,7 +444,7 @@ function managementPage(
           sweepCount: 1,
           sweptCajuelas: 250,
           cajuelasSinceLastSweep: 10,
-          nextSweepAt: 510,
+          nextSweepAt: 500,
           sweepPending: false,
           lastActivityAtUtc: "2026-10-12T15:30:00.000Z",
           ...overrides,

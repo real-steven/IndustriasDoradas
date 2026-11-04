@@ -1,12 +1,26 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
-import type { AuditListItem, AuditQueryRepository } from "./audit.contracts";
+import type {
+  AuditCategory,
+  AuditListItem,
+  AuditQueryRepository,
+} from "./audit.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
 import type { PageResponse } from "../common/dto/page-query.dto";
 import type { EnvironmentVariables } from "../config/environment";
 
 type Row = Record<string, unknown>;
+
+const inventoryEntityTypes = [
+  "inventory_review",
+  "inventory_movement",
+  "inventory_item_type",
+  "inventory_unit",
+  "inventory_item",
+  "rastra_component_change",
+  "operational_novelty_change",
+] as const;
 
 @Injectable()
 export class SupabaseAuditQueryRepository implements AuditQueryRepository {
@@ -24,7 +38,11 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       page: number;
       pageSize: number;
       search?: string;
+      category?: AuditCategory;
+      action?: string;
+      entityType?: string;
       result?: AuditListItem["result"];
+      inventory?: "include" | "exclude";
       fromUtc?: string;
       toUtc?: string;
       routine?: "include" | "exclude";
@@ -38,13 +56,34 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       select:
         "id,correlation_id,organization_id,station_id,actor_display_name,actor_role_code,origin,action,entity_type,entity_id,result,reason_code,evidence_state,changed_fields,changes,occurred_at,recorded_at",
     });
+    if (query.action !== undefined) {
+      parameters.set("action", `eq.${query.action}`);
+    } else if (query.category !== undefined) {
+      this.applyCategory(parameters, query.category);
+    }
+    if (query.entityType !== undefined)
+      parameters.set("entity_type", `eq.${query.entityType}`);
+    if (
+      query.inventory === "exclude" &&
+      query.entityType === undefined &&
+      query.category !== "operation"
+    )
+      parameters.set(
+        "entity_type",
+        `not.in.(${inventoryEntityTypes.join(",")})`,
+      );
     if (query.result !== undefined)
       parameters.set("result", `eq.${query.result}`);
     if (query.fromUtc !== undefined)
       parameters.set("occurred_at", `gte.${query.fromUtc}`);
     if (query.toUtc !== undefined)
       parameters.append("occurred_at", `lt.${query.toUtc}`);
-    if (query.routine === "exclude") parameters.set("action", "neq.access.api");
+    if (
+      query.routine === "exclude" &&
+      query.action === undefined &&
+      query.category === undefined
+    )
+      parameters.set("action", "neq.access.api");
     if (query.search?.trim()) {
       const search = this.escape(query.search);
       const clauses = [
@@ -74,18 +113,101 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       throw new SupabaseDataError(`HTTP_${response.status}`, "audit_events");
     const rows = (await response.json()) as Row[];
     const items = rows.map((row) => this.item(row));
+    const shipmentStatuses = await this.shipmentStatuses(organizationId, items);
     const range = response.headers.get("content-range")?.split("/")[1];
     const total =
       range !== undefined && /^\d+$/u.test(range)
         ? Number(range)
         : items.length;
     return {
-      items,
+      items: items.map((item) => ({
+        ...item,
+        shipmentStatus:
+          item.entityType === "shipment" && item.entityId !== null
+            ? (shipmentStatuses.get(item.entityId) ?? null)
+            : null,
+      })),
       page: query.page,
       pageSize: query.pageSize,
       total,
       totalPages: total === 0 ? 0 : Math.ceil(total / query.pageSize),
     };
+  }
+
+  private async shipmentStatuses(
+    organizationId: string,
+    items: readonly AuditListItem[],
+  ): Promise<ReadonlyMap<string, "ACTIVE" | "COMPLETED">> {
+    const shipmentIds = [
+      ...new Set(
+        items.flatMap((item) =>
+          item.entityType === "shipment" &&
+          item.entityId !== null &&
+          item.result === "SUCCEEDED"
+            ? [item.entityId]
+            : [],
+        ),
+      ),
+    ];
+    const statuses = new Map<string, "ACTIVE" | "COMPLETED">();
+    if (shipmentIds.length === 0) return statuses;
+
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${organizationId}`,
+      shipment_id: `in.(${shipmentIds.join(",")})`,
+      select: "shipment_id,status",
+    });
+    const response = await fetch(
+      `${this.restUrl}/management_shipment_facts?${parameters}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "Accept-Profile": "app",
+          apikey: this.secret,
+          Authorization: `Bearer ${this.secret}`,
+        },
+      },
+    );
+    if (!response.ok) return statuses;
+
+    const rows = (await response.json()) as Row[];
+    for (const row of rows) {
+      const id = row.shipment_id;
+      const status = row.status;
+      if (
+        typeof id === "string" &&
+        (status === "ACTIVE" || status === "COMPLETED")
+      )
+        statuses.set(id, status);
+    }
+    return statuses;
+  }
+
+  private applyCategory(
+    parameters: URLSearchParams,
+    category: AuditCategory,
+  ): void {
+    if (category === "operation") {
+      parameters.set("action", "eq.sync.ingest");
+      parameters.set(
+        "entity_type",
+        "in.(shipment,production_event,production_sweep,mercury_movement)",
+      );
+      return;
+    }
+
+    const actions =
+      category === "people"
+        ? ["attendance.record", "attendance.correct"]
+        : [
+            "account.provision",
+            "account.governance",
+            "permission.governance",
+            "privilege.elevation",
+            "authorization.policy",
+            "business.mutation",
+          ];
+    parameters.set("action", `in.(${actions.join(",")})`);
   }
 
   private item(row: Row): AuditListItem {
