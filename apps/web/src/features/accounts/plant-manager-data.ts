@@ -71,23 +71,27 @@ export function useAccountPlants() {
   });
 }
 
-export function useAccountStations(plantId: string) {
+export function useAccountStations() {
   const request = useAccountRequest();
   return useQuery({
     queryKey: scopedQueryKey(
       "account-stations",
       request.profileId,
       request.organizationId,
-      plantId,
     ),
-    enabled: request.enabled && plantId.length > 0,
+    enabled: request.enabled,
     queryFn: ({ signal }) =>
       apiRequest<PageCatalog>(
-        `/organizations/${encodeURIComponent(request.organizationId)}/plants/${encodeURIComponent(plantId)}/stations?page=1&pageSize=100&state=active`,
+        `/organizations/${encodeURIComponent(request.organizationId)}/stations?page=1&pageSize=100&state=active`,
         request.token,
         { signal },
       ),
     ...cachePolicy.catalog,
+    // La estación se asigna automáticamente. No conservar una respuesta vacía
+    // cuando la estación compartida acaba de activarse en otra vista o sesión.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 

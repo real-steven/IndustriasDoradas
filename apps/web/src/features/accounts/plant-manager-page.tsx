@@ -46,16 +46,30 @@ export function PlantManagerPage() {
   const managers = usePlantManagers();
   const workers = usePlantWorkers();
   const plants = useAccountPlants();
-  const selectedPlantId =
-    plants.data?.items.find((plant) => plant.isActive)?.id ?? "";
-  const stations = useAccountStations(selectedPlantId);
-  const selectedStationId =
-    stations.data?.items.find((station) => station.isActive)?.id ?? "";
+  const stations = useAccountStations();
+  const activePlantIds = new Set(
+    (plants.data?.items ?? [])
+      .filter((plant) => plant.isActive)
+      .map((plant) => plant.id),
+  );
+  const hasActivePlants = activePlantIds.size > 0;
+  const selectedStation = stations.data?.items.find(
+    (station) =>
+      station.isActive &&
+      station.plantId !== undefined &&
+      activePlantIds.has(station.plantId),
+  );
+  const selectedPlantId = selectedStation?.plantId ?? "";
+  const selectedStationId = selectedStation?.id ?? "";
   const automaticStationIds =
     selectedStationId.length === 0 ? [] : [selectedStationId];
   const createManager = useCreatePlantManager();
   const createOperator = useCreateOperator();
   const governManager = useGovernPlantManager();
+  const isCreating = createManager.isPending || createOperator.isPending;
+  const isResolvingAutomaticStation =
+    selectedStationId.length === 0 &&
+    (plants.isLoading || stations.isLoading || stations.isFetching);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -353,16 +367,35 @@ export function PlantManagerPage() {
                 {formError}
               </p>
             )}
+            {form.role === "JEFE_PLANTA" &&
+              selectedStationId.length === 0 &&
+              formError === null && (
+                <p
+                  className={
+                    isResolvingAutomaticStation ? "field-help" : "form-error"
+                  }
+                  role={isResolvingAutomaticStation ? "status" : "alert"}
+                >
+                  {automaticStationMessage({
+                    plantsLoading: plants.isLoading,
+                    plantsError: plants.isError,
+                    hasActivePlants,
+                    stationsLoading: stations.isLoading || stations.isFetching,
+                    stationsError: stations.isError,
+                    tr,
+                  })}
+                </p>
+              )}
             <button
               type="submit"
+              aria-busy={isCreating}
               disabled={
-                createManager.isPending ||
-                createOperator.isPending ||
+                isCreating ||
                 selectedPlantId.length === 0 ||
                 (form.role === "JEFE_PLANTA" && selectedStationId.length === 0)
               }
             >
-              {createManager.isPending || createOperator.isPending
+              {isCreating
                 ? tr("CREANDO…", "CREATING…")
                 : form.role === "JEFE_PLANTA"
                   ? tr("CREAR CUENTA PENDIENTE", "CREATE PENDING ACCOUNT")
@@ -678,6 +711,45 @@ function accountError(error: unknown, language: "es" | "en"): string {
       ? "No se pudo completar la gestión de la cuenta."
       : "The account operation could not be completed.",
     language,
+  );
+}
+
+function automaticStationMessage({
+  plantsLoading,
+  plantsError,
+  hasActivePlants,
+  stationsLoading,
+  stationsError,
+  tr,
+}: {
+  plantsLoading: boolean;
+  plantsError: boolean;
+  hasActivePlants: boolean;
+  stationsLoading: boolean;
+  stationsError: boolean;
+  tr: (spanish: string, english: string) => string;
+}): string {
+  if (plantsLoading || stationsLoading) {
+    return tr(
+      "Preparando la asignación automática de estación…",
+      "Preparing automatic station assignment…",
+    );
+  }
+  if (plantsError || !hasActivePlants) {
+    return tr(
+      "No se pudo identificar una planta activa. Actualice la página e intente nuevamente.",
+      "An active plant could not be identified. Refresh the page and try again.",
+    );
+  }
+  if (stationsError) {
+    return tr(
+      "No se pudo consultar la estación activa. Actualice la página e intente nuevamente.",
+      "The active station could not be loaded. Refresh the page and try again.",
+    );
+  }
+  return tr(
+    "No hay una estación activa disponible en las plantas activas. Active la estación compartida y vuelva a esta vista.",
+    "There is no active station available in the active plants. Activate the shared station and return to this view.",
   );
 }
 
