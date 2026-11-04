@@ -37,6 +37,14 @@ public sealed class SqliteOutboxReviewService(
                 false,
                 "El evento ya fue resuelto o dejó de estar disponible para revisión.");
         }
+        if (action == "RETRY_REQUESTED" && snapshot.ErrorCode == "IDEMPOTENCY_CONTENT_MISMATCH")
+        {
+            transaction.Rollback();
+            return new OutboxReviewDecisionResult(
+                false,
+                "Este evento no puede reenviarse con el mismo identificador. " +
+                "Actualice la aplicación para recuperar el dato con un sobre técnico nuevo.");
+        }
 
         DateTimeOffset now = timeProvider.GetUtcNow().ToUniversalTime();
         await using (SqliteCommand audit = connection.CreateCommand())
