@@ -25,11 +25,40 @@ public sealed class SqliteProductionSweepRepository(
         int sweptTotal = await ReadCumulativeSweptTotalAsync(
                 connection, transaction, session, cancellationToken)
             .ConfigureAwait(false);
+        bool hasFinalSweep = await HasFinalSweepAsync(
+                connection, transaction, session, cancellationToken)
+            .ConfigureAwait(false);
         IReadOnlyList<ProductionEvent> events = await ReadUnsweptEventsAsync(
                 connection, transaction, session, cancellationToken)
             .ConfigureAwait(false);
         transaction.Commit();
-        return new LocalSweepPreparation(session, events, total, sweptTotal);
+        return new LocalSweepPreparation(session, events, total, sweptTotal, hasFinalSweep);
+    }
+
+    private static async Task<bool> HasFinalSweepAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        LocalOperationalSession session,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM production_sweeps
+                WHERE organization_id = $organizationId
+                  AND station_id = $stationId
+                  AND line_id = $lineId
+                  AND feed_cycle_id = $feedCycleId
+                  AND shipment_id = $shipmentId
+                  AND is_final = 1);
+            """;
+        AddScope(command, session);
+        long result = Convert.ToInt64(
+            await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+            CultureInfo.InvariantCulture);
+        return result == 1;
     }
 
     public async Task<LocalSweepRegistration> RecordAsync(

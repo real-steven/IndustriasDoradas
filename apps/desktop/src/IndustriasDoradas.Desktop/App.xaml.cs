@@ -207,6 +207,8 @@ public partial class App : System.Windows.Application
         });
 
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<ISyncClientInstanceProvider>(
+            static _ => new FileSyncClientInstanceProvider());
         builder.Services.AddSingleton<PlantManagerModeState>();
         builder.Services.AddSingleton<IPlantManagerModeAccessor>(services =>
             services.GetRequiredService<PlantManagerModeState>());

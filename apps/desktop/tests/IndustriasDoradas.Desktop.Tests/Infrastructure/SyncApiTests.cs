@@ -15,6 +15,7 @@ public sealed class SyncApiTests
     private static readonly Guid PlantId = Guid.Parse("31000000-0000-4000-8000-000000000001");
     private static readonly Guid StationId = Guid.Parse("34000000-0000-4000-8000-000000000001");
     private static readonly Guid MessageId = Guid.Parse("50000000-0000-4000-8000-000000000001");
+    private static readonly Guid ClientInstanceId = Guid.Parse("36000000-0000-4000-8000-000000000001");
     private static readonly DateTimeOffset Now = new(2026, 9, 19, 18, 0, 0, TimeSpan.Zero);
 
     [TestMethod]
@@ -29,6 +30,8 @@ public sealed class SyncApiTests
             Assert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.AreEqual(DesktopApplicationInfo.Version,
                 json.RootElement.GetProperty("client").GetProperty("applicationVersion").GetString());
+            Assert.AreEqual(ClientInstanceId,
+                json.RootElement.GetProperty("client").GetProperty("instanceId").GetGuid());
             Assert.AreEqual(7, json.RootElement.GetProperty("items")[0]
                 .GetProperty("stationSequence").GetInt64());
             string response = JsonSerializer.Serialize(new
@@ -54,11 +57,18 @@ public sealed class SyncApiTests
                 Content = new StringContent(response, Encoding.UTF8, "application/json"),
             };
         });
-        var api = new SyncApi(new HttpClient(handler) { BaseAddress = new Uri("https://api.example.invalid/") });
+        var api = new SyncApi(
+            new HttpClient(handler) { BaseAddress = new Uri("https://api.example.invalid/") },
+            new StubClientInstanceProvider(ClientInstanceId));
 
         SyncPushResult result = await api.PushAsync(Batch(), "access-token");
 
         Assert.AreEqual("DEPENDENCY_NOT_READY", result.Results.Single().Code);
+    }
+
+    private sealed class StubClientInstanceProvider(Guid id) : ISyncClientInstanceProvider
+    {
+        public Guid GetId() => id;
     }
 
     [TestMethod]

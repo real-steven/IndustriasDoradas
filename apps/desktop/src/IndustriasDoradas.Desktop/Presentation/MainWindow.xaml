@@ -435,7 +435,8 @@
                                TextAlignment="Center" TextWrapping="Wrap"
                                Text="Ingrese el PIN individual del jefe de planta. El acceso vuelve al modo normal después de cinco minutos de inactividad." />
                     <PasswordBox x:Name="HeaderPinBox" Height="54" MaxLength="12"
-                                 Padding="13" FontSize="22" AutomationProperties.Name="PIN individual" />
+                                 Padding="13" FontSize="22" KeyDown="OnElevationPinKeyDown"
+                                 AutomationProperties.Name="PIN individual" />
                     <Button Margin="0,10,0,0" Height="50" Click="OnComingSoon"
                             Tag="La validación biométrica"
                             Content="☝  BIOMETRÍA · PRÓXIMAMENTE" />
@@ -443,7 +444,8 @@
                         <Button Click="OnCancelElevation" Content="CANCELAR" />
                         <Button Margin="10,0,0,0" Click="OnElevate"
                                 Background="{StaticResource NavyBrush}" BorderBrush="{StaticResource NavyBrush}"
-                                Foreground="White" Content="AUTORIZAR" />
+                                Foreground="White" Content="AUTORIZAR"
+                                IsEnabled="{Binding Station.CanInteract}" />
                     </StackPanel>
                     <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center"
                                Foreground="{StaticResource MutedBrush}" Text="{Binding Station.Status}"

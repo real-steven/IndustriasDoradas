@@ -103,6 +103,7 @@ export interface SyncRepository {
     batchId: string;
     clientApplication: string;
     clientApplicationVersion: string;
+    clientInstanceId: string;
     clientSentAtUtc: string;
     serverReceivedAtUtc: string;
     item: NormalizedSyncItem;

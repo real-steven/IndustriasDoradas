@@ -34,6 +34,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private readonly ILocalDatabaseDiagnostics localDiagnostics;
     private readonly ILocalOutboxReviewService? outboxReview;
     private readonly OutboxSyncProcessor? outboxProcessor;
+    private readonly InitialSynchronizationCoordinator? initialSynchronization;
     private readonly string supportFolderPath;
     private readonly SynchronizationContext? uiContext;
     private HealthState state = HealthState.NotChecked;
@@ -62,6 +63,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private string reviewActionStatus = "Seleccione Validar y reintentar o Descartar para cada dato pendiente.";
     private bool isCreatingCopy;
     private bool isExportingReport;
+    private bool isSynchronizing;
     private readonly string stationCode;
     private readonly string stationName;
     private readonly StationViewModel? stationViewModel;
@@ -83,12 +85,14 @@ public sealed class DiagnosticsViewModel : ObservableObject
         ISyncStatusNotifier statusNotifier,
         StationViewModel? stationViewModel,
         ILocalOutboxReviewService? outboxReview = null,
-        OutboxSyncProcessor? outboxProcessor = null)
+        OutboxSyncProcessor? outboxProcessor = null,
+        InitialSynchronizationCoordinator? initialSynchronization = null)
     {
         this.healthService = healthService;
         this.localDiagnostics = localDiagnostics;
         this.outboxReview = outboxReview;
         this.outboxProcessor = outboxProcessor;
+        this.initialSynchronization = initialSynchronization;
         supportFolderPath = GetSupportFolderPath();
         uiContext = SynchronizationContext.Current;
         this.stationViewModel = stationViewModel;
@@ -100,6 +104,9 @@ public sealed class DiagnosticsViewModel : ObservableObject
             ? "Estación Abangares"
             : configuredStation.Name.Trim();
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
+        RetrySynchronizationCommand = new AsyncRelayCommand(
+            RetrySynchronizationAsync,
+            () => !IsSynchronizing);
         CreateRecoveryCopyCommand = new AsyncRelayCommand(
             CreateRecoveryCopyAsync,
             () => CanUseProtectedActions && !IsCreatingCopy &&
@@ -174,6 +181,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     }
 
     public IAsyncRelayCommand RefreshCommand { get; }
+    public IAsyncRelayCommand RetrySynchronizationCommand { get; }
     public IAsyncRelayCommand CreateRecoveryCopyCommand { get; }
     public IAsyncRelayCommand ExportDiagnosticReportCommand { get; }
     public IRelayCommand OpenSupportFolderCommand { get; }
@@ -276,6 +284,49 @@ public sealed class DiagnosticsViewModel : ObservableObject
         private set
         {
             if (SetProperty(ref isExportingReport, value)) ExportDiagnosticReportCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    public bool IsSynchronizing
+    {
+        get => isSynchronizing;
+        private set
+        {
+            if (SetProperty(ref isSynchronizing, value))
+                RetrySynchronizationCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    public async Task RetrySynchronizationAsync(CancellationToken cancellationToken = default)
+    {
+        if (initialSynchronization is null)
+        {
+            await RefreshAsync(cancellationToken).ConfigureAwait(true);
+            return;
+        }
+
+        IsSynchronizing = true;
+        State = HealthState.Checking;
+        StatusTitle = "Sincronizando datos";
+        StatusMessage = "Enviando cambios locales y descargando la información central más reciente.";
+        try
+        {
+            InitialSynchronizationResult result = await initialSynchronization
+                .SynchronizeAsync(cancellationToken: cancellationToken)
+                .ConfigureAwait(true);
+            await RefreshAsync(cancellationToken).ConfigureAwait(true);
+            StatusMessage = result.Message;
+        }
+        catch (Exception exception) when (
+            exception is IOException or InvalidOperationException or SqliteException)
+        {
+            await RefreshAsync(cancellationToken).ConfigureAwait(true);
+            StatusMessage = "La conexión respondió, pero no fue posible aplicar todos los datos centrales. " +
+                "Conserve la información local y solicite revisión técnica.";
+        }
+        finally
+        {
+            IsSynchronizing = false;
         }
     }
 

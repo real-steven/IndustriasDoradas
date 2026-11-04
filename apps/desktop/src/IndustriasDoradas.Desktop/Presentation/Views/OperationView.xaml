@@ -8,18 +8,23 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <Style x:Key="OperationActionButton" TargetType="Button"
                BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Width" Value="170" />
-            <Setter Property="Height" Value="82" />
-            <Setter Property="Margin" Value="0,0,10,0" />
-            <Setter Property="Padding" Value="10" />
+            <Setter Property="Height" Value="64" />
+            <Setter Property="Padding" Value="8" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
     </UserControl.Resources>
 
     <Grid Background="{StaticResource SoftCanvasBrush}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="34,30,34,26" MaxWidth="1380" HorizontalAlignment="Center">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" MinHeight="0"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="24,18,24,8" MaxWidth="1380" HorizontalAlignment="Center">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -63,7 +68,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="8" MinHeight="400" Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
+                            <Border Margin="6" MinHeight="280" Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
                                     BorderThickness="1" CornerRadius="19" SnapsToDevicePixels="True">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -71,7 +76,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <Border Background="{Binding AccentColor}" CornerRadius="19,19,0,0" />
-                                    <StackPanel Grid.Row="1" Margin="22,20,22,25">
+                                    <StackPanel Grid.Row="1" Margin="18,13,18,16">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
@@ -85,12 +90,12 @@
                                             </Border>
                                         </Grid>
 
-                                        <Grid Margin="0,17,0,0">
+                                        <Grid Margin="0,10,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Margin="0,0,5,0" Padding="11" Background="#F8FAFB" CornerRadius="10">
+                                            <Border Margin="0,0,5,0" Padding="8" Background="#F8FAFB" CornerRadius="10">
                                                 <StackPanel>
                                                     <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9"
                                                                FontWeight="Bold" Text="PROVEEDOR" />
@@ -98,7 +103,7 @@
                                                                Text="{Binding SupplierName}" TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="1" Margin="5,0,0,0" Padding="11" Background="#F8FAFB" CornerRadius="10">
+                                            <Border Grid.Column="1" Margin="5,0,0,0" Padding="8" Background="#F8FAFB" CornerRadius="10">
                                                 <StackPanel>
                                                     <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9"
                                                                FontWeight="Bold" Text="RESPONSABLE" />
@@ -108,7 +113,7 @@
                                             </Border>
                                         </Grid>
 
-                                        <Grid Margin="0,21,0,11">
+                                        <Grid Margin="0,10,0,7">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                  <ColumnDefinition Width="Auto" />
@@ -117,11 +122,11 @@
                                             <StackPanel>
                                                 <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="10"
                                                             FontWeight="Bold" Text="🪣  CAJUELAS DEL CARGAMENTO" />
-                                                <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="52"
+                                                <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="42"
                                                            FontWeight="Bold" Text="{Binding Total}"
                                                            AutomationProperties.Name="Total de cajuelas del cargamento" />
                                             </StackPanel>
-                                            <Border Grid.Column="1" Margin="18,0" Padding="16,9"
+                                            <Border Grid.Column="1" Margin="12,0" Padding="12,6"
                                                     VerticalAlignment="Bottom" Background="#F8FAFB" CornerRadius="10">
                                                 <StackPanel>
                                                     <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
@@ -154,39 +159,47 @@
                                                        Text="{Binding ProgressEndDescription}" />
                                         </Grid>
 
-                                        <StackPanel Margin="0,21,0,0" Orientation="Horizontal" HorizontalAlignment="Left">
-                                            <Button Style="{StaticResource OperationActionButton}"
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Margin="0,0,5,0"
+                                                    Style="{StaticResource OperationActionButton}"
                                                     Background="{StaticResource SuccessSoftBrush}" BorderBrush="#BCDCC9"
                                                     Foreground="#187C43"
                                                     Command="{Binding DataContext.RegisterLineCajuelaCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding LineId}"
                                                     AutomationProperties.Name="Registrar cajuela">
                                                 <StackPanel>
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="31" Text="＋" />
+                                                    <TextBlock HorizontalAlignment="Center" FontSize="24" Text="＋" />
                                                     <TextBlock HorizontalAlignment="Center" FontSize="9" Text="AGREGAR CAJUELA" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource OperationActionButton}"
+                                            <Button Grid.Column="1" Margin="5,0"
+                                                    Style="{StaticResource OperationActionButton}"
                                                     Background="{StaticResource DangerSoftBrush}" BorderBrush="#EBC3C7"
                                                     Foreground="{StaticResource DangerBrush}"
                                                     Command="{Binding DataContext.PrepareLineCorrectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding LineId}"
                                                     AutomationProperties.Name="Restar última cajuela">
                                                 <StackPanel>
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="31" Text="−" />
+                                                    <TextBlock HorizontalAlignment="Center" FontSize="24" Text="−" />
                                                     <TextBlock HorizontalAlignment="Center" FontSize="9" Text="RESTAR CAJUELA" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Width="84" Height="82" Margin="12,0,0,0"
+                                            <Button Grid.Column="2" Height="64" Margin="5,0"
                                                     Background="{StaticResource WarningSoftBrush}" BorderBrush="#EAD7A9"
                                                     Foreground="#8B6310"
                                                     Command="{Binding DataContext.PrepareLineSweepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding LineId}"
                                                     ToolTip="Preparar el registro físico de una barrida"
                                                     AutomationProperties.Name="Preparar barrida">
-                                                <TextBlock FontFamily="Segoe UI Emoji" FontSize="29" Text="🧹" />
+                                                <TextBlock FontFamily="Segoe UI Emoji" FontSize="24" Text="🧹" />
                                             </Button>
-                                            <Button Width="84" Height="82" Margin="10,0,0,0"
+                                            <Button Grid.Column="3" Height="64" Margin="5,0,0,0"
                                                     Background="{StaticResource SuccessSoftBrush}" BorderBrush="#BCDCC9"
                                                     Foreground="#187C43"
                                                     Command="{Binding DataContext.RegisterFiveLineCajuelasCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -194,13 +207,13 @@
                                                     ToolTip="Registra cinco cajuelas independientes en esta línea"
                                                     AutomationProperties.Name="Agregar cinco cajuelas">
                                                 <StackPanel>
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="25"
+                                                    <TextBlock HorizontalAlignment="Center" FontSize="21"
                                                                FontWeight="Bold" Text="+5" />
                                                     <TextBlock HorizontalAlignment="Center" FontSize="8"
                                                                FontWeight="Bold" Text="CAJUELAS" />
                                                 </StackPanel>
                                             </Button>
-                                        </StackPanel>
+                                        </Grid>
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -229,32 +242,34 @@
                     </StackPanel>
                 </Border>
 
-                <Border Margin="8,13,8,0" Padding="14">
-                    <Border.Style>
-                        <Style TargetType="Border" BasedOn="{StaticResource InfoAlertStyle}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding FeedbackKind}" Value="{x:Static abstractions:OperationFeedbackKind.Success}">
-                                    <Setter Property="Background" Value="#F3FAF6" />
-                                    <Setter Property="BorderBrush" Value="#BCDCC9" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding FeedbackKind}" Value="{x:Static abstractions:OperationFeedbackKind.Warning}">
-                                    <Setter Property="Background" Value="#FFFAF0" />
-                                    <Setter Property="BorderBrush" Value="#EAD7A9" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding FeedbackKind}" Value="{x:Static abstractions:OperationFeedbackKind.Error}">
-                                    <Setter Property="Background" Value="#FFF7F7" />
-                                    <Setter Property="BorderBrush" Value="#EBC3C7" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <TextBlock AutomationProperties.LiveSetting="Polite" Foreground="{StaticResource Ink700Brush}"
-                               Text="{Binding LastResult}" TextWrapping="Wrap" />
-                </Border>
             </StackPanel>
         </ScrollViewer>
 
-        <StackPanel Width="460" Margin="0,22,22,0"
+        <Border Grid.Row="1" Margin="30,4,30,14" Padding="14" MaxWidth="1364"
+                HorizontalAlignment="Stretch" Panel.ZIndex="20">
+            <Border.Style>
+                <Style TargetType="Border" BasedOn="{StaticResource InfoAlertStyle}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding FeedbackKind}" Value="{x:Static abstractions:OperationFeedbackKind.Success}">
+                            <Setter Property="Background" Value="#F3FAF6" />
+                            <Setter Property="BorderBrush" Value="#BCDCC9" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding FeedbackKind}" Value="{x:Static abstractions:OperationFeedbackKind.Warning}">
+                            <Setter Property="Background" Value="#FFFAF0" />
+                            <Setter Property="BorderBrush" Value="#EAD7A9" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding FeedbackKind}" Value="{x:Static abstractions:OperationFeedbackKind.Error}">
+                            <Setter Property="Background" Value="#FFF7F7" />
+                            <Setter Property="BorderBrush" Value="#EBC3C7" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock AutomationProperties.LiveSetting="Polite" Foreground="{StaticResource Ink700Brush}"
+                       Text="{Binding LastResult}" TextWrapping="Wrap" />
+        </Border>
+
+        <StackPanel Grid.RowSpan="2" Width="460" Margin="0,22,22,0"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Panel.ZIndex="40">
             <Border Margin="0,0,0,10" Padding="17" AutomationProperties.LiveSetting="Assertive">

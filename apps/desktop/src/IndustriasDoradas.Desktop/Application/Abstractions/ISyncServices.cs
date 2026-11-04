@@ -45,6 +45,11 @@ public interface ISyncApi
         CancellationToken cancellationToken = default);
 }
 
+public interface ISyncClientInstanceProvider
+{
+    Guid GetId();
+}
+
 public sealed record SyncChange(
     Guid ChangeId,
     long ServerSequence,

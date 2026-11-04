@@ -4,6 +4,22 @@ import type { Language } from "../i18n/language-context";
 export const unauthorizedEventName = "industrias-doradas:unauthorized";
 export const apiRequestTimeoutMs = 15_000;
 
+type AccessTokenRefresher = () => Promise<string | null>;
+
+let accessTokenRefresher: AccessTokenRefresher | null = null;
+let refreshInFlight: Promise<string | null> | null = null;
+
+export function registerAccessTokenRefresher(
+  refresher: AccessTokenRefresher,
+): () => void {
+  accessTokenRefresher = refresher;
+  refreshInFlight = null;
+  return () => {
+    if (accessTokenRefresher === refresher) accessTokenRefresher = null;
+    refreshInFlight = null;
+  };
+}
+
 export class ApiRequestError extends Error {
   constructor(
     public readonly status: number,
@@ -27,6 +43,15 @@ export async function apiRequest<T>(
   path: string,
   accessToken: string,
   init: RequestInit = {},
+): Promise<T> {
+  return requestWithToken<T>(path, accessToken, init, true);
+}
+
+async function requestWithToken<T>(
+  path: string,
+  accessToken: string,
+  init: RequestInit,
+  allowTokenRefresh: boolean,
 ): Promise<T> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     throw new ApiConnectionError(
@@ -66,6 +91,16 @@ export async function apiRequest<T>(
     callerSignal?.removeEventListener("abort", abortFromCaller);
   }
   if (!response.ok) {
+    if (
+      response.status === 401 &&
+      allowTokenRefresh &&
+      accessTokenRefresher !== null
+    ) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken !== null) {
+        return requestWithToken<T>(path, refreshedToken, init, false);
+      }
+    }
     const body = (await response.json().catch(() => ({}))) as {
       code?: unknown;
       message?: unknown;
@@ -84,6 +119,14 @@ export async function apiRequest<T>(
     );
   }
   return (await response.json()) as T;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (accessTokenRefresher === null) return null;
+  refreshInFlight ??= accessTokenRefresher().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 export function requestErrorMessage(

@@ -6,7 +6,7 @@
   "packageManager": "pnpm@11.21.0",
   "engines": {
     "node": ">=24.19.0 <25",
-    "pnpm": "11.21.0"
+    "pnpm": ">=11.21.0 <12"
   },
   "scripts": {
     "setup": "pnpm install --frozen-lockfile && dotnet restore apps/desktop/IndustriasDoradas.Desktop.slnx",

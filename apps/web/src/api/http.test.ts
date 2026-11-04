@@ -5,6 +5,7 @@ import {
   ApiRequestError,
   apiRequest,
   apiRequestTimeoutMs,
+  registerAccessTokenRefresher,
   requestErrorMessage,
   unauthorizedEventName,
 } from "./http";
@@ -91,6 +92,42 @@ describe("apiRequest", () => {
       message: "La sesión no es válida o venció.",
     });
     expect(unauthorized).toHaveBeenCalledOnce();
+    window.removeEventListener(unauthorizedEventName, unauthorized);
+  });
+
+  it("refreshes the access token and retries one unauthorized request", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "TOKEN_EXPIRED" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", transport);
+    const refresh = vi.fn(() => Promise.resolve("refreshed-token"));
+    const unregister = registerAccessTokenRefresher(refresh);
+    const unauthorized = vi.fn();
+    window.addEventListener(unauthorizedEventName, unauthorized);
+
+    await expect(apiRequest("/private", "expired-token")).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(transport).toHaveBeenCalledTimes(2);
+    const retriedHeaders = new Headers(transport.mock.calls[1]?.[1]?.headers);
+    expect(retriedHeaders.get("Authorization")).toBe("Bearer refreshed-token");
+    expect(unauthorized).not.toHaveBeenCalled();
+
+    unregister();
     window.removeEventListener(unauthorizedEventName, unauthorized);
   });
 

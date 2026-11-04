@@ -298,10 +298,25 @@ public partial class MainWindow : Window
 
     private async void OnElevate(object sender, RoutedEventArgs e)
     {
-        if (viewModel.Station is null) return;
-        await viewModel.Station.ElevateAsync(HeaderPinBox.Password);
+        await ElevateAsync();
+    }
+
+    private async void OnElevationPinKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Return || ElevationOverlay.Visibility != Visibility.Visible ||
+            viewModel.Station?.CanInteract != true)
+            return;
+        e.Handled = true;
+        await ElevateAsync();
+    }
+
+    private async Task ElevateAsync()
+    {
+        StationViewModel? station = viewModel.Station;
+        if (station?.CanInteract != true) return;
+        await station.ElevateAsync(HeaderPinBox.Password);
         HeaderPinBox.Clear();
-        if (viewModel.Station.IsPlantManager)
+        if (station.IsPlantManager)
         {
             ElevationOverlay.Visibility = Visibility.Collapsed;
             viewModel.Attendance?.RefreshManagerMode();

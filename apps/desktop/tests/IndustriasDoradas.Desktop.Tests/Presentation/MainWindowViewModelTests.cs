@@ -1,4 +1,5 @@
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
@@ -44,6 +45,23 @@ public sealed class MainWindowViewModelTests
         Assert.IsTrue(viewModel.IsAttendancePage);
         Assert.AreEqual("Asistencia", viewModel.CurrentPageTitle);
         StringAssert.Contains(attendance.Status, "asistencia");
+    }
+
+    [TestMethod]
+    public async Task DataChangeRefreshesAttendanceWhenItIsVisible()
+    {
+        HomeViewModel home = new();
+        DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
+        var attendance = new AttendancePreviewViewModel();
+        var notifier = new SyncStatusNotifier();
+        using MainWindowViewModel viewModel = new(
+            home, diagnostics, null, null, null, null, notifier, new WpfUiDispatcher(), attendance);
+        viewModel.ShowAttendanceCommand.Execute(null);
+
+        notifier.Notify(new SyncStatusNotification(false, true));
+        await Task.Yield();
+
+        StringAssert.Contains(attendance.Status, "no está configurado");
     }
 
     [TestMethod]

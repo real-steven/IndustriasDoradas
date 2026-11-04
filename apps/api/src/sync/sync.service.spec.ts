@@ -74,9 +74,27 @@ describe("SyncService", () => {
       batchId: body.batchId,
       clientApplication: "desktop",
       clientApplicationVersion: "0.1.0",
+      clientInstanceId: body.scope.stationId,
       clientSentAtUtc: body.sentAtUtc,
     });
     expect(response.results).toHaveLength(2);
+  });
+
+  it("keeps the physical installation identity separate from the station", async () => {
+    const body = envelope();
+    body.client.instanceId = "36000000-0000-4000-8000-000000000001";
+
+    await service.push(
+      body.scope.organizationId,
+      body.scope.stationId,
+      body,
+      auth(),
+      "4a000000-0000-4000-8000-000000000001",
+    );
+
+    expect(repository.ingestItem.mock.calls[0]?.[0].clientInstanceId).toBe(
+      body.client.instanceId,
+    );
   });
 
   it("isolates a temporary repository failure to its item", async () => {

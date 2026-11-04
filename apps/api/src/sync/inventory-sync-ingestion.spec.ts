@@ -153,8 +153,8 @@ describe("inventory sync ingestion with PostgreSQL", () => {
           "OPERATIONAL_NOVELTY_OPENED",
           "OPERATIONAL_NOVELTY_CLOSED",
         ].includes(input.item.operationType)
-          ? "app.ingest_inventory_maintenance_sync_item_v1"
-          : "app.ingest_inventory_sync_item_v2";
+          ? "app.ingest_inventory_maintenance_sync_item_v2"
+          : "app.ingest_inventory_sync_item_v3";
         const result = await db.query<{ result: SyncItemResult }>(
           `select ${functionName}($1::jsonb) as result`,
           [
@@ -166,6 +166,7 @@ describe("inventory sync ingestion with PostgreSQL", () => {
               batchId: input.batchId,
               clientApplication: input.clientApplication,
               clientApplicationVersion: input.clientApplicationVersion,
+              clientInstanceId: input.clientInstanceId,
               clientSentAtUtc: input.clientSentAtUtc,
               receiptId: randomUUID(),
               auditEventId: randomUUID(),

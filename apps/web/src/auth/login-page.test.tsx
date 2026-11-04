@@ -8,6 +8,7 @@ import { AuthContext, type AuthState } from "./auth-context";
 import { LoginPage } from "./login-page";
 
 const rememberedEmailKey = "industrias-doradas:recent-email";
+const emailDraftKey = "industrias-doradas:login-email-draft";
 
 describe("LoginPage", () => {
   afterEach(() => {
@@ -81,6 +82,47 @@ describe("LoginPage", () => {
       "gerencia@example.com",
     );
     expect(JSON.stringify(window.localStorage)).not.toContain("clave-privada");
+  });
+
+  it("restores an unfinished email after the login page reloads", async () => {
+    const user = userEvent.setup();
+    const firstRender = renderLogin();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "CORREO" }),
+      "gerencia@example.com",
+    );
+    expect(window.localStorage.getItem(emailDraftKey)).not.toBeNull();
+
+    firstRender.unmount();
+    renderLogin();
+
+    expect(screen.getByRole("textbox", { name: "CORREO" })).toHaveValue(
+      "gerencia@example.com",
+    );
+  });
+
+  it("discards an unfinished email after five minutes", async () => {
+    const user = userEvent.setup();
+    const firstRender = renderLogin();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "CORREO" }),
+      "temporal@example.com",
+    );
+    window.localStorage.setItem(
+      emailDraftKey,
+      JSON.stringify({
+        email: "temporal@example.com",
+        expiresAt: Date.now() - 1,
+      }),
+    );
+
+    firstRender.unmount();
+    renderLogin();
+
+    expect(screen.getByRole("textbox", { name: "CORREO" })).toHaveValue("");
+    expect(window.localStorage.getItem(emailDraftKey)).toBeNull();
   });
 
   it("asks before opening a session found in the browser", async () => {

@@ -15,7 +15,7 @@
                     <TextBlock Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
                                Text="Compruebe la conexión y el guardado de datos de esta estación." />
                 </StackPanel>
-                <Button Grid.Column="1" VerticalAlignment="Center" Command="{Binding RefreshCommand}"
+                <Button Grid.Column="1" VerticalAlignment="Center" Command="{Binding RetrySynchronizationCommand}"
                         Content="↻  REINTENTAR SINCRONIZACIÓN" />
             </Grid>
 

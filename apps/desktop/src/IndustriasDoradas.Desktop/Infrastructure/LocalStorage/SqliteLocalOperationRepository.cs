@@ -155,7 +155,7 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
                       AND shipment_id = $shipmentId
                       AND feed_cycle_id = $feedCycleId
                       AND responsible_worker_id = $responsibleWorkerId
-                      AND updated_at_utc = $expectedUpdatedAtUtc
+                      AND julianday(updated_at_utc) = julianday($expectedUpdatedAtUtc)
                       AND status = 'ACTIVE';
                     """;
                 AddSessionScope(updateSession, current);
@@ -256,7 +256,7 @@ public sealed class SqliteLocalOperationRepository(ILocalSqliteConnectionFactory
                       AND shipment_id = $shipmentId
                       AND feed_cycle_id = $feedCycleId
                       AND responsible_worker_id = $responsibleWorkerId
-                      AND updated_at_utc = $expectedUpdatedAtUtc
+                      AND julianday(updated_at_utc) = julianday($expectedUpdatedAtUtc)
                       AND status = 'ACTIVE';
                     """;
                 AddSessionScope(completeSession, current);

@@ -111,6 +111,7 @@
                                      Foreground="#172026" CaretBrush="#173B50" SelectionBrush="#B9DCEB"
                                      FontFamily="Segoe UI" FontSize="13" FontWeight="Normal"
                                      PasswordChar="●" IsEnabled="{Binding NeedsCredentials}"
+                                     KeyDown="OnPasswordKeyDown"
                                      AutomationProperties.Name="Contraseña" />
 
                         <Grid Margin="1,0,1,18">

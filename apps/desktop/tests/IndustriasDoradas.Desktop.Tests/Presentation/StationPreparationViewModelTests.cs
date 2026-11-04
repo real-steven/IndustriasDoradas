@@ -232,6 +232,59 @@ public sealed class StationPreparationViewModelTests
     }
 
     [TestMethod]
+    public async Task CompletionAfterEarlierFinalSweepRecordsPendingCajuelasAsRecovery()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        var stationStore = new MemoryStationStore(state);
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, Snapshot()),
+            catalogs,
+            new MemoryStationSequences(),
+            stationStore,
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        var repository = new RecordingOperationRepository(sessions);
+        var sweeps = new MemorySweepRepository(
+            sessions,
+            quantity: 24,
+            hasFinalSweep: true);
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(catalogs, sessions, repository, time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time,
+            dashboard: null,
+            new RecordProductionSweepHandler(sweeps, stationStore, time));
+
+        await viewModel.InitializeAsync();
+        await viewModel.ElevateAsync("123456");
+        viewModel.SelectedLine = viewModel.Lines.Single(line => line.Id == LineId);
+        viewModel.SelectedSupplier = viewModel.Suppliers.Single();
+        viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
+        await viewModel.PrepareLineCommand.ExecuteAsync(null);
+        await viewModel.ConfirmLineCommand.ExecuteAsync(null);
+
+        await viewModel.PrepareCompletionCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(viewModel.ManagementSummary, "Cierre de recuperación");
+        StringAssert.Contains(viewModel.ManagementSummary, "24 cajuelas");
+        await viewModel.ConfirmCompletionCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(1, sweeps.RecordCalls);
+        Assert.IsNotNull(sweeps.LastSweep);
+        Assert.IsFalse(sweeps.LastSweep.IsFinal);
+        Assert.AreEqual(24, sweeps.LastSweep.CajuelaQuantity);
+        Assert.AreEqual(1, repository.CompletionCalls);
+        Assert.AreEqual(LineFeedCycleStatus.Completed, sessions.Current?.Status);
+    }
+
+    [TestMethod]
     public async Task OnlineElevationRenewsExpiredAuthorizationBeforeCompletingShipment()
     {
         var time = new MutableTimeProvider(Now);
@@ -609,7 +662,8 @@ public sealed class StationPreparationViewModelTests
 
     private sealed class MemorySweepRepository(
         MemorySessions sessions,
-        int quantity) : ILocalProductionSweepRepository
+        int quantity,
+        bool hasFinalSweep = false) : ILocalProductionSweepRepository
     {
         public int RecordCalls { get; private set; }
         public ProductionSweep? LastSweep { get; private set; }
@@ -637,7 +691,12 @@ public sealed class StationPreparationViewModelTests
                     Now.AddMinutes(-1),
                     Now.AddMinutes(-1)))
                 .ToArray();
-            return Task.FromResult(new LocalSweepPreparation(session, events, quantity, 0));
+            return Task.FromResult(new LocalSweepPreparation(
+                session,
+                events,
+                quantity,
+                0,
+                hasFinalSweep));
         }
 
         public Task<LocalSweepRegistration> RecordAsync(

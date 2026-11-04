@@ -182,7 +182,8 @@ public sealed record LocalSweepPreparation(
     LocalOperationalSession Session,
     IReadOnlyList<ProductionEvent> UnsweptEvents,
     int TotalCajuelas,
-    int LastSweepCumulativeTotal);
+    int LastSweepCumulativeTotal,
+    bool HasFinalSweep = false);
 
 public sealed record LocalSweepRegistration(
     ProductionSweep Sweep,

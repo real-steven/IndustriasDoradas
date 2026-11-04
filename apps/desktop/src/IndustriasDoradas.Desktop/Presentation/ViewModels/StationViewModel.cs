@@ -769,11 +769,19 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         CloseStationCommand.NotifyCanExecuteChanged();
     }, "No se pudo cerrar la estación.");
 
-    private async Task RunAsync(Func<Task> action, string failure)
+    private async Task RunAsync(
+        Func<Task> action,
+        string failure,
+        bool includeFailureDetail = false)
     {
         IsBusy = true;
         try { await action().ConfigureAwait(true); }
-        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or InvalidOperationException or UnauthorizedAccessException or IOException or SqliteException) { Status = failure; }
+        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or InvalidOperationException or UnauthorizedAccessException or IOException or SqliteException)
+        {
+            Status = includeFailureDetail
+                ? $"{failure} Detalle: {exception.Message}"
+                : failure;
+        }
         finally { IsBusy = false; }
     }
 
@@ -1110,11 +1118,15 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             ManagementSummary = preparedFinalSweep is null
                 ? "Cierre pendiente: finalizará el cargamento y bloqueará nuevos registros. " +
                   "No hay cajuelas posteriores a la última barrida. La línea continúa activa hasta confirmar."
+                : preparedFinalSweep.HasExistingFinalSweep
+                    ? $"Cierre de recuperación: se registrarán {preparedFinalSweep.CajuelaQuantity} cajuelas " +
+                      "posteriores a la barrida final anterior y luego se finalizará el cargamento."
                 : $"Cierre pendiente: antes de finalizar se registrará la barrida final de " +
                   $"{preparedFinalSweep.CajuelaQuantity} cajuelas. Las mediciones de mercurio por rastra quedarán pendientes.";
             Status = "Revise y confirme el cierre del cargamento.";
             NotifyOperationCommands();
-        }, "No se pudo preparar el cierre; el cargamento continúa activo.").ConfigureAwait(true);
+        }, "No se pudo preparar el cierre; el cargamento continúa activo.", includeFailureDetail: true)
+            .ConfigureAwait(true);
     }
 
     private async Task ConfirmCompletionAsync()
@@ -1125,7 +1137,9 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             if (preparedFinalSweep is not null)
             {
-                await sweepHandler!.ConfirmAsync(preparedFinalSweep, isFinal: true).ConfigureAwait(true);
+                await sweepHandler!.ConfirmAsync(
+                    preparedFinalSweep,
+                    isFinal: !preparedFinalSweep.HasExistingFinalSweep).ConfigureAwait(true);
                 preparedFinalSweep = null;
             }
             await operations.ConfirmCompletionAsync(prepared).ConfigureAwait(true);
@@ -1134,7 +1148,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             ManagementSummary = "Cargamento finalizado localmente con su historial conservado.";
             CompleteManagerAction(
                 "Cargamento finalizado. Puede preparar el siguiente; Modo Jefe de Planta continúa activo.");
-        }, "No se pudo finalizar; el cargamento continúa activo.").ConfigureAwait(true);
+        }, "No se pudo finalizar; el cargamento continúa activo.", includeFailureDetail: true)
+            .ConfigureAwait(true);
     }
 
     private void CancelPreparation()

@@ -36,7 +36,7 @@ describe("AuthProvider privacy", () => {
     );
   });
 
-  it("keeps an initial stored session closed until the user confirms it", async () => {
+  it("restores and validates an initial stored session automatically", async () => {
     const harness = createSupabaseHarness();
     const queryClient = testQueryClient();
     const transport = sessionTransport();
@@ -44,14 +44,9 @@ describe("AuthProvider privacy", () => {
 
     renderAuth(harness.client, queryClient);
 
-    expect(await screen.findByText(ACCOUNT_EMAIL)).toBeInTheDocument();
-    expect(transport).not.toHaveBeenCalled();
-    expect(screen.queryByText(PROFILE_ID)).not.toBeInTheDocument();
-
-    await openFoundSession();
-
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
     expect(transport).toHaveBeenCalledOnce();
+    expect(screen.queryByText(ACCOUNT_EMAIL)).not.toBeInTheDocument();
   });
 
   it("stops loading when application session validation never finishes", async () => {
@@ -65,13 +60,11 @@ describe("AuthProvider privacy", () => {
 
     renderAuth(harness.client, queryClient);
     await act(() => Promise.resolve());
-    expect(screen.getByText(ACCOUNT_EMAIL)).toBeInTheDocument();
-    act(() => screen.getByRole("button", { name: "Continuar prueba" }).click());
     expect(screen.getByText("loading")).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(apiRequestTimeoutMs));
 
-    expect(screen.getByText(ACCOUNT_EMAIL)).toBeInTheDocument();
+    expect(screen.getByText("signed-out")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "No fue posible comprobar la sesión",
     );
@@ -86,7 +79,6 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", sessionTransport());
 
     renderAuth(harness.client, queryClient);
-    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
 
     act(() => {
@@ -107,7 +99,6 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", sessionTransport());
 
     renderAuth(harness.client, queryClient);
-    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cerrar prueba" }));
 
@@ -127,7 +118,6 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", sessionTransport());
 
     renderAuth(harness.client, queryClient);
-    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
 
     act(() => {
@@ -147,7 +137,6 @@ describe("AuthProvider privacy", () => {
     vi.stubGlobal("fetch", transport);
 
     renderAuth(harness.client, queryClient);
-    await openFoundSession();
     expect(await screen.findByText(PROFILE_ID)).toBeInTheDocument();
 
     act(() => harness.emit("TOKEN_REFRESHED", authSession("refreshed-token")));
@@ -183,12 +172,6 @@ function AuthProbe() {
       </button>
     </div>
   );
-}
-
-async function openFoundSession(): Promise<void> {
-  const user = userEvent.setup();
-  expect(await screen.findByText(ACCOUNT_EMAIL)).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Continuar prueba" }));
 }
 
 function renderAuth(client: SupabaseClient, queryClient: QueryClient): void {

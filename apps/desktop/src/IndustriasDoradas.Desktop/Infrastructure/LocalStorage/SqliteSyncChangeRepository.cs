@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -263,7 +264,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$quantity", NullableMilliunits(payload, "quantity") ?? (object)DBNull.Value),
                     ("$actorId", Text(payload, "actor_profile_id")),
                     ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
-                    ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+                    ("$sequence", NullableClientScopedSequence(payload) ?? (object)DBNull.Value),
                     ("$workerId", NullableText(payload, "responsible_worker_id") ?? (object)DBNull.Value),
                     ("$occurredAt", Timestamp(payload, "occurred_at_utc", change.ChangedAtUtc)),
                     ("$recordedAt", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)),
@@ -295,7 +296,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$description", NullableText(payload, "description") ?? (object)DBNull.Value),
                     ("$actorId", Text(payload, "actor_profile_id")),
                     ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
-                    ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+                    ("$sequence", NullableClientScopedSequence(payload) ?? (object)DBNull.Value),
                     ("$workerId", NullableText(payload, "responsible_worker_id") ?? (object)DBNull.Value),
                     ("$occurredAt", Timestamp(payload, "occurred_at_utc", change.ChangedAtUtc)),
                     ("$recordedAt", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)))
@@ -390,7 +391,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$lineId", Text(payload, "production_line_id")),
                     ("$cycleId", Text(payload, "feed_cycle_id")),
                     ("$started", Timestamp(payload, "started_at_utc", change.ChangedAtUtc)),
-                    ("$completed", NullableText(payload, "completed_at_utc") ?? (object)DBNull.Value),
+                    ("$completed", NullableTimestamp(payload, "completed_at_utc")),
                     ("$status", Text(payload, "status")),
                     ("$plantId", Text(payload, "plant_id")),
                     ("$stationId", Text(payload, "station_id"))).ConfigureAwait(false);
@@ -410,7 +411,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$id", Text(payload, "id")), ("$shipmentId", Text(payload, "shipment_id")),
                     ("$workerId", Text(payload, "worker_id")),
                     ("$assigned", Timestamp(payload, "started_at_utc", change.ChangedAtUtc)),
-                    ("$unassigned", NullableText(payload, "ended_at_utc") ?? (object)DBNull.Value)).ConfigureAwait(false);
+                    ("$unassigned", NullableTimestamp(payload, "ended_at_utc"))).ConfigureAwait(false);
                 break;
             case "PRODUCTION_EVENT":
                 await ExecuteAsync(connection, transaction, """
@@ -435,7 +436,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$workPeriod", Text(payload, "work_period")),
                     ("$occurred", Timestamp(payload, "occurred_at_utc", change.ChangedAtUtc)),
                     ("$recorded", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)),
-                    ("$sequence", Long(payload, "client_sequence")),
+                    ("$sequence", ClientScopedSequence(payload)),
                     ("$reverses", NullableText(payload, "reverses_client_event_id") ?? (object)DBNull.Value))
                     .ConfigureAwait(false);
                 await ExecuteAsync(connection, transaction, """
@@ -476,7 +477,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$lineId", Text(payload, "production_line_id")),
                     ("$cycleId", Text(payload, "feed_cycle_id")),
                     ("$shipmentId", Text(payload, "shipment_id")),
-                    ("$sequence", Long(payload, "client_sequence")),
+                    ("$sequence", ClientScopedSequence(payload)),
                     ("$count", Integer(payload, "cajuela_count")),
                     ("$swept", Timestamp(payload, "swept_at_utc", change.ChangedAtUtc)),
                     ("$recorded", Timestamp(payload, "recorded_at_utc", change.ChangedAtUtc)),
@@ -521,7 +522,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
                     ("$shipmentId", Text(payload, "shipment_id")),
                     ("$componentId", Text(payload, "line_component_id")),
                     ("$sweepId", NullableText(payload, "sweep_id") ?? (object)DBNull.Value),
-                    ("$sequence", Long(payload, "client_sequence")),
+                    ("$sequence", ClientScopedSequence(payload)),
                     ("$kind", Text(payload, "movement_kind")),
                     ("$amount", Centigrams(payload, "amount_grams") ?? (object)DBNull.Value),
                     ("$unit", Text(payload, "unit_code")),
@@ -569,7 +570,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             ("$delta", Milliunits(payload, "quantity_delta")),
             ("$actorId", Text(payload, "actor_profile_id")),
             ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
-            ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+            ("$sequence", NullableClientScopedSequence(payload) ?? (object)DBNull.Value),
             ("$workerId", NullableText(payload, "responsible_worker_id") ?? (object)DBNull.Value),
             ("$occurred", CanonicalTimestamp(payload, "occurred_at_utc")),
             ("$recorded", CanonicalTimestamp(payload, "recorded_at_utc")),
@@ -600,7 +601,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             ("$status", Text(payload, "status")),
             ("$reviewedBy", Text(payload, "reviewed_by_profile_id")),
             ("$stationId", NullableText(payload, "station_id") ?? (object)DBNull.Value),
-            ("$sequence", NullableLong(payload, "client_sequence") ?? (object)DBNull.Value),
+            ("$sequence", NullableClientScopedSequence(payload) ?? (object)DBNull.Value),
             ("$reviewed", CanonicalTimestamp(payload, "reviewed_at_utc")),
             ("$recorded", CanonicalTimestamp(payload, "recorded_at_utc")),
             ("$notes", NullableText(payload, "notes") ?? (object)DBNull.Value))
@@ -640,7 +641,7 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
         string plantId = Text(payload, "plant_id");
         string stationId = Text(payload, "station_id");
         string workerId = Text(payload, "worker_id");
-        long sequence = Long(payload, "client_sequence");
+        long sequence = ClientScopedSequence(payload);
         string eventType = Text(payload, "event_type");
         string occurredAt = CanonicalTimestamp(payload, "occurred_at_utc");
         string recordedAt = CanonicalTimestamp(payload, "recorded_at_utc");
@@ -676,8 +677,9 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             WHERE client_event_id = $id
               AND organization_id = $organizationId AND plant_id = $plantId
               AND station_id = $stationId AND worker_id = $workerId
-              AND client_sequence = $sequence AND event_type = $eventType
-              AND occurred_at_utc = $occurredAt AND recorded_at_utc = $recordedAt
+              AND event_type = $eventType
+              AND ABS((julianday(occurred_at_utc) - julianday($occurredAt)) * 86400000.0) < 2.0
+              AND ABS((julianday(recorded_at_utc) - julianday($recordedAt)) * 86400000.0) < 2.0
               AND corrected_by_profile_id IS $correctedBy
               AND correction_reason IS $reason AND related_event_id IS $relatedEventId
               AND sync_status <> 'SYNCHRONIZED';
@@ -690,8 +692,9 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             WHERE client_event_id = $id
               AND organization_id = $organizationId AND plant_id = $plantId
               AND station_id = $stationId AND worker_id = $workerId
-              AND client_sequence = $sequence AND event_type = $eventType
-              AND occurred_at_utc = $occurredAt AND recorded_at_utc = $recordedAt
+              AND event_type = $eventType
+              AND ABS((julianday(occurred_at_utc) - julianday($occurredAt)) * 86400000.0) < 2.0
+              AND ABS((julianday(recorded_at_utc) - julianday($recordedAt)) * 86400000.0) < 2.0
               AND corrected_by_profile_id IS $correctedBy
               AND correction_reason IS $reason AND related_event_id IS $relatedEventId
               AND sync_status = 'SYNCHRONIZED' AND confirmed_at_utc = $confirmedAt;
@@ -899,6 +902,25 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
         return value.TryGetInt64(out long result)
             ? result : throw new InvalidOperationException($"Valor inválido para {name} en cambio remoto.");
     }
+    private static long ClientScopedSequence(JsonElement payload)
+    {
+        long sequence = Long(payload, "client_sequence");
+        string? stationId = NullableText(payload, "station_id");
+        string? clientInstanceId = NullableText(payload, "client_instance_id");
+        if (string.IsNullOrWhiteSpace(clientInstanceId) ||
+            string.Equals(clientInstanceId, stationId, StringComparison.OrdinalIgnoreCase))
+            return sequence;
+
+        byte[] value = Encoding.UTF8.GetBytes($"{clientInstanceId}:{sequence}");
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(value, hash);
+        long projected = (long)(BinaryPrimitives.ReadUInt64BigEndian(hash) & long.MaxValue);
+        return projected == 0 ? 1 : projected;
+    }
+    private static long? NullableClientScopedSequence(JsonElement payload) =>
+        NullableLong(payload, "client_sequence") is null
+            ? null
+            : ClientScopedSequence(payload);
     private static long Milliunits(JsonElement payload, string name)
     {
         if (!payload.TryGetProperty(name, out JsonElement value) || !value.TryGetDecimal(out decimal quantity) ||
@@ -930,16 +952,30 @@ public sealed class SqliteSyncChangeRepository : ILocalSyncChangeRepository
             ? item.GetString()!
             : throw new InvalidOperationException($"Valor inválido en {name}.")).ToArray();
     }
-    private static string Timestamp(JsonElement payload, string name, DateTimeOffset fallback) =>
-        NullableText(payload, name) ?? SqliteLocalStorageConverters.Timestamp(fallback);
+    private static string Timestamp(JsonElement payload, string name, DateTimeOffset fallback)
+    {
+        string? value = NullableText(payload, name);
+        return value is null
+            ? SqliteLocalStorageConverters.Timestamp(fallback)
+            : CanonicalTimestamp(value);
+    }
+
+    private static object NullableTimestamp(JsonElement payload, string name)
+    {
+        string? value = NullableText(payload, name);
+        return value is null ? DBNull.Value : CanonicalTimestamp(value);
+    }
 
     private static string CanonicalTimestamp(JsonElement payload, string name)
     {
         string value = Text(payload, name);
-        return SqliteLocalStorageConverters.Timestamp(
+        return CanonicalTimestamp(value);
+    }
+
+    private static string CanonicalTimestamp(string value) =>
+        SqliteLocalStorageConverters.Timestamp(
             DateTimeOffset.Parse(
                 value,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind));
-    }
 }

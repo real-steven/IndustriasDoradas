@@ -7,6 +7,7 @@ import {
   ApiRequestError,
   apiRequestTimeoutMs,
   apiRequest,
+  registerAccessTokenRefresher,
   requestErrorMessage,
   unauthorizedEventName,
 } from "../api/http";
@@ -49,6 +50,17 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
     }, apiRequestTimeoutMs);
     return () => window.clearTimeout(timeout);
   }, [loading]);
+
+  useEffect(
+    () =>
+      registerAccessTokenRefresher(async () => {
+        const { data, error: refreshError } =
+          await supabase.auth.refreshSession();
+        if (refreshError !== null || data.session === null) return null;
+        return data.session.access_token;
+      }),
+    [supabase],
+  );
 
   useEffect(() => {
     let active = true;
@@ -163,8 +175,7 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
     window.addEventListener(unauthorizedEventName, expireSession);
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       if (event === "INITIAL_SESSION") {
-        if (next === null) schedule(null);
-        else holdFoundSession(next);
+        schedule(next);
         return;
       }
       if (event === "SIGNED_OUT") {

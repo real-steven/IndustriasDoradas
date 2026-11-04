@@ -6,12 +6,14 @@ import { LanguageSwitcher } from "../i18n/language-switcher";
 import { useAuth } from "./auth-context";
 
 const rememberedEmailKey = "industrias-doradas:recent-email";
+const emailDraftKey = "industrias-doradas:login-email-draft";
+const emailDraftTtlMs = 5 * 60 * 1_000;
 
 export function LoginPage() {
   const auth = useAuth();
   const { language, tr } = useLanguage();
   const [rememberedEmail] = useState(loadRememberedEmail);
-  const [email, setEmail] = useState(rememberedEmail);
+  const [email, setEmail] = useState(loadInitialEmail);
   const [rememberEmail, setRememberEmail] = useState(
     rememberedEmail.length > 0,
   );
@@ -33,6 +35,7 @@ export function LoginPage() {
     try {
       await auth.signIn(email.trim(), formString(form, "password"));
       saveEmailPreference(email, rememberEmail);
+      clearEmailDraft();
     } catch (error) {
       setFeedback({
         kind: "error",
@@ -109,6 +112,7 @@ export function LoginPage() {
     try {
       await auth.signOut();
       setEmail("");
+      clearEmailDraft();
     } finally {
       setBusy(false);
     }
@@ -191,7 +195,11 @@ export function LoginPage() {
                   type="email"
                   autoComplete="username"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => {
+                    const nextEmail = event.target.value;
+                    setEmail(nextEmail);
+                    saveEmailDraft(nextEmail);
+                  }}
                   disabled={busy}
                   required
                 />
@@ -335,6 +343,54 @@ function loadRememberedEmail(): string {
     return window.localStorage.getItem(rememberedEmailKey)?.trim() ?? "";
   } catch {
     return "";
+  }
+}
+
+function loadInitialEmail(): string {
+  const draft = loadEmailDraft();
+  return draft ?? loadRememberedEmail();
+}
+
+function loadEmailDraft(): string | null {
+  try {
+    const raw = window.localStorage.getItem(emailDraftKey);
+    if (raw === null) return null;
+    const value = JSON.parse(raw) as { email?: unknown; expiresAt?: unknown };
+    if (
+      typeof value.email !== "string" ||
+      typeof value.expiresAt !== "number" ||
+      value.expiresAt <= Date.now()
+    ) {
+      clearEmailDraft();
+      return null;
+    }
+    return value.email;
+  } catch {
+    clearEmailDraft();
+    return null;
+  }
+}
+
+function saveEmailDraft(email: string): void {
+  try {
+    if (email.length === 0) {
+      clearEmailDraft();
+      return;
+    }
+    window.localStorage.setItem(
+      emailDraftKey,
+      JSON.stringify({ email, expiresAt: Date.now() + emailDraftTtlMs }),
+    );
+  } catch {
+    // El borrador temporal nunca debe impedir el inicio de sesión.
+  }
+}
+
+function clearEmailDraft(): void {
+  try {
+    window.localStorage.removeItem(emailDraftKey);
+  } catch {
+    // El almacenamiento puede estar deshabilitado por el navegador.
   }
 }
 

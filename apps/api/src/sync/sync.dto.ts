@@ -30,6 +30,10 @@ export class SyncClientDto {
   @MaxLength(80)
   @Matches(/^[A-Za-z0-9][A-Za-z0-9._+-]*$/u)
   applicationVersion!: string;
+
+  @IsOptional()
+  @IsUUID()
+  instanceId?: string;
 }
 
 export class SyncScopeDto {

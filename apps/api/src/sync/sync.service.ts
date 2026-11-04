@@ -79,6 +79,7 @@ export class SyncService {
             batchId: body.batchId,
             clientApplication: body.client.application,
             clientApplicationVersion: body.client.applicationVersion,
+            clientInstanceId: body.client.instanceId ?? stationId,
             clientSentAtUtc: body.sentAtUtc,
             serverReceivedAtUtc,
             item,

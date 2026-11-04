@@ -8,7 +8,9 @@ using IndustriasDoradas.Desktop.Configuration;
 
 namespace IndustriasDoradas.Desktop.Infrastructure.Sync;
 
-public sealed class SyncApi(HttpClient httpClient) : ISyncApi
+public sealed class SyncApi(
+    HttpClient httpClient,
+    ISyncClientInstanceProvider? clientInstances = null) : ISyncApi
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -22,7 +24,12 @@ public sealed class SyncApi(HttpClient httpClient) : ISyncApi
             contractVersion = 1,
             batchId = batch.BatchId,
             sentAtUtc = batch.SentAtUtc,
-            client = new { application = "desktop", applicationVersion = DesktopApplicationInfo.Version },
+            client = new
+            {
+                application = "desktop",
+                applicationVersion = DesktopApplicationInfo.Version,
+                instanceId = clientInstances?.GetId() ?? batch.StationId,
+            },
             scope = new
             {
                 organizationId = batch.OrganizationId,

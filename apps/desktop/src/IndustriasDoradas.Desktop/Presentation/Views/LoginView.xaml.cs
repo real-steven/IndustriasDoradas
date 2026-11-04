@@ -30,16 +30,29 @@ public partial class LoginView : UserControl
 
     private async void OnSignIn(object sender, RoutedEventArgs e)
     {
-        if (ViewModel is null) return;
-        if (ViewModel.HasRestorableSession && string.IsNullOrWhiteSpace(PasswordBox.Password))
+        await SignInAsync();
+    }
+
+    private async void OnPasswordKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Return || ViewModel?.CanInteract != true) return;
+        e.Handled = true;
+        await SignInAsync();
+    }
+
+    private async Task SignInAsync()
+    {
+        StationViewModel? station = ViewModel;
+        if (station?.CanInteract != true) return;
+        if (station.HasRestorableSession && string.IsNullOrWhiteSpace(PasswordBox.Password))
         {
-            await ViewModel.EnterRestoredSessionAsync();
+            await station.EnterRestoredSessionAsync();
             return;
         }
 
-        await ViewModel.SignInAsync(EmailBox.Text, PasswordBox.Password);
+        await station.SignInAsync(EmailBox.Text, PasswordBox.Password);
         PasswordBox.Clear();
-        if (ViewModel.IsStationOpen)
+        if (station.IsStationOpen)
         {
             SaveEmailPreference();
         }

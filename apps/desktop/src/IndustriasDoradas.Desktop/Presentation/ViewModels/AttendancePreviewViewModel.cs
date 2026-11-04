@@ -344,6 +344,16 @@ public sealed class AttendancePreviewViewModel : ObservableObject
 
     public Task InitializeAsync() => RefreshAsync();
 
+    public async Task RefreshAfterSynchronizationAsync()
+    {
+        if (IsBusy) return;
+        await RefreshAsync().ConfigureAwait(true);
+        if (station is not null && !station.IsClosed && Workers.Count > 0)
+        {
+            Status = "Asistencia actualizada con los datos centrales.";
+        }
+    }
+
     public void RefreshManagerMode()
     {
         if (!IsManagerMode) IsCorrectionPanelOpen = false;

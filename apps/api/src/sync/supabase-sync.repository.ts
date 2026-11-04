@@ -128,20 +128,20 @@ export class SupabaseSyncRepository implements SyncRepository {
       "PRODUCTION_SWEEP_RECORDED",
       "MERCURY_MOVEMENT_RECORDED",
     ].includes(input.item.operationType)
-      ? "rpc/ingest_extended_sync_item_v1"
+      ? "rpc/ingest_extended_sync_item_v2"
       : [
             "RASTRA_COMPONENT_CHANGE_RECORDED",
             "OPERATIONAL_NOVELTY_OPENED",
             "OPERATIONAL_NOVELTY_CLOSED",
           ].includes(input.item.operationType)
-        ? "rpc/ingest_inventory_maintenance_sync_item_v1"
+        ? "rpc/ingest_inventory_maintenance_sync_item_v2"
         : ["INVENTORY_MOVEMENT_RECORDED", "INVENTORY_REVIEW_RECORDED"].includes(
               input.item.operationType,
             )
-          ? "rpc/ingest_inventory_sync_item_v2"
+          ? "rpc/ingest_inventory_sync_item_v3"
           : input.item.operationType === "ATTENDANCE_EVENT_RECORDED"
-            ? "rpc/ingest_attendance_sync_item_v1"
-            : "rpc/ingest_sync_item_v1";
+            ? "rpc/ingest_attendance_sync_item_v2"
+            : "rpc/ingest_sync_item_v2";
     const response = await this.request(rpc, {
       method: "POST",
       body: JSON.stringify({
@@ -153,6 +153,7 @@ export class SupabaseSyncRepository implements SyncRepository {
           batchId: input.batchId,
           clientApplication: input.clientApplication,
           clientApplicationVersion: input.clientApplicationVersion,
+          clientInstanceId: input.clientInstanceId,
           clientSentAtUtc: input.clientSentAtUtc,
           receiptId: randomUUID(),
           auditEventId: randomUUID(),

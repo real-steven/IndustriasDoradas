@@ -11,7 +11,8 @@ public sealed record PreparedProductionSweep(
     int TotalCajuelas,
     int LastSweepCumulativeTotal,
     int CajuelaQuantity,
-    DateTimeOffset PerformedAt);
+    DateTimeOffset PerformedAt,
+    bool HasExistingFinalSweep = false);
 
 public sealed class RecordProductionSweepHandler(
     ILocalProductionSweepRepository repository,
@@ -88,7 +89,8 @@ public sealed class RecordProductionSweepHandler(
             preparation.TotalCajuelas,
             preparation.LastSweepCumulativeTotal,
             quantity,
-            timeProvider.GetUtcNow());
+            timeProvider.GetUtcNow(),
+            preparation.HasFinalSweep);
     }
 
     private async Task<ProtectedStationState> RequireStationAsync(

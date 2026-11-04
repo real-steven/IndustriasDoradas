@@ -1377,7 +1377,8 @@
             "maxLength": 80,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
             "type": "string"
-          }
+          },
+          "instanceId": { "format": "uuid", "type": "string" }
         },
         "required": ["application", "applicationVersion"],
         "type": "object"

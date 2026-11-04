@@ -1132,6 +1132,33 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task IncrementalPullCanonicalizesRemoteTimestampPrecisionAndOffset()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        var repository = new SqliteSyncChangeRepository(database.Factory);
+        Guid supplierId = Guid.NewGuid();
+        using JsonDocument supplier = JsonDocument.Parse($$"""
+            {"id":"{{supplierId:D}}","organization_id":"{{OrganizationId:D}}",
+             "name":"Proveedor con fecha remota","is_active":true,
+             "updated_at":"2026-08-26T06:00:00.123-06:00"}
+            """);
+        var page = new SyncPullPage(
+            1, null, "cursor-canonical-time", false, StartedAt,
+            [new SyncChange(Guid.NewGuid(), 1, "SUPPLIER", supplierId, 1, "UPSERT",
+                StartedAt, 1, supplier.RootElement.Clone())]);
+
+        await repository.ApplyPageAsync(page);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(
+            "2026-08-26T12:00:00.1230000+00:00",
+            await ScalarTextAsync(
+                connection,
+                $"SELECT updated_at_utc FROM cached_suppliers WHERE id = '{supplierId:D}';"));
+    }
+
+    [TestMethod]
     public async Task IncrementalPullProjectsLineComponentsForMercury()
     {
         await using var database = new TestDatabase();
@@ -1205,6 +1232,104 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(SecondWorkerId, sessions[0].ResponsibleWorkerId);
         Assert.HasCount(1, dashboard.Where(item => item.IsReady));
         Assert.AreEqual("María", dashboard.Single(item => item.IsReady).ResponsibleName);
+    }
+
+    [TestMethod]
+    public async Task IncrementalPullReconcilesRemoteReliefAndCompletionForAnOpenDesktopSession()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var repository = new SqliteSyncChangeRepository(database.Factory);
+        Guid shipmentId = Guid.NewGuid();
+        Guid feedCycleId = Guid.NewGuid();
+        Guid firstAssignmentId = Guid.NewGuid();
+        Guid secondAssignmentId = Guid.NewGuid();
+
+        using (JsonDocument shipment = JsonDocument.Parse($$"""
+            {"id":"{{shipmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{StationId:D}}",
+             "production_line_id":"{{LineId:D}}","supplier_id":"{{SupplierId:D}}",
+             "feed_cycle_id":"{{feedCycleId:D}}","started_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{StartedAt:O}}","completed_at_utc":null,"status":"ACTIVE"}
+            """))
+        using (JsonDocument assignment = JsonDocument.Parse($$"""
+            {"id":"{{firstAssignmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "shipment_id":"{{shipmentId:D}}","worker_id":"{{WorkerId:D}}",
+             "assigned_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{StartedAt:O}}","ended_at_utc":null}
+            """))
+        {
+            await repository.ApplyPageAsync(new SyncPullPage(
+                1, null, "cursor-open", false, StartedAt,
+                [
+                    new SyncChange(Guid.NewGuid(), 1, "SHIPMENT", shipmentId, 1,
+                        "UPSERT", StartedAt, 1, shipment.RootElement.Clone()),
+                    new SyncChange(Guid.NewGuid(), 2, "RESPONSIBILITY_ASSIGNMENT", firstAssignmentId, 1,
+                        "UPSERT", StartedAt, 1, assignment.RootElement.Clone()),
+                ]));
+        }
+
+        DateTimeOffset relievedAt = StartedAt.AddMinutes(5);
+        using (JsonDocument endedAssignment = JsonDocument.Parse($$"""
+            {"id":"{{firstAssignmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "shipment_id":"{{shipmentId:D}}","worker_id":"{{WorkerId:D}}",
+             "assigned_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{StartedAt:O}}","ended_at_utc":"{{relievedAt:O}}"}
+            """))
+        using (JsonDocument newAssignment = JsonDocument.Parse($$"""
+            {"id":"{{secondAssignmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "shipment_id":"{{shipmentId:D}}","worker_id":"{{SecondWorkerId:D}}",
+             "assigned_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{relievedAt:O}}","ended_at_utc":null}
+            """))
+        {
+            await repository.ApplyPageAsync(new SyncPullPage(
+                1, "cursor-open", "cursor-relieved", false, relievedAt,
+                [
+                    new SyncChange(Guid.NewGuid(), 3, "RESPONSIBILITY_ASSIGNMENT", firstAssignmentId, 2,
+                        "UPSERT", relievedAt, 1, endedAssignment.RootElement.Clone()),
+                    new SyncChange(Guid.NewGuid(), 4, "RESPONSIBILITY_ASSIGNMENT", secondAssignmentId, 1,
+                        "UPSERT", relievedAt, 1, newAssignment.RootElement.Clone()),
+                ]));
+        }
+
+        IReadOnlyList<LocalOperationalSession> relieved = await database.Sessions()
+            .ListActiveAsync(StationId);
+        Assert.HasCount(1, relieved);
+        Assert.AreEqual(SecondWorkerId, relieved[0].ResponsibleWorkerId);
+
+        DateTimeOffset completedAt = relievedAt.AddMinutes(5);
+        using (JsonDocument completedShipment = JsonDocument.Parse($$"""
+            {"id":"{{shipmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{StationId:D}}",
+             "production_line_id":"{{LineId:D}}","supplier_id":"{{SupplierId:D}}",
+             "feed_cycle_id":"{{feedCycleId:D}}","started_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{StartedAt:O}}","completed_at_utc":"{{completedAt:O}}",
+             "status":"COMPLETED"}
+            """))
+        using (JsonDocument endedSecondAssignment = JsonDocument.Parse($$"""
+            {"id":"{{secondAssignmentId:D}}","organization_id":"{{OrganizationId:D}}",
+             "shipment_id":"{{shipmentId:D}}","worker_id":"{{SecondWorkerId:D}}",
+             "assigned_by_profile_id":"{{ActorProfileId:D}}",
+             "started_at_utc":"{{relievedAt:O}}","ended_at_utc":"{{completedAt:O}}"}
+            """))
+        {
+            await repository.ApplyPageAsync(new SyncPullPage(
+                1, "cursor-relieved", "cursor-completed", false, completedAt,
+                [
+                    new SyncChange(Guid.NewGuid(), 5, "SHIPMENT", shipmentId, 2,
+                        "UPSERT", completedAt, 1, completedShipment.RootElement.Clone()),
+                    new SyncChange(Guid.NewGuid(), 6, "RESPONSIBILITY_ASSIGNMENT", secondAssignmentId, 2,
+                        "UPSERT", completedAt, 1, endedSecondAssignment.RootElement.Clone()),
+                ]));
+        }
+
+        Assert.IsEmpty(await database.Sessions().ListActiveAsync(StationId));
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual("COMPLETED", await ScalarTextAsync(
+            connection,
+            $"SELECT status FROM operational_sessions WHERE shipment_id = '{shipmentId:D}';"));
     }
 
     [TestMethod]
@@ -1934,6 +2059,26 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
+    public async Task ReliefAcceptsEquivalentTimestampTextFromRemoteSynchronization()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        await StartOperationAsync(service);
+        await SetOperationalSessionUpdatedAtAsync(database, "2026-08-26T12:00:00.000Z");
+        PreparedResponsibleRelief prepared = await service.PrepareReliefAsync(
+            SecondWorkerId,
+            Authority());
+        time.SetUtcNow(StartedAt.AddHours(1));
+
+        LocalOperationContext relieved = await service.ConfirmReliefAsync(prepared);
+
+        Assert.AreEqual(SecondWorkerId, relieved.Session?.ResponsibleWorkerId);
+    }
+
+    [TestMethod]
     public async Task WorkPeriodChangesWithoutMutatingActiveOperation()
     {
         await using var database = new TestDatabase();
@@ -1978,6 +2123,43 @@ public sealed class LocalSqliteStorageTests
             "SELECT COUNT(*) FROM responsibility_assignments WHERE unassigned_at_utc IS NULL;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM responsibility_assignments;"));
         Assert.AreEqual(2, (await database.Outbox().ListPendingAsync(10)).Count);
+    }
+
+    [TestMethod]
+    public async Task CompletionAcceptsEquivalentTimestampTextFromRemoteSynchronization()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        await StartOperationAsync(service);
+        await SetOperationalSessionUpdatedAtAsync(database, "2026-08-26T06:00:00.000-06:00");
+        PreparedOperationCompletion prepared = await service.PrepareCompletionAsync(Authority());
+        time.SetUtcNow(StartedAt.AddHours(2));
+
+        LocalOperationContext completed = await service.ConfirmCompletionAsync(prepared);
+
+        Assert.IsFalse(completed.CanRegisterCajuela);
+    }
+
+    [TestMethod]
+    public async Task CompletionStillRejectsAGenuinelyDifferentContextTimestamp()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService service = database.OperationService(time);
+        await StartOperationAsync(service);
+        PreparedOperationCompletion prepared = await service.PrepareCompletionAsync(Authority());
+        await SetOperationalSessionUpdatedAtAsync(database, StartedAt.AddSeconds(1).ToString("O"));
+        time.SetUtcNow(StartedAt.AddHours(2));
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => service.ConfirmCompletionAsync(prepared));
+
+        Assert.IsTrue((await database.Sessions().LoadAsync(StationId))?.Status == LineFeedCycleStatus.Active);
     }
 
     [TestMethod]
@@ -2100,6 +2282,60 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM mercury_movements;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection,
             "SELECT COUNT(*) FROM outbox_messages WHERE operation_type = 'PRODUCTION_SWEEP_RECORDED';"));
+    }
+
+    [TestMethod]
+    public async Task PendingEventsAfterFinalSweepAreRecoveredBeforeCompletion()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var time = new MutableTimeProvider(StartedAt);
+        LocalOperationService operations = database.OperationService(time);
+        await StartOperationAsync(operations);
+        RegisterCajuelaHandler register = database.RegisterHandler(time);
+        await RegisterManyAsync(register, time, 10);
+        SqliteProductionSweepRepository sweeps = database.Sweeps();
+        LocalSweepPreparation firstPreparation = await sweeps.PrepareAsync(StationId, LineId);
+        DateTimeOffset firstSweepAt = time.GetUtcNow().AddMilliseconds(1);
+        await sweeps.RecordAsync(ProductionSweep.Record(
+            Guid.NewGuid(),
+            firstPreparation.UnsweptEvents,
+            ActorProfileId,
+            firstSweepAt,
+            firstSweepAt,
+            isFinal: true));
+        await RegisterManyAsync(register, time, 4, millisecondOffset: 100);
+
+        LocalSweepPreparation recoveryPreparation = await sweeps.PrepareAsync(StationId, LineId);
+
+        Assert.IsTrue(recoveryPreparation.HasFinalSweep);
+        Assert.HasCount(4, recoveryPreparation.UnsweptEvents);
+        DateTimeOffset recoveryAt = time.GetUtcNow().AddMilliseconds(1);
+        ProductionSweep recovery = ProductionSweep.Record(
+            Guid.NewGuid(),
+            recoveryPreparation.UnsweptEvents,
+            ActorProfileId,
+            recoveryAt,
+            recoveryAt,
+            isFinal: !recoveryPreparation.HasFinalSweep);
+        await sweeps.RecordAsync(recovery);
+        time.SetUtcNow(StartedAt.AddHours(1));
+        PreparedOperationCompletion completion = await operations.PrepareCompletionAsync(
+            LineId,
+            Authority());
+        await operations.ConfirmCompletionAsync(completion);
+
+        Assert.IsFalse(recovery.IsFinal);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        Assert.AreEqual(2L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_sweeps;"));
+        Assert.AreEqual(1L, await ScalarLongAsync(
+            connection,
+            "SELECT COUNT(*) FROM production_sweeps WHERE is_final = 1;"));
+        Assert.AreEqual(14L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM sweep_production_events;"));
+        Assert.AreEqual("COMPLETED", await ScalarTextAsync(
+            connection,
+            "SELECT status FROM cached_shipments LIMIT 1;"));
     }
 
     [TestMethod]
@@ -2533,6 +2769,23 @@ public sealed class LocalSqliteStorageTests
             WorkerId,
             Authority());
         return await service.ConfirmStartAsync(prepared);
+    }
+
+    private static async Task SetOperationalSessionUpdatedAtAsync(
+        TestDatabase database,
+        string timestamp)
+    {
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE operational_sessions
+            SET updated_at_utc = $timestamp
+            WHERE station_id = $stationId AND line_id = $lineId;
+            """;
+        command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$stationId", StationId.ToString("D"));
+        command.Parameters.AddWithValue("$lineId", LineId.ToString("D"));
+        Assert.AreEqual(1, await command.ExecuteNonQueryAsync());
     }
 
     private static async Task<IReadOnlyList<RegisterCajuelaResult>> RegisterManyAsync(

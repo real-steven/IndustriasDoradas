@@ -425,6 +425,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                     {
                         await Audit.RefreshAsync();
                     }
+                    else if (ReferenceEquals(CurrentPage, Attendance) && Attendance is not null)
+                    {
+                        await Attendance.RefreshAfterSynchronizationAsync();
+                    }
+                    else if (ReferenceEquals(CurrentPage, Station) && Station is not null)
+                    {
+                        await Station.RefreshPreparationAsync();
+                    }
                     else if (ReferenceEquals(CurrentPage, Operation) && Operation is not null)
                     {
                         await Operation.RefreshAsync();

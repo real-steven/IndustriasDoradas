@@ -48,7 +48,7 @@ begin
   from (
     values
       ('sync_receipts_station_sequence_unique'),
-      ('production_events_station_client_sequence_unique')
+      ('production_events_client_sequence_unique')
   ) as expected(name)
   where not exists (
     select 1

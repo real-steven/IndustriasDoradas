@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using IndustriasDoradas.Desktop.Application.Abstractions;
@@ -68,6 +69,83 @@ public sealed class AttendanceSyncTests
         Assert.AreEqual(CorrectionId, projection.Shifts[0].CheckOut?.ClientEventId);
     }
 
+    [TestMethod]
+    public async Task AcceptedLocalAttendanceConvergesWhenServerNormalizesTimestampPrecisionAndOffset()
+    {
+        await using var origin = new TestDatabase(OriginStationId);
+        await origin.InitializeAsync();
+        DateTimeOffset localOccurred = new(2026, 11, 3, 7, 43, 57, 957, TimeSpan.Zero);
+        localOccurred = localOccurred.AddTicks(3_250);
+        DateTimeOffset localRecorded = localOccurred;
+        DateTimeOffset centralOccurred = new(2026, 11, 3, 1, 43, 57, 957, TimeSpan.FromHours(-6));
+
+        await origin.Attendance.RecordAsync(new RecordLocalAttendanceMutation(
+            CheckInId,
+            OrganizationId,
+            PlantId,
+            OriginStationId,
+            WorkerId,
+            AttendanceEventType.CheckIn,
+            localOccurred,
+            localRecorded));
+
+        await new SqliteSyncChangeRepository(origin.Factory).ApplyPageAsync(
+            SingleCheckInPage(centralOccurred, centralOccurred));
+
+        IReadOnlyList<AttendanceEvent> events = await origin.Attendance
+            .ListForWorkerAsync(OrganizationId, WorkerId);
+        Assert.HasCount(1, events);
+        Assert.AreEqual(localOccurred, events[0].OccurredAt);
+        Assert.AreEqual(localRecorded, events[0].RecordedAt);
+        Assert.AreEqual(AttendanceSyncStatus.Synchronized, events[0].SyncStatus);
+        Assert.AreEqual(ServerTime, events[0].ConfirmedAt);
+    }
+
+    [TestMethod]
+    public async Task TwoPhysicalClientsCanProjectTheSameSequenceForOneLogicalStation()
+    {
+        await using var database = new TestDatabase(OriginStationId);
+        await database.InitializeAsync();
+        Guid firstId = Guid.Parse("77000000-0000-4000-8000-000000000011");
+        Guid secondId = Guid.Parse("77000000-0000-4000-8000-000000000012");
+        Guid firstClient = Guid.Parse("36000000-0000-4000-8000-000000000001");
+        Guid secondClient = Guid.Parse("36000000-0000-4000-8000-000000000002");
+        using JsonDocument first = RemoteAttendance(firstId, firstClient, OccurredAt);
+        using JsonDocument second = RemoteAttendance(secondId, secondClient, OccurredAt.AddMinutes(1));
+        var page = new SyncPullPage(
+            1, null, "multi-client-cursor", false, ServerTime,
+            [
+                new SyncChange(Guid.NewGuid(), 1, "ATTENDANCE_EVENT", firstId, 1,
+                    "UPSERT", ServerTime, 1, first.RootElement.Clone()),
+                new SyncChange(Guid.NewGuid(), 2, "ATTENDANCE_EVENT", secondId, 1,
+                    "UPSERT", ServerTime, 1, second.RootElement.Clone()),
+            ]);
+
+        await new SqliteSyncChangeRepository(database.Factory).ApplyPageAsync(page);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*), COUNT(DISTINCT client_sequence) FROM attendance_events;";
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync();
+        Assert.IsTrue(await reader.ReadAsync());
+        Assert.AreEqual(2L, reader.GetInt64(0));
+        Assert.AreEqual(2L, reader.GetInt64(1));
+    }
+
+    private static JsonDocument RemoteAttendance(
+        Guid eventId,
+        Guid clientInstanceId,
+        DateTimeOffset occurredAt) =>
+        JsonDocument.Parse($$"""
+            {"id":"{{eventId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{OriginStationId:D}}",
+             "client_instance_id":"{{clientInstanceId:D}}","worker_id":"{{WorkerId:D}}",
+             "client_sequence":1,"event_type":"CHECK_IN",
+             "occurred_at_utc":"{{occurredAt:O}}","recorded_at_utc":"{{occurredAt:O}}",
+             "confirmed_at_utc":"{{ServerTime:O}}","sync_status":"SYNCHRONIZED",
+             "corrected_by_profile_id":null,"correction_reason":null,"related_event_id":null}
+            """);
+
     private static SyncPullPage Page()
     {
         using JsonDocument checkIn = JsonDocument.Parse($$"""
@@ -101,6 +179,32 @@ public sealed class AttendanceSyncTests
                     "UPSERT", ServerTime, 1, checkIn.RootElement.Clone()),
                 new SyncChange(Guid.NewGuid(), 2, "ATTENDANCE_EVENT", CorrectionId, 2,
                     "CORRECTION_APPENDED", ServerTime, 1, correction.RootElement.Clone()),
+            ]);
+    }
+
+    private static SyncPullPage SingleCheckInPage(
+        DateTimeOffset occurredAt,
+        DateTimeOffset recordedAt)
+    {
+        string occurred = occurredAt.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture);
+        string recorded = recordedAt.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture);
+        using JsonDocument checkIn = JsonDocument.Parse($$"""
+            {"id":"{{CheckInId:D}}","organization_id":"{{OrganizationId:D}}",
+             "plant_id":"{{PlantId:D}}","station_id":"{{OriginStationId:D}}",
+             "worker_id":"{{WorkerId:D}}","client_sequence":1,"event_type":"CHECK_IN",
+             "occurred_at_utc":"{{occurred}}","recorded_at_utc":"{{recorded}}",
+             "confirmed_at_utc":"{{ServerTime:O}}","sync_status":"SYNCHRONIZED",
+             "corrected_by_profile_id":null,"correction_reason":null,"related_event_id":null}
+            """);
+        return new SyncPullPage(
+            1,
+            null,
+            "normalized-attendance-cursor",
+            false,
+            ServerTime,
+            [
+                new SyncChange(Guid.NewGuid(), 1, "ATTENDANCE_EVENT", CheckInId, 1,
+                    "UPSERT", ServerTime, 1, checkIn.RootElement.Clone()),
             ]);
     }
 

@@ -90,8 +90,8 @@ describe("sync ingestion with PostgreSQL", () => {
       ingestItem: async (input) => {
         const rpc =
           input.item.operationType === "ATTENDANCE_EVENT_RECORDED"
-            ? "ingest_attendance_sync_item_v1"
-            : "ingest_sync_item_v1";
+            ? "ingest_attendance_sync_item_v2"
+            : "ingest_sync_item_v2";
         const result = await db.query<{ result: SyncItemResult }>(
           `select app.${rpc}($1::jsonb) as result`,
           [
@@ -102,6 +102,7 @@ describe("sync ingestion with PostgreSQL", () => {
               batchId: input.batchId,
               clientApplication: input.clientApplication,
               clientApplicationVersion: input.clientApplicationVersion,
+              clientInstanceId: input.clientInstanceId,
               clientSentAtUtc: input.clientSentAtUtc,
               receiptId: randomUUID(),
               auditEventId: randomUUID(),
@@ -121,7 +122,7 @@ describe("sync ingestion with PostgreSQL", () => {
     await db?.close();
   });
 
-  const push = (items: SyncEnvelopeItem[]) =>
+  const push = (items: SyncEnvelopeItem[], instanceId?: string) =>
     service.push(
       scope.organizationId,
       scope.stationId,
@@ -129,7 +130,11 @@ describe("sync ingestion with PostgreSQL", () => {
         contractVersion: 1,
         batchId: randomUUID(),
         sentAtUtc: new Date().toISOString(),
-        client: { application: "desktop", applicationVersion: "0.1.0" },
+        client: {
+          application: "desktop",
+          applicationVersion: "0.1.0",
+          instanceId,
+        },
         scope,
         items,
       },
@@ -322,7 +327,7 @@ describe("sync ingestion with PostgreSQL", () => {
     const first = (await push([collision])).results[0];
     expect(first).toMatchObject({
       status: "FAILED_REVIEW",
-      code: "STATION_SEQUENCE_CONFLICT",
+      code: "CLIENT_SEQUENCE_CONFLICT",
     });
     expect(first?.receiptId).toBeUndefined();
     expect((await push([collision])).results[0]).toEqual(first);
@@ -331,7 +336,36 @@ describe("sync ingestion with PostgreSQL", () => {
     expect((await push([added])).results[0]?.status).toBe("APPLIED");
   });
 
-  it("rolls back a production sequence collision and records a stable rejection", async () => {
+  it("accepts the same local sequence from two computers on one station", async () => {
+    const first = scenario().start;
+    const second = scenario().start;
+    second.payload = {
+      ...second.payload,
+      lineId: "32000000-0000-4000-8000-000000000002",
+    };
+    const firstClient = "36000000-0000-4000-8000-000000000001";
+    const secondClient = "36000000-0000-4000-8000-000000000002";
+
+    const firstResult = await push([first], firstClient);
+    const secondResult = await push([second], secondClient);
+
+    expect(firstResult.results[0]?.status).toBe("APPLIED");
+    expect(secondResult.results[0]?.status).toBe("APPLIED");
+    expect(await count("sync_receipts")).toBe(2);
+    const receipts = await db.query<{
+      client_instance_id: string;
+      client_sequence: number;
+    }>(
+      `select client_instance_id, client_sequence::int
+       from app.sync_receipts order by client_instance_id`,
+    );
+    expect(receipts.rows).toEqual([
+      { client_instance_id: firstClient, client_sequence: 1 },
+      { client_instance_id: secondClient, client_sequence: 1 },
+    ]);
+  });
+
+  it("uses the envelope sequence when projecting a production event", async () => {
     const { start, added } = scenario();
     await push([start, added]);
     const duplicate = {
@@ -343,13 +377,13 @@ describe("sync ingestion with PostgreSQL", () => {
     };
     duplicate.aggregateId = duplicate.payload.clientEventId;
     const first = (await push([duplicate])).results[0];
-    expect(first).toMatchObject({
-      status: "FAILED_REVIEW",
-      code: "PRODUCTION_SEQUENCE_CONFLICT",
-    });
+    expect(first).toMatchObject({ status: "APPLIED", code: "APPLIED" });
     expect(first?.receiptId).toBeDefined();
-    expect((await push([duplicate])).results[0]).toEqual(first);
-    expect(await count("production_events")).toBe(1);
+    expect((await push([duplicate])).results[0]).toMatchObject({
+      status: "ALREADY_APPLIED",
+      receiptId: first?.receiptId,
+    });
+    expect(await count("production_events")).toBe(2);
     expect(await count("sync_receipts")).toBe(3);
   });
 
