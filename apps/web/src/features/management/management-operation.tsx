@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { ManagementOperationLine } from "../../api/generated/api-client";
 import { requestErrorMessage } from "../../api/http";
@@ -24,11 +24,11 @@ export function OperationLinesPanel({
     <section className="portal-panel">
       <header>
         <div>
-          <h2>{tr("Operación en vivo", "Live operations")}</h2>
+          <h2>{tr("Líneas en operación", "Operating lines")}</h2>
           <p>
             {tr(
-              "Líneas activas confirmadas por la proyección central de la planta",
-              "Active lines confirmed by the plant's central projection",
+              "Resumen de la producción que se encuentra abierta en este momento",
+              "Summary of production currently in progress",
             )}
           </p>
         </div>
@@ -73,7 +73,7 @@ export function OperationFreshness({
 
   if (query.isPending)
     return (
-      <span>{tr("Consultando datos centrales…", "Loading central data…")}</span>
+      <span>{tr("Actualizando la operación…", "Refreshing operations…")}</span>
     );
   if (query.data === undefined)
     return (
@@ -91,21 +91,21 @@ export function OperationFreshness({
         {tr("Datos desactualizados", "Outdated data")}
         {effectiveAtUtc === null
           ? ""
-          : ` · ${tr("última actividad central", "latest central activity")} ${formatCostaRicaDateTime(effectiveAtUtc, language)}`}
+          : ` · ${tr("última actualización", "last updated")} ${formatCostaRicaDateTime(effectiveAtUtc, language)}`}
       </span>
     );
   if (effectiveAtUtc === null)
     return (
       <span>
         {tr(
-          "Fuente central confirmada · sin cambios registrados",
-          "Central source confirmed · no recorded changes",
+          "Información actualizada · sin actividad registrada todavía",
+          "Information is up to date · no activity recorded yet",
         )}
       </span>
     );
   return (
     <span>
-      {tr("Datos centrales al", "Central data as of")}{" "}
+      {tr("Información actualizada", "Information updated")}{" "}
       {formatCostaRicaDateTime(effectiveAtUtc, language)}
       {freshness.isError
         ? tr(
@@ -163,24 +163,121 @@ function OperationQueryState({ query }: { query: ManagementOperationQuery }) {
           <h3>{tr("No hay líneas activas", "No active lines")}</h3>
           <p>
             {tr(
-              "La consulta central respondió correctamente, pero no existe una operación abierta en este momento.",
-              "The central query responded successfully, but there are no open operations at this time.",
+              "No existe ningún cargamento abierto en las líneas de producción.",
+              "There are no open shipments on the production lines.",
             )}
           </p>
         </div>
       ) : (
-        <div className="line-grid">
-          {query.data.items.map((line) => (
-            <OperationLineCard
-              key={line.productionLineId}
-              line={line}
-              stale={stale}
-            />
-          ))}
-        </div>
+        <>
+          <SweepMilestoneAlert lines={query.data.items} />
+          <div className="line-grid">
+            {query.data.items.map((line) => (
+              <OperationLineCard
+                key={line.productionLineId}
+                line={line}
+                stale={stale}
+              />
+            ))}
+          </div>
+        </>
       )}
     </>
   );
+}
+
+function SweepMilestoneAlert({
+  lines,
+}: {
+  lines: readonly ManagementOperationLine[];
+}) {
+  const { locale, tr } = useLanguage();
+  const pending = lines.filter((line) => line.sweepPending);
+  const nearing = lines
+    .filter((line) => !line.sweepPending && sweepRatio(line) >= 0.8)
+    .sort((left, right) => sweepRatio(right) - sweepRatio(left));
+  const line = pending[0] ?? nearing[0];
+  const severity = pending.length > 0 ? "critical" : "warning";
+  const affectedLines = lines
+    .filter((item) =>
+      severity === "critical"
+        ? item.sweepPending
+        : !item.sweepPending && sweepRatio(item) >= 0.8,
+    )
+    .map((item) => item.productionLineId)
+    .sort()
+    .join(",");
+  const alertKey =
+    line === undefined ? null : [severity, affectedLines].join(":");
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (alertKey === null || severity === "critical") return;
+    const timer = window.setTimeout(() => setDismissedKey(alertKey), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [alertKey, severity]);
+
+  if (line === undefined || alertKey === dismissedKey) return null;
+
+  const goal = sweepGoal(line);
+  const remaining = Math.max(0, goal - line.cajuelasSinceLastSweep);
+  const additionalPending = Math.max(0, pending.length - 1);
+
+  return (
+    <aside
+      className={["operation-sweep-alert", severity].join(" ")}
+      role={severity === "critical" ? "alert" : "status"}
+    >
+      <span className="operation-sweep-alert-icon" aria-hidden="true">
+        🧹
+      </span>
+      <div>
+        <strong>
+          {severity === "critical"
+            ? tr("Barrida pendiente", "Sweep pending")
+            : tr("Próxima a barrida", "Approaching sweep")}
+        </strong>
+        <p>
+          {severity === "critical" ? (
+            <>
+              {line.productionLineName}{" "}
+              {tr(
+                "alcanzó la referencia de barrida.",
+                "reached the sweep threshold.",
+              )}
+              {additionalPending > 0 && (
+                <>
+                  {" "}
+                  {tr("Otras líneas pendientes:", "Other pending lines:")}{" "}
+                  {additionalPending.toLocaleString(locale)}.
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {line.productionLineName}: {tr("faltan", "remaining")}{" "}
+              {remaining.toLocaleString(locale)} {tr("cajuelas", "cajuelas")}.
+            </>
+          )}
+        </p>
+      </div>
+      <button
+        type="button"
+        aria-label={tr("Cerrar alerta", "Dismiss alert")}
+        onClick={() => setDismissedKey(alertKey)}
+      >
+        ×
+      </button>
+    </aside>
+  );
+}
+
+function sweepGoal(line: ManagementOperationLine): number {
+  return Math.max(1, line.nextSweepAt - line.sweptCajuelas);
+}
+
+function sweepRatio(line: ManagementOperationLine): number {
+  return line.cajuelasSinceLastSweep / sweepGoal(line);
 }
 
 function OperationLineCard({
@@ -192,6 +289,16 @@ function OperationLineCard({
 }) {
   const { language, locale, tr } = useLanguage();
   const accent = lineAccent(line.productionLineOrder);
+  const goal = sweepGoal(line);
+  const ratio = sweepRatio(line);
+  const sweepProgress = Math.min(100, Math.round(ratio * 100));
+  const remainingCajuelas = Math.max(0, goal - line.cajuelasSinceLastSweep);
+  const sweepTone =
+    line.sweepPending || ratio >= 0.8
+      ? "critical"
+      : ratio >= 0.5
+        ? "warning"
+        : "normal";
 
   return (
     <article className={`line-card ${accent}${stale ? " stale" : ""}`}>
@@ -200,7 +307,7 @@ function OperationLineCard({
         <span className={`line-status ${stale ? "stale" : "current"}`}>
           {stale
             ? tr("DATO DESACTUALIZADO", "OUTDATED DATA")
-            : tr("ACTIVA", "ACTIVE")}
+            : tr("EN OPERACIÓN", "OPERATING")}
         </span>
       </div>
       <p className="line-station">
@@ -232,9 +339,8 @@ function OperationLineCard({
           <dd>{line.sweepCount.toLocaleString(locale)}</dd>
         </div>
         <div>
-          <dt>{tr("Cargamento", "Shipment")}</dt>
+          <dt>{tr("Inicio del cargamento", "Shipment started")}</dt>
           <dd>
-            {tr("Activo desde", "Active since")}{" "}
             <time dateTime={line.startedAtUtc}>
               {formatCostaRicaDateTime(line.startedAtUtc, language)}
             </time>
@@ -242,18 +348,38 @@ function OperationLineCard({
         </div>
       </dl>
 
-      <div className={`sweep-reference${line.sweepPending ? " pending" : ""}`}>
-        <span>
-          {line.sweepPending
-            ? tr("Barrida pendiente desde", "Sweep overdue since")
-            : tr("Próxima barrida", "Next sweep")}
-        </span>
-        <strong>
-          {line.nextSweepAt.toLocaleString(locale)} {tr("cajuelas", "cajuelas")}
-        </strong>
+      <div className={`sweep-reference ${sweepTone}`}>
+        <div>
+          <span>
+            {line.sweepPending
+              ? tr("Barrida requerida", "Sweep required")
+              : tr("Avance a la próxima barrida", "Next sweep progress")}
+          </span>
+          <strong>
+            {line.cajuelasSinceLastSweep.toLocaleString(locale)}{" "}
+            {tr("de", "of")} {goal.toLocaleString(locale)}{" "}
+            {tr("cajuelas", "cajuelas")}
+          </strong>
+        </div>
+        <div
+          className="sweep-progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={goal}
+          aria-valuenow={Math.min(line.cajuelasSinceLastSweep, goal)}
+        >
+          <i style={{ width: String(sweepProgress).concat("%") }} />
+        </div>
         <small>
-          {line.cajuelasSinceLastSweep.toLocaleString(locale)}{" "}
-          {tr("desde la última barrida", "since the last sweep")}
+          {line.sweepPending ? (
+            tr("El umbral ya fue alcanzado", "The threshold has been reached")
+          ) : (
+            <>
+              {tr("Faltan", "Remaining")}{" "}
+              {remainingCajuelas.toLocaleString(locale)}{" "}
+              {tr("cajuelas", "cajuelas")}
+            </>
+          )}
         </small>
       </div>
     </article>

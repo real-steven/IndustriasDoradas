@@ -37,6 +37,7 @@ export interface AuditEvent {
   action: string;
   entityType: string;
   entityId: string | null;
+  shipmentStatus?: "ACTIVE" | "COMPLETED" | null;
   result: "SUCCEEDED" | "REJECTED" | "FAILED";
   reasonCode: string | null;
   changedFields?: string[];
@@ -47,6 +48,9 @@ export interface AuditEvent {
 
 export interface AuditFilters {
   search: string;
+  category?: "operation" | "people" | "administration";
+  action?: string;
+  entityType?: string;
   fromDate?: string;
   toDate?: string;
   page: number;
@@ -242,9 +246,14 @@ export function useShipmentAuditEvents(filters?: AuditFilters) {
     page: String(filters?.page ?? 1),
     pageSize: String(filters?.pageSize ?? 100),
     routine: "exclude",
+    inventory: "exclude",
   });
   const search = filters?.search.trim() ?? "shipment";
   if (search.length > 0) params.set("search", search);
+  if (filters?.category !== undefined) params.set("category", filters.category);
+  if (filters?.action !== undefined) params.set("action", filters.action);
+  if (filters?.entityType !== undefined)
+    params.set("entityType", filters.entityType);
   if (filters?.fromDate !== undefined)
     params.set("fromUtc", `${filters.fromDate}T06:00:00.000Z`);
   if (filters?.toDate !== undefined) {

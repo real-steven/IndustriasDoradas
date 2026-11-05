@@ -1,6 +1,8 @@
 export const AUDIT_EVENT_REPOSITORY = Symbol("AUDIT_EVENT_REPOSITORY");
 export const AUDIT_QUERY_REPOSITORY = Symbol("AUDIT_QUERY_REPOSITORY");
 
+export type AuditCategory = "operation" | "people" | "administration";
+
 export const AUDIT_ACTIONS = {
   API_ACCESS: "access.api",
   AUTHORIZATION_POLICY: "authorization.policy",
@@ -89,6 +91,7 @@ export interface AuditListItem {
   action: string;
   entityType: string;
   entityId: string | null;
+  shipmentStatus?: "ACTIVE" | "COMPLETED" | null;
   result: AuditResult;
   reasonCode: string | null;
   evidenceState: AuditEvidenceState;
@@ -105,7 +108,11 @@ export interface AuditQueryRepository {
       page: number;
       pageSize: number;
       search?: string;
+      category?: AuditCategory;
+      action?: string;
+      entityType?: string;
       result?: AuditResult;
+      inventory?: "include" | "exclude";
       fromUtc?: string;
       toUtc?: string;
       routine?: "include" | "exclude";

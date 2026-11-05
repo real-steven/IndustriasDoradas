@@ -566,6 +566,20 @@ describe("API smoke (e2e)", () => {
     ]);
 
     await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/stations?page=2&pageSize=100&state=active`,
+      )
+      .set("Authorization", "Bearer valid-token")
+      .expect(200)
+      .expect({ items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 });
+
+    expect(catalogs.list.mock.calls).toContainEqual([
+      "stations",
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({ page: 2, pageSize: 100, state: "active" }),
+    ]);
+
+    await request(httpServer)
       .get("/api/v1/organizations/30000000-0000-4000-8000-000000000099/plants")
       .set("Authorization", "Bearer valid-token")
       .expect(403);
