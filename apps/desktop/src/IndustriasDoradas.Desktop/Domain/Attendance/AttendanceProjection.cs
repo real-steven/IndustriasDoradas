@@ -83,7 +83,7 @@ public static class AttendanceProjectionService
                         attendanceEvent.WorkerId,
                         attendanceEvent.ClientEventId,
                         attendanceEvent.RecordedAt,
-                        "Se registró una segunda entrada mientras existía una jornada abierta."));
+                        "Entrada duplicada: ya existía una jornada abierta; la segunda marca no abrió otra jornada."));
                 }
 
                 continue;
@@ -115,7 +115,7 @@ public static class AttendanceProjectionService
                     openCheckIn.WorkerId,
                     openCheckIn.ClientEventId,
                     normalizedAsOf,
-                    "La jornada continúa abierta después de ocho horas."));
+                    "La jornada lleva más de ocho horas abierta; falta registrar o corregir la salida."));
             }
         }
 

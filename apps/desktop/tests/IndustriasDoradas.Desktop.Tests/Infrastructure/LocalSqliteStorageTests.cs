@@ -5,6 +5,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain;
+using IndustriasDoradas.Desktop.Domain.Attendance;
 using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
 using Microsoft.Data.Sqlite;
@@ -64,8 +65,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(28L, result.CurrentVersion);
-        Assert.AreEqual(28, result.AppliedCount);
+        Assert.AreEqual(29L, result.CurrentVersion);
+        Assert.AreEqual(29, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -74,7 +75,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(28L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(29L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -89,8 +90,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(28L, result.CurrentVersion);
-        Assert.AreEqual(9, result.AppliedCount);
+        Assert.AreEqual(29L, result.CurrentVersion);
+        Assert.AreEqual(10, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_workers;"));
         Assert.AreEqual(9L, await ScalarLongAsync(connection, """
@@ -490,8 +491,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(28L, result.CurrentVersion);
-        Assert.AreEqual(1, result.AppliedCount);
+        Assert.AreEqual(29L, result.CurrentVersion);
+        Assert.AreEqual(2, result.AppliedCount);
         await using SqliteConnection verification = await database.Factory.OpenAsync();
         Assert.AreEqual(0L, await ScalarLongAsync(
             verification,
@@ -551,7 +552,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(27, result.AppliedCount);
+        Assert.AreEqual(28, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -571,8 +572,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(28L, result.CurrentVersion);
-        Assert.AreEqual(17, result.AppliedCount);
+        Assert.AreEqual(29L, result.CurrentVersion);
+        Assert.AreEqual(18, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -840,7 +841,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(28L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(29L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -990,7 +991,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(26, result.AppliedCount);
+        Assert.AreEqual(27, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -1672,8 +1673,8 @@ public sealed class LocalSqliteStorageTests
         IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
             .ListRastrasAsync(OrganizationId, LineId);
 
-        Assert.AreEqual(28L, result.CurrentVersion);
-        Assert.AreEqual(15, result.AppliedCount);
+        Assert.AreEqual(29L, result.CurrentVersion);
+        Assert.AreEqual(16, result.AppliedCount);
         Assert.HasCount(1, rastras);
         Assert.AreEqual(rastraId, rastras[0].Id);
     }
@@ -2684,6 +2685,49 @@ public sealed class LocalSqliteStorageTests
         Assert.HasCount(1, filteredShipments);
         Assert.IsEmpty(futureShipments);
         Assert.HasCount(1, filteredCorrections);
+    }
+
+    [TestMethod]
+    public async Task AuditReadsAttendanceAndPersistsImmutableSecurityHistory()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var attendance = new SqliteAttendanceRepository(database.Factory);
+        Guid checkInId = Guid.NewGuid();
+        await attendance.RecordAsync(new RecordLocalAttendanceMutation(
+            checkInId,
+            OrganizationId,
+            PlantId,
+            StationId,
+            WorkerId,
+            AttendanceEventType.CheckIn,
+            StartedAt,
+            StartedAt.AddSeconds(1)));
+        SqliteAuditRepository audit = database.Audit();
+        await audit.RecordSecurityEventAsync(new RecordLocalSecurityAuditEvent(
+            StationId,
+            ActorProfileId,
+            "Jefe de planta",
+            "SESSION_OPENED",
+            "EXITOSO",
+            "La estación fue abierta para pruebas.",
+            StartedAt));
+
+        IReadOnlyList<LocalAttendanceWorkerAudit> workers = await audit.ListAttendanceAsync(
+            new LocalAuditQuery(StartedAt.AddMinutes(-1), StartedAt.AddMinutes(1)));
+        IReadOnlyList<LocalSecurityAuditEvent> security = await audit.ListSecurityEventsAsync(
+            new LocalAuditQuery(StartedAt.AddMinutes(-1), StartedAt.AddMinutes(1)));
+
+        LocalAttendanceWorkerAudit worker = workers.Single(item => item.WorkerId == WorkerId);
+        Assert.HasCount(1, worker.Events);
+        Assert.AreEqual(checkInId, worker.Events[0].ClientEventId);
+        Assert.HasCount(1, security);
+        Assert.AreEqual("SESSION_OPENED", security[0].EventType);
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => ExecuteWithoutParametersAsync(
+            connection,
+            "DELETE FROM local_security_audit_events;"));
     }
 
     [TestMethod]

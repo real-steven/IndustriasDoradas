@@ -121,8 +121,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ShowSettingsCommand = new RelayCommand(
             () => CurrentPage = Settings!,
             CanShowSettings);
-        ShowAttendanceCommand = new RelayCommand(
-            () => CurrentPage = Attendance!,
+        ShowAttendanceCommand = new AsyncRelayCommand(
+            ShowAttendanceAsync,
             () => Attendance is not null);
         ShowStationCommand = new AsyncRelayCommand(
             ShowStationAsync,
@@ -196,7 +196,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public IRelayCommand DismissResponsibilityWarningCommand { get; }
     public IAsyncRelayCommand ShowStationResponsibilityCommand { get; }
     public IRelayCommand ShowSettingsCommand { get; }
-    public IRelayCommand ShowAttendanceCommand { get; }
+    public IAsyncRelayCommand ShowAttendanceCommand { get; }
     public IAsyncRelayCommand ShowStationCommand { get; }
     public IRelayCommand ShowOperationCommand { get; }
     public bool HasCorrectionNotification => correctionNotificationsReady &&
@@ -271,6 +271,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (Station is null) return;
         await Station.RefreshPreparationAsync();
         CurrentPage = Station;
+    }
+
+    private async Task ShowAttendanceAsync()
+    {
+        if (Attendance is null) return;
+        CurrentPage = Attendance;
+        await Attendance.RefreshAfterSynchronizationAsync();
     }
 
     private async Task ShowAuditAsync()
@@ -362,6 +369,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (Station?.IsApplicationUnlocked == true)
             {
                 CurrentPage = Home;
+                if (Attendance is not null)
+                {
+                    _ = Attendance.RefreshAfterSynchronizationAsync();
+                }
             }
             return;
         }

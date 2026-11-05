@@ -66,8 +66,18 @@ begin
   end if;
 
   select count(*) into actual_count from app.suppliers;
-  if actual_count <> 5 then
-    raise exception 'expected five fictitious suppliers, found %', actual_count;
+  if actual_count <> 6 then
+    raise exception 'expected six seeded suppliers, found %', actual_count;
+  end if;
+
+  if not exists (
+    select 1
+    from app.suppliers
+    where organization_id = '30000000-0000-4000-8000-000000000001'
+      and name = 'Material propio'
+      and is_active
+  ) then
+    raise exception 'expected Material propio to be an active seeded supplier';
   end if;
 
   if exists (

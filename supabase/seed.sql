@@ -269,6 +269,7 @@ set
 
 insert into app.suppliers (id, organization_id, name, email, phone)
 values
+  ('35000000-0000-4000-8000-000000000006', '30000000-0000-4000-8000-000000000001', 'Material propio', null, null),
   ('35000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'Proveedor Jesús', 'jesus@example.invalid', '+506 0000-0001'),
   ('35000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Proveedor Francisco', 'francisco@example.invalid', '+506 0000-0002'),
   ('35000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000001', 'Proveedor Lucía', 'lucia@example.invalid', '+506 0000-0003'),

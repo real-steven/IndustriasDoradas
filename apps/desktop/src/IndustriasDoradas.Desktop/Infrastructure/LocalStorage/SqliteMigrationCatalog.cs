@@ -41,6 +41,7 @@ public static class SqliteMigrationCatalog
         Read(26, "outbox_dependency_review", "026_outbox_dependency_review.sql"),
         Read(27, "repair_unsafe_client_sequences", "027_repair_unsafe_client_sequences.sql"),
         Read(28, "reenvelope_idempotency_sequence_repairs", "028_reenvelope_idempotency_sequence_repairs.sql"),
+        Read(29, "local_security_audit", "029_local_security_audit.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

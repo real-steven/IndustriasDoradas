@@ -356,9 +356,17 @@
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="RESPONSABLE PRINCIPAL O NUEVO RESPONSABLE" />
-                                    <ComboBox Style="{StaticResource StationComboBoxStyle}" DisplayMemberPath="DisplayName"
-                                              ItemsSource="{Binding Workers}" SelectedItem="{Binding SelectedWorker}"
-                                              AutomationProperties.Name="Responsable principal" />
+                                    <Grid>
+                                        <ComboBox Style="{StaticResource StationComboBoxStyle}" DisplayMemberPath="DisplayName"
+                                                  ItemsSource="{Binding Workers}" SelectedItem="{Binding SelectedWorker}"
+                                                  AutomationProperties.Name="Responsable principal" />
+                                        <TextBlock Margin="14,0,42,0" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource MutedBrush}"
+                                                   FontSize="11" IsHitTestVisible="False"
+                                                   Text="Registre asistencia para poder seleccionar un responsable."
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Visibility="{Binding HasNoAvailableWorkers, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    </Grid>
                                 </StackPanel>
                                 <StackPanel Grid.Row="4" Grid.ColumnSpan="3">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="NOTA DEL TURNO (OPCIONAL)" />

@@ -1,4 +1,5 @@
 using IndustriasDoradas.Desktop.Application.Abstractions;
+using IndustriasDoradas.Desktop.Domain.Attendance;
 using Microsoft.Data.Sqlite;
 
 namespace IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
@@ -219,6 +220,144 @@ public sealed class SqliteAuditRepository(
         return results;
     }
 
+    public async Task<IReadOnlyList<LocalAttendanceWorkerAudit>> ListAttendanceAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        await using SqliteConnection connection = await connectionFactory
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT worker.id, worker.name, worker.category,
+                   event.client_event_id, event.organization_id, event.plant_id,
+                   event.station_id, event.worker_id, event.client_sequence,
+                   event.event_type, event.occurred_at_utc, event.recorded_at_utc,
+                   event.confirmed_at_utc, event.sync_status,
+                   event.corrected_by_profile_id, event.correction_reason,
+                   event.related_event_id
+            FROM cached_workers AS worker
+            LEFT JOIN attendance_events AS event
+              ON event.worker_id = worker.id
+             AND ($startUtc IS NULL OR event.occurred_at_utc >= $startUtc)
+             AND ($endUtc IS NULL OR event.occurred_at_utc < $endUtc)
+            WHERE worker.is_active = 1
+            ORDER BY worker.name COLLATE NOCASE,
+                     event.occurred_at_utc,
+                     event.client_sequence;
+            """;
+        AddQueryParameters(command, query);
+        var workers = new Dictionary<Guid, AttendanceWorkerBuilder>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            Guid workerId = Guid.Parse(reader.GetString(0));
+            if (!workers.TryGetValue(workerId, out AttendanceWorkerBuilder? worker))
+            {
+                worker = new AttendanceWorkerBuilder(
+                    workerId,
+                    reader.GetString(1),
+                    reader.GetString(2));
+                workers.Add(workerId, worker);
+            }
+
+            if (reader.IsDBNull(3)) continue;
+            worker.Events.Add(AttendanceEvent.Restore(
+                Guid.Parse(reader.GetString(3)),
+                Guid.Parse(reader.GetString(4)),
+                Guid.Parse(reader.GetString(5)),
+                Guid.Parse(reader.GetString(6)),
+                Guid.Parse(reader.GetString(7)),
+                FromAttendanceType(reader.GetString(9)),
+                reader.GetInt64(8),
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(10)),
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(11)),
+                reader.IsDBNull(12) ? null : SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(12)),
+                FromAttendanceSyncStatus(reader.GetString(13)),
+                reader.IsDBNull(14) ? null : Guid.Parse(reader.GetString(14)),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.IsDBNull(16) ? null : Guid.Parse(reader.GetString(16))));
+        }
+
+        return workers.Values
+            .Select(worker => new LocalAttendanceWorkerAudit(
+                worker.WorkerId,
+                worker.WorkerName,
+                worker.WorkerCategory,
+                worker.Events.AsReadOnly()))
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<LocalSecurityAuditEvent>> ListSecurityEventsAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        await using SqliteConnection connection = await connectionFactory
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, station_id, profile_id, actor_display_name,
+                   event_type, result, details, occurred_at_utc
+            FROM local_security_audit_events
+            WHERE ($startUtc IS NULL OR occurred_at_utc >= $startUtc)
+              AND ($endUtc IS NULL OR occurred_at_utc < $endUtc)
+            ORDER BY occurred_at_utc DESC, id DESC
+            LIMIT $limit;
+            """;
+        AddQueryParameters(command, query);
+        var results = new List<LocalSecurityAuditEvent>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            results.Add(new LocalSecurityAuditEvent(
+                Guid.Parse(reader.GetString(0)),
+                Guid.Parse(reader.GetString(1)),
+                reader.IsDBNull(2) ? null : Guid.Parse(reader.GetString(2)),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(7))));
+        }
+        return results;
+    }
+
+    public async Task RecordSecurityEventAsync(
+        RecordLocalSecurityAuditEvent auditEvent,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(auditEvent);
+        await using SqliteConnection connection = await connectionFactory
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO local_security_audit_events(
+                id, station_id, profile_id, actor_display_name,
+                event_type, result, details, occurred_at_utc)
+            VALUES($id, $stationId, $profileId, $actorName,
+                   $eventType, $result, $details, $occurredAt);
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
+        command.Parameters.AddWithValue("$stationId", auditEvent.StationId.ToString("D"));
+        command.Parameters.AddWithValue(
+            "$profileId",
+            auditEvent.ProfileId is null ? DBNull.Value : auditEvent.ProfileId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$actorName", auditEvent.ActorName.Trim());
+        command.Parameters.AddWithValue("$eventType", auditEvent.EventType.Trim());
+        command.Parameters.AddWithValue("$result", auditEvent.Result.Trim());
+        command.Parameters.AddWithValue("$details", auditEvent.Details.Trim());
+        command.Parameters.AddWithValue(
+            "$occurredAt",
+            SqliteLocalStorageConverters.Timestamp(auditEvent.OccurredAt));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<LocalResponsibilityAudit>>> ReadResponsibilitiesAsync(
         SqliteConnection connection,
         IEnumerable<Guid> shipmentIds,
@@ -300,4 +439,29 @@ public sealed class SqliteAuditRepository(
         int CorrectionCount,
         int MercuryRecordedSweepCount,
         int DisplayOrder);
+
+    private sealed record AttendanceWorkerBuilder(
+        Guid WorkerId,
+        string WorkerName,
+        string WorkerCategory)
+    {
+        public List<AttendanceEvent> Events { get; } = [];
+    }
+
+    private static AttendanceEventType FromAttendanceType(string value) => value switch
+    {
+        "CHECK_IN" => AttendanceEventType.CheckIn,
+        "CHECK_OUT" => AttendanceEventType.CheckOut,
+        "ADJUSTED_CHECK_IN" => AttendanceEventType.AdjustedCheckIn,
+        "ADJUSTED_CHECK_OUT" => AttendanceEventType.AdjustedCheckOut,
+        _ => throw new InvalidOperationException($"Tipo de asistencia desconocido: {value}."),
+    };
+
+    private static AttendanceSyncStatus FromAttendanceSyncStatus(string value) => value switch
+    {
+        "PENDING" => AttendanceSyncStatus.Pending,
+        "SYNCHRONIZED" => AttendanceSyncStatus.Synchronized,
+        "REQUIRES_ATTENTION" => AttendanceSyncStatus.RequiresAttention,
+        _ => throw new InvalidOperationException($"Estado de asistencia desconocido: {value}."),
+    };
 }

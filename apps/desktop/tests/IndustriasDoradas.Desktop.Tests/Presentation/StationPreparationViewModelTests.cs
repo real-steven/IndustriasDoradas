@@ -17,6 +17,7 @@ public sealed class StationPreparationViewModelTests
     private static readonly Guid PlantId = Guid.Parse("31000000-0000-4000-8000-000000000001");
     private static readonly Guid StationId = Guid.Parse("34000000-0000-4000-8000-000000000001");
     private static readonly Guid SupplierId = Guid.Parse("42000000-0000-4000-8000-000000000001");
+    private static readonly Guid OwnMaterialSupplierId = Guid.Parse("42000000-0000-4000-8000-000000000002");
     private static readonly Guid LineId = Guid.Parse("43000000-0000-4000-8000-000000000001");
     private static readonly Guid SecondLineId = Guid.Parse("43000000-0000-4000-8000-000000000002");
     private static readonly Guid ThirdLineId = Guid.Parse("43000000-0000-4000-8000-000000000003");
@@ -154,6 +155,53 @@ public sealed class StationPreparationViewModelTests
         Assert.IsTrue(viewModel.LineStatuses.Single(line => line.Id == LineId).IsPrepared);
         Assert.IsTrue(viewModel.LineStatuses.Single(line => line.Id == SecondLineId).IsPrepared);
         StringAssert.Contains(viewModel.Status, "Línea lista");
+    }
+
+    [TestMethod]
+    public async Task NewShipmentDefaultsToOwnMaterialWithoutReplacingActiveSupplier()
+    {
+        var time = new FixedTimeProvider();
+        ProtectedStationState state = State();
+        var catalogs = new MemoryCatalogs();
+        LocalOperationCatalogSnapshot snapshot = SnapshotWithOwnMaterial();
+        var coordinator = new StationCoordinator(
+            new StubAuth(),
+            new StubStationApi(state, snapshot),
+            catalogs,
+            new MemoryStationSequences(),
+            new MemoryStationStore(state),
+            new NoopEvidenceCapture(),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+        var sessions = new MemorySessions();
+        using var viewModel = new StationViewModel(
+            coordinator,
+            catalogs,
+            new LocalOperationService(
+                catalogs,
+                sessions,
+                new RecordingOperationRepository(sessions),
+                time),
+            Options.Create(new StationOptions { Id = StationId }),
+            time);
+
+        await viewModel.InitializeAsync();
+        await viewModel.ElevateAsync("123456");
+
+        Assert.AreEqual(OwnMaterialSupplierId, viewModel.SelectedSupplier?.Id);
+        viewModel.SelectLineCommand.Execute(LineId);
+        Assert.AreEqual(OwnMaterialSupplierId, viewModel.SelectedSupplier?.Id);
+
+        viewModel.SelectedSupplier = viewModel.Suppliers.Single(supplier => supplier.Id == SupplierId);
+        viewModel.SelectedWorker = viewModel.Workers.Single(worker => worker.Id == WorkerId);
+        await viewModel.PrepareLineCommand.ExecuteAsync(null);
+        await viewModel.ConfirmLineCommand.ExecuteAsync(null);
+
+        viewModel.SelectLineCommand.Execute(SecondLineId);
+        Assert.AreEqual(OwnMaterialSupplierId, viewModel.SelectedSupplier?.Id);
+
+        viewModel.SelectLineCommand.Execute(LineId);
+        Assert.AreEqual(SupplierId, viewModel.SelectedSupplier?.Id);
     }
 
     [TestMethod]
@@ -481,6 +529,22 @@ public sealed class StationPreparationViewModelTests
 
     private static LocalOperationCatalogSnapshot Snapshot() => new(
         [new CachedSupplier(SupplierId, OrganizationId, "La Esperanza", true, Now)],
+        [
+            new CachedWorker(WorkerId, OrganizationId, "Marta", true, Now),
+            new CachedWorker(SecondWorkerId, OrganizationId, "Carlos", true, Now),
+        ],
+        [
+            new CachedProductionLine(LineId, OrganizationId, PlantId, "Línea 1", true, Now),
+            new CachedProductionLine(SecondLineId, OrganizationId, PlantId, "Línea 2", true, Now),
+            new CachedProductionLine(ThirdLineId, OrganizationId, PlantId, "Línea 3", true, Now),
+            new CachedProductionLine(FourthLineId, OrganizationId, PlantId, "Línea 4", true, Now),
+        ]);
+
+    private static LocalOperationCatalogSnapshot SnapshotWithOwnMaterial() => new(
+        [
+            new CachedSupplier(SupplierId, OrganizationId, "La Esperanza", true, Now),
+            new CachedSupplier(OwnMaterialSupplierId, OrganizationId, "Material propio", true, Now),
+        ],
         [
             new CachedWorker(WorkerId, OrganizationId, "Marta", true, Now),
             new CachedWorker(SecondWorkerId, OrganizationId, "Carlos", true, Now),

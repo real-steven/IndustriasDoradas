@@ -225,7 +225,7 @@ public sealed class DiagnosticsViewModelTests
     }
 
     [TestMethod]
-    public void AttendanceAuditCategoryIsAnExplicitComingSoonPreview()
+    public void AttendanceAuditCategoryIsAvailableForProtectedReview()
     {
         DiagnosticsViewModel diagnostics = new(
             new StubHealthService(SystemHealth.Available("api", DateTimeOffset.UtcNow)),
@@ -235,7 +235,7 @@ public sealed class DiagnosticsViewModelTests
         audit.SelectCategoryCommand.Execute(AuditCategory.Attendance);
 
         Assert.IsTrue(audit.IsAttendanceCategory);
-        StringAssert.Contains(audit.Status, "próximamente");
+        Assert.IsFalse(audit.Status.Contains("próximamente", StringComparison.OrdinalIgnoreCase));
     }
 
     [TestMethod]

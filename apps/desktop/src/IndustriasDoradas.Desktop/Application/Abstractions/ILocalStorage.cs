@@ -268,6 +268,31 @@ public sealed record LocalCajuelaCorrectionAudit(
     DateTimeOffset ConfirmedAt,
     bool RequiredPlantManager);
 
+public sealed record LocalAttendanceWorkerAudit(
+    Guid WorkerId,
+    string WorkerName,
+    string WorkerCategory,
+    IReadOnlyList<AttendanceEvent> Events);
+
+public sealed record LocalSecurityAuditEvent(
+    Guid Id,
+    Guid StationId,
+    Guid? ProfileId,
+    string ActorName,
+    string EventType,
+    string Result,
+    string Details,
+    DateTimeOffset OccurredAt);
+
+public sealed record RecordLocalSecurityAuditEvent(
+    Guid StationId,
+    Guid? ProfileId,
+    string ActorName,
+    string EventType,
+    string Result,
+    string Details,
+    DateTimeOffset OccurredAt);
+
 public sealed record LocalAuditQuery(
     DateTimeOffset? StartUtc,
     DateTimeOffset? EndExclusiveUtc,
@@ -488,6 +513,20 @@ public interface ILocalAuditRepository
         LocalAuditQuery query,
         CancellationToken cancellationToken = default) =>
         ListCajuelaCorrectionsAsync(cancellationToken);
+
+    Task<IReadOnlyList<LocalAttendanceWorkerAudit>> ListAttendanceAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<LocalAttendanceWorkerAudit>>([]);
+
+    Task<IReadOnlyList<LocalSecurityAuditEvent>> ListSecurityEventsAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<LocalSecurityAuditEvent>>([]);
+
+    Task RecordSecurityEventAsync(
+        RecordLocalSecurityAuditEvent auditEvent,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public interface ILocalProductionSweepRepository
