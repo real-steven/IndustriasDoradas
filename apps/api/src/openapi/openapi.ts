@@ -6,6 +6,7 @@ import {
 } from "@nestjs/swagger";
 
 const UUID = { type: "string", format: "uuid" } as const;
+const DATE = { type: "string", format: "date" } as const;
 const DATE_TIME = { type: "string", format: "date-time" } as const;
 
 interface MutableResponse {
@@ -790,6 +791,333 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         },
       },
     },
+    ProductionReportMetrics: {
+      type: "object",
+      required: [
+        "completedShipments",
+        "totalCajuelas",
+        "sweepCount",
+        "goldShipments",
+        "pendingGoldShipments",
+        "totalGoldGrams",
+        "includedCajuelas",
+        "gramsPerCajuela",
+        "palosPerCajuela",
+        "goldCoveragePercentage",
+      ],
+      additionalProperties: false,
+      properties: {
+        completedShipments: { type: "integer", minimum: 0 },
+        totalCajuelas: { type: "integer", minimum: 0 },
+        sweepCount: { type: "integer", minimum: 0 },
+        goldShipments: { type: "integer", minimum: 0 },
+        pendingGoldShipments: { type: "integer", minimum: 0 },
+        totalGoldGrams: { type: "number", minimum: 0 },
+        includedCajuelas: { type: "integer", minimum: 0 },
+        gramsPerCajuela: { type: "number", minimum: 0, nullable: true },
+        palosPerCajuela: { type: "number", minimum: 0, nullable: true },
+        goldCoveragePercentage: { type: "number", minimum: 0, maximum: 100 },
+      },
+    },
+    ProductionReportSupplier: {
+      allOf: [
+        { $ref: "#/components/schemas/ProductionReportMetrics" },
+        {
+          type: "object",
+          required: ["supplierId", "supplierName"],
+          properties: {
+            supplierId: UUID,
+            supplierName: { type: "string" },
+          },
+        },
+      ],
+    },
+    ProductionReportShipment: {
+      type: "object",
+      required: [
+        "shipmentId",
+        "shipmentCode",
+        "plantId",
+        "stationName",
+        "productionLineId",
+        "productionLineName",
+        "productionLineOrder",
+        "supplierId",
+        "supplierName",
+        "responsibleWorkerName",
+        "startedAtUtc",
+        "completedAtUtc",
+        "durationHours",
+        "cajuelaTotal",
+        "sweepCount",
+        "goldStatus",
+        "goldAmountGrams",
+        "gramsPerCajuela",
+        "palosPerCajuela",
+      ],
+      additionalProperties: false,
+      properties: {
+        shipmentId: UUID,
+        shipmentCode: { type: "string" },
+        plantId: UUID,
+        stationName: { type: "string" },
+        productionLineId: UUID,
+        productionLineName: { type: "string" },
+        productionLineOrder: { type: "integer" },
+        supplierId: UUID,
+        supplierName: { type: "string" },
+        responsibleWorkerName: { type: "string", nullable: true },
+        startedAtUtc: DATE_TIME,
+        completedAtUtc: DATE_TIME,
+        durationHours: { type: "number", minimum: 0 },
+        cajuelaTotal: { type: "integer", minimum: 0 },
+        sweepCount: { type: "integer", minimum: 0 },
+        goldStatus: { type: "string", enum: ["REGISTERED", "PENDING"] },
+        goldAmountGrams: { type: "number", minimum: 0, nullable: true },
+        gramsPerCajuela: { type: "number", minimum: 0, nullable: true },
+        palosPerCajuela: { type: "number", minimum: 0, nullable: true },
+      },
+    },
+    ReportSettlementLine: {
+      type: "object",
+      required: [
+        "id",
+        "shipmentId",
+        "assayLabel",
+        "karat",
+        "gramsLiquidated",
+        "pricePerKaratCrc",
+        "pricePerGramCrc",
+        "grossAmountCrc",
+        "displayOrder",
+      ],
+      properties: {
+        id: UUID,
+        shipmentId: UUID,
+        assayLabel: { type: "string", nullable: true },
+        karat: { type: "number", minimum: 0, maximum: 24 },
+        gramsLiquidated: {
+          type: "number",
+          minimum: 0,
+          exclusiveMinimum: true,
+        },
+        pricePerKaratCrc: { type: "number", minimum: 0, nullable: true },
+        pricePerGramCrc: { type: "number", minimum: 0 },
+        grossAmountCrc: { type: "number" },
+        displayOrder: { type: "integer", minimum: 1 },
+      },
+    },
+    ReportSettlementExpense: {
+      type: "object",
+      required: [
+        "id",
+        "category",
+        "concept",
+        "amountCrc",
+        "occurredOn",
+        "responsibleName",
+        "displayOrder",
+      ],
+      properties: {
+        id: UUID,
+        category: {
+          type: "string",
+          enum: ["TRANSPORT", "BAGS", "PLANT", "SALARY", "FINCA", "OTHER"],
+        },
+        concept: { type: "string" },
+        amountCrc: { type: "number", minimum: 0 },
+        occurredOn: DATE,
+        responsibleName: { type: "string", nullable: true },
+        displayOrder: { type: "integer", minimum: 1 },
+      },
+    },
+    ReportSettlement: {
+      type: "object",
+      required: [
+        "id",
+        "organizationId",
+        "supplierId",
+        "supplierName",
+        "weekStart",
+        "buyerName",
+        "destination",
+        "currencyCode",
+        "participationPercentage",
+        "receivedAmountCrc",
+        "notes",
+        "status",
+        "revision",
+        "supersedesSettlementId",
+        "rowVersion",
+        "createdByProfileId",
+        "updatedByProfileId",
+        "approvedByProfileId",
+        "approvedAtUtc",
+        "createdAtUtc",
+        "updatedAtUtc",
+        "totalGrams",
+        "grossAmountCrc",
+        "expensesCrc",
+        "netAmountCrc",
+        "participationAmountCrc",
+        "effectiveReceivedAmountCrc",
+        "lines",
+        "expenses",
+      ],
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        supplierId: UUID,
+        supplierName: { type: "string" },
+        weekStart: DATE,
+        buyerName: { type: "string" },
+        destination: { type: "string", nullable: true },
+        currencyCode: { type: "string", enum: ["CRC"] },
+        participationPercentage: { type: "number", minimum: 0, maximum: 100 },
+        receivedAmountCrc: { type: "number", minimum: 0, nullable: true },
+        notes: { type: "string", nullable: true },
+        status: {
+          type: "string",
+          enum: ["DRAFT", "REVIEWED", "APPROVED", "CLOSED"],
+        },
+        revision: { type: "integer", minimum: 1 },
+        supersedesSettlementId: { ...UUID, nullable: true },
+        rowVersion: { type: "integer", minimum: 1 },
+        createdByProfileId: UUID,
+        updatedByProfileId: UUID,
+        approvedByProfileId: { ...UUID, nullable: true },
+        approvedAtUtc: { ...DATE_TIME, nullable: true },
+        createdAtUtc: DATE_TIME,
+        updatedAtUtc: DATE_TIME,
+        totalGrams: { type: "number" },
+        grossAmountCrc: { type: "number" },
+        expensesCrc: { type: "number" },
+        netAmountCrc: { type: "number" },
+        participationAmountCrc: { type: "number" },
+        effectiveReceivedAmountCrc: { type: "number" },
+        lines: {
+          type: "array",
+          items: { $ref: "#/components/schemas/ReportSettlementLine" },
+        },
+        expenses: {
+          type: "array",
+          items: { $ref: "#/components/schemas/ReportSettlementExpense" },
+        },
+      },
+    },
+    ReportWeeklySummary: {
+      type: "object",
+      required: [
+        "weekStart",
+        "settlements",
+        "totalGrams",
+        "grossAmountCrc",
+        "expensesCrc",
+        "netAmountCrc",
+        "receivedAmountCrc",
+      ],
+      properties: {
+        weekStart: DATE,
+        settlements: { type: "integer", minimum: 0 },
+        totalGrams: { type: "number" },
+        grossAmountCrc: { type: "number" },
+        expensesCrc: { type: "number" },
+        netAmountCrc: { type: "number" },
+        receivedAmountCrc: { type: "number" },
+      },
+    },
+    ProductionReport: {
+      type: "object",
+      required: [
+        "version",
+        "language",
+        "timezone",
+        "generatedAtUtc",
+        "period",
+        "filters",
+        "summary",
+        "suppliers",
+        "shipments",
+        "financialSettlements",
+        "weeklyFinancialSummary",
+        "financialSummary",
+        "definitions",
+      ],
+      additionalProperties: false,
+      properties: {
+        version: { type: "string", enum: ["production-gold-v1"] },
+        language: { type: "string", enum: ["es", "en"] },
+        timezone: { type: "string", enum: ["America/Costa_Rica"] },
+        generatedAtUtc: DATE_TIME,
+        period: {
+          type: "object",
+          required: ["fromUtc", "toUtc"],
+          properties: { fromUtc: DATE_TIME, toUtc: DATE_TIME },
+        },
+        filters: {
+          type: "object",
+          required: ["plantId", "productionLineId", "supplierId"],
+          properties: {
+            plantId: { ...UUID, nullable: true },
+            productionLineId: { ...UUID, nullable: true },
+            supplierId: { ...UUID, nullable: true },
+          },
+        },
+        summary: { $ref: "#/components/schemas/ProductionReportMetrics" },
+        suppliers: {
+          type: "array",
+          items: { $ref: "#/components/schemas/ProductionReportSupplier" },
+        },
+        shipments: {
+          type: "array",
+          items: { $ref: "#/components/schemas/ProductionReportShipment" },
+        },
+        financialSettlements: {
+          type: "array",
+          items: { $ref: "#/components/schemas/ReportSettlement" },
+        },
+        weeklyFinancialSummary: {
+          type: "array",
+          items: { $ref: "#/components/schemas/ReportWeeklySummary" },
+        },
+        financialSummary: {
+          type: "object",
+          required: [
+            "settlements",
+            "totalGrams",
+            "grossAmountCrc",
+            "expensesCrc",
+            "netAmountCrc",
+            "receivedAmountCrc",
+          ],
+          properties: {
+            settlements: { type: "integer", minimum: 0 },
+            totalGrams: { type: "number" },
+            grossAmountCrc: { type: "number" },
+            expensesCrc: { type: "number" },
+            netAmountCrc: { type: "number" },
+            receivedAmountCrc: { type: "number" },
+          },
+        },
+        definitions: {
+          type: "object",
+          required: [
+            "goldCoverage",
+            "gramsPerCajuela",
+            "palosPerCajuela",
+            "missingGold",
+            "financialCalculation",
+          ],
+          properties: {
+            goldCoverage: { type: "string" },
+            gramsPerCajuela: { type: "string" },
+            palosPerCajuela: { type: "string" },
+            missingGold: { type: "string" },
+            financialCalculation: { type: "string" },
+          },
+        },
+      },
+    },
     RecordShipmentGoldDto: {
       type: "object",
       required: ["amountGrams"],
@@ -842,11 +1170,26 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       }
       const success = operation.responses["200"] ?? operation.responses["201"];
       if (success !== undefined && typeof success === "object") {
-        success.content = {
-          "application/json": {
-            schema: responseSchema(path, operation.operationId ?? ""),
-          },
-        };
+        if (path.endsWith(".xlsx")) {
+          success.content = {
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+              {
+                schema: { type: "string", format: "binary" },
+              },
+          };
+        } else if (path.endsWith(".pdf")) {
+          success.content = {
+            "application/pdf": {
+              schema: { type: "string", format: "binary" },
+            },
+          };
+        } else {
+          success.content = {
+            "application/json": {
+              schema: responseSchema(path, operation.operationId ?? ""),
+            },
+          };
+        }
       }
     }
   }
@@ -915,6 +1258,21 @@ function responseSchema(
     return { $ref: "#/components/schemas/AttendanceHours" };
   if (path.endsWith("/management/gold-summary"))
     return { $ref: "#/components/schemas/GoldSummary" };
+  if (path.endsWith("/reports/production"))
+    return { $ref: "#/components/schemas/ProductionReport" };
+  if (path.endsWith("/reports/settlements/weekly-summary"))
+    return {
+      type: "array",
+      items: { $ref: "#/components/schemas/ReportWeeklySummary" },
+    };
+  if (path.includes("/reports/settlements")) {
+    return operationId.includes("list")
+      ? {
+          type: "array",
+          items: { $ref: "#/components/schemas/ReportSettlement" },
+        }
+      : { $ref: "#/components/schemas/ReportSettlement" };
+  }
   if (path.endsWith("/gold-results"))
     return operationId.includes("history")
       ? {

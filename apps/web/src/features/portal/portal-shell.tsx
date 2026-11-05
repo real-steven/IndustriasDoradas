@@ -58,15 +58,15 @@ const primaryNavigation = [
     labelEn: "Statistics",
     icon: "⌁",
   },
-] as const;
-
-const futureNavigation = [
   {
     to: "/gerencia/reportes",
     label: "Reportes",
     labelEn: "Reports",
     icon: "⇩",
   },
+] as const;
+
+const futureNavigation = [
   {
     to: "/gerencia/configuracion",
     label: "Configuración",

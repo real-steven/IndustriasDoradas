@@ -20,6 +20,7 @@ import {
 } from "../management/management-shipments";
 import { DashboardSummary } from "./dashboard-summary";
 import { StatisticsFeature } from "../statistics/statistics";
+import { ReportsFeature } from "../reports/reports";
 
 function usePortalFreshness(): ManagementFreshnessQuery {
   return useOutletContext<{ freshness: ManagementFreshnessQuery }>().freshness;
@@ -107,11 +108,11 @@ export function WorkersPage() {
 
   return (
     <PortalPage
-      title={tr("Trabajadores y horas", "Workers and hours")}
-      eyebrow={tr("ASISTENCIA CONFIRMADA", "CONFIRMED ATTENDANCE")}
+      title={tr("Trabajadores", "Workers")}
+      eyebrow={tr("EXPEDIENTES Y TARIFAS", "RECORDS AND RATES")}
       description={tr(
-        "Consulte jornadas, horas confirmadas, pendientes y correcciones por trabajador. Esta pantalla no modifica marcas ni calcula pagos.",
-        "Review shifts, confirmed hours, open items, and corrections by worker. This screen does not modify marks or calculate payroll.",
+        "Busque un empleado por nombre o cédula para revisar sus horas, tarifa, ajustes e historial salarial.",
+        "Find an employee by name or identity number to review hours, rate, adjustments, and pay history.",
       )}
     >
       <AttendanceFeature />
@@ -179,6 +180,23 @@ export function StatisticsPage() {
       )}
     >
       <StatisticsFeature />
+    </PortalPage>
+  );
+}
+
+export function ReportsPage() {
+  const { tr } = useLanguage();
+
+  return (
+    <PortalPage
+      title={tr("Reportes", "Reports")}
+      eyebrow={tr("INFORMACIÓN PARA GERENCIA", "MANAGEMENT INFORMATION")}
+      description={tr(
+        "Elija entre reportes de producción y oro o una pre-nómina separada por empleado.",
+        "Choose between production and gold reports or a separate employee pre-payroll report.",
+      )}
+    >
+      <ReportsFeature />
     </PortalPage>
   );
 }

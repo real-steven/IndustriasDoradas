@@ -15,6 +15,7 @@ import { GoldModule } from "./gold/gold.module";
 import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { ManagementModule } from "./management/management.module";
+import { ReportsModule } from "./reports/reports.module";
 import { StationModule } from "./station/station.module";
 import { SyncModule } from "./sync/sync.module";
 import { WorkersModule } from "./workers/workers.module";
@@ -46,6 +47,7 @@ const environmentFiles = nodeEnvironment
     HealthModule,
     InventoryModule,
     ManagementModule,
+    ReportsModule,
     StationModule,
     SyncModule,
     WorkersModule,

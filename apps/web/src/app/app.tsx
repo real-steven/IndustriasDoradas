@@ -7,6 +7,7 @@ import {
   DashboardPage,
   GoldPage,
   OperationPage,
+  ReportsPage,
   ShipmentDetailPage,
   ShipmentsPage,
   StatisticsPage,
@@ -38,18 +39,7 @@ export function App() {
           <Route path="usuarios" element={<PlantManagerPage />} />
           <Route path="estadisticas" element={<StatisticsPage />} />
           <Route path="trabajadores" element={<WorkersPage />} />
-          <Route
-            path="reportes"
-            element={
-              <UpcomingPage
-                title={tr("Reportes", "Reports")}
-                description={tr(
-                  "Generación futura de archivos Excel gerenciales.",
-                  "Future generation of management Excel files.",
-                )}
-              />
-            }
-          />
+          <Route path="reportes" element={<ReportsPage />} />
           <Route
             path="inventario"
             element={<Navigate to="/gerencia" replace />}

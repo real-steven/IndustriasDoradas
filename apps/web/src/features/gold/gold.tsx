@@ -479,8 +479,11 @@ function GoldEditor({
   const [reason, setReason] = useState("");
   const [validation, setValidation] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [hasCurrentResult, setHasCurrentResult] = useState(
+    shipment.hasGoldResult,
+  );
   const parsed = parseAmount(amount);
-  const correction = shipment.hasGoldResult || mutation.data !== undefined;
+  const correction = hasCurrentResult;
   const formError =
     validation ??
     (mutation.isError ? mutationMessage(mutation.error, language) : null);
@@ -553,6 +556,7 @@ function GoldEditor({
         amountGrams: parsed,
         ...(correction ? { correctionReason: reason.trim() } : {}),
       });
+      setHasCurrentResult(true);
       setSaved(
         correction
           ? tr(
@@ -606,7 +610,12 @@ function GoldEditor({
             inputMode="decimal"
             placeholder={tr("Ej. 12,50", "E.g. 12.50")}
             value={amount}
-            onChange={(event) => setAmount(event.target.value)}
+            onChange={(event) => {
+              setAmount(event.target.value);
+              setValidation(null);
+              setSaved(null);
+              if (mutation.isError) mutation.reset();
+            }}
             aria-describedby={`gold-equivalence${formError !== null ? " gold-form-error" : ""}`}
             aria-invalid={formError !== null}
           />
@@ -628,7 +637,12 @@ function GoldEditor({
               maxLength={500}
               rows={3}
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value);
+                setValidation(null);
+                setSaved(null);
+                if (mutation.isError) mutation.reset();
+              }}
             />
           </label>
         )}

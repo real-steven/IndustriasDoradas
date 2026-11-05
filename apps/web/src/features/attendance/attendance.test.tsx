@@ -1,73 +1,65 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { QueryProvider } from "../../app/query-provider";
 import { AuthContext, type AuthState } from "../../auth/auth-context";
 import { AttendanceFeature } from "./attendance";
-import { attendanceDateRange, parseAttendanceFilters } from "./attendance-data";
+import { currentPayrollWeek } from "./payroll-data";
 
 const ORGANIZATION_ID = "30000000-0000-4000-8000-000000000001";
 const WORKER_ID = "52000000-0000-4000-8000-000000000001";
 
-describe("consulta gerencial de asistencia", () => {
+describe("expediente y pre-nómina por trabajador", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
   });
 
-  it("calcula semanas de lunes a domingo en el calendario de Costa Rica", () => {
-    const current = parseAttendanceFilters(
-      new URLSearchParams("period=current"),
-    );
-    const previous = parseAttendanceFilters(
-      new URLSearchParams("period=previous"),
-    );
-    const now = new Date("2026-10-20T18:00:00.000Z");
-
-    expect(attendanceDateRange(current, now)).toEqual({
+  it("calcula la semana de lunes a domingo en Costa Rica", () => {
+    expect(currentPayrollWeek(new Date("2026-10-20T18:00:00.000Z"))).toEqual({
       fromDate: "2026-10-19",
       toDate: "2026-10-25",
     });
-    expect(attendanceDateRange(previous, now)).toEqual({
-      fromDate: "2026-10-12",
-      toDate: "2026-10-18",
-    });
   });
 
-  it("conserva fecha y trabajador en la URL y muestra horas, pendientes y ajustes", async () => {
+  it("abre un empleado y muestra horas, tarifa, total y ajustes explicados", async () => {
     const transport = vi.fn<typeof fetch>((input) => {
       const request = new URL(requestUrl(input), "http://localhost");
-      if (request.pathname.endsWith("/workers"))
-        return Promise.resolve(workerPage());
-      if (request.pathname.endsWith("/management/attendance/hours"))
-        return Promise.resolve(attendanceHours());
+      if (request.pathname.endsWith("/payroll/workers"))
+        return Promise.resolve(json([workerProfile()]));
+      if (request.pathname.endsWith("/management/attendance/payroll"))
+        return Promise.resolve(json(payrollReport()));
       throw new Error(`Unexpected request ${request.pathname}`);
     });
     vi.stubGlobal("fetch", transport);
 
-    renderAttendance(
-      `/gerencia/trabajadores?period=date&date=2026-10-20&worker=${WORKER_ID}`,
-    );
+    renderAttendance(`/gerencia/trabajadores?worker=${WORKER_ID}`);
 
-    const summary = await screen.findByLabelText("Resumen de asistencia");
-    expect(within(summary).getByText("8 h")).toBeInTheDocument();
-    expect(screen.getByText(/Jornada abierta desde/u)).toBeInTheDocument();
-    expect(screen.getByText("Salida olvidada al terminar")).toBeInTheDocument();
+    expect(await screen.findByText("8 h")).toBeInTheDocument();
     expect(
-      screen.getByText(/Realizado por Jefa de planta 1/u),
+      screen.getByText(
+        (content) => content.includes("16") && content.includes("500"),
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("No suman horas confirmadas")).toBeInTheDocument();
+    expect(
+      screen.getByText("Presentó comprobante del hospital."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Sin deducciones legales")).toBeInTheDocument();
 
-    const hoursCall = transport.mock.calls.find(([input]) =>
-      requestUrl(input).includes("/management/attendance/hours"),
+    const payrollCall = transport.mock.calls.find(([input]) =>
+      requestUrl(input).endsWith("/management/attendance/payroll")
+        ? true
+        : requestUrl(input).includes("/management/attendance/payroll?"),
     );
-    const request = new URL(requestUrl(hoursCall?.[0]), "http://localhost");
-    expect(request.searchParams.get("fromDate")).toBe("2026-10-20");
-    expect(request.searchParams.get("toDate")).toBe("2026-10-20");
+    const request = new URL(requestUrl(payrollCall?.[0]), "http://localhost");
     expect(request.searchParams.get("workerId")).toBe(WORKER_ID);
+    expect(request.searchParams.get("fromDate")).toMatch(
+      /^\d{4}-\d{2}-\d{2}$/u,
+    );
+    expect(request.searchParams.get("toDate")).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
   });
 });
 
@@ -78,7 +70,7 @@ function renderAttendance(path: string): void {
       profileId: "a1000000-0000-4000-8000-000000000001",
       organizationId: ORGANIZATION_ID,
       role: "JEFE_EMPRESA",
-      permissions: ["attendance.read"],
+      permissions: ["attendance.read", "payroll.read", "payroll.manage"],
       expiresAt: "2026-10-21T01:00:00Z",
     },
     foundSession: null,
@@ -103,129 +95,76 @@ function renderAttendance(path: string): void {
   );
 }
 
-function workerPage(): Response {
-  return json({
-    items: [
-      {
-        id: WORKER_ID,
-        organizationId: ORGANIZATION_ID,
-        plantId: "31000000-0000-4000-8000-000000000001",
-        sourceRequestId: "request-1",
-        userProfileId: null,
-        category: "OPERARIO",
-        name: "Operario Uno",
-        email: null,
-        phone: null,
-        status: "ACTIVO",
-        statusChangedAt: "2026-10-01T12:00:00.000Z",
-        isActive: true,
-        deactivatedAt: null,
-      },
-    ],
-    page: 1,
-    pageSize: 100,
-    total: 1,
-    totalPages: 1,
-  });
+function workerProfile() {
+  return {
+    id: WORKER_ID,
+    organizationId: ORGANIZATION_ID,
+    plantId: "31000000-0000-4000-8000-000000000001",
+    name: "Operario Uno",
+    identityNumber: "1-1111-1111",
+    category: "OPERARIO",
+    status: "ACTIVO",
+    isActive: true,
+    currentRateId: "rate-1",
+    currentHourlyRateCrc: 2000,
+    nightMultiplier: 1.5,
+    rateEffectiveFromUtc: "2026-10-01T06:00:00.000Z",
+  };
 }
 
-function attendanceHours(): Response {
-  return json({
-    version: "attendance-hours-v1",
+function payrollReport() {
+  const worker = workerProfile();
+  return {
+    version: "payroll-preparation-v1",
     timezone: "America/Costa_Rica",
-    period: {
-      fromDate: "2026-10-20",
-      toDate: "2026-10-20",
-      fromUtc: "2026-10-20T06:00:00.000Z",
-      toUtc: "2026-10-21T06:00:00.000Z",
-    },
-    summary: {
-      workerCount: 1,
-      confirmedShiftCount: 1,
-      openShiftCount: 1,
-      incidentCount: 1,
-      adjustmentCount: 1,
-      totalConfirmedMinutes: 480,
-    },
+    currencyCode: "CRC",
+    legalScope: "GROSS_ESTIMATE_WITHOUT_LEGAL_DEDUCTIONS",
+    period: { fromDate: "2026-10-19", toDate: "2026-10-25" },
+    generatedAtUtc: "2026-10-25T18:00:00.000Z",
     workers: [
       {
-        workerId: WORKER_ID,
-        workerName: "Operario Uno",
+        worker,
         confirmedMinutes: 480,
         completedShiftCount: 1,
-        openShiftCount: 1,
-        incidentCount: 1,
+        openShiftCount: 0,
+        incidentCount: 0,
+        baseAmountCrc: 16000,
+        adjustmentAmountCrc: 500,
+        estimatedGrossAmountCrc: 16500,
+        missingRateMinutes: 0,
+        adjustments: [
+          {
+            id: "adjustment-1",
+            adjustmentDate: "2026-10-20",
+            adjustmentType: "OTHER_EARNING",
+            minutes: null,
+            amountCrc: 500,
+            note: "Presentó comprobante del hospital.",
+            recordedAtUtc: "2026-10-20T20:00:00.000Z",
+            calculatedAmountCrc: 500,
+          },
+        ],
+        rates: [
+          {
+            id: "rate-1",
+            regularHourlyRateCrc: 2000,
+            nightMultiplier: 1.5,
+            effectiveFromUtc: "2026-10-01T06:00:00.000Z",
+            reason: "Tarifa inicial",
+            createdAtUtc: "2026-10-01T06:00:00.000Z",
+          },
+        ],
+        shifts: [],
       },
     ],
-    shifts: [
-      {
-        workerId: WORKER_ID,
-        workerName: "Operario Uno",
-        plantId: "31000000-0000-4000-8000-000000000001",
-        status: "OPEN",
-        startedOn: "2026-10-20",
-        checkInEventId: "event-open",
-        checkInAtUtc: "2026-10-20T13:00:00.000Z",
-        checkOutEventId: null,
-        checkOutAtUtc: null,
-        durationMinutes: null,
-        minutesInPeriod: null,
-      },
-      {
-        workerId: WORKER_ID,
-        workerName: "Operario Uno",
-        plantId: "31000000-0000-4000-8000-000000000001",
-        status: "COMPLETED",
-        startedOn: "2026-10-20",
-        checkInEventId: "event-in",
-        checkInAtUtc: "2026-10-20T13:00:00.000Z",
-        checkOutEventId: "event-out",
-        checkOutAtUtc: "2026-10-20T21:00:00.000Z",
-        durationMinutes: 480,
-        minutesInPeriod: 480,
-      },
-    ],
-    incidents: [
-      {
-        type: "OPEN_SHIFT_EXCEEDED",
-        workerId: WORKER_ID,
-        workerName: "Operario Uno",
-        eventId: "event-open",
-        detectedAtUtc: "2026-10-20T22:00:00.000Z",
-        description: "La jornada supera ocho horas y continúa abierta.",
-      },
-    ],
-    adjustments: [
-      {
-        eventId: "event-adjusted",
-        eventType: "ADJUSTED_CHECK_OUT",
-        workerId: WORKER_ID,
-        workerName: "Operario Uno",
-        plantId: "31000000-0000-4000-8000-000000000001",
-        occurredAtUtc: "2026-10-20T21:00:00.000Z",
-        recordedAtUtc: "2026-10-20T22:10:00.000Z",
-        confirmedAtUtc: "2026-10-20T22:10:02.000Z",
-        correctedByProfileId: "a1000000-0000-4000-8000-000000000002",
-        correctedByDisplayName: "Jefa de planta 1",
-        correctionReason: "Salida olvidada al terminar",
-        relatedEventId: "event-out",
-      },
-    ],
-    coverage: {
-      status: "COMPLETE",
-      eventsRead: 4,
-      confirmedEventsUsed: 4,
-      excludedEvents: 1,
-      eventsInPeriod: 4,
-      firstEventAtUtc: "2026-10-20T13:00:00.000Z",
-      lastEventAtUtc: "2026-10-20T22:10:00.000Z",
+    summary: {
+      workerCount: 1,
+      workersReady: 1,
+      workersMissingRate: 0,
+      confirmedMinutes: 480,
+      estimatedGrossAmountCrc: 16500,
     },
-    freshness: {
-      generatedAtUtc: "2026-10-20T22:11:00.000Z",
-      lastConfirmedAtUtc: "2026-10-20T22:10:02.000Z",
-      lagSeconds: 58,
-    },
-  });
+  };
 }
 
 function json(body: unknown): Response {

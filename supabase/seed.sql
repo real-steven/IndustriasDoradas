@@ -47,7 +47,10 @@ values
   ('10000000-0000-4000-8000-000000000028', 'attendance.read', 'Consultar asistencia, jornadas e incidencias.'),
   ('10000000-0000-4000-8000-000000000029', 'attendance.record', 'Registrar entrada y salida desde una estación autorizada.'),
   ('10000000-0000-4000-8000-000000000030', 'attendance.pay_rates.read', 'Consultar tarifas horarias versionadas.'),
-  ('10000000-0000-4000-8000-000000000031', 'attendance.pay_rates.manage', 'Configurar tarifas horarias por trabajador.')
+  ('10000000-0000-4000-8000-000000000031', 'attendance.pay_rates.manage', 'Configurar tarifas horarias por trabajador.'),
+  ('10000000-0000-4000-8000-000000000032', 'reports.manage', 'Crear, editar, revisar y aprobar liquidaciones financieras gerenciales.'),
+  ('10000000-0000-4000-8000-000000000033', 'payroll.read', 'Consultar pre-nomina, tarifas y ajustes salariales.'),
+  ('10000000-0000-4000-8000-000000000034', 'payroll.manage', 'Configurar tarifas, identificacion y ajustes de pre-nomina.')
 on conflict (id) do update
 set
   code = excluded.code,
@@ -57,6 +60,9 @@ set
 with assignments (role_code, permission_code) as (
   values
     ('JEFE_EMPRESA', 'reports.read'),
+    ('JEFE_EMPRESA', 'reports.manage'),
+    ('JEFE_EMPRESA', 'payroll.read'),
+    ('JEFE_EMPRESA', 'payroll.manage'),
     ('JEFE_EMPRESA', 'audit.read_redacted'),
     ('JEFE_EMPRESA', 'administrators.govern'),
     ('JEFE_EMPRESA', 'organization_catalogs.read'),

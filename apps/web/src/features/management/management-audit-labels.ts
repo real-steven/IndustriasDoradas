@@ -108,6 +108,7 @@ export function managerAuditArea(
   if (entityType.includes("shipment") || entityType.includes("production"))
     return es ? "Producción" : "Production";
   if (entityType.includes("supplier")) return es ? "Proveedores" : "Suppliers";
+  if (entityType === "report.settlement") return es ? "Finanzas" : "Finance";
   if (entityType.includes("inventory")) return es ? "Inventario" : "Inventory";
   if (entityType.includes("rastra") || entityType.includes("novelty"))
     return es ? "Mantenimiento" : "Maintenance";
@@ -173,6 +174,7 @@ export function managerAuditField(
     is_active: ["Estado activo", "Active status"],
     is_custom: ["Registro personalizado", "Custom record"],
     line_count: ["Cantidad de líneas", "Line count"],
+    expense_count: ["Cantidad de gastos", "Expense count"],
     movement_type: ["Tipo de movimiento", "Movement type"],
     name: ["Nombre", "Name"],
     permission_count: ["Cantidad de permisos", "Permission count"],
@@ -183,6 +185,9 @@ export function managerAuditField(
     reason: ["Motivo", "Reason"],
     request_status: ["Estado de la solicitud", "Request status"],
     role_code: ["Rol", "Role"],
+    revision: ["Revisión", "Revision"],
+    row_version: ["Versión de edición", "Edit version"],
+    source_revision: ["Revisión original", "Original revision"],
     station_count: ["Cantidad de estaciones", "Station count"],
     status: ["Estado", "Status"],
     status_reason: ["Motivo del estado", "Status reason"],
@@ -235,6 +240,30 @@ function businessMutationAction(event: AuditEvent, es: boolean): string {
   const requestStatus = event.changes?.request_status?.after;
   const movement = event.changes?.movement_type?.after;
   const changeType = event.changes?.change_type?.after;
+
+  if (event.entityType === "report.settlement") {
+    const before = event.changes?.status?.before;
+    const after = event.changes?.status?.after;
+    if (before === null)
+      return es
+        ? "Se creó un borrador de liquidación"
+        : "A settlement draft was created";
+    if (after === "REVIEWED")
+      return es
+        ? "Se envió una liquidación a revisión"
+        : "A settlement was sent for review";
+    if (after === "APPROVED")
+      return es
+        ? "Se aprobó y protegió una liquidación"
+        : "A settlement was approved and locked";
+    if (after === "CLOSED")
+      return es ? "Se cerró una liquidación" : "A settlement was closed";
+    if (after === "DRAFT" && before === "REVIEWED")
+      return es
+        ? "Se devolvió una liquidación a borrador"
+        : "A settlement was returned to draft";
+    return es ? "Se actualizó una liquidación" : "A settlement was updated";
+  }
 
   if (event.entityType === "worker_request") {
     if (requestStatus === "APPROVED")
