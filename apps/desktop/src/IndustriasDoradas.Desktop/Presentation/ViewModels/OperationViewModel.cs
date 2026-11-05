@@ -39,6 +39,7 @@ public sealed class OperationViewModel : ObservableObject
     private readonly OperationSafetyOptions safetyOptions;
     private readonly IPlantManagerModeAccessor? managerMode;
     private readonly Guid stationId;
+    private readonly HashSet<Guid> hiddenLineIds = [];
     private OperationLinePanelViewModel line = new();
     private IReadOnlyList<LocalOperationDashboardSnapshot> appliedDashboardSnapshots = [];
     private PreparedCajuelaReversal? preparedReversal;
@@ -52,6 +53,7 @@ public sealed class OperationViewModel : ObservableObject
     private bool isBusy;
     private bool isCorrectionPending;
     private bool isSweepConfirmationPending;
+    private bool isExternalRefreshRunning;
     private string sweepConfirmationSummary = string.Empty;
     private bool isLocalStorageAvailable;
     private OperationFocusTarget focusedTarget = OperationFocusTarget.RegisterCajuela;
@@ -109,6 +111,9 @@ public sealed class OperationViewModel : ObservableObject
         CancelSweepCommand = new RelayCommand(CancelSweep, CanCancelSweep);
         ShowComingSoonCommand = new RelayCommand(ShowComingSoon);
         DismissMilestoneAlertCommand = new RelayCommand<Guid>(DismissMilestoneAlert);
+        HideLineCommand = new RelayCommand<Guid>(HideLine);
+        RestoreLineCommand = new RelayCommand<Guid>(RestoreLine);
+        RestoreAllLinesCommand = new RelayCommand(RestoreAllLines);
         MilestoneAlerts.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(IsMilestoneAlertVisible));
@@ -125,8 +130,14 @@ public sealed class OperationViewModel : ObservableObject
     }
 
     public ObservableCollection<OperationLinePanelViewModel> Lines { get; } = [];
+    public ObservableCollection<OperationLinePanelViewModel> VisibleLines { get; } = [];
+    public ObservableCollection<OperationLinePanelViewModel> HiddenLines { get; } = [];
     public ObservableCollection<OperationMilestoneAlertViewModel> MilestoneAlerts { get; } = [];
     public bool HasActiveLines => Lines.Count > 0;
+    public bool HasVisibleLines => VisibleLines.Count > 0;
+    public bool HasHiddenLines => HiddenLines.Count > 0;
+    public int VisibleLineCount => VisibleLines.Count;
+    public int VisibleGridColumns => VisibleLines.Count <= 1 ? 1 : 2;
     public IInputCommandSource InputSource => inputSource;
     public string LocalStorageStatus
     {
@@ -229,6 +240,9 @@ public sealed class OperationViewModel : ObservableObject
     public IRelayCommand CancelSweepCommand { get; }
     public IRelayCommand ShowComingSoonCommand { get; }
     public IRelayCommand<Guid> DismissMilestoneAlertCommand { get; }
+    public IRelayCommand<Guid> HideLineCommand { get; }
+    public IRelayCommand<Guid> RestoreLineCommand { get; }
+    public IRelayCommand RestoreAllLinesCommand { get; }
 
     public Task InitializeAsync() => RefreshAsync();
 
@@ -312,11 +326,12 @@ public sealed class OperationViewModel : ObservableObject
 
     public async Task RefreshFromExternalChangeAsync()
     {
-        if (IsBusy)
+        if (IsBusy || isExternalRefreshRunning)
         {
             return;
         }
 
+        isExternalRefreshRunning = true;
         try
         {
             IReadOnlyList<LocalOperationDashboardSnapshot> snapshots = await dashboard.ListAsync(stationId)
@@ -340,6 +355,10 @@ public sealed class OperationViewModel : ObservableObject
             exception is IOException or SqliteException or InvalidOperationException)
         {
             // El sondeo visible es un respaldo: conserva la última card válida y vuelve a intentar.
+        }
+        finally
+        {
+            isExternalRefreshRunning = false;
         }
     }
 
@@ -416,7 +435,11 @@ public sealed class OperationViewModel : ObservableObject
             selectedLine.Total = currentTotal;
             ProductionReviewAlertState review = ApplyMilestones(
                 selectedLine, currentTotal, selectedLine.LastSweepCumulativeTotal);
-            ProductionReviewAlertState previousReview = milestones.CalculateReviewAlert(previousTotal);
+            ProductionReviewAlertState previousReview = milestones.CalculateReviewAlert(
+                previousTotal,
+                selectedLine.LastSweepCumulativeTotal == 0
+                    ? null
+                    : selectedLine.LastSweepCumulativeTotal);
             if (review.IsActive &&
                 (!previousReview.IsActive || previousReview.ActiveReference != review.ActiveReference))
             {
@@ -554,7 +577,9 @@ public sealed class OperationViewModel : ObservableObject
             Line.Total = result.Total;
             ProductionReviewAlertState review = ApplyMilestones(
                 Line, result.Total, Line.LastSweepCumulativeTotal);
-            ProductionReviewAlertState previousReview = milestones.CalculateReviewAlert(previousTotal);
+            ProductionReviewAlertState previousReview = milestones.CalculateReviewAlert(
+                previousTotal,
+                Line.LastSweepCumulativeTotal == 0 ? null : Line.LastSweepCumulativeTotal);
             if (!result.WasDuplicate && review.IsActive &&
                 (!previousReview.IsActive || previousReview.ActiveReference != review.ActiveReference))
             {
@@ -745,6 +770,8 @@ public sealed class OperationViewModel : ObservableObject
             ApplyLine(panel, snapshot, active[index].LineSlot);
             Lines.Add(panel);
         }
+        hiddenLineIds.RemoveWhere(id => Lines.All(line => line.LineId != id));
+        RebuildVisibleLines();
 
         OperationLinePanelViewModel? selected = Lines.FirstOrDefault(item => item.LineId == selectedLineId) ??
             Lines.FirstOrDefault();
@@ -782,6 +809,7 @@ public sealed class OperationViewModel : ObservableObject
         panel.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
         panel.Total = snapshot.Total;
         panel.SweepCount = snapshot.SweepCount;
+        panel.ApplySweeps(snapshot.Sweeps);
         ApplyMilestones(panel, snapshot.Total, snapshot.LastSweepCumulativeTotal);
         panel.SupplierName = snapshot.SupplierName ?? "Sin proveedor";
         panel.ResponsibleName = snapshot.ResponsibleName ?? "Sin responsable";
@@ -824,7 +852,49 @@ public sealed class OperationViewModel : ObservableObject
             PendingOutboxCount = 0,
             FailedReviewOutboxCount = 0,
             SyncedOutboxCount = 0,
+            Sweeps = null,
         };
+
+    private void HideLine(Guid lineId)
+    {
+        if (Lines.All(line => line.LineId != lineId)) return;
+        hiddenLineIds.Add(lineId);
+        RebuildVisibleLines();
+    }
+
+    private void RestoreLine(Guid lineId)
+    {
+        hiddenLineIds.Remove(lineId);
+        RebuildVisibleLines();
+    }
+
+    private void RestoreAllLines()
+    {
+        hiddenLineIds.Clear();
+        RebuildVisibleLines();
+    }
+
+    private void RebuildVisibleLines()
+    {
+        VisibleLines.Clear();
+        HiddenLines.Clear();
+        foreach (OperationLinePanelViewModel panel in Lines)
+        {
+            if (hiddenLineIds.Contains(panel.LineId))
+            {
+                HiddenLines.Add(panel);
+            }
+            else
+            {
+                VisibleLines.Add(panel);
+            }
+        }
+
+        OnPropertyChanged(nameof(HasVisibleLines));
+        OnPropertyChanged(nameof(HasHiddenLines));
+        OnPropertyChanged(nameof(VisibleLineCount));
+        OnPropertyChanged(nameof(VisibleGridColumns));
+    }
 
     private async Task<bool> RunAsync(Func<Task> action, string failureMessage)
     {
@@ -903,12 +973,13 @@ public sealed class OperationViewModel : ObservableObject
         int total,
         int lastSweepCumulativeTotal)
     {
-        ProductionReviewAlertState review = milestones.CalculateReviewAlert(total);
+        long? sweepBaseline = lastSweepCumulativeTotal == 0 ? null : lastSweepCumulativeTotal;
+        ProductionReviewAlertState review = milestones.CalculateReviewAlert(total, sweepBaseline);
         panel.ApplyMilestones(
             review,
             milestones.CalculateSweepProgress(
                 total,
-                lastSweepCumulativeTotal == 0 ? null : lastSweepCumulativeTotal));
+                sweepBaseline));
         return review;
     }
 

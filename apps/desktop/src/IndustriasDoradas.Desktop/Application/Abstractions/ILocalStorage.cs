@@ -288,10 +288,17 @@ public sealed record LocalOperationDashboardSnapshot(
     int FailedReviewOutboxCount = 0,
     int SyncedOutboxCount = 0,
     int LastSweepCumulativeTotal = 0,
-    int SweepCount = 0)
+    int SweepCount = 0,
+    IReadOnlyList<LocalProductionSweepSummary>? Sweeps = null)
 {
     public bool IsReady => Session?.Status == LineFeedCycleStatus.Active;
 }
+
+public sealed record LocalProductionSweepSummary(
+    Guid Id,
+    int CajuelaCount,
+    DateTimeOffset SweptAt,
+    bool IsFinal);
 
 public interface ILocalCatalogRepository
 {

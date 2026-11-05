@@ -85,4 +85,45 @@ public partial class OperationView : UserControl
         Focus();
         Keyboard.Focus(this);
     }
+
+    private void OnOpenLineWindow(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is null || sender is not Button { DataContext: OperationLinePanelViewModel line })
+        {
+            return;
+        }
+
+        OperationLineDisplayWindow? existing = System.Windows.Application.Current.Windows
+            .OfType<OperationLineDisplayWindow>()
+            .FirstOrDefault(window => window.LineId == line.LineId);
+        if (existing is not null)
+        {
+            if (existing.WindowState == WindowState.Minimized)
+            {
+                existing.WindowState = WindowState.Normal;
+            }
+            existing.Activate();
+            return;
+        }
+
+        OperationLineDisplayWindow? window = null;
+        try
+        {
+            window = new OperationLineDisplayWindow(ViewModel, line)
+            {
+                Owner = Window.GetWindow(this),
+            };
+            window.Show();
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or System.Windows.Markup.XamlParseException)
+        {
+            window?.Close();
+            MessageBox.Show(
+                "No se pudo abrir la vista de esta línea. La aplicación principal puede continuar.",
+                "Vista de línea no disponible",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
 }

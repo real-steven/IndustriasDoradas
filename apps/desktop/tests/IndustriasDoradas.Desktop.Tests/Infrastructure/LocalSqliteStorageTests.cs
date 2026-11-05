@@ -1131,7 +1131,7 @@ public sealed class LocalSqliteStorageTests
     }
 
     [TestMethod]
-    public async Task IdempotencyMismatchCannotBeRetriedWithTheSameEnvelope()
+    public async Task IdempotencyMismatchCannotBeRetriedOrDiscardedWithTheSameEnvelope()
     {
         await using var database = new TestDatabase();
         await database.Migrator.MigrateAsync();
@@ -1152,9 +1152,12 @@ public sealed class LocalSqliteStorageTests
             database.Factory, new MutableTimeProvider(StartedAt.AddMinutes(1)));
 
         OutboxReviewDecisionResult retry = await review.RetryAsync(message.Id);
+        OutboxReviewDecisionResult discard = await review.DiscardAsync(message.Id);
 
         Assert.IsFalse(retry.Applied);
         StringAssert.Contains(retry.Message, "sobre técnico nuevo");
+        Assert.IsFalse(discard.Applied);
+        StringAssert.Contains(discard.Message, "solamente en este equipo");
         LocalSynchronizationQueueState queue = await database.Outbox().ReadAsync();
         Assert.AreEqual(0, queue.PendingCount);
         Assert.AreEqual(1, queue.FailedReviewCount);
@@ -2492,6 +2495,10 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual(SweepMercuryStatus.Pending, sweep.MercuryStatus);
         LocalOperationDashboardSnapshot dashboard = await database.Dashboard().GetAsync(StationId);
         Assert.AreEqual(1, dashboard.SweepCount);
+        Assert.IsNotNull(dashboard.Sweeps);
+        Assert.AreEqual(1, dashboard.Sweeps.Count);
+        Assert.AreEqual(quantity, dashboard.Sweeps[0].CajuelaCount);
+        Assert.AreEqual(sweep.Id, dashboard.Sweeps[0].Id);
 
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_sweeps;"));

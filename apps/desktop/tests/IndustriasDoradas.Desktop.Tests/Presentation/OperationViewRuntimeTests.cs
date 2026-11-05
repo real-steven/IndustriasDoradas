@@ -48,6 +48,29 @@ public sealed class OperationViewRuntimeTests
         view.UpdateLayout();
 
         Assert.IsTrue(view.IsMeasureValid);
+        Assert.AreEqual(
+            0,
+            FindVisualChildren<Viewbox>(view).Count(),
+            "Las tarjetas no deben usar escalado gráfico porque vuelve borroso el texto.");
+        Border responsiveCard = FindVisualChildren<Border>(view)
+            .Single(item => item.CornerRadius.TopLeft == 19d && item.ActualHeight == 520d);
+        Assert.AreEqual(520d, responsiveCard.ActualHeight, 0.1d);
+        Assert.IsTrue(
+            responsiveCard.ActualWidth <= 980d,
+            "Una sola línea debe conservar una proporción compacta y no estirarse a todo el monitor.");
+
+        var dedicated = new OperationLineDisplayWindow
+        {
+            DataContext = new { Line = line, IsLineAvailable = true },
+        };
+        AssertWindowCanShow(dedicated, shownWindow =>
+        {
+            Border accentStrip = FindVisualChildren<Border>(shownWindow)
+                .Single(item => item.Name == "LineAccentStrip");
+            Assert.AreEqual(
+                (Color)ColorConverter.ConvertFromString(line.AccentColor),
+                ((SolidColorBrush)accentStrip.Background).Color);
+        });
 
         AssertCanRender(new HomeView());
         AssertCanRender(new DiagnosticsView());
@@ -134,6 +157,21 @@ public sealed class OperationViewRuntimeTests
         Assert.IsTrue(view.IsMeasureValid);
     }
 
+    private static void AssertWindowCanShow(Window window, Action<Window>? whileVisible = null)
+    {
+        try
+        {
+            window.Show();
+            window.UpdateLayout();
+            Assert.IsTrue(window.IsVisible);
+            whileVisible?.Invoke(window);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     private static string? SelectionText(ComboBox comboBox)
     {
         comboBox.ApplyTemplate();
@@ -164,7 +202,13 @@ public sealed class OperationViewRuntimeTests
         IReadOnlyList<OperationLinePanelViewModel> Lines,
         IReadOnlyList<OperationMilestoneAlertViewModel> MilestoneAlerts)
     {
+        public IReadOnlyList<OperationLinePanelViewModel> VisibleLines => Lines;
+        public OperationLinePanelViewModel[] HiddenLines => Lines.Where(_ => false).ToArray();
         public bool HasActiveLines => Lines.Count > 0;
+        public bool HasVisibleLines => VisibleLines.Count > 0;
+        public bool HasHiddenLines => HiddenLines.Length > 0;
+        public int VisibleLineCount => VisibleLines.Count;
+        public int VisibleGridColumns => VisibleLines.Count <= 1 ? 1 : 2;
         public string LocalStorageStatus => $"Guardado local disponible · {Lines.Count}";
         public string PendingStatus => $"{Lines.Count - 1} pendientes";
         public string LastResult => $"{Lines.Count} línea lista para operar.";

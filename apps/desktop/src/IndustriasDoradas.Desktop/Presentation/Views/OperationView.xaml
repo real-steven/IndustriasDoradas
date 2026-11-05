@@ -21,11 +21,15 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ScrollViewer Grid.Row="0" MinHeight="0"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="24,18,24,8" MaxWidth="1380" HorizontalAlignment="Center">
-                <Grid>
+        <Grid Grid.Row="0" Margin="24,18,24,8" MaxWidth="1680"
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -48,7 +52,7 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Margin="0,18,0,15">
+                <Grid Grid.Row="1" Margin="0,18,0,15">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -59,35 +63,105 @@
                                Text="{Binding PendingStatus}" />
                 </Grid>
 
-                <ItemsControl ItemsSource="{Binding Lines}"
-                              Visibility="{Binding HasActiveLines, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Border Grid.Row="2" Margin="6,0,6,10" Padding="12,9" Background="#EEF6FA"
+                        BorderBrush="#CFE0E8" BorderThickness="1" CornerRadius="12"
+                        Visibility="{Binding HasHiddenLines, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Ink700Brush}"
+                                   FontSize="11" FontWeight="Bold" Text="LÍNEAS OCULTAS" />
+                        <ItemsControl Grid.Column="1" Margin="12,0" ItemsSource="{Binding HiddenLines}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Margin="0,0,7,0" Padding="10,5"
+                                            Command="{Binding DataContext.RestoreLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding LineId}"
+                                            Content="{Binding LineName}"
+                                            ToolTip="Volver a mostrar esta línea" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Grid.Column="2" Padding="10,5" Command="{Binding RestoreAllLinesCommand}"
+                                Content="MOSTRAR TODAS" />
+                    </Grid>
+                </Border>
+
+                <ItemsControl Grid.Row="3" ItemsSource="{Binding VisibleLines}"
+                              VerticalAlignment="Top"
+                              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                              Visibility="{Binding HasVisibleLines, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter Property="VerticalAlignment" Value="Stretch" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid />
+                            <UniformGrid Columns="{Binding DataContext.VisibleGridColumns, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="6" MinHeight="280" Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
+                            <Border x:Name="LineCard" Margin="6" Background="White"
+                                    BorderBrush="{StaticResource SoftBorderBrush}"
                                     BorderThickness="1" CornerRadius="19" SnapsToDevicePixels="True">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Height" Value="330" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.VisibleLineCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                         Value="1">
+                                                <Setter Property="Height" Value="520" />
+                                                <Setter Property="MaxWidth" Value="980" />
+                                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding DataContext.VisibleLineCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                         Value="2">
+                                                <Setter Property="Height" Value="390" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="7" />
-                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
                                     <Border Background="{Binding AccentColor}" CornerRadius="19,19,0,0" />
-                                    <StackPanel Grid.Row="1" Margin="18,13,18,16">
+                                    <StackPanel x:Name="CardBody" Grid.Row="1" Margin="18,13,18,16"
+                                                VerticalAlignment="Center">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="20"
+                                            <TextBlock x:Name="LineNameText" Foreground="{StaticResource Ink900Brush}" FontSize="20"
                                                        FontWeight="Bold" Text="{Binding LineName}" />
-                                            <Border Grid.Column="1" Padding="10,5" Background="#E7F7ED" CornerRadius="14">
-                                                <TextBlock Foreground="#207946" FontSize="9" FontWeight="Bold"
-                                                           Text="{Binding StateLabel}" />
-                                            </Border>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <Button x:Name="OpenLineButton" Width="30" Height="30" MinHeight="0" Margin="0,0,6,0" Padding="0"
+                                                        Click="OnOpenLineWindow" ToolTip="Abrir esta línea en otra pantalla"
+                                                        AutomationProperties.Name="Abrir línea en otra pantalla">
+                                                    <TextBlock x:Name="OpenLineIcon" FontSize="14" Text="▣" />
+                                                </Button>
+                                                <Button x:Name="HideLineButton" Width="30" Height="30" MinHeight="0" Margin="0,0,7,0" Padding="0"
+                                                        Command="{Binding DataContext.HideLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding LineId}" ToolTip="Ocultar esta línea"
+                                                        AutomationProperties.Name="Ocultar línea">
+                                                    <TextBlock x:Name="HideLineIcon" FontSize="16" Text="−" />
+                                                </Button>
+                                                <Border x:Name="StateBadge" Padding="10,5" Background="#E7F7ED" CornerRadius="14">
+                                                    <TextBlock x:Name="StateLabelText" Foreground="#207946" FontSize="9" FontWeight="Bold"
+                                                               Text="{Binding StateLabel}" />
+                                                </Border>
+                                            </StackPanel>
                                         </Grid>
 
                                         <Grid Margin="0,10,0,0">
@@ -95,19 +169,19 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Margin="0,0,5,0" Padding="8" Background="#F8FAFB" CornerRadius="10">
+                                            <Border x:Name="SupplierBox" Margin="0,0,5,0" Padding="8" Background="#F8FAFB" CornerRadius="10">
                                                 <StackPanel>
-                                                    <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9"
+                                                    <TextBlock x:Name="SupplierLabel" Foreground="{StaticResource MutedBrush}" FontSize="9"
                                                                FontWeight="Bold" Text="PROVEEDOR" />
-                                                    <TextBlock Margin="0,4,0,0" FontWeight="Bold" FontSize="12"
+                                                    <TextBlock x:Name="SupplierValue" Margin="0,4,0,0" FontWeight="Bold" FontSize="12"
                                                                Text="{Binding SupplierName}" TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="1" Margin="5,0,0,0" Padding="8" Background="#F8FAFB" CornerRadius="10">
+                                            <Border x:Name="ResponsibleBox" Grid.Column="1" Margin="5,0,0,0" Padding="8" Background="#F8FAFB" CornerRadius="10">
                                                 <StackPanel>
-                                                    <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="9"
+                                                    <TextBlock x:Name="ResponsibleLabel" Foreground="{StaticResource MutedBrush}" FontSize="9"
                                                                FontWeight="Bold" Text="RESPONSABLE" />
-                                                    <TextBlock Margin="0,4,0,0" FontWeight="Bold" FontSize="12"
+                                                    <TextBlock x:Name="ResponsibleValue" Margin="0,4,0,0" FontWeight="Bold" FontSize="12"
                                                                Text="{Binding ResponsibleName}" TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
                                             </Border>
@@ -120,33 +194,80 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <StackPanel>
-                                                <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="10"
+                                                <TextBlock x:Name="TotalLabel" Foreground="{StaticResource MutedBrush}" FontSize="10"
                                                             FontWeight="Bold" Text="🪣  CAJUELAS DEL CARGAMENTO" />
-                                                <TextBlock Foreground="{StaticResource Ink900Brush}" FontSize="42"
+                                                <TextBlock x:Name="TotalValue" Foreground="{StaticResource Ink900Brush}" FontSize="42"
                                                            FontWeight="Bold" Text="{Binding Total}"
                                                            AutomationProperties.Name="Total de cajuelas del cargamento" />
                                             </StackPanel>
-                                            <Border Grid.Column="1" Margin="12,0" Padding="12,6"
-                                                    VerticalAlignment="Bottom" Background="#F8FAFB" CornerRadius="10">
+                                            <ToggleButton x:Name="SweepDetailsButton" Grid.Column="1" Margin="12,0" Padding="12,6"
+                                                          VerticalAlignment="Bottom" Background="#F8FAFB"
+                                                          BorderBrush="#E1EAEE" ToolTipService.ShowDuration="60000"
+                                                          AutomationProperties.Name="Cantidad de barridas y detalle">
+                                                <ToggleButton.ToolTip>
+                                                    <StackPanel MinWidth="190">
+                                                        <TextBlock Margin="0,0,0,7" FontWeight="Bold" Text="Cajuelas por barrida" />
+                                                        <ItemsControl ItemsSource="{Binding Sweeps}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Grid Margin="0,2">
+                                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                                        <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                                                                        <TextBlock Grid.Column="1" Margin="12,0,0,0" Text="{Binding CajuelaDescription}" />
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                        <TextBlock Margin="0,6,0,0" Foreground="{StaticResource MutedBrush}" FontSize="10"
+                                                                   Text="Haga clic para mantener este detalle visible." />
+                                                    </StackPanel>
+                                                </ToggleButton.ToolTip>
                                                 <StackPanel>
-                                                    <TextBlock HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
+                                                    <TextBlock x:Name="SweepCountLabel" HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}"
                                                                FontSize="8" FontWeight="Bold" Text="CANTIDAD DE BARRIDAS" />
-                                                    <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center"
-                                                               FontSize="20" FontWeight="Bold" Text="{Binding SweepCount}"
-                                                               AutomationProperties.Name="Cantidad de barridas realizadas" />
+                                                    <TextBlock x:Name="SweepCountValue" Margin="0,3,0,0" HorizontalAlignment="Center"
+                                                               FontSize="20" FontWeight="Bold" Text="{Binding SweepCount}" />
                                                 </StackPanel>
-                                            </Border>
-                                             <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
-                                                <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"
+                                            </ToggleButton>
+                                            <Popup Grid.Column="1" Placement="Bottom" PlacementTarget="{Binding ElementName=SweepDetailsButton}"
+                                                   IsOpen="{Binding IsChecked, ElementName=SweepDetailsButton}"
+                                                   StaysOpen="True" AllowsTransparency="True">
+                                                <Border Margin="0,7,0,0" Padding="14" MinWidth="230" Background="White"
+                                                        BorderBrush="#CFE0E8" BorderThickness="1" CornerRadius="12">
+                                                    <Border.Effect><DropShadowEffect BlurRadius="16" Opacity="0.18" ShadowDepth="4" /></Border.Effect>
+                                                    <StackPanel>
+                                                        <TextBlock FontSize="13" FontWeight="Bold" Text="Cajuelas por barrida" />
+                                                        <ItemsControl Margin="0,7,0,0" ItemsSource="{Binding Sweeps}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Grid Margin="0,3">
+                                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                                        <StackPanel>
+                                                                            <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                                                                            <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="10" Text="{Binding TimeDescription}" />
+                                                                        </StackPanel>
+                                                                        <TextBlock Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center"
+                                                                                   FontWeight="Bold" Text="{Binding CajuelaDescription}" />
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource MutedBrush}" FontSize="10"
+                                                                   Text="Haga clic nuevamente en el contador para cerrar." />
+                                                    </StackPanel>
+                                                </Border>
+                                            </Popup>
+                                             <StackPanel x:Name="AlertsPanel" Grid.Column="2" VerticalAlignment="Bottom">
+                                                <TextBlock x:Name="AlertsLabel" HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"
                                                            FontSize="9" FontWeight="Bold" Text="PRÓXIMAS ALERTAS" />
-                                                <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" FontSize="12"
+                                                <TextBlock x:Name="MercuryAlertText" Margin="0,4,0,0" HorizontalAlignment="Right" FontSize="12"
                                                            FontWeight="Bold" Text="{Binding NextMercuryAlertDescription}" />
-                                                <TextBlock Margin="0,2,0,0" HorizontalAlignment="Right" FontSize="12"
+                                                <TextBlock x:Name="SweepAlertText" Margin="0,2,0,0" HorizontalAlignment="Right" FontSize="12"
                                                            FontWeight="Bold" Text="{Binding NextSweepAlertDescription}" />
                                             </StackPanel>
                                         </Grid>
 
-                                        <ProgressBar Height="13" Minimum="0" Maximum="{Binding ProgressMaximum}"
+                                        <ProgressBar x:Name="LineProgress" Height="13" Minimum="0" Maximum="{Binding ProgressMaximum}"
                                                      Value="{Binding ProgressValue, Mode=OneWay}"
                                                      Foreground="{Binding ProgressColor, Mode=OneWay}"
                                                      Background="#E7EDEF" />
@@ -161,12 +282,12 @@
 
                                         <Grid Margin="0,12,0,0">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="2*" />
-                                                <ColumnDefinition Width="2*" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition x:Name="AddColumn" Width="2*" />
+                                                <ColumnDefinition x:Name="SubtractColumn" Width="2*" />
+                                                <ColumnDefinition x:Name="SweepColumn" Width="*" />
+                                                <ColumnDefinition x:Name="AddFiveColumn" Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Margin="0,0,5,0"
+                                            <Button x:Name="AddButton" Grid.Column="0" Margin="0,0,5,0"
                                                     Style="{StaticResource OperationActionButton}"
                                                     Background="{StaticResource SuccessSoftBrush}" BorderBrush="#BCDCC9"
                                                     Foreground="#187C43"
@@ -174,11 +295,11 @@
                                                     CommandParameter="{Binding LineId}"
                                                     AutomationProperties.Name="Registrar cajuela">
                                                 <StackPanel>
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="24" Text="＋" />
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="9" Text="AGREGAR CAJUELA" />
+                                                    <TextBlock x:Name="AddButtonIcon" HorizontalAlignment="Center" FontSize="24" Text="＋" />
+                                                    <TextBlock x:Name="AddButtonLabel" HorizontalAlignment="Center" FontSize="9" Text="AGREGAR CAJUELA" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Grid.Column="1" Margin="5,0"
+                                            <Button x:Name="SubtractButton" Grid.Column="1" Margin="5,0"
                                                     Style="{StaticResource OperationActionButton}"
                                                     Background="{StaticResource DangerSoftBrush}" BorderBrush="#EBC3C7"
                                                     Foreground="{StaticResource DangerBrush}"
@@ -186,20 +307,20 @@
                                                     CommandParameter="{Binding LineId}"
                                                     AutomationProperties.Name="Restar última cajuela">
                                                 <StackPanel>
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="24" Text="−" />
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="9" Text="RESTAR CAJUELA" />
+                                                    <TextBlock x:Name="SubtractButtonIcon" HorizontalAlignment="Center" FontSize="24" Text="−" />
+                                                    <TextBlock x:Name="SubtractButtonLabel" HorizontalAlignment="Center" FontSize="9" Text="RESTAR CAJUELA" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Grid.Column="2" Height="64" Margin="5,0"
+                                            <Button x:Name="SweepButton" Grid.Column="2" Height="64" Margin="5,0"
                                                     Background="{StaticResource WarningSoftBrush}" BorderBrush="#EAD7A9"
                                                     Foreground="#8B6310"
                                                     Command="{Binding DataContext.PrepareLineSweepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding LineId}"
                                                     ToolTip="Preparar el registro físico de una barrida"
                                                     AutomationProperties.Name="Preparar barrida">
-                                                <TextBlock FontFamily="Segoe UI Emoji" FontSize="24" Text="🧹" />
+                                                <TextBlock x:Name="SweepButtonIcon" FontFamily="Segoe UI Emoji" FontSize="24" Text="🧹" />
                                             </Button>
-                                            <Button Grid.Column="3" Height="64" Margin="5,0,0,0"
+                                            <Button x:Name="AddFiveButton" Grid.Column="3" Height="64" Margin="5,0,0,0"
                                                     Background="{StaticResource SuccessSoftBrush}" BorderBrush="#BCDCC9"
                                                     Foreground="#187C43"
                                                     Command="{Binding DataContext.RegisterFiveLineCajuelasCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -207,9 +328,9 @@
                                                     ToolTip="Registra cinco cajuelas independientes en esta línea"
                                                     AutomationProperties.Name="Agregar cinco cajuelas">
                                                 <StackPanel>
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="21"
+                                                    <TextBlock x:Name="AddFiveButtonValue" HorizontalAlignment="Center" FontSize="21"
                                                                FontWeight="Bold" Text="+5" />
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="8"
+                                                    <TextBlock x:Name="AddFiveButtonLabel" HorizontalAlignment="Center" FontSize="8"
                                                                FontWeight="Bold" Text="CAJUELAS" />
                                                 </StackPanel>
                                             </Button>
@@ -217,11 +338,96 @@
                                     </StackPanel>
                                 </Grid>
                             </Border>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding DataContext.VisibleLineCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                             Value="2">
+                                    <Setter TargetName="CardBody" Property="Margin" Value="22,16,22,20" />
+                                    <Setter TargetName="LineNameText" Property="FontSize" Value="23" />
+                                    <Setter TargetName="OpenLineButton" Property="Width" Value="34" />
+                                    <Setter TargetName="OpenLineButton" Property="Height" Value="34" />
+                                    <Setter TargetName="HideLineButton" Property="Width" Value="34" />
+                                    <Setter TargetName="HideLineButton" Property="Height" Value="34" />
+                                    <Setter TargetName="StateBadge" Property="Padding" Value="11,6" />
+                                    <Setter TargetName="StateLabelText" Property="FontSize" Value="10" />
+                                    <Setter TargetName="SupplierBox" Property="Padding" Value="10" />
+                                    <Setter TargetName="ResponsibleBox" Property="Padding" Value="10" />
+                                    <Setter TargetName="SupplierLabel" Property="FontSize" Value="10" />
+                                    <Setter TargetName="ResponsibleLabel" Property="FontSize" Value="10" />
+                                    <Setter TargetName="SupplierValue" Property="FontSize" Value="14" />
+                                    <Setter TargetName="ResponsibleValue" Property="FontSize" Value="14" />
+                                    <Setter TargetName="TotalLabel" Property="FontSize" Value="11" />
+                                    <Setter TargetName="TotalValue" Property="FontSize" Value="48" />
+                                    <Setter TargetName="SweepCountLabel" Property="FontSize" Value="9" />
+                                    <Setter TargetName="SweepCountValue" Property="FontSize" Value="23" />
+                                    <Setter TargetName="AlertsLabel" Property="FontSize" Value="10" />
+                                    <Setter TargetName="MercuryAlertText" Property="FontSize" Value="13" />
+                                    <Setter TargetName="SweepAlertText" Property="FontSize" Value="13" />
+                                    <Setter TargetName="LineProgress" Property="Height" Value="15" />
+                                    <Setter TargetName="AddColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="SubtractColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="SweepColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="AddFiveColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="AddButton" Property="Height" Value="74" />
+                                    <Setter TargetName="SubtractButton" Property="Height" Value="74" />
+                                    <Setter TargetName="SweepButton" Property="Height" Value="74" />
+                                    <Setter TargetName="AddFiveButton" Property="Height" Value="74" />
+                                    <Setter TargetName="AddButtonIcon" Property="FontSize" Value="27" />
+                                    <Setter TargetName="SubtractButtonIcon" Property="FontSize" Value="27" />
+                                    <Setter TargetName="SweepButtonIcon" Property="FontSize" Value="27" />
+                                    <Setter TargetName="AddFiveButtonValue" Property="FontSize" Value="24" />
+                                    <Setter TargetName="AddButtonLabel" Property="FontSize" Value="10" />
+                                    <Setter TargetName="SubtractButtonLabel" Property="FontSize" Value="10" />
+                                    <Setter TargetName="AddFiveButtonLabel" Property="FontSize" Value="9" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DataContext.VisibleLineCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                             Value="1">
+                                    <Setter TargetName="CardBody" Property="Margin" Value="34,22,34,28" />
+                                    <Setter TargetName="LineNameText" Property="FontSize" Value="28" />
+                                    <Setter TargetName="OpenLineButton" Property="Width" Value="42" />
+                                    <Setter TargetName="OpenLineButton" Property="Height" Value="42" />
+                                    <Setter TargetName="HideLineButton" Property="Width" Value="42" />
+                                    <Setter TargetName="HideLineButton" Property="Height" Value="42" />
+                                    <Setter TargetName="OpenLineIcon" Property="FontSize" Value="18" />
+                                    <Setter TargetName="HideLineIcon" Property="FontSize" Value="21" />
+                                    <Setter TargetName="StateBadge" Property="Padding" Value="14,8" />
+                                    <Setter TargetName="StateLabelText" Property="FontSize" Value="11" />
+                                    <Setter TargetName="SupplierBox" Property="Padding" Value="13" />
+                                    <Setter TargetName="ResponsibleBox" Property="Padding" Value="13" />
+                                    <Setter TargetName="SupplierLabel" Property="FontSize" Value="11" />
+                                    <Setter TargetName="ResponsibleLabel" Property="FontSize" Value="11" />
+                                    <Setter TargetName="SupplierValue" Property="FontSize" Value="16" />
+                                    <Setter TargetName="ResponsibleValue" Property="FontSize" Value="16" />
+                                    <Setter TargetName="TotalLabel" Property="FontSize" Value="12" />
+                                    <Setter TargetName="TotalValue" Property="FontSize" Value="58" />
+                                    <Setter TargetName="SweepDetailsButton" Property="Padding" Value="18,10" />
+                                    <Setter TargetName="SweepCountLabel" Property="FontSize" Value="10" />
+                                    <Setter TargetName="SweepCountValue" Property="FontSize" Value="28" />
+                                    <Setter TargetName="AlertsLabel" Property="FontSize" Value="11" />
+                                    <Setter TargetName="MercuryAlertText" Property="FontSize" Value="15" />
+                                    <Setter TargetName="SweepAlertText" Property="FontSize" Value="15" />
+                                    <Setter TargetName="LineProgress" Property="Height" Value="17" />
+                                    <Setter TargetName="AddColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="SubtractColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="SweepColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="AddFiveColumn" Property="Width" Value="*" />
+                                    <Setter TargetName="AddButton" Property="Height" Value="88" />
+                                    <Setter TargetName="SubtractButton" Property="Height" Value="88" />
+                                    <Setter TargetName="SweepButton" Property="Height" Value="88" />
+                                    <Setter TargetName="AddFiveButton" Property="Height" Value="88" />
+                                    <Setter TargetName="AddButtonIcon" Property="FontSize" Value="32" />
+                                    <Setter TargetName="SubtractButtonIcon" Property="FontSize" Value="32" />
+                                    <Setter TargetName="SweepButtonIcon" Property="FontSize" Value="31" />
+                                    <Setter TargetName="AddFiveButtonValue" Property="FontSize" Value="28" />
+                                    <Setter TargetName="AddButtonLabel" Property="FontSize" Value="11" />
+                                    <Setter TargetName="SubtractButtonLabel" Property="FontSize" Value="11" />
+                                    <Setter TargetName="AddFiveButtonLabel" Property="FontSize" Value="10" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Border Margin="8" Padding="52" Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
+                <Border Grid.Row="3" Margin="8" Padding="52" Background="White" BorderBrush="{StaticResource SoftBorderBrush}"
                         BorderThickness="1" CornerRadius="19">
                     <Border.Style>
                         <Style TargetType="Border">
@@ -242,8 +448,7 @@
                     </StackPanel>
                 </Border>
 
-            </StackPanel>
-        </ScrollViewer>
+        </Grid>
 
         <Border Grid.Row="1" Margin="30,4,30,14" Padding="14" MaxWidth="1364"
                 HorizontalAlignment="Stretch" Panel.ZIndex="20">
