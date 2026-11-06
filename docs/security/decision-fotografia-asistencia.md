@@ -55,3 +55,26 @@ documentar, como mínimo:
 
 Hasta que esas condiciones tengan aprobación explícita, el paso 6.6 se omite y
 la fotografía permanece en backlog.
+
+## Actualización — prototipo de elevación biométrica (2026-11-05)
+
+La decisión anterior sigue vigente para **asistencia**: el check-in/out no toma
+fotografías ni utiliza reconocimiento facial. Se autorizó por separado un
+prototipo local y reversible únicamente para elevar temporalmente a Modo Jefe de
+Planta.
+
+El prototipo:
+
+- requiere un PIN válido antes del primer registro facial;
+- muestra la cámara durante ese registro para permitir centrar el rostro;
+- en usos posteriores enciende la cámara por pocos segundos al presionar
+  `Elevar acceso` y comunica el estado en pantalla;
+- guarda únicamente una plantilla matemática cifrada con DPAPI para el usuario
+  de Windows y la estación actuales;
+- no guarda fotografías, no envía biometría a Supabase y no crea Storage;
+- conserva el PIN como alternativa cuando no hay cámara o no hay coincidencia;
+- no se considera todavía un control biométrico de producción, porque una cámara
+  RGB común no ofrece por sí sola prueba de vida resistente a suplantación.
+
+La implementación y sus límites se detallan en
+[`prototipo-biometria-local.md`](prototipo-biometria-local.md).

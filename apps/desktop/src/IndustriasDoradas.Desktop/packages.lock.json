@@ -76,6 +76,18 @@
           "Microsoft.Extensions.Primitives": "10.0.10"
         }
       },
+      "OpenCvSharp5.Windows": {
+        "type": "Direct",
+        "requested": "[5.0.0.20261018, )",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "Ts5Bl5fd38HXJdUdKicg5swNXy41j4Vu5sV3M9IL4Prxk6CxVuHkVg0NHrtuncuP0hG3RIOlOPPH0pfJKOSRUA==",
+        "dependencies": {
+          "OpenCvSharp5": "5.0.0.20261018",
+          "OpenCvSharp5.GdipExtensions": "5.0.0.20261018",
+          "OpenCvSharp5.WpfExtensions": "5.0.0.20261018",
+          "OpenCvSharp5.runtime.win": "5.0.0.20261018"
+        }
+      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Direct",
         "requested": "[3.0.5, )",
@@ -330,6 +342,32 @@
         "type": "Transitive",
         "resolved": "10.0.10",
         "contentHash": "5wu/GrYVd8mG2DVUw3vFJzF+O336TyTGg/Kmcgw9bfwYhCoFiV5lR5QeEmKecJyrW4W54nMfD3p3589E8a7czQ=="
+      },
+      "OpenCvSharp5": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "AVRSdqht1PRr9QfQjVzd6CM4o4IxHS5VeT94ZEEKdMHSQIx7U+VR0O3OzCxRROirJlmH6oz+MMw0SUBxKEN3Qw=="
+      },
+      "OpenCvSharp5.GdipExtensions": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "eCdmcJuDOtykf4u0Kf1b+UF0Ug9BFkvwsxJ264baQHVKG9PBuH5gvHMxkN1WADPpr10inf2wejWhiHVrI9Ta/w==",
+        "dependencies": {
+          "OpenCvSharp5": "5.0.0.20261018"
+        }
+      },
+      "OpenCvSharp5.runtime.win": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "WwyIbPJqlDwejKehYHS2xh3AxU4tnMm/S8obqGvTs0vR8e/1EFTU9Wk9c4H1s4GLUk6QI6FmcMoaxqwc1bYGSQ=="
+      },
+      "OpenCvSharp5.WpfExtensions": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "BENRIQSGIXTvDpt7tVlNiyVM83RpskLQVUwItcYQ4+DtpkOzAHhBiUO8eW45/6rhkNn5WRYCdXgJcX105UGAmQ==",
+        "dependencies": {
+          "OpenCvSharp5": "5.0.0.20261018"
+        }
       },
       "SQLite": {
         "type": "Transitive",

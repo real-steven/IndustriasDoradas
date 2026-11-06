@@ -4,13 +4,15 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using System.ComponentModel;
 using System.Globalization;
+using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 
 namespace IndustriasDoradas.Desktop.Presentation;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IDisposable
 {
     private readonly MainWindowViewModel viewModel;
+    private readonly IBiometricVerificationService biometricService;
     private readonly DispatcherTimer clockTimer;
     private readonly DispatcherTimer headerTimer;
     private readonly DispatcherTimer noticeTimer;
@@ -21,11 +23,16 @@ public partial class MainWindow : Window
     private SizeToContent windowedSizeToContent;
     private bool windowedTopmost;
     private bool isFullScreen;
+    private CancellationTokenSource? biometricCancellation;
+    private bool disposed;
 
-    public MainWindow(MainWindowViewModel viewModel)
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        IBiometricVerificationService biometricService)
     {
         InitializeComponent();
         this.viewModel = viewModel;
+        this.biometricService = biometricService;
         DataContext = viewModel;
         clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         clockTimer.Tick += OnClockTick;
@@ -252,6 +259,7 @@ public partial class MainWindow : Window
         if (e.Key != Key.Escape) return;
         if (ElevationOverlay.Visibility == Visibility.Visible)
         {
+            CancelBiometricVerification();
             HeaderPinBox.Clear();
             ElevationOverlay.Visibility = Visibility.Collapsed;
             e.Handled = true;
@@ -282,7 +290,7 @@ public partial class MainWindow : Window
         FloatingFullScreenExitButton.Visibility = Visibility.Collapsed;
     }
 
-    private void OnElevationClick(object sender, RoutedEventArgs e)
+    private async void OnElevationClick(object sender, RoutedEventArgs e)
     {
         if (viewModel.Station?.IsPlantManager == true)
         {
@@ -294,6 +302,18 @@ public partial class MainWindow : Window
         ElevationOverlay.Visibility = Visibility.Visible;
         HeaderPinBox.Focus();
         Keyboard.Focus(HeaderPinBox);
+        try
+        {
+            await StartSilentBiometricVerificationAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            BiometricStatusText.Text = "Validación biométrica cancelada. Puede ingresar su PIN.";
+        }
+        catch (Exception exception)
+        {
+            BiometricStatusText.Text = $"La cámara no pudo completar la validación. Puede ingresar su PIN. Detalle: {exception.Message}";
+        }
     }
 
     private async void OnElevate(object sender, RoutedEventArgs e)
@@ -314,6 +334,7 @@ public partial class MainWindow : Window
     {
         StationViewModel? station = viewModel.Station;
         if (station?.CanInteract != true) return;
+        CancelBiometricVerification();
         await station.ElevateAsync(HeaderPinBox.Password);
         HeaderPinBox.Clear();
         if (station.IsPlantManager)
@@ -325,8 +346,103 @@ public partial class MainWindow : Window
 
     private void OnCancelElevation(object sender, RoutedEventArgs e)
     {
+        CancelBiometricVerification();
         HeaderPinBox.Clear();
         ElevationOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private async Task StartSilentBiometricVerificationAsync()
+    {
+        StationViewModel? station = viewModel.Station;
+        Guid? profileId = station?.CurrentProfileId;
+        if (station is null || profileId is null)
+        {
+            BiometricStatusText.Text = "Abra una sesión antes de usar biometría.";
+            EnrollBiometricButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        CancelBiometricVerification();
+        biometricCancellation = new CancellationTokenSource();
+        CancellationToken token = biometricCancellation.Token;
+        bool enrolled = await biometricService.HasEnrollmentAsync(profileId.Value, token);
+        if (token.IsCancellationRequested || ElevationOverlay.Visibility != Visibility.Visible) return;
+
+        EnrollBiometricButton.Visibility = enrolled ? Visibility.Collapsed : Visibility.Visible;
+        if (!enrolled)
+        {
+            EnrollBiometricButton.Content = "REGISTRAR ROSTRO EN ESTE EQUIPO";
+            BiometricStatusText.Text = "Rostro no registrado. Ingrese el PIN y seleccione Registrar rostro.";
+            return;
+        }
+
+        var status = new Progress<string>(message => BiometricStatusText.Text = message);
+        BiometricOperationResult result = await biometricService.VerifyAsync(
+            profileId.Value,
+            status,
+            token);
+        if (token.IsCancellationRequested || ElevationOverlay.Visibility != Visibility.Visible) return;
+        BiometricStatusText.Text = result.Message;
+        if (!result.Succeeded)
+        {
+            EnrollBiometricButton.Content = "VOLVER A REGISTRAR ROSTRO";
+            EnrollBiometricButton.Visibility = Visibility.Visible;
+            return;
+        }
+
+        bool elevated = await station.ElevateWithBiometricAsync(profileId.Value);
+        if (!elevated || ElevationOverlay.Visibility != Visibility.Visible) return;
+        HeaderPinBox.Clear();
+        ElevationOverlay.Visibility = Visibility.Collapsed;
+        viewModel.Attendance?.RefreshManagerMode();
+    }
+
+    private async void OnEnrollBiometric(object sender, RoutedEventArgs e)
+    {
+        StationViewModel? station = viewModel.Station;
+        Guid? profileId = station?.CurrentProfileId;
+        if (station?.CanInteract != true || profileId is null) return;
+        if (string.IsNullOrWhiteSpace(HeaderPinBox.Password))
+        {
+            BiometricStatusText.Text = "Ingrese primero su PIN individual para autorizar el registro.";
+            HeaderPinBox.Focus();
+            return;
+        }
+
+        CancelBiometricVerification();
+        BiometricStatusText.Text = "Validando PIN antes del registro…";
+        await station.ElevateAsync(HeaderPinBox.Password);
+        HeaderPinBox.Clear();
+        if (!station.IsPlantManager)
+        {
+            BiometricStatusText.Text = station.Status;
+            return;
+        }
+
+        using var enrollmentWindow = new BiometricEnrollmentWindow(
+            biometricService,
+            profileId.Value,
+            station.CurrentProfileDisplayName)
+        {
+            Owner = this,
+        };
+        enrollmentWindow.ShowDialog();
+        BiometricOperationResult? result = enrollmentWindow.Result;
+        BiometricStatusText.Text = result?.Message ?? "Registro facial cancelado.";
+        if (result?.Succeeded != true) return;
+
+        EnrollBiometricButton.Visibility = Visibility.Collapsed;
+        ElevationOverlay.Visibility = Visibility.Collapsed;
+        viewModel.Attendance?.RefreshManagerMode();
+    }
+
+    private void CancelBiometricVerification()
+    {
+        CancellationTokenSource? previous = biometricCancellation;
+        biometricCancellation = null;
+        if (previous is null) return;
+        previous.Cancel();
+        previous.Dispose();
     }
 
     private void OnComingSoon(object sender, RoutedEventArgs e)
@@ -370,6 +486,14 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        Dispose();
+    }
+
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        CancelBiometricVerification();
         clockTimer.Stop();
         headerTimer.Stop();
         noticeTimer.Stop();
@@ -378,5 +502,7 @@ public partial class MainWindow : Window
         clockTimer.Tick -= OnClockTick;
         headerTimer.Tick -= OnHeaderTimerTick;
         noticeTimer.Tick -= OnNoticeTimerTick;
+        Closed -= OnClosed;
+        GC.SuppressFinalize(this);
     }
 }
