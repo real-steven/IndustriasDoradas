@@ -268,6 +268,31 @@ public sealed record LocalCajuelaCorrectionAudit(
     DateTimeOffset ConfirmedAt,
     bool RequiredPlantManager);
 
+public sealed record LocalAttendanceWorkerAudit(
+    Guid WorkerId,
+    string WorkerName,
+    string WorkerCategory,
+    IReadOnlyList<AttendanceEvent> Events);
+
+public sealed record LocalSecurityAuditEvent(
+    Guid Id,
+    Guid StationId,
+    Guid? ProfileId,
+    string ActorName,
+    string EventType,
+    string Result,
+    string Details,
+    DateTimeOffset OccurredAt);
+
+public sealed record RecordLocalSecurityAuditEvent(
+    Guid StationId,
+    Guid? ProfileId,
+    string ActorName,
+    string EventType,
+    string Result,
+    string Details,
+    DateTimeOffset OccurredAt);
+
 public sealed record LocalAuditQuery(
     DateTimeOffset? StartUtc,
     DateTimeOffset? EndExclusiveUtc,
@@ -288,10 +313,17 @@ public sealed record LocalOperationDashboardSnapshot(
     int FailedReviewOutboxCount = 0,
     int SyncedOutboxCount = 0,
     int LastSweepCumulativeTotal = 0,
-    int SweepCount = 0)
+    int SweepCount = 0,
+    IReadOnlyList<LocalProductionSweepSummary>? Sweeps = null)
 {
     public bool IsReady => Session?.Status == LineFeedCycleStatus.Active;
 }
+
+public sealed record LocalProductionSweepSummary(
+    Guid Id,
+    int CajuelaCount,
+    DateTimeOffset SweptAt,
+    bool IsFinal);
 
 public interface ILocalCatalogRepository
 {
@@ -481,6 +513,20 @@ public interface ILocalAuditRepository
         LocalAuditQuery query,
         CancellationToken cancellationToken = default) =>
         ListCajuelaCorrectionsAsync(cancellationToken);
+
+    Task<IReadOnlyList<LocalAttendanceWorkerAudit>> ListAttendanceAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<LocalAttendanceWorkerAudit>>([]);
+
+    Task<IReadOnlyList<LocalSecurityAuditEvent>> ListSecurityEventsAsync(
+        LocalAuditQuery query,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<LocalSecurityAuditEvent>>([]);
+
+    Task RecordSecurityEventAsync(
+        RecordLocalSecurityAuditEvent auditEvent,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public interface ILocalProductionSweepRepository

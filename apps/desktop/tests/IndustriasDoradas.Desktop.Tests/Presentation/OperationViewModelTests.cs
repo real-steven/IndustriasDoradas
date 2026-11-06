@@ -164,11 +164,66 @@ public sealed class OperationViewModelTests
 
         Assert.IsTrue(viewModel.HasActiveLines);
         Assert.AreEqual(2, viewModel.Lines.Count);
+        Assert.AreEqual(2, viewModel.VisibleLines.Count);
+        Assert.AreEqual(2, viewModel.VisibleGridColumns);
         Assert.AreEqual(LineId, viewModel.Lines[0].LineId);
         Assert.AreEqual(SecondLineId, viewModel.Lines[1].LineId);
         Assert.AreEqual(1, viewModel.Lines[0].LineSlot);
         Assert.AreEqual(2, viewModel.Lines[1].LineSlot);
         Assert.AreEqual(12, viewModel.Lines[1].Total);
+    }
+
+    [TestMethod]
+    public async Task LinesCanBeHiddenAndRestoredWithoutChangingTheActiveOperationSet()
+    {
+        var dashboard = new ListDashboardRepository(
+        [
+            ReadySnapshot(total: 7),
+            ReadySnapshotForLine(SecondLineId, "Línea 2", total: 12),
+        ]);
+        OperationViewModel viewModel = Create(dashboard, new StubCajuelaRepository(total: 7));
+        await viewModel.InitializeAsync();
+
+        viewModel.HideLineCommand.Execute(LineId);
+
+        Assert.AreEqual(2, viewModel.Lines.Count);
+        Assert.AreEqual(1, viewModel.VisibleLines.Count);
+        Assert.AreEqual(1, viewModel.HiddenLines.Count);
+        Assert.AreEqual(SecondLineId, viewModel.VisibleLines.Single().LineId);
+        Assert.AreEqual(1, viewModel.VisibleGridColumns);
+        Assert.IsTrue(viewModel.HasHiddenLines);
+
+        viewModel.RestoreLineCommand.Execute(LineId);
+
+        Assert.AreEqual(2, viewModel.VisibleLines.Count);
+        Assert.AreEqual(0, viewModel.HiddenLines.Count);
+        Assert.IsFalse(viewModel.HasHiddenLines);
+    }
+
+    [TestMethod]
+    public async Task SweepBreakdownIsExposedInChronologicalOrderForTheCard()
+    {
+        LocalOperationDashboardSnapshot snapshot = ReadySnapshot(total: 520) with
+        {
+            SweepCount = 2,
+            LastSweepCumulativeTotal = 510,
+            Sweeps =
+            [
+                new LocalProductionSweepSummary(Guid.NewGuid(), 260, Now.AddHours(-2), false),
+                new LocalProductionSweepSummary(Guid.NewGuid(), 250, Now.AddHours(-1), false),
+            ],
+        };
+        OperationViewModel viewModel = Create(
+            new ListDashboardRepository([snapshot]),
+            new StubCajuelaRepository(total: 520));
+
+        await viewModel.InitializeAsync();
+
+        Assert.AreEqual(2, viewModel.Line.Sweeps.Count);
+        Assert.AreEqual("Barrida 1", viewModel.Line.Sweeps[0].Title);
+        Assert.AreEqual("260 cajuelas", viewModel.Line.Sweeps[0].CajuelaDescription);
+        Assert.AreEqual("Barrida 2", viewModel.Line.Sweeps[1].Title);
+        Assert.AreEqual("250 cajuelas", viewModel.Line.Sweeps[1].CajuelaDescription);
     }
 
     [TestMethod]
@@ -246,8 +301,10 @@ public sealed class OperationViewModelTests
         Assert.AreEqual(0, justSwept.Line.CajuelasSinceLastSweep);
         Assert.AreEqual(260, justSwept.Line.Total);
         Assert.AreEqual(260, justSwept.Line.LastSweepCumulativeTotal);
+        Assert.AreEqual("Mercurio en 50", justSwept.Line.NextMercuryAlertDescription);
         Assert.AreEqual(1, afterOneMore.Line.CajuelasSinceLastSweep);
         Assert.AreEqual(261, afterOneMore.Line.Total);
+        Assert.AreEqual("Mercurio en 49", afterOneMore.Line.NextMercuryAlertDescription);
         Assert.AreEqual(260, afterOneMore.Line.LastSweepCumulativeTotal);
     }
 

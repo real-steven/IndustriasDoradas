@@ -21,13 +21,41 @@ public sealed record AttendanceWorkerStatus(
     DateTimeOffset? OpenCheckInAt,
     Guid? LatestEventId = null,
     AttendanceEventType? LatestEventType = null,
-    DateTimeOffset? LatestEventAt = null)
+    DateTimeOffset? LatestEventAt = null,
+    TimeSpan? CurrentShiftDuration = null)
 {
     public Guid Id => Worker.Id;
     public string Name => Worker.Name;
     public string CategoryLabel => Worker.Category == "JEFE_PLANTA" ? "Jefe de planta" : "Operario";
     public string DisplayName => Worker.DisplayName;
-    public string StateColor => IsPresent ? "#178449" : "#71808A";
+    public string StateColor => CurrentShiftDuration switch
+    {
+        { TotalHours: >= 10 } => "#B33A32",
+        { TotalHours: >= 9 } => "#C6533D",
+        { TotalHours: >= 8 } => "#B96A00",
+        _ => IsPresent ? "#178449" : "#71808A",
+    };
+    public string CardBackground => CurrentShiftDuration switch
+    {
+        { TotalHours: >= 10 } => "#FFE5E2",
+        { TotalHours: >= 9 } => "#FDEDE8",
+        { TotalHours: >= 8 } => "#FFF0D6",
+        { TotalHours: >= 7 } => "#FFF6D8",
+        { TotalHours: >= 6 } => "#FFFAE8",
+        _ => "#F7F9FA",
+    };
+    public string CardBorder => CurrentShiftDuration switch
+    {
+        { TotalHours: >= 10 } => "#C95850",
+        { TotalHours: >= 9 } => "#DC7A62",
+        { TotalHours: >= 8 } => "#E3A23B",
+        { TotalHours: >= 7 } => "#D8BB55",
+        { TotalHours: >= 6 } => "#E4D58D",
+        _ => "#DCE6EA",
+    };
+    public string ShiftDurationDescription => CurrentShiftDuration is null
+        ? string.Empty
+        : $"{Math.Floor(CurrentShiftDuration.Value.TotalHours):0} h {CurrentShiftDuration.Value.Minutes:00} min";
 }
 
 public sealed record AttendanceCorrectionDayOption(string Name, DateTime Date);
@@ -391,6 +419,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                 .ConfigureAwait(true);
             var statuses = new List<AttendanceWorkerStatus>(activeWorkers.Count);
             int totalIncidents = 0;
+            DateTimeOffset now = timeProvider.GetUtcNow();
             foreach (CachedWorker worker in activeWorkers.OrderBy(item => item.Name))
             {
                 IReadOnlyList<AttendanceEvent> events = await attendance
@@ -398,7 +427,7 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                     .ConfigureAwait(true);
                 AttendanceProjection projection = AttendanceProjectionService.Project(
                     events,
-                    timeProvider.GetUtcNow());
+                    now);
                 AttendanceShift? open = projection.Shifts.LastOrDefault(
                     shift => shift.Status == AttendanceShiftStatus.Open);
                 AttendanceEvent? latest = events
@@ -418,7 +447,8 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                     open?.CheckIn.OccurredAt,
                     latest?.ClientEventId,
                     latest?.Type,
-                    latest?.OccurredAt));
+                    latest?.OccurredAt,
+                    ShiftDuration(open, now)));
             }
 
             Workers.Clear();
@@ -521,12 +551,13 @@ public sealed class AttendancePreviewViewModel : ObservableObject
             .ConfigureAwait(true);
         var statuses = new List<AttendanceWorkerStatus>(activeWorkers.Count);
         int totalIncidents = 0;
+        DateTimeOffset now = timeProvider.GetUtcNow();
         foreach (CachedWorker worker in activeWorkers.OrderBy(item => item.Name))
         {
             IReadOnlyList<AttendanceEvent> events = await attendance
                 .ListForWorkerAsync(station.Session.OrganizationId, worker.Id)
                 .ConfigureAwait(true);
-            AttendanceProjection projection = AttendanceProjectionService.Project(events, timeProvider.GetUtcNow());
+            AttendanceProjection projection = AttendanceProjectionService.Project(events, now);
             AttendanceShift? open = projection.Shifts.LastOrDefault(
                 shift => shift.Status == AttendanceShiftStatus.Open);
             AttendanceEvent? latest = events
@@ -546,7 +577,8 @@ public sealed class AttendancePreviewViewModel : ObservableObject
                     open?.CheckIn.OccurredAt,
                     latest?.ClientEventId,
                     latest?.Type,
-                    latest?.OccurredAt));
+                    latest?.OccurredAt,
+                    ShiftDuration(open, now)));
         }
 
         Workers.Clear();
@@ -718,6 +750,13 @@ public sealed class AttendancePreviewViewModel : ObservableObject
         CorrectionHour = localNow.Hour % 12 == 0 ? 12 : localNow.Hour % 12;
         CorrectionMinute = localNow.Minute;
         CorrectionMeridiem = localNow.Hour >= 12 ? "p. m." : "a. m.";
+    }
+
+    private static TimeSpan? ShiftDuration(AttendanceShift? open, DateTimeOffset now)
+    {
+        if (open is null) return null;
+        TimeSpan duration = now - open.CheckIn.OccurredAt;
+        return duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
     }
 
     private void UpdateCorrectionTimeFromSelectors()

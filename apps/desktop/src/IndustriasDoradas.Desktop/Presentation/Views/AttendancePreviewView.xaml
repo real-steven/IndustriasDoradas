@@ -110,8 +110,8 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Background" Value="#F7F9FA" />
-            <Setter Property="BorderBrush" Value="#DCE6EA" />
+            <Setter Property="Background" Value="{Binding CardBackground}" />
+            <Setter Property="BorderBrush" Value="{Binding CardBorder}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
             <Setter Property="AutomationProperties.HelpText"
@@ -477,11 +477,16 @@
                                                            ToolTip="{Binding LastMark}" />
                                             </Grid>
                                         </StackPanel>
-                                        <TextBlock Grid.Column="1" Margin="12,0,0,0"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{Binding StateColor}"
-                                                   FontWeight="Bold" Text="{Binding State}"
-                                                   TextWrapping="NoWrap" />
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0"
+                                                    VerticalAlignment="Center" HorizontalAlignment="Right">
+                                            <TextBlock HorizontalAlignment="Right"
+                                                       Foreground="{Binding StateColor}"
+                                                       FontWeight="Bold" Text="{Binding State}"
+                                                       TextWrapping="NoWrap" />
+                                            <TextBlock Margin="0,2,0,0" HorizontalAlignment="Right"
+                                                       Foreground="{Binding StateColor}" FontSize="10"
+                                                       FontWeight="SemiBold" Text="{Binding ShiftDurationDescription}" />
+                                        </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>

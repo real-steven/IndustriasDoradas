@@ -76,6 +76,8 @@ public sealed class MercuryRastraEntryViewModel(
 
 public sealed class StationViewModel : ObservableObject, IDisposable
 {
+    private const string DefaultOwnMaterialSupplierName = "Material propio";
+
     private readonly StationCoordinator coordinator;
     private readonly PrivilegeModeController modeController;
     private readonly ILocalCatalogRepository catalogs;
@@ -87,6 +89,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly PlantManagerModeState? sharedManagerMode;
     private readonly RecordMercuryMovementHandler? mercuryHandler;
     private readonly InitialSynchronizationCoordinator? initialSynchronization;
+    private readonly ILocalAuditRepository? localAudit;
+    private readonly Guid configuredStationId;
     private readonly DispatcherTimer idleTimer;
     private bool isClosingForIdle;
     private bool isMaintainingSession;
@@ -199,7 +203,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         PlantManagerModeState? sharedManagerMode,
         RecordMercuryMovementHandler? mercuryHandler,
         ILocalAttendanceRepository? attendance = null,
-        InitialSynchronizationCoordinator? initialSynchronization = null)
+        InitialSynchronizationCoordinator? initialSynchronization = null,
+        ILocalAuditRepository? localAudit = null)
     {
         this.coordinator = coordinator;
         this.catalogs = catalogs;
@@ -211,6 +216,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         this.sharedManagerMode = sharedManagerMode;
         this.mercuryHandler = mercuryHandler;
         this.initialSynchronization = initialSynchronization;
+        this.localAudit = localAudit;
+        configuredStationId = options.Value.Id;
         modeController = new PrivilegeModeController(
             timeProvider,
             TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds),
@@ -446,8 +453,13 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     public IReadOnlyList<CachedWorker> Workers
     {
         get => workers;
-        private set => SetProperty(ref workers, value);
+        private set
+        {
+            if (!SetProperty(ref workers, value)) return;
+            OnPropertyChanged(nameof(HasNoAvailableWorkers));
+        }
     }
+    public bool HasNoAvailableWorkers => Workers.Count == 0;
     public IReadOnlyList<CachedProductionLine> Lines
     {
         get => lines;
@@ -684,6 +696,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             await LoadPreparationCatalogsAsync().ConfigureAwait(true);
             IsApplicationUnlocked = true;
             OpenOperationMode(SynchronizedOperationMessage());
+            await RecordSecurityEventAsync(
+                "SESSION_OPENED",
+                "EXITOSO",
+                "La estación se abrió mediante autenticación reciente.",
+                state).ConfigureAwait(true);
         }, "No se pudo abrir la estación.").ConfigureAwait(true);
 
         if (state is null)
@@ -692,6 +709,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             LoginSessionState = LoginSessionState.SignInFailed;
             StationSessionStatus = LoginSessionTitle;
             Status = LoginSessionDescription;
+            await RecordSecurityEventAsync(
+                "SESSION_REJECTED",
+                "RECHAZADO",
+                "No se pudo abrir una sesión nueva con las credenciales proporcionadas.",
+                null).ConfigureAwait(true);
         }
     }
 
@@ -734,9 +756,22 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 modeController.EnterPlantManagerMode();
                 Mode = modeController.Mode;
                 Status = "Modo Jefe de Planta activo. Se cerrará tras cinco minutos de inactividad total.";
+                await RecordSecurityEventAsync(
+                    "ELEVATION_ACCEPTED",
+                    "ACEPTADO",
+                    "PIN validado; se activó Modo Jefe de Planta.",
+                    state).ConfigureAwait(true);
                 await LoadPreparationCatalogsAsync().ConfigureAwait(true);
             }
-            else Status = $"Elevación rechazada: {result.Result}. Modo Operación continúa activo.";
+            else
+            {
+                Status = $"Elevación rechazada: {result.Result}. Modo Operación continúa activo.";
+                await RecordSecurityEventAsync(
+                    "ELEVATION_REJECTED",
+                    result.Result,
+                    "El intento de elevar permisos fue rechazado; Modo Operación continuó activo.",
+                    state).ConfigureAwait(true);
+            }
         }, "No se pudo validar el PIN; Modo Operación continúa activo.");
     }
 
@@ -754,7 +789,13 @@ public sealed class StationViewModel : ObservableObject, IDisposable
 
     private Task CloseStationAsync() => RunAsync(async () =>
     {
+        ProtectedStationState? closingState = state;
         await coordinator.CloseSessionAsync().ConfigureAwait(true);
+        await RecordSecurityEventAsync(
+            "SESSION_CLOSED",
+            "MANUAL",
+            "La estación fue cerrada manualmente.",
+            closingState).ConfigureAwait(true);
         state = null;
         WasSessionRestored = false;
         isSessionSynchronized = false;
@@ -797,6 +838,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
         IsApplicationUnlocked = true;
         OpenOperationMode(SynchronizedOperationMessage());
+        _ = RecordSecurityEventAsync(
+            "SESSION_RESTORED",
+            "EXITOSO",
+            "Se abrió una sesión protegida restaurada en este equipo.",
+            state);
     }
 
     private string SynchronizedOperationMessage() =>
@@ -857,6 +903,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         modeController.ExitPlantManagerMode();
         Mode = modeController.Mode;
         Status = "Modo Operación activo.";
+        _ = RecordSecurityEventAsync(
+            "ELEVATION_ENDED",
+            "MANUAL",
+            "Modo Jefe de Planta fue cerrado manualmente.",
+            state);
     }
     private async void OnIdleTick(object? sender, EventArgs e)
     {
@@ -870,6 +921,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             Mode = modeController.Mode;
             Status = "Modo Jefe de Planta cerrado por inactividad. Los cambios sin confirmar se conservan.";
+            await RecordSecurityEventAsync(
+                "ELEVATION_ENDED",
+                "INACTIVIDAD",
+                "Modo Jefe de Planta se cerró tras cinco minutos sin actividad.",
+                state).ConfigureAwait(true);
         }
         await MaintainSessionIfRequiredAsync().ConfigureAwait(true);
     }
@@ -880,7 +936,13 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         isClosingForIdle = true;
         try
         {
+            ProtectedStationState? closingState = state;
             await coordinator.CloseSessionAsync().ConfigureAwait(true);
+            await RecordSecurityEventAsync(
+                "SESSION_EXPIRED",
+                "INACTIVIDAD",
+                "La estación se cerró tras una hora sin actividad.",
+                closingState).ConfigureAwait(true);
             Status = "Estación cerrada tras una hora sin actividad. Inicie sesión para continuar.";
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException)
@@ -898,6 +960,31 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsStationOpen));
             CloseStationCommand.NotifyCanExecuteChanged();
             isClosingForIdle = false;
+        }
+    }
+
+    private async Task RecordSecurityEventAsync(
+        string eventType,
+        string result,
+        string details,
+        ProtectedStationState? sourceState)
+    {
+        if (localAudit is null) return;
+        try
+        {
+            await localAudit.RecordSecurityEventAsync(new RecordLocalSecurityAuditEvent(
+                sourceState?.Authorization.StationId ?? configuredStationId,
+                sourceState?.Session.ProfileId,
+                sourceState?.Session.DisplayName ?? "Sistema de estación",
+                eventType,
+                result,
+                details,
+                timeProvider.GetUtcNow())).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (
+            exception is IOException or InvalidOperationException or SqliteException)
+        {
+            // La auditoría nunca debe bloquear la operación o el cierre de la estación.
         }
     }
 
@@ -1249,6 +1336,17 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             activeSupplierNames.TryGetValue(SelectedLine.Id, out string? supplierName)
                 ? supplierName
                 : "Proveedor registrado";
+        CachedSupplier? contextSupplier = activeSession is null
+            ? Suppliers.FirstOrDefault(IsDefaultOwnMaterialSupplier)
+            : Suppliers.FirstOrDefault(supplier =>
+                string.Equals(
+                    supplier.Name.Trim(),
+                    activeSupplierName.Trim(),
+                    StringComparison.OrdinalIgnoreCase));
+        if (contextSupplier is not null && SelectedSupplier?.Id != contextSupplier.Id)
+        {
+            SelectedSupplier = contextSupplier;
+        }
         OnPropertyChanged(nameof(ActiveSupplierName));
         UpdateLineStatuses();
         OnPropertyChanged(nameof(HasActiveOperation));
@@ -1493,6 +1591,12 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         activeSupplierNames.TryGetValue(lineId, out string? supplierName)
             ? supplierName
             : "Proveedor registrado";
+
+    private static bool IsDefaultOwnMaterialSupplier(CachedSupplier supplier) =>
+        string.Equals(
+            supplier.Name.Trim(),
+            DefaultOwnMaterialSupplierName,
+            StringComparison.OrdinalIgnoreCase);
 
     private static string FormatLocalTime(DateTimeOffset instant) =>
         instant.ToOffset(TimeSpan.FromHours(-6)).ToString(

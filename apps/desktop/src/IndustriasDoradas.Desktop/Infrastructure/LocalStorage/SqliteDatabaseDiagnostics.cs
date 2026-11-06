@@ -342,6 +342,9 @@ public sealed class SqliteDatabaseDiagnostics : ILocalDatabaseDiagnostics
             "La marca se guardó sin una autorización vigente verificable y el sistema central la rechazó. " +
             "Si es un dato de prueba, descártelo; si es real, registre nuevamente la marca con una sesión vigente.",
         "DATABASE_CONSTRAINT_VIOLATION" => "El evento contradice una regla de integridad central.",
+        "IDEMPOTENCY_CONTENT_MISMATCH" =>
+            "El servidor ya conocía el sobre técnico con otro contenido. " +
+            "No lo reintente manualmente; una actualización debe generar un sobre nuevo conservando el dato local.",
         "INVALID_EVENT" or "INVALID_LOCAL_PAYLOAD" => "El contenido del evento no cumple el contrato de sincronización.",
         "AUTH_REFRESH_REQUIRED" => "La sesión debe renovarse con conexión.",
         _ => "Revisión técnica requerida; entregue este código al soporte.",

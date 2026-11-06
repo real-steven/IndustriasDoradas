@@ -50,6 +50,29 @@ public sealed class ProductionMilestoneServiceTests
     }
 
     [TestMethod]
+    [DataRow(260L, false, -1L, 310L)]
+    [DataRow(309L, false, -1L, 310L)]
+    [DataRow(310L, true, 310L, 360L)]
+    [DataRow(315L, true, 310L, 360L)]
+    [DataRow(316L, false, -1L, 360L)]
+    public void MercuryCounterRestartsFromTheLastRealSweep(
+        long total,
+        bool expectedActive,
+        long expectedActiveReference,
+        long expectedNextReference)
+    {
+        ProductionReviewAlertState result = service.CalculateReviewAlert(
+            total,
+            lastSweepCumulativeTotal: 260);
+
+        Assert.AreEqual(expectedActive, result.IsActive);
+        Assert.AreEqual(
+            expectedActiveReference < 0 ? null : expectedActiveReference,
+            result.ActiveReference);
+        Assert.AreEqual(expectedNextReference, result.NextReference);
+    }
+
+    [TestMethod]
     [DataRow(0L, false, 250L, 0L, 250L, 0L)]
     [DataRow(249L, false, 250L, 0L, 250L, 249L)]
     [DataRow(250L, true, 250L, 0L, 250L, 250L)]
@@ -149,6 +172,10 @@ public sealed class ProductionMilestoneServiceTests
             new ProductionMilestoneConfiguration(sweepInterval: 0));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             service.CalculateReviewAlert(-1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            service.CalculateReviewAlert(10, -1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            service.CalculateReviewAlert(10, 11));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             service.CalculateSweepProgress(-1));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>

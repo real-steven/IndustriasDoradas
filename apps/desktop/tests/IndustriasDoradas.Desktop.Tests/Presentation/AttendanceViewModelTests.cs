@@ -161,6 +161,29 @@ public sealed class AttendanceViewModelTests
     }
 
     [TestMethod]
+    public void OpenShiftCardEscalatesFromYellowToRedAsHoursAccumulate()
+    {
+        var worker = new CachedWorker(
+            WorkerId,
+            OrganizationId,
+            "Operario de prueba",
+            true,
+            Now,
+            "OPERARIO");
+
+        var sixHours = new AttendanceWorkerStatus(
+            worker, true, "En planta", "Entrada registrada", 0, Guid.NewGuid(), Now,
+            CurrentShiftDuration: TimeSpan.FromHours(6));
+        var eightHours = sixHours with { CurrentShiftDuration = TimeSpan.FromHours(8) };
+        var tenHours = sixHours with { CurrentShiftDuration = TimeSpan.FromHours(10) };
+
+        Assert.AreEqual("#FFFAE8", sixHours.CardBackground);
+        Assert.AreEqual("#FFF0D6", eightHours.CardBackground);
+        Assert.AreEqual("#FFE5E2", tenHours.CardBackground);
+        Assert.AreEqual("10 h 00 min", tenHours.ShiftDurationDescription);
+    }
+
+    [TestMethod]
     public async Task PersonnelStatusShowsFiveWorkersPerPageAndSupportsSearch()
     {
         CachedWorker[] workers = Enumerable.Range(1, 12)

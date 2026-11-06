@@ -77,9 +77,53 @@ public sealed class SqliteOperationDashboardRepository(
                     PendingOutboxCount = outbox.Pending,
                     FailedReviewOutboxCount = outbox.FailedReview,
                     SyncedOutboxCount = outbox.Synced,
+                    Sweeps = await ReadSweepsAsync(
+                        connection,
+                        transaction,
+                        active.Session!,
+                        cancellationToken).ConfigureAwait(false),
                 });
         }
         transaction.Commit();
+        return result;
+    }
+
+    private static async Task<IReadOnlyList<LocalProductionSweepSummary>> ReadSweepsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        LocalOperationalSession session,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT id, cajuela_count, swept_at_utc, is_final
+            FROM production_sweeps
+            WHERE organization_id = $organizationId
+              AND station_id = $stationId
+              AND line_id = $lineId
+              AND feed_cycle_id = $feedCycleId
+              AND shipment_id = $shipmentId
+            ORDER BY swept_at_utc, client_sequence, id;
+            """;
+        command.Parameters.AddWithValue("$organizationId", session.OrganizationId.ToString("D"));
+        command.Parameters.AddWithValue("$stationId", session.StationId.ToString("D"));
+        command.Parameters.AddWithValue("$lineId", session.LineId.ToString("D"));
+        command.Parameters.AddWithValue("$feedCycleId", session.FeedCycleId.ToString("D"));
+        command.Parameters.AddWithValue("$shipmentId", session.ShipmentId.ToString("D"));
+
+        var result = new List<LocalProductionSweepSummary>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            result.Add(new LocalProductionSweepSummary(
+                Guid.Parse(reader.GetString(0)),
+                reader.GetInt32(1),
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(2)),
+                reader.GetInt32(3) == 1));
+        }
+
         return result;
     }
 

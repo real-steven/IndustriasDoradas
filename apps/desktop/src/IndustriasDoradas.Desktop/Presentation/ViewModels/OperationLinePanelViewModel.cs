@@ -1,7 +1,24 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Domain.Production;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
+
+public sealed record OperationSweepSummaryViewModel(
+    Guid Id,
+    int Number,
+    int CajuelaCount,
+    DateTimeOffset SweptAt,
+    bool IsFinal)
+{
+    public string Title => $"Barrida {Number}";
+    public string CajuelaDescription => $"{CajuelaCount} cajuelas";
+    public string TimeDescription => SweptAt.ToLocalTime().ToString(
+        "dd/MM · HH:mm",
+        CultureInfo.GetCultureInfo("es-CR"));
+}
 
 public sealed class OperationLinePanelViewModel : ObservableObject
 {
@@ -34,6 +51,9 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     private string progressColor = "#1F9D55";
     private string nextMercuryAlertDescription = "Mercurio en 50";
     private string nextSweepAlertDescription = "Barrida en 250";
+
+    public ObservableCollection<OperationSweepSummaryViewModel> Sweeps { get; } = [];
+    public bool HasSweeps => Sweeps.Count > 0;
 
     public Guid LineId { get => lineId; set => SetProperty(ref lineId, value); }
     public int LineSlot { get => lineSlot; set => SetProperty(ref lineSlot, value); }
@@ -116,6 +136,26 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     {
         get => sweepCount;
         set => SetProperty(ref sweepCount, value);
+    }
+
+    public void ApplySweeps(IReadOnlyList<LocalProductionSweepSummary>? sweeps)
+    {
+        Sweeps.Clear();
+        if (sweeps is not null)
+        {
+            for (int index = 0; index < sweeps.Count; index++)
+            {
+                LocalProductionSweepSummary sweep = sweeps[index];
+                Sweeps.Add(new OperationSweepSummaryViewModel(
+                    sweep.Id,
+                    index + 1,
+                    sweep.CajuelaCount,
+                    sweep.SweptAt,
+                    sweep.IsFinal));
+            }
+        }
+
+        OnPropertyChanged(nameof(HasSweeps));
     }
 
     public int CajuelasSinceLastSweep

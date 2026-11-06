@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
+using IndustriasDoradas.Desktop.Domain.Attendance;
 using Microsoft.Extensions.Options;
 
 namespace IndustriasDoradas.Desktop.Presentation.ViewModels;
@@ -66,6 +67,39 @@ public sealed record AuditCorrectionItemViewModel(
     public string ActorRole => Source.ActorRole;
     public string Reason => Source.Reason;
     public bool RequiredPlantManager => Source.RequiredPlantManager;
+    public string TypeDescription => RequiredPlantManager
+        ? "Corrección posterior · Modo Jefe"
+        : "Corrección inmediata";
+}
+
+public sealed record AuditFilterOption(string Code, string Name);
+
+public sealed record AuditWorkerFilterOption(Guid? WorkerId, string Name);
+
+public sealed record AuditAttendanceItemViewModel(
+    Guid WorkerId,
+    string WorkerName,
+    string WorkerRole,
+    string EntryDescription,
+    string ExitDescription,
+    string DurationDescription,
+    string StatusDescription,
+    string CorrectionDescription,
+    string IncidentDescription,
+    bool IsOpen,
+    bool HasIncident,
+    DateTimeOffset? EntryAt,
+    DateTimeOffset? ExitAt);
+
+public sealed record AuditSecurityItemViewModel(
+    LocalSecurityAuditEvent Source,
+    string TypeDescription,
+    string OccurredDescription,
+    string Tone)
+{
+    public string ActorName => Source.ActorName;
+    public string Result => Source.Result;
+    public string Details => Source.Details;
 }
 
 public enum AuditCategory
@@ -108,6 +142,17 @@ public sealed class AuditViewModel : ObservableObject
     private IReadOnlyList<AuditLineFilterViewModel> shipmentLines = [];
     private IReadOnlyList<AuditShipmentItemViewModel> visibleCompletedShipments = [];
     private IReadOnlyList<AuditCorrectionItemViewModel> cajuelaCorrections = [];
+    private IReadOnlyList<AuditCorrectionItemViewModel> allCajuelaCorrections = [];
+    private IReadOnlyList<AuditAttendanceItemViewModel> allAttendanceItems = [];
+    private IReadOnlyList<AuditAttendanceItemViewModel> attendanceItems = [];
+    private IReadOnlyList<AuditWorkerFilterOption> attendanceWorkers = [];
+    private IReadOnlyList<AuditSecurityItemViewModel> allSecurityEvents = [];
+    private IReadOnlyList<AuditSecurityItemViewModel> securityEvents = [];
+    private readonly IReadOnlyList<AuditFilterOption> correctionTypeOptions;
+    private readonly IReadOnlyList<AuditFilterOption> securityTypeOptions;
+    private AuditFilterOption selectedCorrectionType;
+    private AuditFilterOption selectedSecurityType;
+    private AuditWorkerFilterOption? selectedAttendanceWorker;
     private AuditLineFilterViewModel? selectedLine;
     private AuditShipmentItemViewModel? selectedShipment;
     private IReadOnlyList<MercuryRastraEntryViewModel> mercuryRastras = [];
@@ -156,6 +201,21 @@ public sealed class AuditViewModel : ObservableObject
         ];
         selectedPeriodOption = periodOptions[0];
         selectedFilterDate = TodayInCostaRica();
+        correctionTypeOptions =
+        [
+            new("ALL", "Todas las correcciones"),
+            new("MANAGER", "Con Modo Jefe de Planta"),
+            new("IMMEDIATE", "Correcciones inmediatas"),
+        ];
+        selectedCorrectionType = correctionTypeOptions[0];
+        securityTypeOptions =
+        [
+            new("ALL", "Toda la seguridad"),
+            new("SESSION", "Aperturas y cierres"),
+            new("ELEVATION", "Elevaciones de acceso"),
+            new("REJECTED", "Accesos rechazados"),
+        ];
+        selectedSecurityType = securityTypeOptions[0];
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         SelectCategoryCommand = new AsyncRelayCommand<AuditCategory>(SelectCategoryAsync);
         SelectLineCommand = new AsyncRelayCommand<AuditLineFilterViewModel>(SelectLineAsync);
@@ -261,6 +321,86 @@ public sealed class AuditViewModel : ObservableObject
             OnPropertyChanged(nameof(VisibleRecordCountDescription));
         }
     }
+    public IReadOnlyList<AuditFilterOption> CorrectionTypeOptions => correctionTypeOptions;
+    public AuditFilterOption SelectedCorrectionType
+    {
+        get => selectedCorrectionType;
+        set
+        {
+            if (value is null || !SetProperty(ref selectedCorrectionType, value)) return;
+            ApplyCorrectionFilter();
+        }
+    }
+    public IReadOnlyList<AuditAttendanceItemViewModel> AttendanceItems
+    {
+        get => attendanceItems;
+        private set
+        {
+            if (!SetProperty(ref attendanceItems, value)) return;
+            OnPropertyChanged(nameof(HasAttendanceItems));
+            OnPropertyChanged(nameof(VisibleRecordCountDescription));
+        }
+    }
+    public bool HasAttendanceItems => AttendanceItems.Count > 0;
+    public IReadOnlyList<AuditWorkerFilterOption> AttendanceWorkers
+    {
+        get => attendanceWorkers;
+        private set => SetProperty(ref attendanceWorkers, value);
+    }
+    public AuditWorkerFilterOption? SelectedAttendanceWorker
+    {
+        get => selectedAttendanceWorker;
+        set
+        {
+            if (!SetProperty(ref selectedAttendanceWorker, value)) return;
+            ApplyAttendanceFilter();
+        }
+    }
+    public int PersonnelInPlantCount => allAttendanceItems.Count(item => item.IsOpen);
+    public int AttendanceIncidentCount => allAttendanceItems.Count(item => item.HasIncident);
+    public string TodayHoursDescription
+    {
+        get
+        {
+            TimeSpan total = TimeSpan.Zero;
+            DateTime today = TodayInCostaRica();
+            var dayStart = new DateTimeOffset(
+                DateTime.SpecifyKind(today, DateTimeKind.Unspecified),
+                CostaRicaOffset);
+            DateTimeOffset dayEnd = dayStart.AddDays(1);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            foreach (AuditAttendanceItemViewModel item in allAttendanceItems)
+            {
+                if (item.EntryAt is not DateTimeOffset entry) continue;
+                DateTimeOffset exit = item.ExitAt ?? now;
+                DateTimeOffset overlapStart = entry > dayStart ? entry : dayStart;
+                DateTimeOffset overlapEnd = exit < dayEnd ? exit : dayEnd;
+                if (overlapEnd > overlapStart) total += overlapEnd - overlapStart;
+            }
+            return $"{Math.Floor(total.TotalHours):0} h {total.Minutes:00} min";
+        }
+    }
+    public IReadOnlyList<AuditFilterOption> SecurityTypeOptions => securityTypeOptions;
+    public AuditFilterOption SelectedSecurityType
+    {
+        get => selectedSecurityType;
+        set
+        {
+            if (value is null || !SetProperty(ref selectedSecurityType, value)) return;
+            ApplySecurityFilter();
+        }
+    }
+    public IReadOnlyList<AuditSecurityItemViewModel> SecurityEvents
+    {
+        get => securityEvents;
+        private set
+        {
+            if (!SetProperty(ref securityEvents, value)) return;
+            OnPropertyChanged(nameof(HasSecurityEvents));
+            OnPropertyChanged(nameof(VisibleRecordCountDescription));
+        }
+    }
+    public bool HasSecurityEvents => SecurityEvents.Count > 0;
     public AuditShipmentItemViewModel? SelectedShipment
     {
         get => selectedShipment;
@@ -334,6 +474,12 @@ public sealed class AuditViewModel : ObservableObject
         AuditCategory.Corrections => CajuelaCorrections.Count == 1
             ? "1 corrección encontrada"
             : $"{CajuelaCorrections.Count} correcciones encontradas",
+        AuditCategory.Attendance => AttendanceItems.Count == 1
+            ? "1 jornada encontrada"
+            : $"{AttendanceItems.Count} jornadas encontradas",
+        AuditCategory.Access => SecurityEvents.Count == 1
+            ? "1 evento encontrado"
+            : $"{SecurityEvents.Count} eventos encontrados",
         _ => "Módulo próximo",
     };
     public string CorrectionCountDescription => Corrections.Count > 0
@@ -381,10 +527,23 @@ public sealed class AuditViewModel : ObservableObject
         }
         else if (SelectedCategory == AuditCategory.Corrections)
         {
-            CajuelaCorrections = (await localAudit.ListCajuelaCorrectionsAsync(query)
+            allCajuelaCorrections = (await localAudit.ListCajuelaCorrectionsAsync(query)
                     .ConfigureAwait(true))
                 .Select(ToViewModel)
                 .ToArray();
+            ApplyCorrectionFilter();
+        }
+        else if (SelectedCategory == AuditCategory.Attendance)
+        {
+            LoadAttendance(await localAudit.ListAttendanceAsync(query).ConfigureAwait(true));
+        }
+        else if (SelectedCategory == AuditCategory.Access)
+        {
+            allSecurityEvents = (await localAudit.ListSecurityEventsAsync(query)
+                    .ConfigureAwait(true))
+                .Select(ToViewModel)
+                .ToArray();
+            ApplySecurityFilter();
         }
         Status = StatusForSelectedCategory();
     }
@@ -585,9 +744,9 @@ public sealed class AuditViewModel : ObservableObject
         AuditCategory.Corrections =>
             $"{CajuelaCorrections.Count} corrección(es) locales con trazabilidad.",
         AuditCategory.Attendance =>
-            "Asistencia, horas e incidencias estarán disponibles próximamente.",
+            $"{AttendanceItems.Count} jornada(s) y {AttendanceIncidentCount} incidencia(s) en el periodo.",
         AuditCategory.Access =>
-            "Sesiones y validaciones de seguridad del sistema estarán disponibles próximamente.",
+            $"{SecurityEvents.Count} evento(s) de seguridad en el periodo.",
         _ => "Cambios administrativos estarán disponibles próximamente.",
     };
 
@@ -773,6 +932,162 @@ public sealed class AuditViewModel : ObservableObject
             : $"Conteo: {item.TotalBefore} → {item.TotalAfter}";
         return new AuditCorrectionItemViewModel(item, FormatLocal(item.ConfirmedAt), total);
     }
+
+    private void ApplyCorrectionFilter()
+    {
+        CajuelaCorrections = SelectedCorrectionType.Code switch
+        {
+            "MANAGER" => allCajuelaCorrections.Where(item => item.RequiredPlantManager).ToArray(),
+            "IMMEDIATE" => allCajuelaCorrections.Where(item => !item.RequiredPlantManager).ToArray(),
+            _ => allCajuelaCorrections,
+        };
+    }
+
+    private void LoadAttendance(IReadOnlyList<LocalAttendanceWorkerAudit> workers)
+    {
+        Guid? selectedWorkerId = SelectedAttendanceWorker?.WorkerId;
+        AttendanceWorkers =
+        [
+            new AuditWorkerFilterOption(null, "Todo el personal"),
+            .. workers.Select(worker => new AuditWorkerFilterOption(worker.WorkerId, worker.WorkerName)),
+        ];
+        SelectedAttendanceWorker = AttendanceWorkers.FirstOrDefault(item =>
+            item.WorkerId == selectedWorkerId) ?? AttendanceWorkers[0];
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var items = new List<AuditAttendanceItemViewModel>();
+        foreach (LocalAttendanceWorkerAudit worker in workers)
+        {
+            if (worker.Events.Count == 0) continue;
+            AttendanceProjection projection = AttendanceProjectionService.Project(worker.Events, now);
+            string workerRole = worker.WorkerCategory == "JEFE_PLANTA"
+                ? "Jefe de planta"
+                : "Operario";
+            var representedIncidentIds = new HashSet<Guid>();
+            foreach (AttendanceShift shift in projection.Shifts.OrderByDescending(item => item.CheckIn.OccurredAt))
+            {
+                TimeSpan duration = shift.Duration ?? (now - shift.CheckIn.OccurredAt);
+                if (duration < TimeSpan.Zero) duration = TimeSpan.Zero;
+                Guid[] relatedIds = shift.CheckOut is null
+                    ? [shift.CheckIn.ClientEventId]
+                    : [shift.CheckIn.ClientEventId, shift.CheckOut.ClientEventId];
+                AttendanceIncident[] shiftIncidents = projection.Incidents
+                    .Where(incident => relatedIds.Contains(incident.EventId))
+                    .ToArray();
+                foreach (AttendanceIncident incident in shiftIncidents)
+                {
+                    representedIncidentIds.Add(incident.EventId);
+                }
+                string incidentDescription = string.Join(
+                    " · ",
+                    shiftIncidents.Select(incident => incident.Description).Distinct());
+                string correctionDescription = string.Join(
+                    " · ",
+                    worker.Events
+                        .Where(item => item.IsAdjustment &&
+                            item.RelatedEventId is Guid relatedId && relatedIds.Contains(relatedId))
+                        .Select(item => item.CorrectionReason)
+                        .Where(item => !string.IsNullOrWhiteSpace(item))
+                        .Distinct());
+                items.Add(new AuditAttendanceItemViewModel(
+                    worker.WorkerId,
+                    worker.WorkerName,
+                    workerRole,
+                    FormatLocal(shift.CheckIn.OccurredAt),
+                    shift.CheckOut is null ? "Jornada abierta" : FormatLocal(shift.CheckOut.OccurredAt),
+                    FormatDuration(duration),
+                    shift.Status == AttendanceShiftStatus.Open ? "EN PLANTA" : "JORNADA CERRADA",
+                    string.IsNullOrWhiteSpace(correctionDescription)
+                        ? "Sin correcciones"
+                        : $"Corrección: {correctionDescription}",
+                    incidentDescription,
+                    shift.Status == AttendanceShiftStatus.Open,
+                    shiftIncidents.Length > 0,
+                    shift.CheckIn.OccurredAt,
+                    shift.CheckOut?.OccurredAt));
+            }
+
+            foreach (AttendanceIncident incident in projection.Incidents
+                         .Where(item => !representedIncidentIds.Contains(item.EventId)))
+            {
+                AttendanceEvent? sourceEvent = worker.Events.FirstOrDefault(item =>
+                    item.ClientEventId == incident.EventId);
+                items.Add(new AuditAttendanceItemViewModel(
+                    worker.WorkerId,
+                    worker.WorkerName,
+                    workerRole,
+                    sourceEvent is null ? "Marca no identificada" : FormatLocal(sourceEvent.OccurredAt),
+                    "La marca no modificó la jornada",
+                    "—",
+                    "INCIDENCIA",
+                    string.IsNullOrWhiteSpace(sourceEvent?.CorrectionReason)
+                        ? "Sin correcciones"
+                        : $"Corrección: {sourceEvent.CorrectionReason}",
+                    incident.Description,
+                    false,
+                    true,
+                    null,
+                    null));
+            }
+        }
+
+        allAttendanceItems = items
+            .OrderByDescending(item => item.IsOpen)
+            .ThenBy(item => item.WorkerName, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        OnPropertyChanged(nameof(PersonnelInPlantCount));
+        OnPropertyChanged(nameof(AttendanceIncidentCount));
+        OnPropertyChanged(nameof(TodayHoursDescription));
+        ApplyAttendanceFilter();
+    }
+
+    private void ApplyAttendanceFilter()
+    {
+        AttendanceItems = SelectedAttendanceWorker?.WorkerId is Guid workerId
+            ? allAttendanceItems.Where(item => item.WorkerId == workerId).ToArray()
+            : allAttendanceItems;
+    }
+
+    private void ApplySecurityFilter()
+    {
+        SecurityEvents = SelectedSecurityType.Code switch
+        {
+            "SESSION" => allSecurityEvents
+                .Where(item => item.Source.EventType.StartsWith("SESSION_", StringComparison.Ordinal))
+                .ToArray(),
+            "ELEVATION" => allSecurityEvents
+                .Where(item => item.Source.EventType.StartsWith("ELEVATION_", StringComparison.Ordinal))
+                .ToArray(),
+            "REJECTED" => allSecurityEvents
+                .Where(item => item.Source.EventType.EndsWith("_REJECTED", StringComparison.Ordinal))
+                .ToArray(),
+            _ => allSecurityEvents,
+        };
+    }
+
+    private static AuditSecurityItemViewModel ToViewModel(LocalSecurityAuditEvent item)
+    {
+        string type = item.EventType switch
+        {
+            "SESSION_OPENED" => "Inicio de sesión",
+            "SESSION_RESTORED" => "Sesión restaurada",
+            "SESSION_CLOSED" => "Cierre de sesión",
+            "SESSION_EXPIRED" => "Sesión vencida o cerrada",
+            "SESSION_REJECTED" => "Inicio de sesión rechazado",
+            "ELEVATION_ACCEPTED" => "Modo Jefe activado",
+            "ELEVATION_REJECTED" => "Elevación rechazada",
+            "ELEVATION_ENDED" => "Modo Jefe finalizado",
+            _ => item.EventType,
+        };
+        string tone = item.EventType.EndsWith("_REJECTED", StringComparison.Ordinal) ||
+            item.EventType == "SESSION_EXPIRED"
+            ? "#FFF8E9"
+            : "#F7F9FA";
+        return new AuditSecurityItemViewModel(item, type, FormatLocal(item.OccurredAt), tone);
+    }
+
+    private static string FormatDuration(TimeSpan duration) =>
+        $"{Math.Floor(duration.TotalHours):0} h {duration.Minutes:00} min";
 
     private static string FormatLocal(DateTimeOffset value) =>
         value.ToOffset(TimeSpan.FromHours(-6)).ToString(

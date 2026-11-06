@@ -71,13 +71,19 @@ public sealed class ProductionMilestoneService
         this.configuration = configuration ?? new ProductionMilestoneConfiguration();
     }
 
-    public ProductionReviewAlertState CalculateReviewAlert(long totalCajuelas)
+    public ProductionReviewAlertState CalculateReviewAlert(
+        long totalCajuelas,
+        long? lastSweepCumulativeTotal = null)
     {
         EnsureNonNegative(totalCajuelas, nameof(totalCajuelas));
+        ValidateSweepBaseline(totalCajuelas, lastSweepCumulativeTotal);
 
-        long completedReference = totalCajuelas / configuration.ReviewInterval
+        long baseline = lastSweepCumulativeTotal ?? 0;
+        long cajuelasSinceLastSweep = totalCajuelas - baseline;
+        long completedRelativeReference = cajuelasSinceLastSweep / configuration.ReviewInterval
             * configuration.ReviewInterval;
-        bool isActive = completedReference >= configuration.ReviewInterval &&
+        long completedReference = checked(baseline + completedRelativeReference);
+        bool isActive = completedRelativeReference >= configuration.ReviewInterval &&
             totalCajuelas <= checked(completedReference + configuration.ReviewWindowExtension);
         long nextReference = checked(completedReference + configuration.ReviewInterval);
 
@@ -95,19 +101,7 @@ public sealed class ProductionMilestoneService
         long? lastSweepCumulativeTotal = null)
     {
         EnsureNonNegative(totalCajuelas, nameof(totalCajuelas));
-        if (lastSweepCumulativeTotal is < 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(lastSweepCumulativeTotal),
-                "El acumulado de la última barrida no puede ser negativo.");
-        }
-
-        if (lastSweepCumulativeTotal > totalCajuelas)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(lastSweepCumulativeTotal),
-                "La última barrida no puede superar el total acumulado actual.");
-        }
+        ValidateSweepBaseline(totalCajuelas, lastSweepCumulativeTotal);
 
         long baseline = lastSweepCumulativeTotal ?? 0;
         long nextSweepReference = checked(baseline + configuration.SweepInterval);
@@ -131,6 +125,23 @@ public sealed class ProductionMilestoneService
             throw new ArgumentOutOfRangeException(
                 parameterName,
                 "El total acumulado de cajuelas no puede ser negativo.");
+        }
+    }
+
+    private static void ValidateSweepBaseline(long totalCajuelas, long? lastSweepCumulativeTotal)
+    {
+        if (lastSweepCumulativeTotal is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lastSweepCumulativeTotal),
+                "El acumulado de la última barrida no puede ser negativo.");
+        }
+
+        if (lastSweepCumulativeTotal > totalCajuelas)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lastSweepCumulativeTotal),
+                "La última barrida no puede superar el total acumulado actual.");
         }
     }
 }
