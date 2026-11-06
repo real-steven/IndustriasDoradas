@@ -399,6 +399,44 @@
         "required": ["code", "name", "displayOrder", "componentTypeId"],
         "type": "object"
       },
+      "CreatePayrollAdjustmentDto": {
+        "properties": {
+          "adjustmentDate": { "type": "string" },
+          "adjustmentType": {
+            "enum": [
+              "PAID_LEAVE_HOURS",
+              "OVERTIME_HOURS",
+              "HOLIDAY_HOURS",
+              "REST_DAY_HOURS",
+              "OTHER_EARNING",
+              "OTHER_DEDUCTION"
+            ],
+            "type": "string"
+          },
+          "amountCrc": { "minimum": 0.01, "type": "number" },
+          "minutes": { "maximum": 1440, "minimum": 1, "type": "number" },
+          "note": { "maxLength": 300, "minLength": 3, "type": "string" }
+        },
+        "required": ["adjustmentDate", "adjustmentType", "note"],
+        "type": "object"
+      },
+      "CreatePayrollRateDto": {
+        "properties": {
+          "effectiveFromUtc": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T",
+            "type": "string"
+          },
+          "nightMultiplier": { "maximum": 5, "minimum": 1, "type": "number" },
+          "reason": { "maxLength": 240, "minLength": 3, "type": "string" },
+          "regularHourlyRateCrc": {
+            "example": 2000,
+            "minimum": 0.01,
+            "type": "number"
+          }
+        },
+        "required": ["regularHourlyRateCrc", "reason"],
+        "type": "object"
+      },
       "CreatePlantDto": {
         "properties": {
           "code": {
@@ -1116,6 +1154,228 @@
         "required": ["pin"],
         "type": "object"
       },
+      "ProductionReport": {
+        "additionalProperties": false,
+        "properties": {
+          "definitions": {
+            "properties": {
+              "financialCalculation": { "type": "string" },
+              "goldCoverage": { "type": "string" },
+              "gramsPerCajuela": { "type": "string" },
+              "missingGold": { "type": "string" },
+              "palosPerCajuela": { "type": "string" }
+            },
+            "required": [
+              "goldCoverage",
+              "gramsPerCajuela",
+              "palosPerCajuela",
+              "missingGold",
+              "financialCalculation"
+            ],
+            "type": "object"
+          },
+          "filters": {
+            "properties": {
+              "plantId": {
+                "format": "uuid",
+                "nullable": true,
+                "type": "string"
+              },
+              "productionLineId": {
+                "format": "uuid",
+                "nullable": true,
+                "type": "string"
+              },
+              "supplierId": {
+                "format": "uuid",
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "required": ["plantId", "productionLineId", "supplierId"],
+            "type": "object"
+          },
+          "financialSettlements": {
+            "items": { "$ref": "#/components/schemas/ReportSettlement" },
+            "type": "array"
+          },
+          "financialSummary": {
+            "properties": {
+              "expensesCrc": { "type": "number" },
+              "grossAmountCrc": { "type": "number" },
+              "netAmountCrc": { "type": "number" },
+              "receivedAmountCrc": { "type": "number" },
+              "settlements": { "minimum": 0, "type": "integer" },
+              "totalGrams": { "type": "number" }
+            },
+            "required": [
+              "settlements",
+              "totalGrams",
+              "grossAmountCrc",
+              "expensesCrc",
+              "netAmountCrc",
+              "receivedAmountCrc"
+            ],
+            "type": "object"
+          },
+          "generatedAtUtc": { "format": "date-time", "type": "string" },
+          "language": { "enum": ["es", "en"], "type": "string" },
+          "period": {
+            "properties": {
+              "fromUtc": { "format": "date-time", "type": "string" },
+              "toUtc": { "format": "date-time", "type": "string" }
+            },
+            "required": ["fromUtc", "toUtc"],
+            "type": "object"
+          },
+          "shipments": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionReportShipment"
+            },
+            "type": "array"
+          },
+          "summary": { "$ref": "#/components/schemas/ProductionReportMetrics" },
+          "suppliers": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionReportSupplier"
+            },
+            "type": "array"
+          },
+          "timezone": { "enum": ["America/Costa_Rica"], "type": "string" },
+          "version": { "enum": ["production-gold-v1"], "type": "string" },
+          "weeklyFinancialSummary": {
+            "items": { "$ref": "#/components/schemas/ReportWeeklySummary" },
+            "type": "array"
+          }
+        },
+        "required": [
+          "version",
+          "language",
+          "timezone",
+          "generatedAtUtc",
+          "period",
+          "filters",
+          "summary",
+          "suppliers",
+          "shipments",
+          "financialSettlements",
+          "weeklyFinancialSummary",
+          "financialSummary",
+          "definitions"
+        ],
+        "type": "object"
+      },
+      "ProductionReportMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "completedShipments": { "minimum": 0, "type": "integer" },
+          "goldCoveragePercentage": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "goldShipments": { "minimum": 0, "type": "integer" },
+          "gramsPerCajuela": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "includedCajuelas": { "minimum": 0, "type": "integer" },
+          "palosPerCajuela": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "pendingGoldShipments": { "minimum": 0, "type": "integer" },
+          "sweepCount": { "minimum": 0, "type": "integer" },
+          "totalCajuelas": { "minimum": 0, "type": "integer" },
+          "totalGoldGrams": { "minimum": 0, "type": "number" }
+        },
+        "required": [
+          "completedShipments",
+          "totalCajuelas",
+          "sweepCount",
+          "goldShipments",
+          "pendingGoldShipments",
+          "totalGoldGrams",
+          "includedCajuelas",
+          "gramsPerCajuela",
+          "palosPerCajuela",
+          "goldCoveragePercentage"
+        ],
+        "type": "object"
+      },
+      "ProductionReportShipment": {
+        "additionalProperties": false,
+        "properties": {
+          "cajuelaTotal": { "minimum": 0, "type": "integer" },
+          "completedAtUtc": { "format": "date-time", "type": "string" },
+          "durationHours": { "minimum": 0, "type": "number" },
+          "goldAmountGrams": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "goldStatus": { "enum": ["REGISTERED", "PENDING"], "type": "string" },
+          "gramsPerCajuela": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "palosPerCajuela": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "plantId": { "format": "uuid", "type": "string" },
+          "productionLineId": { "format": "uuid", "type": "string" },
+          "productionLineName": { "type": "string" },
+          "productionLineOrder": { "type": "integer" },
+          "responsibleWorkerName": { "nullable": true, "type": "string" },
+          "shipmentCode": { "type": "string" },
+          "shipmentId": { "format": "uuid", "type": "string" },
+          "startedAtUtc": { "format": "date-time", "type": "string" },
+          "stationName": { "type": "string" },
+          "supplierId": { "format": "uuid", "type": "string" },
+          "supplierName": { "type": "string" },
+          "sweepCount": { "minimum": 0, "type": "integer" }
+        },
+        "required": [
+          "shipmentId",
+          "shipmentCode",
+          "plantId",
+          "stationName",
+          "productionLineId",
+          "productionLineName",
+          "productionLineOrder",
+          "supplierId",
+          "supplierName",
+          "responsibleWorkerName",
+          "startedAtUtc",
+          "completedAtUtc",
+          "durationHours",
+          "cajuelaTotal",
+          "sweepCount",
+          "goldStatus",
+          "goldAmountGrams",
+          "gramsPerCajuela",
+          "palosPerCajuela"
+        ],
+        "type": "object"
+      },
+      "ProductionReportSupplier": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ProductionReportMetrics" },
+          {
+            "properties": {
+              "supplierId": { "format": "uuid", "type": "string" },
+              "supplierName": { "type": "string" }
+            },
+            "required": ["supplierId", "supplierName"],
+            "type": "object"
+          }
+        ]
+      },
       "RastraComponentChange": {
         "properties": {
           "actorProfileId": { "format": "uuid", "type": "string" },
@@ -1290,6 +1550,213 @@
         "required": ["amountGrams"],
         "type": "object"
       },
+      "ReportSettlement": {
+        "properties": {
+          "approvedAtUtc": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "approvedByProfileId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "buyerName": { "type": "string" },
+          "createdAtUtc": { "format": "date-time", "type": "string" },
+          "createdByProfileId": { "format": "uuid", "type": "string" },
+          "currencyCode": { "enum": ["CRC"], "type": "string" },
+          "destination": { "nullable": true, "type": "string" },
+          "effectiveReceivedAmountCrc": { "type": "number" },
+          "expenses": {
+            "items": { "$ref": "#/components/schemas/ReportSettlementExpense" },
+            "type": "array"
+          },
+          "expensesCrc": { "type": "number" },
+          "grossAmountCrc": { "type": "number" },
+          "id": { "format": "uuid", "type": "string" },
+          "lines": {
+            "items": { "$ref": "#/components/schemas/ReportSettlementLine" },
+            "type": "array"
+          },
+          "netAmountCrc": { "type": "number" },
+          "notes": { "nullable": true, "type": "string" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "participationAmountCrc": { "type": "number" },
+          "participationPercentage": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "receivedAmountCrc": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "revision": { "minimum": 1, "type": "integer" },
+          "rowVersion": { "minimum": 1, "type": "integer" },
+          "status": {
+            "enum": ["DRAFT", "REVIEWED", "APPROVED", "CLOSED"],
+            "type": "string"
+          },
+          "supersedesSettlementId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "supplierId": { "format": "uuid", "type": "string" },
+          "supplierName": { "type": "string" },
+          "totalGrams": { "type": "number" },
+          "updatedAtUtc": { "format": "date-time", "type": "string" },
+          "updatedByProfileId": { "format": "uuid", "type": "string" },
+          "weekStart": { "format": "date", "type": "string" }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "supplierId",
+          "supplierName",
+          "weekStart",
+          "buyerName",
+          "destination",
+          "currencyCode",
+          "participationPercentage",
+          "receivedAmountCrc",
+          "notes",
+          "status",
+          "revision",
+          "supersedesSettlementId",
+          "rowVersion",
+          "createdByProfileId",
+          "updatedByProfileId",
+          "approvedByProfileId",
+          "approvedAtUtc",
+          "createdAtUtc",
+          "updatedAtUtc",
+          "totalGrams",
+          "grossAmountCrc",
+          "expensesCrc",
+          "netAmountCrc",
+          "participationAmountCrc",
+          "effectiveReceivedAmountCrc",
+          "lines",
+          "expenses"
+        ],
+        "type": "object"
+      },
+      "ReportSettlementExpense": {
+        "properties": {
+          "amountCrc": { "minimum": 0, "type": "number" },
+          "category": {
+            "enum": ["TRANSPORT", "BAGS", "PLANT", "SALARY", "FINCA", "OTHER"],
+            "type": "string"
+          },
+          "concept": { "type": "string" },
+          "displayOrder": { "minimum": 1, "type": "integer" },
+          "id": { "format": "uuid", "type": "string" },
+          "occurredOn": { "format": "date", "type": "string" },
+          "responsibleName": { "nullable": true, "type": "string" }
+        },
+        "required": [
+          "id",
+          "category",
+          "concept",
+          "amountCrc",
+          "occurredOn",
+          "responsibleName",
+          "displayOrder"
+        ],
+        "type": "object"
+      },
+      "ReportSettlementExpenseDto": {
+        "properties": {
+          "amountCrc": { "minimum": 0, "type": "number" },
+          "category": {
+            "enum": ["TRANSPORT", "BAGS", "PLANT", "SALARY", "FINCA", "OTHER"],
+            "type": "string"
+          },
+          "concept": { "maxLength": 160, "minLength": 1, "type": "string" },
+          "occurredOn": { "type": "string" },
+          "responsibleName": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["category", "concept", "amountCrc", "occurredOn"],
+        "type": "object"
+      },
+      "ReportSettlementLine": {
+        "properties": {
+          "assayLabel": { "nullable": true, "type": "string" },
+          "displayOrder": { "minimum": 1, "type": "integer" },
+          "gramsLiquidated": {
+            "exclusiveMinimum": true,
+            "minimum": 0,
+            "type": "number"
+          },
+          "grossAmountCrc": { "type": "number" },
+          "id": { "format": "uuid", "type": "string" },
+          "karat": { "maximum": 24, "minimum": 0, "type": "number" },
+          "pricePerGramCrc": { "minimum": 0, "type": "number" },
+          "pricePerKaratCrc": {
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "shipmentId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "id",
+          "shipmentId",
+          "assayLabel",
+          "karat",
+          "gramsLiquidated",
+          "pricePerKaratCrc",
+          "pricePerGramCrc",
+          "grossAmountCrc",
+          "displayOrder"
+        ],
+        "type": "object"
+      },
+      "ReportSettlementLineDto": {
+        "properties": {
+          "assayLabel": { "maxLength": 120, "minLength": 1, "type": "string" },
+          "gramsLiquidated": { "minimum": 0.001, "type": "number" },
+          "karat": { "maximum": 24, "minimum": 0, "type": "number" },
+          "pricePerGramCrc": { "minimum": 0, "type": "number" },
+          "pricePerKaratCrc": { "minimum": 0, "type": "number" },
+          "shipmentId": { "format": "uuid", "type": "string" }
+        },
+        "required": [
+          "shipmentId",
+          "karat",
+          "gramsLiquidated",
+          "pricePerGramCrc"
+        ],
+        "type": "object"
+      },
+      "ReportWeeklySummary": {
+        "properties": {
+          "expensesCrc": { "type": "number" },
+          "grossAmountCrc": { "type": "number" },
+          "netAmountCrc": { "type": "number" },
+          "receivedAmountCrc": { "type": "number" },
+          "settlements": { "minimum": 0, "type": "integer" },
+          "totalGrams": { "type": "number" },
+          "weekStart": { "format": "date", "type": "string" }
+        },
+        "required": [
+          "weekStart",
+          "settlements",
+          "totalGrams",
+          "grossAmountCrc",
+          "expensesCrc",
+          "netAmountCrc",
+          "receivedAmountCrc"
+        ],
+        "type": "object"
+      },
       "ResolveWorkerRequestDto": {
         "properties": {
           "reason": { "maxLength": 300, "minLength": 1, "type": "string" }
@@ -1302,6 +1769,42 @@
           "reason": { "maxLength": 500, "minLength": 1, "type": "string" }
         },
         "required": ["reason", "occurredAtUtc"],
+        "type": "object"
+      },
+      "SaveReportSettlementDto": {
+        "properties": {
+          "buyerName": { "maxLength": 160, "minLength": 1, "type": "string" },
+          "destination": { "maxLength": 160, "minLength": 1, "type": "string" },
+          "expenses": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReportSettlementExpenseDto"
+            },
+            "type": "array"
+          },
+          "lines": {
+            "items": { "$ref": "#/components/schemas/ReportSettlementLineDto" },
+            "minItems": 1,
+            "type": "array"
+          },
+          "notes": { "maxLength": 1000, "minLength": 1, "type": "string" },
+          "participationPercentage": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "receivedAmountCrc": { "minimum": 0, "type": "number" },
+          "supplierId": { "format": "uuid", "type": "string" },
+          "weekStart": { "type": "string" }
+        },
+        "required": [
+          "supplierId",
+          "weekStart",
+          "buyerName",
+          "participationPercentage",
+          "lines",
+          "expenses"
+        ],
         "type": "object"
       },
       "Session": {
@@ -1451,6 +1954,17 @@
         "required": ["organizationId", "plantId", "stationId"],
         "type": "object"
       },
+      "TransitionReportSettlementDto": {
+        "properties": {
+          "rowVersion": { "minimum": 1, "type": "number" },
+          "status": {
+            "enum": ["DRAFT", "REVIEWED", "APPROVED", "CLOSED"],
+            "type": "string"
+          }
+        },
+        "required": ["rowVersion", "status"],
+        "type": "object"
+      },
       "UpdateLineComponentDto": {
         "properties": {
           "code": {
@@ -1467,6 +1981,18 @@
       "UpdateLocaleDto": {
         "properties": { "locale": { "enum": ["es", "en"], "type": "string" } },
         "required": ["locale"],
+        "type": "object"
+      },
+      "UpdatePayrollWorkerProfileDto": {
+        "properties": {
+          "identityNumber": {
+            "maxLength": 30,
+            "minLength": 4,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["identityNumber"],
         "type": "object"
       },
       "UpdatePlantDto": {
@@ -1496,6 +2022,44 @@
           "displayOrder": { "minimum": 1, "type": "number" },
           "name": { "maxLength": 120, "minLength": 1, "type": "string" }
         },
+        "type": "object"
+      },
+      "UpdateReportSettlementDto": {
+        "properties": {
+          "buyerName": { "maxLength": 160, "minLength": 1, "type": "string" },
+          "destination": { "maxLength": 160, "minLength": 1, "type": "string" },
+          "expenses": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReportSettlementExpenseDto"
+            },
+            "type": "array"
+          },
+          "lines": {
+            "items": { "$ref": "#/components/schemas/ReportSettlementLineDto" },
+            "minItems": 1,
+            "type": "array"
+          },
+          "notes": { "maxLength": 1000, "minLength": 1, "type": "string" },
+          "participationPercentage": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "receivedAmountCrc": { "minimum": 0, "type": "number" },
+          "rowVersion": { "minimum": 1, "type": "number" },
+          "supplierId": { "format": "uuid", "type": "string" },
+          "weekStart": { "type": "string" }
+        },
+        "required": [
+          "supplierId",
+          "weekStart",
+          "buyerName",
+          "participationPercentage",
+          "lines",
+          "expenses",
+          "rowVersion"
+        ],
         "type": "object"
       },
       "UpdateStationDto": {
@@ -6207,6 +6771,479 @@
         "tags": ["Attendance"]
       }
     },
+    "/api/v1/organizations/{organizationId}/management/attendance/payroll": {
+      "get": {
+        "operationId": "AttendanceController_payrollReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "workerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Attendance"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/attendance/payroll/workers": {
+      "get": {
+        "operationId": "AttendanceController_payrollWorkers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": { "maxLength": 80, "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Worker" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Attendance"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/attendance/payroll/workers/{workerId}/adjustments": {
+      "post": {
+        "operationId": "AttendanceController_createPayrollAdjustment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "workerId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePayrollAdjustmentDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Worker" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Attendance"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/attendance/payroll/workers/{workerId}/pay-rates": {
+      "post": {
+        "operationId": "AttendanceController_createPayrollRate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "workerId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePayrollRateDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Worker" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Attendance"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/attendance/payroll/workers/{workerId}/profile": {
+      "patch": {
+        "operationId": "AttendanceController_updatePayrollProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "workerId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePayrollWorkerProfileDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Worker" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Attendance"]
+      }
+    },
     "/api/v1/organizations/{organizationId}/management/freshness": {
       "get": {
         "operationId": "ManagementController_freshness",
@@ -8048,6 +9085,1258 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Catalogs"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/payroll": {
+      "get": {
+        "operationId": "ReportsController_payrollReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "workerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/payroll.pdf": {
+      "get": {
+        "operationId": "ReportsController_payrollDocument",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "workerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": { "format": "binary", "type": "string" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/payroll.xlsx": {
+      "get": {
+        "operationId": "ReportsController_payrollSpreadsheet",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "workerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": { "format": "binary", "type": "string" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/production": {
+      "get": {
+        "operationId": "ReportsController_production",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "es",
+              "enum": ["es", "en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProductionReport" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/production.pdf": {
+      "get": {
+        "operationId": "ReportsController_productionPdf",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "es",
+              "enum": ["es", "en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": { "format": "binary", "type": "string" }
+              }
+            },
+            "description": "Reporte PDF de producción y oro"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/production.xlsx": {
+      "get": {
+        "operationId": "ReportsController_productionExcel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toUtc",
+            "required": true,
+            "schema": { "format": "date-time", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "plantId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "es",
+              "enum": ["es", "en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": { "format": "binary", "type": "string" }
+              }
+            },
+            "description": "Reporte Excel de producción y oro"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/settlements": {
+      "get": {
+        "operationId": "ReportsController_listSettlements",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": ["DRAFT", "REVIEWED", "APPROVED", "CLOSED"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": { "$ref": "#/components/schemas/ReportSettlement" },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      },
+      "post": {
+        "operationId": "ReportsController_createSettlement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveReportSettlementDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReportSettlement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/settlements/weekly-summary": {
+      "get": {
+        "operationId": "ReportsController_weeklySummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": ["DRAFT", "REVIEWED", "APPROVED", "CLOSED"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReportWeeklySummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/settlements/{settlementId}": {
+      "patch": {
+        "operationId": "ReportsController_updateSettlement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "settlementId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReportSettlementDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReportSettlement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/settlements/{settlementId}/corrections": {
+      "post": {
+        "operationId": "ReportsController_createSettlementCorrection",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "settlementId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReportSettlement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/reports/settlements/{settlementId}/status": {
+      "post": {
+        "operationId": "ReportsController_transitionSettlement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "settlementId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionReportSettlementDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReportSettlement" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Reports"]
       }
     },
     "/api/v1/organizations/{organizationId}/stations": {

@@ -3,6 +3,7 @@ import type { Language } from "../i18n/language-context";
 
 export const unauthorizedEventName = "industrias-doradas:unauthorized";
 export const apiRequestTimeoutMs = 15_000;
+export const apiDownloadTimeoutMs = 60_000;
 
 type AccessTokenRefresher = () => Promise<string | null>;
 
@@ -45,6 +46,19 @@ export async function apiRequest<T>(
   init: RequestInit = {},
 ): Promise<T> {
   return requestWithToken<T>(path, accessToken, init, true);
+}
+
+export interface ApiDownload {
+  blob: Blob;
+  filename: string | null;
+}
+
+export async function apiDownload(
+  path: string,
+  accessToken: string,
+  init: RequestInit = {},
+): Promise<ApiDownload> {
+  return downloadWithToken(path, accessToken, init, true);
 }
 
 async function requestWithToken<T>(
@@ -121,6 +135,92 @@ async function requestWithToken<T>(
   return (await response.json()) as T;
 }
 
+async function downloadWithToken(
+  path: string,
+  accessToken: string,
+  init: RequestInit,
+  allowTokenRefresh: boolean,
+): Promise<ApiDownload> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    throw new ApiConnectionError(
+      "OFFLINE",
+      "Sin conexión. Compruebe la red e intente nuevamente.",
+    );
+  }
+  const { apiBaseUrl } = readWebEnvironment();
+  const controller = new AbortController();
+  const callerSignal = init.signal;
+  const abortFromCaller = () => controller.abort();
+  if (callerSignal?.aborted) controller.abort();
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = setTimeout(() => controller.abort(), apiDownloadTimeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/v1${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...init.headers,
+      },
+    });
+  } catch (error) {
+    if (callerSignal?.aborted) throw error;
+    throw new ApiConnectionError(
+      "NETWORK_UNAVAILABLE",
+      "No fue posible conectar con el servicio.",
+    );
+  } finally {
+    clearTimeout(timeout);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
+  }
+  if (!response.ok) {
+    if (
+      response.status === 401 &&
+      allowTokenRefresh &&
+      accessTokenRefresher !== null
+    ) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken !== null) {
+        return downloadWithToken(path, refreshedToken, init, false);
+      }
+    }
+    const body = (await response.json().catch(() => ({}))) as {
+      code?: unknown;
+      message?: unknown;
+    };
+    const serverMessage = Array.isArray(body.message)
+      ? body.message.join(", ")
+      : typeof body.message === "string"
+        ? body.message
+        : "La descarga no pudo completarse.";
+    if (response.status === 401 && typeof window !== "undefined")
+      window.dispatchEvent(new Event(unauthorizedEventName));
+    throw new ApiRequestError(
+      response.status,
+      typeof body.code === "string" ? body.code : `HTTP_${response.status}`,
+      safeApiMessage(response.status, serverMessage),
+    );
+  }
+  return {
+    blob: await response.blob(),
+    filename: responseFilename(response.headers.get("content-disposition")),
+  };
+}
+
+function responseFilename(contentDisposition: string | null): string | null {
+  if (contentDisposition === null) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/iu.exec(contentDisposition)?.[1];
+  if (encoded !== undefined) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return null;
+    }
+  }
+  return /filename="?([^";]+)"?/iu.exec(contentDisposition)?.[1] ?? null;
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   if (accessTokenRefresher === null) return null;
   refreshInFlight ??= accessTokenRefresher().finally(() => {
@@ -152,6 +252,7 @@ export function requestErrorMessage(
       return language === "es"
         ? "La cuenta no tiene permiso para consultar esta información."
         : "This account is not allowed to view this information.";
+    if (error.status >= 400 && error.status < 500) return error.message;
     if (error.status >= 500)
       return language === "es"
         ? "El servicio no está disponible temporalmente. Intente nuevamente."
