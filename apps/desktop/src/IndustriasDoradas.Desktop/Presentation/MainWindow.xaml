@@ -437,9 +437,27 @@
                     <PasswordBox x:Name="HeaderPinBox" Height="54" MaxLength="12"
                                  Padding="13" FontSize="22" KeyDown="OnElevationPinKeyDown"
                                  AutomationProperties.Name="PIN individual" />
-                    <Button Margin="0,10,0,0" Height="50" Click="OnComingSoon"
-                            Tag="La validación biométrica"
-                            Content="☝  BIOMETRÍA · PRÓXIMAMENTE" />
+                    <Border Margin="0,10,0,0" Padding="13,10" Background="#F2F7F9"
+                            BorderBrush="#D5E3E9" BorderThickness="1" CornerRadius="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" FontFamily="Segoe UI Emoji"
+                                       FontSize="22" Text="◉" />
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                <TextBlock Foreground="#0874A3" FontSize="10" FontWeight="Bold"
+                                           Text="BIOMETRÍA LOCAL · PROTOTIPO" />
+                                <TextBlock x:Name="BiometricStatusText" Margin="0,2,0,0"
+                                           Foreground="#536A77" TextWrapping="Wrap"
+                                           Text="Comprobando registro facial…" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Button x:Name="EnrollBiometricButton" Margin="0,8,0,0" Height="44"
+                            Click="OnEnrollBiometric" Visibility="Collapsed"
+                            Content="REGISTRAR ROSTRO EN ESTE EQUIPO" />
                     <StackPanel Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button Click="OnCancelElevation" Content="CANCELAR" />
                         <Button Margin="10,0,0,0" Click="OnElevate"

@@ -255,6 +255,7 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<ProductionMilestoneService>();
         builder.Services.AddSingleton<IProtectedStationStore, DpapiStationStore>();
         builder.Services.AddSingleton<IElevationEvidenceCapture, NoopEvidenceCapture>();
+        builder.Services.AddSingleton<IBiometricVerificationService, LocalFaceBiometricService>();
         builder.Services.AddSingleton<StationCoordinator>();
         builder.Services.AddSingleton<ISyncStationContext, SyncStationContext>();
         builder.Services.AddSingleton<ISyncJitter, SystemSyncJitter>();

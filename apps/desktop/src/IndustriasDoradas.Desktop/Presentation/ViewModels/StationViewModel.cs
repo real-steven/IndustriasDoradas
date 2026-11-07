@@ -290,6 +290,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     }
     public bool IsPlantManager => Mode == StationMode.PlantManager;
     public bool IsStationOpen => state is not null;
+    public Guid? CurrentProfileId => state?.Session.ProfileId;
+    public string CurrentProfileDisplayName => state?.Session.DisplayName ?? "Jefe de planta";
     public bool IsApplicationUnlocked
     {
         get => isApplicationUnlocked;
@@ -773,6 +775,50 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                     state).ConfigureAwait(true);
             }
         }, "No se pudo validar el PIN; Modo Operación continúa activo.");
+    }
+
+    public async Task<bool> ElevateWithBiometricAsync(Guid profileId)
+    {
+        bool elevated = false;
+        if (state is null || !IsApplicationUnlocked)
+        {
+            Status = "Primero abra la estación.";
+            return false;
+        }
+
+        if (profileId == Guid.Empty || state.Session.ProfileId != profileId)
+        {
+            Status = "El rostro registrado no corresponde a la sesión abierta. Use el PIN.";
+            await RecordSecurityEventAsync(
+                "BIOMETRIC_ELEVATION_REJECTED",
+                "PERFIL_DISTINTO",
+                "La plantilla biométrica no correspondía al perfil de la sesión abierta.",
+                state).ConfigureAwait(true);
+            return false;
+        }
+
+        await RunAsync(async () =>
+        {
+            DateTimeOffset now = timeProvider.GetUtcNow();
+            if (state is null || state.IsClosed || state.Authorization.OfflineValidUntil <= now)
+            {
+                Status = "La autorización protegida de la estación venció. Abra la sesión nuevamente.";
+                return;
+            }
+
+            modeController.EnterPlantManagerMode();
+            Mode = modeController.Mode;
+            elevated = true;
+            Status = "Rostro reconocido. Modo Jefe de Planta activo durante cinco minutos de inactividad total.";
+            await RecordSecurityEventAsync(
+                "BIOMETRIC_ELEVATION_ACCEPTED",
+                "ACEPTADO",
+                "Identidad facial validada localmente; se activó Modo Jefe de Planta.",
+                state).ConfigureAwait(true);
+            await LoadPreparationCatalogsAsync().ConfigureAwait(true);
+        }, "No se pudo activar el acceso biométrico; use el PIN.").ConfigureAwait(true);
+
+        return elevated;
     }
 
     public Task RecoverPasswordAsync(string email) => RunAsync(async () =>
