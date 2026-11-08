@@ -419,10 +419,54 @@
         "resolved": "18.4.0",
         "contentHash": "4L6m2kS2pY5uJ9cpeRxzW22opr6ttScIRqsOpMDQpgENp/ZwxkkQCcmc6LRSURo2dFaaSW5KVflQZvroiJ7Wzg=="
       },
+      "Microsoft.Win32.SystemEvents": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "kdj5cqOwgZCMltEhQ4+WVUoFkMHG08EJfy1MDyS9H+FBg66vTTFyX8YcNl8IQh5wRQv79P+iduQgDGY8ucBR+w=="
+      },
       "MSTest.Analyzers": {
         "type": "Transitive",
         "resolved": "4.3.3",
         "contentHash": "cTcdSPIZ8WvchbC5DFmfHxrvVNZCtops+2W94le+Q+mx110Y9L9mqNVVc9flF35lFeL5GsY+rxGBylsjDk4+zg=="
+      },
+      "OpenCvSharp5": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "AVRSdqht1PRr9QfQjVzd6CM4o4IxHS5VeT94ZEEKdMHSQIx7U+VR0O3OzCxRROirJlmH6oz+MMw0SUBxKEN3Qw=="
+      },
+      "OpenCvSharp5.GdipExtensions": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "eCdmcJuDOtykf4u0Kf1b+UF0Ug9BFkvwsxJ264baQHVKG9PBuH5gvHMxkN1WADPpr10inf2wejWhiHVrI9Ta/w==",
+        "dependencies": {
+          "OpenCvSharp5": "5.0.0.20261018",
+          "System.Drawing.Common": "10.0.12"
+        }
+      },
+      "OpenCvSharp5.runtime.win": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "WwyIbPJqlDwejKehYHS2xh3AxU4tnMm/S8obqGvTs0vR8e/1EFTU9Wk9c4H1s4GLUk6QI6FmcMoaxqwc1bYGSQ=="
+      },
+      "OpenCvSharp5.Windows": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "Ts5Bl5fd38HXJdUdKicg5swNXy41j4Vu5sV3M9IL4Prxk6CxVuHkVg0NHrtuncuP0hG3RIOlOPPH0pfJKOSRUA==",
+        "dependencies": {
+          "OpenCvSharp5": "5.0.0.20261018",
+          "OpenCvSharp5.GdipExtensions": "5.0.0.20261018",
+          "OpenCvSharp5.WpfExtensions": "5.0.0.20261018",
+          "OpenCvSharp5.runtime.win": "5.0.0.20261018"
+        }
+      },
+      "OpenCvSharp5.WpfExtensions": {
+        "type": "Transitive",
+        "resolved": "5.0.0.20261018",
+        "contentHash": "BENRIQSGIXTvDpt7tVlNiyVM83RpskLQVUwItcYQ4+DtpkOzAHhBiUO8eW45/6rhkNn5WRYCdXgJcX105UGAmQ==",
+        "dependencies": {
+          "OpenCvSharp5": "5.0.0.20261018",
+          "System.Drawing.Common": "10.0.12"
+        }
       },
       "SQLite": {
         "type": "Transitive",
@@ -464,6 +508,14 @@
         "resolved": "10.0.10",
         "contentHash": "OvGz3PrzuAI/Sj7LTcXcCe3FClRI1IyRMZjNONcZtFh+Ww7nAtSh4kh08r8KVe/xxkXJPjR0Y1jF7H+N42d4xQ=="
       },
+      "System.Drawing.Common": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "FBUxiucg2gsnyItbpGgyXI5u8FYLcqdLKS1XJkHHTj3RK1c6kpsJr/Y9i4edUNF7LqCYFrHqpHEvpt8/lNBe9w==",
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "10.0.12"
+        }
+      },
       "industriasdoradas.desktop": {
         "type": "Project",
         "dependencies": {
@@ -472,6 +524,7 @@
           "Microsoft.Extensions.Hosting": "[10.0.10, )",
           "Microsoft.Extensions.Http": "[10.0.10, )",
           "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.10, )",
+          "OpenCvSharp5.Windows": "[5.0.0.20261018, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )"
         }
       }
