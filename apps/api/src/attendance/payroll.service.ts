@@ -5,6 +5,7 @@ import { AttendanceService } from "./attendance.service";
 import type {
   PayrollAdjustment,
   PayrollFilters,
+  PayrollGrossAuthorization,
   PayrollRateVersion,
   PayrollReadModel,
   PayrollRepository,
@@ -14,6 +15,7 @@ import type {
 import { PAYROLL_REPOSITORY } from "./payroll.contracts";
 import type {
   CreatePayrollAdjustmentDto,
+  CreatePayrollGrossAuthorizationDto,
   CreatePayrollRateDto,
 } from "./payroll.dto";
 import { AUDIT_ACTIONS, type AuditActor } from "../audit/audit.contracts";
@@ -52,8 +54,9 @@ export class PayrollService {
     let profiles: readonly PayrollWorkerProfile[] = [];
     let rates: readonly PayrollRateVersion[] = [];
     let adjustments: readonly PayrollAdjustment[] = [];
+    let authorizations: readonly PayrollGrossAuthorization[] = [];
     try {
-      [profiles, rates, adjustments] = await Promise.all([
+      [profiles, rates, adjustments, authorizations] = await Promise.all([
         filters.workerId === undefined
           ? this.repository.listWorkers(organizationId)
           : this.requireWorker(organizationId, filters.workerId).then(
@@ -61,6 +64,7 @@ export class PayrollService {
             ),
         this.repository.listRates(organizationId, filters.workerId),
         this.repository.listAdjustments(organizationId, filters),
+        this.repository.listGrossAuthorizations(organizationId, filters),
       ]);
     } catch (error) {
       this.storageError(error);
@@ -72,6 +76,7 @@ export class PayrollService {
           worker,
           rates.filter((rate) => rate.workerId === worker.id),
           adjustments.filter((item) => item.workerId === worker.id),
+          authorizations.filter((item) => item.workerId === worker.id),
           attendance.shifts.filter((shift) => shift.workerId === worker.id),
           attendance.incidents.filter(
             (incident) => incident.workerId === worker.id,
@@ -267,36 +272,92 @@ export class PayrollService {
     );
   }
 
+  async createGrossAuthorization(
+    organizationId: string,
+    workerId: string,
+    input: CreatePayrollGrossAuthorizationDto,
+    context: MutationContext,
+  ) {
+    await this.requireWorker(organizationId, workerId);
+    if (input.toDate < input.fromDate) {
+      throw new ApplicationError(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        "PAYROLL_PERIOD_INVALID",
+        "The payroll authorization period is invalid",
+      );
+    }
+    const authorization: PayrollGrossAuthorization = {
+      id: randomUUID(),
+      organizationId,
+      workerId,
+      fromDate: input.fromDate,
+      toDate: input.toDate,
+      authorizedAmountCrc: input.authorizedAmountCrc,
+      reason: input.reason.trim(),
+      recordedByProfileId: context.auth.profile.id,
+      recordedByName: context.auth.profile.displayName,
+      recordedAtUtc: new Date().toISOString(),
+    };
+    return this.auditTrail.execute(
+      {
+        correlationId: context.correlationId,
+        organizationId,
+        actor: this.actor(context.auth),
+        origin: "WEB",
+        action: AUDIT_ACTIONS.BUSINESS_MUTATION,
+        entityType: "payroll.gross_authorization",
+        entityId: authorization.id,
+        failureResult: "REJECTED",
+        failureReasonCode: "PAYROLL_GROSS_AUTHORIZATION_REJECTED",
+        allowedChangeFields: [
+          "worker_id",
+          "from_date",
+          "to_date",
+          "authorized_amount_crc",
+        ],
+        changes: {
+          worker_id: { before: null, after: workerId },
+          from_date: { before: null, after: authorization.fromDate },
+          to_date: { before: null, after: authorization.toDate },
+          authorized_amount_crc: {
+            before: null,
+            after: authorization.authorizedAmountCrc,
+          },
+        },
+      },
+      async () => {
+        try {
+          await this.repository.createGrossAuthorization(authorization);
+          return authorization;
+        } catch (error) {
+          this.storageError(error);
+        }
+      },
+    );
+  }
+
   private workerResult(
     worker: PayrollWorkerProfile,
     rates: readonly PayrollRateVersion[],
     adjustments: readonly PayrollAdjustment[],
+    authorizations: readonly PayrollGrossAuthorization[],
     shifts: PayrollWorkerResult["shifts"],
     incidents: PayrollWorkerResult["incidents"],
   ): PayrollWorkerResult {
-    let base = 0;
-    let missingRateMinutes = 0;
-    for (const shift of shifts) {
-      const minutes = shift.minutesInPeriod ?? 0;
-      if (shift.status !== "COMPLETED" || minutes <= 0) continue;
-      const rate = this.rateAt(rates, shift.checkInAtUtc);
-      if (rate === null) missingRateMinutes += minutes;
-      else base += (minutes / 60) * rate.regularHourlyRateCrc;
-    }
-
-    let adjustmentTotal = 0;
-    let adjustmentMissingRate = false;
-    const calculatedAdjustments = adjustments.map((adjustment) => {
-      const value = this.adjustmentValue(adjustment, rates);
-      if (value === null) adjustmentMissingRate = true;
-      else adjustmentTotal += value;
-      return { ...adjustment, calculatedAmountCrc: value };
-    });
-    const missingRate = missingRateMinutes > 0 || adjustmentMissingRate;
     const confirmedMinutes = this.round(
       shifts.reduce((total, shift) => total + (shift.minutesInPeriod ?? 0), 0),
       3,
     );
+    const missingRate =
+      confirmedMinutes > 0 && worker.currentHourlyRateCrc === null;
+    const calculatedGross = missingRate
+      ? null
+      : this.money(
+          (confirmedMinutes / 60) * (worker.currentHourlyRateCrc ?? 0),
+        );
+    const authorization = authorizations[0] ?? null;
+    const effectiveGross =
+      authorization?.authorizedAmountCrc ?? calculatedGross;
     return {
       worker,
       confirmedMinutes,
@@ -305,54 +366,26 @@ export class PayrollService {
       ).length,
       openShiftCount: shifts.filter((shift) => shift.status === "OPEN").length,
       incidentCount: incidents.length,
-      baseAmountCrc: missingRate ? null : this.money(base),
-      adjustmentAmountCrc: adjustmentMissingRate
-        ? null
-        : this.money(adjustmentTotal),
-      estimatedGrossAmountCrc: missingRate
-        ? null
-        : this.money(base + adjustmentTotal),
-      missingRateMinutes: this.round(missingRateMinutes, 3),
-      adjustments: calculatedAdjustments,
+      baseAmountCrc: calculatedGross,
+      adjustmentAmountCrc: 0,
+      calculatedGrossAmountCrc: calculatedGross,
+      authorizedGrossAmountCrc: authorization?.authorizedAmountCrc ?? null,
+      grossDifferenceCrc:
+        calculatedGross === null || authorization === null
+          ? null
+          : this.money(authorization.authorizedAmountCrc - calculatedGross),
+      estimatedGrossAmountCrc: effectiveGross,
+      missingRateMinutes: missingRate ? confirmedMinutes : 0,
+      grossAuthorization: authorization,
+      grossAuthorizations: authorizations,
+      adjustments: adjustments.map((adjustment) => ({
+        ...adjustment,
+        calculatedAmountCrc: 0,
+      })),
       rates,
       shifts,
       incidents,
     };
-  }
-
-  private adjustmentValue(
-    adjustment: PayrollAdjustment,
-    rates: readonly PayrollRateVersion[],
-  ): number | null {
-    if (adjustment.adjustmentType === "OTHER_EARNING")
-      return adjustment.amountCrc;
-    if (adjustment.adjustmentType === "OTHER_DEDUCTION")
-      return adjustment.amountCrc === null ? null : -adjustment.amountCrc;
-    const rate = this.rateAt(
-      rates,
-      `${adjustment.adjustmentDate}T23:59:59.999Z`,
-    );
-    if (rate === null || adjustment.minutes === null) return null;
-    const base = (adjustment.minutes / 60) * rate.regularHourlyRateCrc;
-    if (adjustment.adjustmentType === "PAID_LEAVE_HOURS") return base;
-    if (adjustment.adjustmentType === "OVERTIME_HOURS") return base * 0.5;
-    return base;
-  }
-
-  private rateAt(
-    rates: readonly PayrollRateVersion[],
-    timestamp: string,
-  ): PayrollRateVersion | null {
-    const at = Date.parse(timestamp);
-    return (
-      [...rates]
-        .filter((rate) => Date.parse(rate.effectiveFromUtc) <= at)
-        .sort(
-          (left, right) =>
-            Date.parse(right.effectiveFromUtc) -
-            Date.parse(left.effectiveFromUtc),
-        )[0] ?? null
-    );
   }
 
   private async requireWorker(organizationId: string, workerId: string) {

@@ -15,6 +15,9 @@ export type PayrollAdjustmentType =
   | "OVERTIME_HOURS"
   | "HOLIDAY_HOURS"
   | "REST_DAY_HOURS"
+  | "ABSENCE_HOURS"
+  | "EARLY_DEPARTURE_HOURS"
+  | "OTHER_COMMENT"
   | "OTHER_EARNING"
   | "OTHER_DEDUCTION";
 
@@ -53,6 +56,16 @@ export interface PayrollAdjustment {
   calculatedAmountCrc: number | null;
 }
 
+export interface PayrollGrossAuthorization {
+  id: string;
+  fromDate: string;
+  toDate: string;
+  authorizedAmountCrc: number;
+  reason: string;
+  recordedByName: string;
+  recordedAtUtc: string;
+}
+
 export interface PayrollShift {
   status: "COMPLETED" | "OPEN";
   startedOn: string;
@@ -69,8 +82,13 @@ export interface PayrollWorkerResult {
   incidentCount: number;
   baseAmountCrc: number | null;
   adjustmentAmountCrc: number | null;
+  calculatedGrossAmountCrc: number | null;
+  authorizedGrossAmountCrc: number | null;
+  grossDifferenceCrc: number | null;
   estimatedGrossAmountCrc: number | null;
   missingRateMinutes: number;
+  grossAuthorization: PayrollGrossAuthorization | null;
+  grossAuthorizations: PayrollGrossAuthorization[];
   adjustments: PayrollAdjustment[];
   rates: PayrollRateVersion[];
   shifts: PayrollShift[];
@@ -201,6 +219,28 @@ export function useCreatePayrollAdjustment() {
       const { workerId, ...body } = input;
       return apiRequest<PayrollAdjustment>(
         `/organizations/${encodeURIComponent(request.organizationId)}/management/attendance/payroll/workers/${encodeURIComponent(workerId)}/adjustments`,
+        request.token,
+        { method: "POST", body: JSON.stringify(body) },
+      );
+    },
+    onSuccess: () => invalidatePayroll(queryClient, request),
+  });
+}
+
+export function useAuthorizePayrollGross() {
+  const request = usePayrollRequest();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      workerId: string;
+      fromDate: string;
+      toDate: string;
+      authorizedAmountCrc: number;
+      reason: string;
+    }) => {
+      const { workerId, ...body } = input;
+      return apiRequest<PayrollGrossAuthorization>(
+        `/organizations/${encodeURIComponent(request.organizationId)}/management/attendance/payroll/workers/${encodeURIComponent(workerId)}/gross-authorizations`,
         request.token,
         { method: "POST", body: JSON.stringify(body) },
       );

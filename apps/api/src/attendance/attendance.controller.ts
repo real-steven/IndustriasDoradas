@@ -15,6 +15,7 @@ import { AttendanceHoursQueryDto } from "./attendance.dto";
 import { AttendanceService } from "./attendance.service";
 import {
   CreatePayrollAdjustmentDto,
+  CreatePayrollGrossAuthorizationDto,
   CreatePayrollRateDto,
   PayrollQueryDto,
   PayrollWorkerDirectoryQueryDto,
@@ -109,6 +110,22 @@ export class AttendanceController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.payroll.createAdjustment(
+      organizationId,
+      workerId,
+      body,
+      this.context(request),
+    );
+  }
+
+  @Post("payroll/workers/:workerId/gross-authorizations")
+  @RequirePermissions("payroll.manage")
+  createPayrollGrossAuthorization(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("workerId", ParseUUIDPipe) workerId: string,
+    @Body() body: CreatePayrollGrossAuthorizationDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.payroll.createGrossAuthorization(
       organizationId,
       workerId,
       body,

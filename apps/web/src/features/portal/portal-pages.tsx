@@ -111,9 +111,10 @@ export function WorkersPage() {
       title={tr("Trabajadores", "Workers")}
       eyebrow={tr("EXPEDIENTES Y TARIFAS", "RECORDS AND RATES")}
       description={tr(
-        "Busque un empleado por nombre o cédula para revisar sus horas, tarifa, ajustes e historial salarial.",
-        "Find an employee by name or identity number to review hours, rate, adjustments, and pay history.",
+        "Busque un empleado por nombre o cédula para revisar sus horas, tarifa, bruto y notas.",
+        "Find an employee by name or identity number to review hours, rate, gross amount, and notes.",
       )}
+      compact
     >
       <AttendanceFeature />
     </PortalPage>
@@ -239,23 +240,27 @@ function PortalPage({
   eyebrow,
   description,
   actions,
+  compact = false,
   children,
 }: PropsWithChildren<{
   title: string;
   eyebrow: string;
   description: string;
   actions?: ReactNode;
+  compact?: boolean;
 }>) {
   return (
-    <div className="portal-view">
-      <header className="portal-page-head">
-        <div>
-          <p className="eyebrow">{eyebrow}</p>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
-        {actions && <div className="page-actions">{actions}</div>}
-      </header>
+    <div className={`portal-view${compact ? " portal-view-compact" : ""}`}>
+      {!compact && (
+        <header className="portal-page-head">
+          <div>
+            <p className="eyebrow">{eyebrow}</p>
+            <h1>{title}</h1>
+            <p>{description}</p>
+          </div>
+          {actions && <div className="page-actions">{actions}</div>}
+        </header>
+      )}
       {children}
     </div>
   );

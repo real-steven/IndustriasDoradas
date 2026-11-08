@@ -43,12 +43,12 @@ export class PayrollPdfExporter {
           "Estimación bruta antes de CCSS, renta, embargos y otras deducciones legales.",
         );
 
-      const columns = [34, 250, 345, 430, 520, 610];
+      const columns = [34, 280, 385, 500, 625];
       let y = 105;
       const header = () => {
         document.rect(34, y, 724, 24).fill(PALE);
         document.font("Helvetica-Bold").fontSize(7.5).fillColor(NAVY);
-        ["TRABAJADOR", "HORAS", "BASE", "AJUSTES", "TOTAL", "ESTADO"].forEach(
+        ["TRABAJADOR", "HORAS", "TARIFA", "BRUTO", "ESTADO"].forEach(
           (label, index) =>
             document.text(label, columns[index], y + 8, {
               width: index === 0 ? 205 : 85,
@@ -85,10 +85,15 @@ export class PayrollPdfExporter {
           );
         const values = [
           `${(item.confirmedMinutes / 60).toLocaleString("es-CR", { maximumFractionDigits: 2 })} h`,
-          this.money(item.baseAmountCrc),
-          this.money(item.adjustmentAmountCrc),
+          item.worker.currentHourlyRateCrc === null
+            ? "Pendiente"
+            : `${this.money(item.worker.currentHourlyRateCrc)} / h`,
           this.money(item.estimatedGrossAmountCrc),
-          item.estimatedGrossAmountCrc === null ? "Falta tarifa" : "Calculado",
+          item.estimatedGrossAmountCrc === null
+            ? "Falta tarifa"
+            : item.grossAuthorization === null
+              ? "Calculado"
+              : "Editado",
         ];
         document.font("Helvetica").fontSize(8).fillColor("#102d3b");
         values.forEach((value, index) =>
@@ -112,17 +117,30 @@ export class PayrollPdfExporter {
         .font("Helvetica-Bold")
         .fontSize(10)
         .fillColor(NAVY)
-        .text("Ajustes incluidos", 34, y);
+        .text("Cambios al bruto y comentarios", 34, y);
       y += 16;
       document.font("Helvetica").fontSize(8).fillColor("#102d3b");
       for (const item of report.workers) {
+        if (item.grossAuthorization !== null) {
+          if (y > 530) {
+            document.addPage();
+            y = 42;
+          }
+          document.text(
+            `• ${item.worker.name}: bruto editado a ${this.money(item.grossAuthorization.authorizedAmountCrc)}. ${item.grossAuthorization.reason} — ${item.grossAuthorization.recordedByName}`,
+            44,
+            y,
+            { width: 704 },
+          );
+          y += 18;
+        }
         for (const adjustment of item.adjustments) {
           if (y > 530) {
             document.addPage();
             y = 42;
           }
           document.text(
-            `• ${item.worker.name}: ${adjustment.note} (${this.money(adjustment.calculatedAmountCrc)})`,
+            `• ${item.worker.name}: ${adjustment.note}${adjustment.minutes === null ? "" : ` (${(adjustment.minutes / 60).toLocaleString("es-CR", { maximumFractionDigits: 2 })} h)`}`,
             44,
             y,
             { width: 704 },

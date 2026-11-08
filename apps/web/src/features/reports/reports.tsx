@@ -55,8 +55,8 @@ export function ReportsFeature() {
           <strong>{tr("Pre-nómina", "Pre-payroll")}</strong>
           <small>
             {tr(
-              "Horas, tarifas, ajustes y total bruto",
-              "Hours, rates, adjustments, and gross total",
+              "Horas, tarifas, notas y total bruto",
+              "Hours, rates, notes, and gross total",
             )}
           </small>
         </button>

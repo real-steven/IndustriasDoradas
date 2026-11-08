@@ -408,6 +408,9 @@
               "OVERTIME_HOURS",
               "HOLIDAY_HOURS",
               "REST_DAY_HOURS",
+              "ABSENCE_HOURS",
+              "EARLY_DEPARTURE_HOURS",
+              "OTHER_COMMENT",
               "OTHER_EARNING",
               "OTHER_DEDUCTION"
             ],
@@ -418,6 +421,20 @@
           "note": { "maxLength": 300, "minLength": 3, "type": "string" }
         },
         "required": ["adjustmentDate", "adjustmentType", "note"],
+        "type": "object"
+      },
+      "CreatePayrollGrossAuthorizationDto": {
+        "properties": {
+          "authorizedAmountCrc": {
+            "example": 120000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "fromDate": { "type": "string" },
+          "reason": { "maxLength": 300, "minLength": 3, "type": "string" },
+          "toDate": { "type": "string" }
+        },
+        "required": ["authorizedAmountCrc", "fromDate", "toDate", "reason"],
         "type": "object"
       },
       "CreatePayrollRateDto": {
@@ -6977,6 +6994,103 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreatePayrollAdjustmentDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Worker" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Attendance"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/attendance/payroll/workers/{workerId}/gross-authorizations": {
+      "post": {
+        "operationId": "AttendanceController_createPayrollGrossAuthorization",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "workerId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePayrollGrossAuthorizationDto"
               }
             }
           },

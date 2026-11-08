@@ -17,12 +17,7 @@ import {
 import { PAYROLL_ADJUSTMENT_TYPES } from "./payroll.contracts";
 
 const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/u;
-const HOUR_ADJUSTMENTS = new Set([
-  "PAID_LEAVE_HOURS",
-  "OVERTIME_HOURS",
-  "HOLIDAY_HOURS",
-  "REST_DAY_HOURS",
-]);
+const MONEY_ADJUSTMENTS = new Set(["OTHER_EARNING", "OTHER_DEDUCTION"]);
 
 export class PayrollQueryDto {
   @Matches(LOCAL_DATE)
@@ -82,9 +77,7 @@ export class CreatePayrollAdjustmentDto {
   @IsIn([...PAYROLL_ADJUSTMENT_TYPES])
   adjustmentType!: (typeof PAYROLL_ADJUSTMENT_TYPES)[number];
 
-  @ValidateIf((object: CreatePayrollAdjustmentDto) =>
-    HOUR_ADJUSTMENTS.has(object.adjustmentType),
-  )
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 0 })
   @Min(1)
@@ -92,7 +85,7 @@ export class CreatePayrollAdjustmentDto {
   minutes?: number;
 
   @ValidateIf((object: CreatePayrollAdjustmentDto) =>
-    object.adjustmentType.startsWith("OTHER_"),
+    MONEY_ADJUSTMENTS.has(object.adjustmentType),
   )
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -103,4 +96,23 @@ export class CreatePayrollAdjustmentDto {
   @MinLength(3)
   @MaxLength(300)
   note!: string;
+}
+
+export class CreatePayrollGrossAuthorizationDto {
+  @Matches(LOCAL_DATE)
+  fromDate!: string;
+
+  @Matches(LOCAL_DATE)
+  toDate!: string;
+
+  @ApiProperty({ example: 120000, minimum: 0 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  authorizedAmountCrc!: number;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(300)
+  reason!: string;
 }

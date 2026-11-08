@@ -1,6 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -25,7 +25,7 @@ describe("expediente y pre-nómina por trabajador", () => {
     });
   });
 
-  it("abre un empleado y muestra horas, tarifa, total y ajustes explicados", async () => {
+  it("abre el empleado en un modal y muestra bruto, autorizado y comentarios", async () => {
     const transport = vi.fn<typeof fetch>((input) => {
       const request = new URL(requestUrl(input), "http://localhost");
       if (request.pathname.endsWith("/payroll/workers"))
@@ -36,7 +36,10 @@ describe("expediente y pre-nómina por trabajador", () => {
     });
     vi.stubGlobal("fetch", transport);
 
-    renderAttendance(`/gerencia/trabajadores?worker=${WORKER_ID}`);
+    renderAttendance("/gerencia/trabajadores");
+
+    await screen.findByText("Operario Uno");
+    fireEvent.click(screen.getByRole("button", { name: /Operario Uno/u }));
 
     expect(await screen.findByText("8 h")).toBeInTheDocument();
     expect(
@@ -44,10 +47,11 @@ describe("expediente y pre-nómina por trabajador", () => {
         (content) => content.includes("16") && content.includes("500"),
       ),
     ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Notas" }));
     expect(
-      screen.getByText("Presentó comprobante del hospital."),
+      await screen.findByText("Presentó comprobante del hospital."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Sin deducciones legales")).toBeInTheDocument();
 
     const payrollCall = transport.mock.calls.find(([input]) =>
       requestUrl(input).endsWith("/management/attendance/payroll")
@@ -129,19 +133,42 @@ function payrollReport() {
         openShiftCount: 0,
         incidentCount: 0,
         baseAmountCrc: 16000,
-        adjustmentAmountCrc: 500,
+        adjustmentAmountCrc: 0,
+        calculatedGrossAmountCrc: 16000,
+        authorizedGrossAmountCrc: 16500,
+        grossDifferenceCrc: 500,
         estimatedGrossAmountCrc: 16500,
         missingRateMinutes: 0,
+        grossAuthorization: {
+          id: "authorization-1",
+          fromDate: "2026-10-19",
+          toDate: "2026-10-25",
+          authorizedAmountCrc: 16500,
+          reason: "Monto aprobado por gerencia",
+          recordedByName: "Lucía",
+          recordedAtUtc: "2026-10-25T18:00:00.000Z",
+        },
+        grossAuthorizations: [
+          {
+            id: "authorization-1",
+            fromDate: "2026-10-19",
+            toDate: "2026-10-25",
+            authorizedAmountCrc: 16500,
+            reason: "Monto aprobado por gerencia",
+            recordedByName: "Lucía",
+            recordedAtUtc: "2026-10-25T18:00:00.000Z",
+          },
+        ],
         adjustments: [
           {
             id: "adjustment-1",
             adjustmentDate: "2026-10-20",
-            adjustmentType: "OTHER_EARNING",
-            minutes: null,
-            amountCrc: 500,
+            adjustmentType: "OVERTIME_HOURS",
+            minutes: 60,
+            amountCrc: null,
             note: "Presentó comprobante del hospital.",
             recordedAtUtc: "2026-10-20T20:00:00.000Z",
-            calculatedAmountCrc: 500,
+            calculatedAmountCrc: 0,
           },
         ],
         rates: [

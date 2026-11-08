@@ -24,14 +24,13 @@ export class PayrollExcelExporter {
       { key: "worker", width: 28 },
       { key: "identity", width: 18 },
       { key: "hours", width: 18 },
-      { key: "base", width: 18 },
-      { key: "adjustments", width: 18 },
-      { key: "total", width: 20 },
+      { key: "rate", width: 18 },
+      { key: "gross", width: 20 },
       { key: "status", width: 24 },
     ];
-    summary.mergeCells("A1:G2");
+    summary.mergeCells("A1:F2");
     this.title(summary.getCell("A1"), "Pre-nómina gerencial");
-    summary.mergeCells("A3:G3");
+    summary.mergeCells("A3:F3");
     summary.getCell("A3").value =
       "Estimación bruta antes de CCSS, renta, embargos y otras deducciones legales.";
     summary.getCell("A3").font = { italic: true, color: { argb: "FF58717C" } };
@@ -45,9 +44,8 @@ export class PayrollExcelExporter {
       "Trabajador",
       "Cédula",
       "Horas confirmadas",
-      "Monto base",
-      "Ajustes",
-      "Total bruto",
+      "Tarifa por hora",
+      "Bruto calculado",
       "Estado",
     ]);
     this.header(summary.getRow(7));
@@ -56,16 +54,17 @@ export class PayrollExcelExporter {
         worker: item.worker.name,
         identity: item.worker.identityNumber ?? "Pendiente",
         hours: item.confirmedMinutes / 60,
-        base: item.baseAmountCrc,
-        adjustments: item.adjustmentAmountCrc,
-        total: item.estimatedGrossAmountCrc,
+        rate: item.worker.currentHourlyRateCrc,
+        gross: item.estimatedGrossAmountCrc,
         status:
           item.estimatedGrossAmountCrc === null
             ? "Falta configurar tarifa"
-            : "Calculado",
+            : item.grossAuthorization === null
+              ? "Calculado"
+              : "Editado",
       });
       row.getCell(3).numFmt = "0.00";
-      for (const column of [4, 5, 6])
+      for (const column of [4, 5])
         row.getCell(column).numFmt = "₡#,##0.00;[Red]-₡#,##0.00";
       if (item.estimatedGrossAmountCrc === null) {
         row.eachCell((cell) => {
@@ -80,7 +79,7 @@ export class PayrollExcelExporter {
     const totalRow = summary.addRow({
       worker: "TOTAL",
       hours: report.summary.confirmedMinutes / 60,
-      total: report.summary.estimatedGrossAmountCrc,
+      gross: report.summary.estimatedGrossAmountCrc,
       status:
         report.summary.estimatedGrossAmountCrc === null
           ? "Incompleto"
@@ -88,9 +87,9 @@ export class PayrollExcelExporter {
     });
     totalRow.font = { bold: true };
     totalRow.getCell(3).numFmt = "0.00";
-    totalRow.getCell(6).numFmt = "₡#,##0.00;[Red]-₡#,##0.00";
+    totalRow.getCell(5).numFmt = "₡#,##0.00;[Red]-₡#,##0.00";
 
-    const adjustments = workbook.addWorksheet("Ajustes", {
+    const adjustments = workbook.addWorksheet("Comentarios", {
       views: [{ state: "frozen", ySplit: 1 }],
     });
     adjustments.columns = [
@@ -98,7 +97,6 @@ export class PayrollExcelExporter {
       { header: "Fecha", key: "date", width: 14 },
       { header: "Tipo", key: "type", width: 24 },
       { header: "Horas", key: "hours", width: 12 },
-      { header: "Monto", key: "amount", width: 18 },
       { header: "Explicación", key: "note", width: 55 },
     ];
     this.header(adjustments.getRow(1));
@@ -109,14 +107,41 @@ export class PayrollExcelExporter {
           date: adjustment.adjustmentDate,
           type: adjustment.adjustmentType,
           hours: adjustment.minutes === null ? null : adjustment.minutes / 60,
-          amount: adjustment.calculatedAmountCrc,
           note: adjustment.note,
         });
         row.getCell(4).numFmt = "0.00";
-        row.getCell(5).numFmt = "₡#,##0.00;[Red]-₡#,##0.00";
       }
     }
-    adjustments.autoFilter = "A1:F1";
+    adjustments.autoFilter = "A1:E1";
+
+    const authorizations = workbook.addWorksheet("Cambios al bruto", {
+      views: [{ state: "frozen", ySplit: 1 }],
+    });
+    authorizations.columns = [
+      { header: "Trabajador", key: "worker", width: 28 },
+      { header: "Desde", key: "from", width: 14 },
+      { header: "Hasta", key: "to", width: 14 },
+      { header: "Bruto registrado", key: "amount", width: 22 },
+      { header: "Motivo", key: "reason", width: 45 },
+      { header: "Responsable", key: "actor", width: 28 },
+      { header: "Registrado", key: "recorded", width: 22 },
+    ];
+    this.header(authorizations.getRow(1));
+    for (const item of report.workers) {
+      for (const authorization of item.grossAuthorizations) {
+        const row = authorizations.addRow({
+          worker: item.worker.name,
+          from: authorization.fromDate,
+          to: authorization.toDate,
+          amount: authorization.authorizedAmountCrc,
+          reason: authorization.reason,
+          actor: authorization.recordedByName,
+          recorded: new Date(authorization.recordedAtUtc),
+        });
+        row.getCell(4).numFmt = "₡#,##0.00";
+        row.getCell(7).numFmt = "dd/mm/yyyy hh:mm";
+      }
+    }
 
     const history = workbook.addWorksheet("Historial de tarifas", {
       views: [{ state: "frozen", ySplit: 1 }],

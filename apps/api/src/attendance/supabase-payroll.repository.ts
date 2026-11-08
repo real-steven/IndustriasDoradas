@@ -5,6 +5,7 @@ import type {
   PayrollAdjustment,
   PayrollAdjustmentType,
   PayrollFilters,
+  PayrollGrossAuthorization,
   PayrollRateVersion,
   PayrollRepository,
   PayrollWorkerProfile,
@@ -161,6 +162,47 @@ export class SupabasePayrollRepository implements PayrollRepository {
     });
   }
 
+  async listGrossAuthorizations(
+    organizationId: string,
+    filters: PayrollFilters,
+  ): Promise<readonly PayrollGrossAuthorization[]> {
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${organizationId}`,
+      from_date: `eq.${filters.fromDate}`,
+      to_date: `eq.${filters.toDate}`,
+      order: "recorded_at_utc.desc,id.desc",
+      limit: "5000",
+      select: "*",
+    });
+    if (filters.workerId !== undefined)
+      parameters.set("worker_id", `eq.${filters.workerId}`);
+    const response = await this.request(
+      `management_payroll_gross_authorizations?${parameters}`,
+    );
+    return ((await response.json()) as Row[]).map((row) =>
+      this.grossAuthorization(row),
+    );
+  }
+
+  async createGrossAuthorization(
+    input: PayrollGrossAuthorization,
+  ): Promise<void> {
+    await this.request("payroll_gross_authorizations", {
+      method: "POST",
+      body: JSON.stringify({
+        id: input.id,
+        organization_id: input.organizationId,
+        worker_id: input.workerId,
+        from_date: input.fromDate,
+        to_date: input.toDate,
+        authorized_amount_crc: input.authorizedAmountCrc,
+        reason: input.reason,
+        recorded_by_profile_id: input.recordedByProfileId,
+        recorded_at_utc: input.recordedAtUtc,
+      }),
+    });
+  }
+
   private async request(
     path: string,
     init: RequestInit = {},
@@ -231,6 +273,21 @@ export class SupabasePayrollRepository implements PayrollRepository {
       amountCrc: this.nullableNumber(row, "amount_crc"),
       note: this.string(row, "note"),
       recordedByProfileId: this.string(row, "recorded_by_profile_id"),
+      recordedAtUtc: this.string(row, "recorded_at_utc"),
+    };
+  }
+
+  private grossAuthorization(row: Row): PayrollGrossAuthorization {
+    return {
+      id: this.string(row, "id"),
+      organizationId: this.string(row, "organization_id"),
+      workerId: this.string(row, "worker_id"),
+      fromDate: this.string(row, "from_date"),
+      toDate: this.string(row, "to_date"),
+      authorizedAmountCrc: this.number(row, "authorized_amount_crc"),
+      reason: this.string(row, "reason"),
+      recordedByProfileId: this.string(row, "recorded_by_profile_id"),
+      recordedByName: this.string(row, "recorded_by_name"),
       recordedAtUtc: this.string(row, "recorded_at_utc"),
     };
   }

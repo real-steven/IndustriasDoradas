@@ -10,6 +10,9 @@ export const PAYROLL_ADJUSTMENT_TYPES = [
   "OVERTIME_HOURS",
   "HOLIDAY_HOURS",
   "REST_DAY_HOURS",
+  "ABSENCE_HOURS",
+  "EARLY_DEPARTURE_HOURS",
+  "OTHER_COMMENT",
   "OTHER_EARNING",
   "OTHER_DEDUCTION",
 ] as const;
@@ -56,6 +59,19 @@ export interface PayrollAdjustment {
   recordedAtUtc: string;
 }
 
+export interface PayrollGrossAuthorization {
+  id: string;
+  organizationId: string;
+  workerId: string;
+  fromDate: string;
+  toDate: string;
+  authorizedAmountCrc: number;
+  reason: string;
+  recordedByProfileId: string;
+  recordedByName: string;
+  recordedAtUtc: string;
+}
+
 export interface PayrollFilters {
   fromDate: string;
   toDate: string;
@@ -70,8 +86,13 @@ export interface PayrollWorkerResult {
   incidentCount: number;
   baseAmountCrc: number | null;
   adjustmentAmountCrc: number | null;
+  calculatedGrossAmountCrc: number | null;
+  authorizedGrossAmountCrc: number | null;
+  grossDifferenceCrc: number | null;
   estimatedGrossAmountCrc: number | null;
   missingRateMinutes: number;
+  grossAuthorization: PayrollGrossAuthorization | null;
+  grossAuthorizations: readonly PayrollGrossAuthorization[];
   adjustments: readonly (PayrollAdjustment & {
     calculatedAmountCrc: number | null;
   })[];
@@ -121,4 +142,9 @@ export interface PayrollRepository {
     filters: PayrollFilters,
   ): Promise<readonly PayrollAdjustment[]>;
   createAdjustment(input: PayrollAdjustment): Promise<void>;
+  listGrossAuthorizations(
+    organizationId: string,
+    filters: PayrollFilters,
+  ): Promise<readonly PayrollGrossAuthorization[]>;
+  createGrossAuthorization(input: PayrollGrossAuthorization): Promise<void>;
 }

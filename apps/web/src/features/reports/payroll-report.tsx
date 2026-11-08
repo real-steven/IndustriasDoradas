@@ -56,8 +56,8 @@ export function PayrollReportFeature() {
             <h2>{tr("Pre-nómina", "Pre-payroll")}</h2>
             <p>
               {tr(
-                "Horas confirmadas, tarifa vigente y ajustes explicados por empleado.",
-                "Confirmed hours, current rate, and explained adjustments by employee.",
+                "Horas confirmadas, tarifa, bruto y comentarios por empleado.",
+                "Confirmed hours, rate, gross amount, and comments by employee.",
               )}
             </p>
           </div>
@@ -142,8 +142,8 @@ export function PayrollReportFeature() {
                 <h2>{tr("Resumen por empleado", "Summary by employee")}</h2>
                 <p>
                   {tr(
-                    "Abra un empleado para ver los ajustes que explican su monto.",
-                    "Open an employee to review the adjustments behind the amount.",
+                    "Abra un empleado para ver sus comentarios y el motivo de cualquier edición manual.",
+                    "Open an employee to review comments and the reason for any manual edit.",
                   )}
                 </p>
               </div>
@@ -175,13 +175,15 @@ export function PayrollReportFeature() {
                       </strong>
                     </span>
                     <span>
-                      <small>{tr("Ajustes", "Adjustments")}</small>
+                      <small>{tr("Tarifa", "Rate")}</small>
                       <strong>
-                        {formatSignedCrc(item.adjustmentAmountCrc, locale)}
+                        {item.worker.currentHourlyRateCrc === null
+                          ? tr("Pendiente", "Pending")
+                          : `${formatCrc(item.worker.currentHourlyRateCrc, locale)} / h`}
                       </strong>
                     </span>
                     <span>
-                      <small>{tr("Total bruto", "Gross total")}</small>
+                      <small>{tr("Bruto calculado", "Calculated gross")}</small>
                       <strong>
                         {item.estimatedGrossAmountCrc === null
                           ? tr("Falta tarifa", "Rate required")
@@ -190,18 +192,24 @@ export function PayrollReportFeature() {
                     </span>
                   </summary>
                   <div className="payroll-report-adjustments">
+                    {item.grossAuthorization !== null && (
+                      <p>
+                        <strong>{tr("Bruto editado", "Gross edited")}:</strong>{" "}
+                        {item.grossAuthorization.reason} ·{" "}
+                        {item.grossAuthorization.recordedByName}
+                      </p>
+                    )}
                     {item.adjustments.length === 0 ? (
-                      <p>{tr("Sin ajustes.", "No adjustments.")}</p>
+                      <p>{tr("Sin comentarios.", "No comments.")}</p>
                     ) : (
                       <ul>
                         {item.adjustments.map((adjustment) => (
                           <li key={adjustment.id}>
                             <span>{adjustment.note}</span>
                             <strong>
-                              {formatSignedCrc(
-                                adjustment.calculatedAmountCrc,
-                                locale,
-                              )}
+                              {adjustment.minutes === null
+                                ? "—"
+                                : `${(adjustment.minutes / 60).toLocaleString(locale, { maximumFractionDigits: 2 })} h`}
                             </strong>
                           </li>
                         ))}
@@ -216,8 +224,8 @@ export function PayrollReportFeature() {
             <strong>{tr("ALCANCE", "SCOPE")}</strong>
             <p>
               {tr(
-                "Este reporte es una pre-nómina bruta. No incluye CCSS, renta, embargos ni otras deducciones legales. Las horas extra y feriados aparecen únicamente cuando gerencia los registra como ajuste.",
-                "This is a gross pre-payroll report. It excludes social security, income tax, garnishments, and other legal deductions. Overtime and holidays appear only when management records them as an adjustment.",
+                "Este reporte es una pre-nómina bruta. No incluye CCSS, renta, embargos ni otras deducciones legales. Los comentarios no alteran el pago; cualquier edición manual del bruto conserva su motivo.",
+                "This is a gross pre-payroll report. It excludes social security, income tax, garnishments, and other legal deductions. Comments do not alter pay; every manual gross edit preserves its reason.",
               )}
             </p>
           </section>
@@ -233,10 +241,4 @@ function formatCrc(value: number, locale: string): string {
     currency: "CRC",
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function formatSignedCrc(value: number | null, locale: string): string {
-  if (value === null) return "—";
-  const formatted = formatCrc(Math.abs(value), locale);
-  return value > 0 ? `+${formatted}` : value < 0 ? `−${formatted}` : formatted;
 }
