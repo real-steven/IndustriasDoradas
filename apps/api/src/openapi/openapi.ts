@@ -1033,6 +1033,8 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         "language",
         "timezone",
         "generatedAtUtc",
+        "sections",
+        "fields",
         "period",
         "filters",
         "summary",
@@ -1049,6 +1051,31 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         language: { type: "string", enum: ["es", "en"] },
         timezone: { type: "string", enum: ["America/Costa_Rica"] },
         generatedAtUtc: DATE_TIME,
+        sections: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["summary", "shipments", "financial"],
+          },
+        },
+        fields: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "date",
+              "shipment",
+              "supplier",
+              "line",
+              "gold",
+              "karat",
+              "cajuelas",
+              "palos",
+              "responsible",
+              "sweeps",
+            ],
+          },
+        },
         period: {
           type: "object",
           required: ["fromUtc", "toUtc"],

@@ -77,10 +77,10 @@ export class AttendanceController {
     @Body() body: UpdatePayrollWorkerProfileDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.payroll.setIdentity(
+    return this.payroll.updateProfile(
       organizationId,
       workerId,
-      body.identityNumber,
+      body,
       this.context(request),
     );
   }

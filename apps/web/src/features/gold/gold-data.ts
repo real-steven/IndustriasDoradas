@@ -7,9 +7,13 @@ import {
 } from "@tanstack/react-query";
 
 import type {
+  GoldReviewEntry,
   GoldResultEntry,
   GoldSummary,
+  PageManagementSweepMercury,
   RecordShipmentGoldInput,
+  RecordSweepMercuryInput,
+  ReviewShipmentGoldInput,
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
 import { cachePolicy } from "../../app/cache-policy";
@@ -134,6 +138,122 @@ export function useRecordShipmentGold(shipmentId: string | null) {
       ]);
     },
   });
+}
+
+export function useGoldReviewHistory(shipmentId: string | null) {
+  const auth = useAuth();
+  const token = auth.session?.access_token ?? "";
+  const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
+
+  return useQuery({
+    queryKey: scopedQueryKey(
+      "gold-review-history",
+      profileId,
+      organizationId,
+      shipmentId ?? "",
+    ),
+    enabled:
+      auth.session !== null &&
+      auth.profile !== null &&
+      shipmentId !== null &&
+      shipmentId.length > 0,
+    queryFn: ({ signal }) =>
+      apiRequest<GoldReviewEntry[]>(
+        `/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId ?? "")}/gold-reviews`,
+        token,
+        { signal },
+      ),
+    ...cachePolicy.history,
+  });
+}
+
+export function useReviewShipmentGold(shipmentId: string | null) {
+  const auth = useAuth();
+  const queryClient = useQueryClient();
+  const token = auth.session?.access_token ?? "";
+  const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
+
+  return useMutation({
+    mutationFn: (input: ReviewShipmentGoldInput) => {
+      if (shipmentId === null) throw new Error("Shipment is required");
+      return apiRequest<GoldReviewEntry>(
+        `/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/gold-reviews`,
+        token,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    onSuccess: async () =>
+      invalidateGoldQueries(queryClient, profileId, organizationId),
+  });
+}
+
+export function useRecordSweepMercury(
+  shipmentId: string | null,
+  sweepId: string | null,
+) {
+  const auth = useAuth();
+  const queryClient = useQueryClient();
+  const token = auth.session?.access_token ?? "";
+  const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
+
+  return useMutation({
+    mutationFn: (input: RecordSweepMercuryInput) => {
+      if (shipmentId === null || sweepId === null)
+        throw new Error("Shipment and sweep are required");
+      return apiRequest<PageManagementSweepMercury>(
+        `/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/sweeps/${encodeURIComponent(sweepId)}/mercury`,
+        token,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateScoped(
+          queryClient,
+          "management-shipment-sweeps",
+          profileId,
+          organizationId,
+        ),
+        invalidateScoped(
+          queryClient,
+          "management-shipments",
+          profileId,
+          organizationId,
+        ),
+        invalidateScoped(
+          queryClient,
+          "shipment-audit",
+          profileId,
+          organizationId,
+        ),
+      ]);
+    },
+  });
+}
+
+async function invalidateGoldQueries(
+  queryClient: QueryClient,
+  profileId: string,
+  organizationId: string,
+) {
+  await Promise.all([
+    invalidateScoped(queryClient, "gold-summary", profileId, organizationId),
+    invalidateScoped(
+      queryClient,
+      "gold-review-history",
+      profileId,
+      organizationId,
+    ),
+    invalidateScoped(
+      queryClient,
+      "management-shipments",
+      profileId,
+      organizationId,
+    ),
+  ]);
 }
 
 function invalidateScoped(

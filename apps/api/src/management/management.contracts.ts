@@ -68,6 +68,8 @@ export interface ManagementSweepMercury {
   remainderGrams: number | null;
   hasInputRecord: boolean;
   hasRemainderRecord: boolean;
+  inputMovementId: string | null;
+  remainderMovementId: string | null;
 }
 
 export interface ManagementLatestChange {

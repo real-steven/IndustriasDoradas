@@ -186,6 +186,9 @@ describe("API smoke (e2e)", () => {
       listShipmentFacts: jest.fn().mockResolvedValue([]),
       listResults: jest.fn().mockResolvedValue([]),
       createResult: jest.fn(),
+      listReviews: jest.fn().mockResolvedValue([]),
+      createReview: jest.fn(),
+      createMercuryMovements: jest.fn().mockResolvedValue(undefined),
     };
     inventory = {
       hasPlantScope: jest.fn().mockResolvedValue(true),
@@ -1074,6 +1077,8 @@ describe("API smoke (e2e)", () => {
         cajuelaTotal: 100,
         hasGoldResult: true,
         goldAmountGrams: 0,
+        reviewEntryId: null,
+        reviewDisposition: "PENDING",
       },
       {
         shipmentId: "42000000-0000-4000-8000-000000000002",
@@ -1082,6 +1087,8 @@ describe("API smoke (e2e)", () => {
         cajuelaTotal: 150,
         hasGoldResult: false,
         goldAmountGrams: null,
+        reviewEntryId: null,
+        reviewDisposition: "PENDING",
       },
     ]);
 

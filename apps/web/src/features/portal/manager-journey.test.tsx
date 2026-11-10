@@ -4,13 +4,7 @@ import type {
   SupabaseClient,
 } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -68,29 +62,22 @@ describe("recorrido gerencial de aceptación", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("1 línea activa")).toBeInTheDocument();
     expect(screen.getByText("Cajuelas en proceso")).toBeInTheDocument();
-    expect(screen.getByText("260")).toBeInTheDocument();
+    expect(screen.getAllByText("260").length).toBeGreaterThan(0);
     expect(
-      screen.queryByRole("heading", { name: "Línea 1" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("link", { name: "Operación" }));
-    expect(
-      await screen.findByRole("heading", { name: "Operación" }),
+      await screen.findByRole("heading", { name: "Línea 1" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/10 de 250 cajuelas/u)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("link", { name: "Cargamentos" }));
-    expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
-    await screen.findByRole("option", { name: "Proveedor Norte" });
-    await user.selectOptions(screen.getByLabelText("Proveedor"), SUPPLIER_ID);
-    await waitFor(() =>
-      expect(
-        api.requestedUrls.some((value) => {
-          const url = new URL(value, "http://localhost");
-          return url.searchParams.get("supplierId") === SUPPLIER_ID;
-        }),
-      ).toBe(true),
+    await user.click(screen.getByRole("link", { name: "Auditoría" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Área" }),
+      "shipments",
     );
+    expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: "Buscar actividad" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Historial")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: /ABRIR DETALLE/u }));
     expect(
@@ -102,9 +89,9 @@ describe("recorrido gerencial de aceptación", () => {
       await screen.findByText("Cambio operativo recibido"),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("link", { name: "Oro" }));
+    await user.click(screen.getByRole("link", { name: "Oro y mercurio" }));
     expect(await screen.findByText("Pendiente")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "REGISTRAR ORO" }));
+    await user.click(screen.getByRole("button", { name: "REGISTRAR DATOS" }));
     const amount = screen.getByRole("textbox", {
       name: "Oro total en gramos",
     });
@@ -135,7 +122,7 @@ describe("recorrido gerencial de aceptación", () => {
     });
 
     await user.click(
-      screen.getByRole("button", { name: "Cerrar registro de oro" }),
+      screen.getByRole("button", { name: "Cerrar registro del cargamento" }),
     );
     expect(screen.getAllByText("1,25 g").length).toBeGreaterThan(0);
 
@@ -296,6 +283,11 @@ function createManagementApi(): {
       return Promise.resolve(json(goldEntries));
     }
 
+    if (
+      url.pathname.endsWith(`/management/shipments/${SHIPMENT_ID}/gold-reviews`)
+    )
+      return Promise.resolve(json([]));
+
     if (url.pathname.endsWith(`/management/shipments/${SHIPMENT_ID}/sweeps`))
       return Promise.resolve(page([sweep()], 100));
 
@@ -378,6 +370,8 @@ function sweep() {
     remainderGrams: null,
     hasInputRecord: true,
     hasRemainderRecord: false,
+    inputMovementId: "45000000-0000-4000-8000-000000000001",
+    remainderMovementId: null,
   };
 }
 
@@ -389,6 +383,11 @@ function goldSummary(entries: GoldResultEntry[]) {
     totalShipments: 1,
     registeredShipments: registered,
     excludedShipments: 1 - registered,
+    pendingShipments: 1 - registered,
+    acknowledgedShipments: 0,
+    acknowledgedShipmentIds: [],
+    omittedShipments: 0,
+    omittedShipmentIds: [],
     coveragePercentage: registered * 100,
     totalGoldGrams: amount,
     includedCajuelas: registered * 260,

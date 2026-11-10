@@ -8,6 +8,7 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from "class-validator";
 
 import type { WorkerRequestStatus, WorkerStatus } from "./workers.contracts";
@@ -77,4 +78,11 @@ export class MergeWorkerRequestDto extends ResolveWorkerRequestDto {
 export class SetWorkerStateDto {
   @IsBoolean()
   active!: boolean;
+
+  @Transform(trim)
+  @ValidateIf((object: SetWorkerStateDto) => !object.active)
+  @IsString()
+  @MinLength(3)
+  @MaxLength(300)
+  reason?: string;
 }

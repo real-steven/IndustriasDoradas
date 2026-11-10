@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { requestErrorMessage } from "../../api/http";
@@ -14,10 +14,33 @@ import {
 import {
   downloadProductionReport,
   useProductionReport,
+  type ProductionReport,
+  type ProductionReportField,
   type ReportShipment,
 } from "./reports-data";
-import { ReportSettlements } from "./report-settlements";
 import { PayrollReportFeature } from "./payroll-report";
+
+const REPORT_FIELDS_STORAGE_KEY =
+  "industrias-doradas:reports:production-fields:v1";
+const RECOMMENDED_REPORT_FIELDS: ProductionReportField[] = [
+  "date",
+  "shipment",
+  "supplier",
+  "gold",
+  "karat",
+];
+const ALL_REPORT_FIELDS: ProductionReportField[] = [
+  "date",
+  "shipment",
+  "supplier",
+  "line",
+  "gold",
+  "karat",
+  "cajuelas",
+  "palos",
+  "responsible",
+  "sweeps",
+];
 
 export function ReportsFeature() {
   const { tr } = useLanguage();
@@ -75,7 +98,12 @@ function ProductionReportsFeature() {
   const { language, locale, tr } = useLanguage();
   const [parameters, setParameters] = useSearchParams();
   const filters = parseStatisticsFilters(parameters);
-  const report = useProductionReport(filters, language);
+  const [fields, setFields] = useState<ProductionReportField[]>(
+    loadSavedReportFields,
+  );
+  const [selectionSaved, setSelectionSaved] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const report = useProductionReport(filters, language, fields);
   const options = useManagementStatistics({
     ...filters,
     productionLineId: undefined,
@@ -85,8 +113,8 @@ function ProductionReportsFeature() {
   const [exporting, setExporting] = useState<"xlsx" | "pdf" | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const range = statisticsDateRange(filters);
-  const groupedShipments = useMemo(
-    () => groupShipments(report.data?.shipments ?? []),
+  const sortedShipments = useMemo(
+    () => sortShipments(report.data?.shipments ?? []),
     [report.data?.shipments],
   );
 
@@ -117,6 +145,7 @@ function ProductionReportsFeature() {
         filters,
         language,
         format,
+        fields,
       );
     } catch (error) {
       setDownloadError(
@@ -134,40 +163,52 @@ function ProductionReportsFeature() {
     }
   };
 
+  const toggleField = (field: ProductionReportField) => {
+    setSelectionSaved(false);
+    setFields((current) => {
+      if (current.includes(field)) {
+        return current.length === 1
+          ? current
+          : current.filter((item) => item !== field);
+      }
+      return ALL_REPORT_FIELDS.filter(
+        (candidate) => current.includes(candidate) || candidate === field,
+      );
+    });
+  };
+
+  const saveSelection = () => {
+    localStorage.setItem(REPORT_FIELDS_STORAGE_KEY, JSON.stringify(fields));
+    setSelectionSaved(true);
+  };
+
+  const restoreRecommended = () => {
+    setFields(RECOMMENDED_REPORT_FIELDS);
+    setSelectionSaved(false);
+  };
+
+  const fieldOptions = reportFieldOptions(tr);
+
   return (
     <div className="production-reports-feature">
       <section className="portal-panel reports-builder">
         <header>
           <div>
-            <h2>{tr("Producción y oro", "Production and gold")}</h2>
+            <h2>{tr("Crear reporte operativo", "Create operations report")}</h2>
             <p>
               {tr(
-                "Prepare el mismo corte gerencial en pantalla, Excel o PDF.",
-                "Prepare the same management cut on screen, Excel, or PDF.",
+                "Elija el período y la información antes de revisar el archivo.",
+                "Choose the period and information before reviewing the file.",
               )}
             </p>
           </div>
           <div className="reports-export-actions">
             <button
               type="button"
-              className="secondary"
-              disabled={exporting !== null || report.data === undefined}
-              aria-busy={exporting === "xlsx" || undefined}
-              onClick={() => void download("xlsx")}
+              disabled={report.data === undefined || report.isPending}
+              onClick={() => setPreviewOpen(true)}
             >
-              {exporting === "xlsx"
-                ? tr("GENERANDO EXCEL…", "GENERATING EXCEL…")
-                : tr("EXPORTAR EXCEL", "EXPORT EXCEL")}
-            </button>
-            <button
-              type="button"
-              disabled={exporting !== null || report.data === undefined}
-              aria-busy={exporting === "pdf" || undefined}
-              onClick={() => void download("pdf")}
-            >
-              {exporting === "pdf"
-                ? tr("GENERANDO PDF…", "GENERATING PDF…")
-                : tr("EXPORTAR PDF", "EXPORT PDF")}
+              {tr("REVISAR VISTA PREVIA", "REVIEW PREVIEW")}
             </button>
           </div>
         </header>
@@ -248,6 +289,49 @@ function ProductionReportsFeature() {
             </select>
           </label>
         </div>
+        <fieldset className="report-section-picker report-field-picker">
+          <legend>{tr("INCLUIR EN EL ARCHIVO", "INCLUDE IN FILE")}</legend>
+          {fieldOptions.map((option) => (
+            <label key={option.field}>
+              <input
+                type="checkbox"
+                checked={fields.includes(option.field)}
+                onChange={() => toggleField(option.field)}
+              />
+              <span>
+                <strong>
+                  {option.label}
+                  {RECOMMENDED_REPORT_FIELDS.includes(option.field) && (
+                    <small className="report-recommended-label">
+                      {tr("RECOMENDADO", "RECOMMENDED")}
+                    </small>
+                  )}
+                </strong>
+                <small>{option.description}</small>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <div className="report-selection-actions">
+          <button type="button" className="secondary" onClick={saveSelection}>
+            {tr("GUARDAR SELECCIÓN", "SAVE SELECTION")}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={restoreRecommended}
+          >
+            {tr("RESTABLECER RECOMENDADOS", "RESTORE RECOMMENDED")}
+          </button>
+          {selectionSaved && (
+            <span role="status">
+              {tr(
+                "Selección guardada en este equipo.",
+                "Selection saved on this device.",
+              )}
+            </span>
+          )}
+        </div>
         <p className="reports-period">
           {tr("Período incluido", "Included period")}: {range.fromDate} –{" "}
           {range.toDate}
@@ -298,59 +382,7 @@ function ProductionReportsFeature() {
                 )}
               </p>
             </section>
-          ) : (
-            <section className="portal-panel reports-preview">
-              <header>
-                <div>
-                  <h2>
-                    {tr("Vista previa por proveedor", "Supplier preview")}
-                  </h2>
-                  <p>
-                    {tr(
-                      "Abra cada proveedor para consultar los cargamentos que formarán parte del archivo.",
-                      "Open each supplier to review the shipments included in the file.",
-                    )}
-                  </p>
-                </div>
-              </header>
-              <div className="reports-supplier-groups">
-                {groupedShipments.map(([supplier, shipments]) => (
-                  <SupplierGroup
-                    key={supplier}
-                    supplier={supplier}
-                    shipments={shipments}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          <ReportSettlements
-            fromDate={range.fromDate}
-            toDate={range.toDate}
-            suppliers={report.data.suppliers}
-            shipments={report.data.shipments}
-          />
-
-          <section className="portal-panel reports-scope financial">
-            <div>
-              <span>
-                {tr("CÁLCULO TRANSPARENTE", "TRANSPARENT CALCULATION")}
-              </span>
-              <h2>
-                {tr(
-                  "De los gramos al total recibido",
-                  "From grams to total received",
-                )}
-              </h2>
-            </div>
-            <p>
-              {tr(
-                "Las liquidaciones se editan únicamente como borrador. Al aprobarlas quedan protegidas, conservan el responsable y pasan a formar parte del Excel y PDF gerencial; los borradores no alteran los totales oficiales.",
-                "Settlements are editable only as drafts. Once approved they are locked, retain their responsible person, and become part of the management Excel and PDF; drafts do not alter official totals.",
-              )}
-            </p>
-          </section>
+          ) : null}
 
           <p className="reports-generated">
             {tr("Reporte calculado el", "Report calculated on")}{" "}
@@ -360,108 +392,327 @@ function ProductionReportsFeature() {
               timeZone: report.data.timezone,
             }).format(new Date(report.data.generatedAtUtc))}
           </p>
+          {previewOpen && (
+            <ProductionReportPreview
+              report={report.data}
+              fields={fields}
+              shipments={sortedShipments}
+              exporting={exporting}
+              onClose={() => setPreviewOpen(false)}
+              onDownload={download}
+            />
+          )}
         </>
       )}
     </div>
   );
 }
 
-function SupplierGroup({
-  supplier,
+function ProductionReportPreview({
+  report,
+  fields,
   shipments,
+  exporting,
+  onClose,
+  onDownload,
 }: {
-  supplier: string;
+  report: ProductionReport;
+  fields: ProductionReportField[];
   shipments: ReportShipment[];
+  exporting: "xlsx" | "pdf" | null;
+  onClose: () => void;
+  onDownload: (format: "xlsx" | "pdf") => Promise<void>;
 }) {
   const { locale, tr } = useLanguage();
-  const totals = shipmentTotals(shipments);
+  const fieldOptions = reportFieldOptions(tr);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
   return (
-    <details className="reports-supplier-group" open={shipments.length <= 4}>
-      <summary>
-        <span>
-          <strong>{supplier}</strong>
-          <small>
-            {shipments.length.toLocaleString(locale)}{" "}
-            {tr("cargamentos", "shipments")}
-          </small>
-        </span>
-        <span>
-          <strong>{formatNumber(totals.goldGrams, locale, 2)} g</strong>
-          <small>
-            {totals.palosPerCajuela === null
-              ? tr("Rendimiento pendiente", "Yield pending")
-              : `${formatNumber(totals.palosPerCajuela, locale, 4)} ${tr("palos/cajuela", "palos/cajuela")}`}
-          </small>
-        </span>
-      </summary>
-      <div className="reports-table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>{tr("Cargamento", "Shipment")}</th>
-              <th>{tr("Cierre", "Completed")}</th>
-              <th>{tr("Línea", "Line")}</th>
-              <th>{tr("Cajuelas", "Cajuelas")}</th>
-              <th>{tr("Barridas", "Sweeps")}</th>
-              <th>{tr("Oro", "Gold")}</th>
-              <th>{tr("Palos/cajuela", "Palos/cajuela")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shipments.map((shipment) => (
-              <tr key={shipment.shipmentId}>
-                <th scope="row">{shipment.shipmentCode}</th>
-                <td>{formatDate(shipment.completedAtUtc, locale)}</td>
-                <td>{shipment.productionLineName}</td>
-                <td>{shipment.cajuelaTotal.toLocaleString(locale)}</td>
-                <td>{shipment.sweepCount.toLocaleString(locale)}</td>
-                <td>
-                  {shipment.goldAmountGrams === null
-                    ? tr("Pendiente", "Pending")
-                    : `${formatNumber(shipment.goldAmountGrams, locale, 2)} g`}
-                </td>
-                <td>{formatNullable(shipment.palosPerCajuela, locale, 4)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
+    <div className="payroll-modal-backdrop" onMouseDown={onClose}>
+      <section
+        className="report-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={tr("Vista previa del reporte", "Report preview")}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <span>{tr("VISTA PREVIA", "PREVIEW")}</span>
+            <h2>{tr("Reporte operativo", "Operations report")}</h2>
+            <p>
+              {report.period.fromUtc.slice(0, 10)} –{" "}
+              {report.period.toUtc.slice(0, 10)}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="secondary payroll-modal-close"
+            aria-label={tr("Cerrar", "Close")}
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="report-preview-modal-content">
+          <section>
+            <div className="report-preview-heading">
+              <div>
+                <h3>{tr("Cargamentos incluidos", "Included shipments")}</h3>
+                <p>
+                  {tr(
+                    "Una sola tabla, ordenada por proveedor y fecha.",
+                    "One table, ordered by supplier and date.",
+                  )}
+                </p>
+              </div>
+              <strong>
+                {tr("Oro total", "Total gold")}:{" "}
+                {formatNumber(report.summary.totalGoldGrams, locale, 2)} g
+              </strong>
+            </div>
+            <div className="reports-table-scroll report-preview-table">
+              <table>
+                <thead>
+                  <tr>
+                    {fields.map((field) => (
+                      <th key={field}>
+                        {fieldOptions.find((option) => option.field === field)
+                          ?.label ?? field}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shipments.map((shipment) => (
+                    <tr key={shipment.shipmentId}>
+                      {fields.map((field, index) => {
+                        const value = reportFieldValue(
+                          report,
+                          shipment,
+                          field,
+                          locale,
+                          tr,
+                        );
+                        return index === 0 ? (
+                          <th key={field} scope="row">
+                            {value}
+                          </th>
+                        ) : (
+                          <td key={field}>{value}</td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <footer>
+          <span>
+            {tr(
+              "El archivo incluirá únicamente los campos seleccionados.",
+              "The file will include only the selected fields.",
+            )}
+          </span>
+          <div className="reports-export-actions">
+            <button
+              type="button"
+              className="secondary"
+              disabled={exporting !== null}
+              onClick={() => void onDownload("xlsx")}
+            >
+              {exporting === "xlsx"
+                ? tr("GENERANDO…", "GENERATING…")
+                : tr("GENERAR EXCEL", "GENERATE EXCEL")}
+            </button>
+            <button
+              type="button"
+              disabled={exporting !== null}
+              onClick={() => void onDownload("pdf")}
+            >
+              {exporting === "pdf"
+                ? tr("GENERANDO…", "GENERATING…")
+                : tr("GENERAR PDF", "GENERATE PDF")}
+            </button>
+          </div>
+        </footer>
+      </section>
+    </div>
   );
 }
 
-function groupShipments(
-  shipments: ReportShipment[],
-): Array<[string, ReportShipment[]]> {
-  const groups = new Map<string, ReportShipment[]>();
-  for (const shipment of shipments) {
-    groups.set(shipment.supplierName, [
-      ...(groups.get(shipment.supplierName) ?? []),
-      shipment,
-    ]);
+function reportFieldOptions(
+  tr: (spanish: string, english: string) => string,
+): Array<{
+  field: ProductionReportField;
+  label: string;
+  description: string;
+}> {
+  return [
+    {
+      field: "date",
+      label: tr("Fecha de cierre", "Completion date"),
+      description: tr(
+        "Día en que terminó el cargamento.",
+        "Day when the shipment was completed.",
+      ),
+    },
+    {
+      field: "shipment",
+      label: tr("Cargamento", "Shipment"),
+      description: tr(
+        "Código que identifica el trabajo realizado.",
+        "Code identifying the completed work.",
+      ),
+    },
+    {
+      field: "supplier",
+      label: tr("Proveedor", "Supplier"),
+      description: tr(
+        "Persona o material propio que entregó el material.",
+        "Person or own material that supplied the load.",
+      ),
+    },
+    {
+      field: "line",
+      label: tr("Línea", "Line"),
+      description: tr(
+        "Línea de planta donde se procesó el cargamento.",
+        "Plant line where the shipment was processed.",
+      ),
+    },
+    {
+      field: "gold",
+      label: tr("Oro total", "Total gold"),
+      description: tr(
+        "Gramos de oro registrados para el cargamento.",
+        "Gold grams recorded for the shipment.",
+      ),
+    },
+    {
+      field: "karat",
+      label: tr("Quilataje", "Karat"),
+      description: tr(
+        "Resultados de quilataje registrados en la liquidación.",
+        "Karat results recorded in the settlement.",
+      ),
+    },
+    {
+      field: "cajuelas",
+      label: tr("Cajuelas", "Cajuelas"),
+      description: tr(
+        "Cantidad total de cajuelas procesadas.",
+        "Total cajuelas processed.",
+      ),
+    },
+    {
+      field: "palos",
+      label: tr("Palos", "Palos"),
+      description: tr(
+        "Equivalencia del oro registrado: un palo corresponde a 0,10 g.",
+        "Recorded gold equivalent: one palo equals 0.10 g.",
+      ),
+    },
+    {
+      field: "responsible",
+      label: tr("Responsable", "Responsible worker"),
+      description: tr(
+        "Trabajador responsable del cargamento.",
+        "Worker responsible for the shipment.",
+      ),
+    },
+    {
+      field: "sweeps",
+      label: tr("Barridas", "Sweeps"),
+      description: tr(
+        "Número de barridas realizadas durante el cargamento.",
+        "Number of sweeps completed during the shipment.",
+      ),
+    },
+  ];
+}
+
+function loadSavedReportFields(): ProductionReportField[] {
+  try {
+    const stored = localStorage.getItem(REPORT_FIELDS_STORAGE_KEY);
+    if (stored === null) return RECOMMENDED_REPORT_FIELDS;
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return RECOMMENDED_REPORT_FIELDS;
+    const valid = ALL_REPORT_FIELDS.filter((field) => parsed.includes(field));
+    return valid.length === 0 ? RECOMMENDED_REPORT_FIELDS : valid;
+  } catch {
+    return RECOMMENDED_REPORT_FIELDS;
   }
-  return [...groups.entries()].sort(([left], [right]) =>
-    left.localeCompare(right, "es"),
-  );
 }
 
-function shipmentTotals(shipments: ReportShipment[]) {
-  const totals = shipments.reduce(
-    (result, shipment) => ({
-      goldCajuelas:
-        result.goldCajuelas +
-        (shipment.goldAmountGrams === null ? 0 : shipment.cajuelaTotal),
-      goldGrams: result.goldGrams + (shipment.goldAmountGrams ?? 0),
-    }),
-    { goldCajuelas: 0, goldGrams: 0 },
-  );
-  return {
-    ...totals,
-    palosPerCajuela:
-      totals.goldCajuelas === 0
-        ? null
-        : (totals.goldGrams * 10) / totals.goldCajuelas,
-  };
+function sortShipments(shipments: ReportShipment[]): ReportShipment[] {
+  return [...shipments].sort((left, right) => {
+    const supplier = left.supplierName.localeCompare(right.supplierName, "es");
+    return supplier === 0
+      ? left.completedAtUtc.localeCompare(right.completedAtUtc)
+      : supplier;
+  });
+}
+
+function reportFieldValue(
+  report: ProductionReport,
+  shipment: ReportShipment,
+  field: ProductionReportField,
+  locale: string,
+  tr: (spanish: string, english: string) => string,
+): string {
+  switch (field) {
+    case "date":
+      return formatDate(shipment.completedAtUtc, locale);
+    case "shipment":
+      return shipment.shipmentCode;
+    case "supplier":
+      return shipment.supplierName;
+    case "line":
+      return shipment.productionLineName;
+    case "gold":
+      return shipment.goldAmountGrams === null
+        ? tr("Sin registrar", "Not recorded")
+        : `${formatNumber(shipment.goldAmountGrams, locale, 2)} g`;
+    case "karat":
+      return shipmentKarats(report, shipment.shipmentId, locale, tr);
+    case "cajuelas":
+      return shipment.cajuelaTotal.toLocaleString(locale);
+    case "palos":
+      return shipment.goldAmountGrams === null
+        ? tr("Sin registrar", "Not recorded")
+        : formatNumber(shipment.goldAmountGrams * 10, locale, 2);
+    case "responsible":
+      return shipment.responsibleWorkerName ?? tr("Sin responsable", "None");
+    case "sweeps":
+      return shipment.sweepCount.toLocaleString(locale);
+  }
+}
+
+function shipmentKarats(
+  report: ProductionReport,
+  shipmentId: string,
+  locale: string,
+  tr: (spanish: string, english: string) => string,
+): string {
+  const values = report.financialSettlements
+    .flatMap((settlement) => settlement.lines)
+    .filter((line) => line.shipmentId === shipmentId)
+    .sort((left, right) => left.displayOrder - right.displayOrder)
+    .map((line) => formatNumber(line.karat, locale, 2));
+  return values.length === 0
+    ? tr("Sin registrar", "Not recorded")
+    : values.join(" / ");
 }
 
 function formatDate(value: string, locale: string): string {
@@ -476,12 +727,4 @@ function formatNumber(value: number, locale: string, digits: number): string {
     maximumFractionDigits: digits,
     minimumFractionDigits: digits,
   });
-}
-
-function formatNullable(
-  value: number | null,
-  locale: string,
-  digits: number,
-): string {
-  return value === null ? "—" : formatNumber(value, locale, digits);
 }

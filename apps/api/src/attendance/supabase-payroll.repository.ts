@@ -74,18 +74,26 @@ export class SupabasePayrollRepository implements PayrollRepository {
     return row === undefined ? null : this.worker(row);
   }
 
-  async updateIdentity(
+  async updateProfile(
     organizationId: string,
     workerId: string,
-    identityNumber: string | null,
+    profile: {
+      name: string;
+      identityNumber: string | null;
+      email: string | null;
+      phone: string | null;
+    },
   ): Promise<void> {
-    const parameters = new URLSearchParams({
-      organization_id: `eq.${organizationId}`,
-      id: `eq.${workerId}`,
-    });
-    await this.request(`workers?${parameters}`, {
-      method: "PATCH",
-      body: JSON.stringify({ identity_number: identityNumber }),
+    await this.request("rpc/update_worker_profile_v1", {
+      method: "POST",
+      body: JSON.stringify({
+        target_organization_id: organizationId,
+        target_worker_id: workerId,
+        worker_name: profile.name,
+        worker_identity_number: profile.identityNumber ?? "",
+        worker_email: profile.email ?? "",
+        worker_phone: profile.phone ?? "",
+      }),
     });
   }
 
@@ -237,6 +245,9 @@ export class SupabasePayrollRepository implements PayrollRepository {
       organizationId: this.string(row, "organization_id"),
       plantId: this.string(row, "plant_id"),
       name: this.string(row, "name"),
+      userProfileId: this.nullableString(row, "user_profile_id"),
+      email: this.nullableString(row, "email"),
+      phone: this.nullableString(row, "phone"),
       identityNumber: this.nullableString(row, "identity_number"),
       category: this.string(row, "category"),
       status: this.string(row, "status"),

@@ -99,6 +99,9 @@ export interface WorkersRepository {
     organizationId: string,
     workerId: string,
     active: boolean,
+    governorProfileId: string,
+    reason: string | undefined,
+    occurredAt: string,
   ): Promise<WorkerItem | null>;
 }
 

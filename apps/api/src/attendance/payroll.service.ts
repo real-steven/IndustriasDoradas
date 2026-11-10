@@ -117,14 +117,24 @@ export class PayrollService {
     };
   }
 
-  async setIdentity(
+  async updateProfile(
     organizationId: string,
     workerId: string,
-    identityNumber: string | null,
+    profile: {
+      name: string;
+      identityNumber: string | null;
+      email: string | null;
+      phone: string | null;
+    },
     context: MutationContext,
   ) {
     const worker = await this.requireWorker(organizationId, workerId);
-    const normalized = identityNumber?.trim() || null;
+    const normalized = {
+      name: profile.name.trim(),
+      identityNumber: profile.identityNumber?.trim() || null,
+      email: profile.email?.trim().toLowerCase() || null,
+      phone: profile.phone?.trim() || null,
+    };
     return this.auditTrail.execute(
       {
         correlationId: context.correlationId,
@@ -136,17 +146,31 @@ export class PayrollService {
         entityId: workerId,
         failureResult: "REJECTED",
         failureReasonCode: "PAYROLL_PROFILE_REJECTED",
-        allowedChangeFields: ["identity_number_configured"],
+        allowedChangeFields: [
+          "name",
+          "identity_number_configured",
+          "email_configured",
+          "phone_configured",
+        ],
         changes: {
+          name: { before: worker.name, after: normalized.name },
           identity_number_configured: {
             before: worker.identityNumber !== null,
-            after: normalized !== null,
+            after: normalized.identityNumber !== null,
+          },
+          email_configured: {
+            before: worker.email !== null,
+            after: normalized.email !== null,
+          },
+          phone_configured: {
+            before: worker.phone !== null,
+            after: normalized.phone !== null,
           },
         },
       },
       async () => {
         try {
-          await this.repository.updateIdentity(
+          await this.repository.updateProfile(
             organizationId,
             workerId,
             normalized,

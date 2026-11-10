@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
+  IsEmail,
   IsIn,
   IsNumber,
   IsOptional,
@@ -39,11 +40,30 @@ export class PayrollWorkerDirectoryQueryDto {
 }
 
 export class UpdatePayrollWorkerProfileDto {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  name!: string;
+
   @ValidateIf((_object, value) => value !== null)
   @IsString()
   @MinLength(4)
   @MaxLength(30)
   identityNumber!: string | null;
+
+  @ValidateIf((_object, value) => value !== null)
+  @IsEmail()
+  @MaxLength(254)
+  email!: string | null;
+
+  @ValidateIf((_object, value) => value !== null)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  phone!: string | null;
 }
 
 export class CreatePayrollRateDto {

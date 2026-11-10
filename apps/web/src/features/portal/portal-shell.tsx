@@ -22,29 +22,16 @@ const primaryNavigation = [
     end: true,
   },
   {
-    to: "/gerencia/operacion",
-    label: "Operación",
-    labelEn: "Operations",
-    icon: "◫",
-  },
-  { to: "/gerencia/oro", label: "Oro", labelEn: "Gold", icon: "◆" },
-  {
-    to: "/gerencia/cargamentos",
-    label: "Cargamentos",
-    labelEn: "Shipments",
-    icon: "▤",
+    to: "/gerencia/oro",
+    label: "Oro y mercurio",
+    labelEn: "Gold and mercury",
+    icon: "◆",
   },
   {
     to: "/gerencia/auditoria",
     label: "Auditoría",
     labelEn: "Audit",
     icon: "◷",
-  },
-  {
-    to: "/gerencia/usuarios",
-    label: "Usuarios",
-    labelEn: "Users",
-    icon: "♙",
   },
   {
     to: "/gerencia/trabajadores",
@@ -77,11 +64,8 @@ const futureNavigation = [
 
 const pageTitles: Record<string, readonly [string, string]> = {
   "/gerencia": ["Resumen", "Overview"],
-  "/gerencia/operacion": ["Operación", "Operations"],
-  "/gerencia/oro": ["Oro", "Gold"],
-  "/gerencia/cargamentos": ["Cargamentos", "Shipments"],
+  "/gerencia/oro": ["Oro y mercurio", "Gold and mercury"],
   "/gerencia/auditoria": ["Auditoría", "Audit"],
-  "/gerencia/usuarios": ["Usuarios", "Users"],
   "/gerencia/estadisticas": ["Estadísticas", "Statistics"],
   "/gerencia/trabajadores": ["Trabajadores", "Workers"],
   "/gerencia/reportes": ["Reportes", "Reports"],

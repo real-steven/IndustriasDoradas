@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 
 import type {
   ProductionReport,
+  ProductionReportField,
   ProductionReportShipment,
 } from "./reports.contracts";
 
@@ -28,15 +29,194 @@ export class ReportsExcelExporter {
     );
     workbook.title = workbook.subject;
 
-    this.summarySheet(workbook, report);
-    this.shipmentsSheet(workbook, report);
-    this.settlementsSheet(workbook, report);
-    this.expensesSheet(workbook, report);
-    this.weeklySheet(workbook, report);
-    this.definitionsSheet(workbook, report);
+    this.selectedReportSheet(workbook, report);
 
     const value = await workbook.xlsx.writeBuffer();
     return Buffer.from(value);
+  }
+
+  private selectedReportSheet(
+    workbook: ExcelJS.Workbook,
+    report: ProductionReport,
+  ): void {
+    const fields = report.fields;
+    const sheet = workbook.addWorksheet(
+      this.text(report, "Reporte de oro", "Gold report"),
+      {
+        properties: { defaultRowHeight: 20 },
+        pageSetup: {
+          fitToPage: true,
+          fitToWidth: 1,
+          orientation: fields.length > 6 ? "landscape" : "portrait",
+        },
+        views: [{ state: "frozen", ySplit: 5 }],
+      },
+    );
+    sheet.columns = fields.map((field) => ({
+      key: field,
+      width: this.selectedColumnWidth(field),
+    }));
+    sheet.mergeCells(1, 1, 2, fields.length);
+    const title = sheet.getCell(1, 1);
+    title.value = this.text(
+      report,
+      "Reporte de oro por cargamento",
+      "Gold report by shipment",
+    );
+    title.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 16 };
+    title.alignment = { vertical: "middle" };
+    title.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
+
+    sheet.mergeCells(3, 1, 3, fields.length);
+    const period = `${this.date(report.period.fromUtc, report.language)} - ${this.date(report.period.toUtc, report.language)}`;
+    sheet.getCell(3, 1).value =
+      `${this.text(report, "Período", "Period")}: ${period}`;
+    sheet.getCell(3, 1).font = { color: { argb: "FF4E6874" }, italic: true };
+
+    const header = sheet.getRow(5);
+    fields.forEach((field, index) => {
+      header.getCell(index + 1).value = this.selectedFieldLabel(report, field);
+    });
+    this.tableHeader(header, 1, fields.length);
+
+    const shipments = [...report.shipments].sort((left, right) => {
+      const supplier = left.supplierName.localeCompare(
+        right.supplierName,
+        report.language,
+      );
+      return supplier === 0
+        ? left.completedAtUtc.localeCompare(right.completedAtUtc)
+        : supplier;
+    });
+    shipments.forEach((shipment, index) => {
+      const row = sheet.getRow(6 + index);
+      fields.forEach((field, fieldIndex) => {
+        const cell = row.getCell(fieldIndex + 1);
+        cell.value = this.selectedFieldValue(report, shipment, field);
+        if (
+          typeof cell.value === "number" &&
+          ["gold", "karat", "palos"].includes(field)
+        )
+          cell.numFmt = "#,##0.00";
+        if (
+          typeof cell.value === "number" &&
+          ["cajuelas", "sweeps"].includes(field)
+        )
+          cell.numFmt = "#,##0";
+      });
+      this.tableBody(row, 1, fields.length, index % 2 === 0);
+    });
+
+    const totalRow = sheet.getRow(6 + shipments.length);
+    totalRow.getCell(1).value = this.text(
+      report,
+      "TOTAL GENERAL",
+      "GRAND TOTAL",
+    );
+    const goldIndex = fields.indexOf("gold");
+    if (goldIndex >= 0) {
+      totalRow.getCell(goldIndex + 1).value = report.summary.totalGoldGrams;
+      totalRow.getCell(goldIndex + 1).numFmt = "#,##0.00";
+    }
+    for (let column = 1; column <= fields.length; column += 1) {
+      totalRow.getCell(column).font = {
+        bold: true,
+        color: { argb: `FF${NAVY}` },
+      };
+      totalRow.getCell(column).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: PALE_GREEN },
+      };
+    }
+
+    sheet.autoFilter = {
+      from: { row: 5, column: 1 },
+      to: { row: 5, column: fields.length },
+    };
+    this.applySheetDefaults(sheet);
+  }
+
+  private selectedColumnWidth(field: ProductionReportField): number {
+    return {
+      date: 16,
+      shipment: 18,
+      supplier: 28,
+      line: 22,
+      gold: 15,
+      karat: 18,
+      cajuelas: 13,
+      palos: 13,
+      responsible: 25,
+      sweeps: 12,
+    }[field];
+  }
+
+  private selectedFieldLabel(
+    report: ProductionReport,
+    field: ProductionReportField,
+  ): string {
+    const labels: Record<ProductionReportField, [string, string]> = {
+      date: ["Fecha de cierre", "Completion date"],
+      shipment: ["Cargamento", "Shipment"],
+      supplier: ["Proveedor", "Supplier"],
+      line: ["Línea", "Line"],
+      gold: ["Oro total (g)", "Total gold (g)"],
+      karat: ["Quilataje", "Karat"],
+      cajuelas: ["Cajuelas", "Cajuelas"],
+      palos: ["Palos", "Palos"],
+      responsible: ["Responsable", "Responsible worker"],
+      sweeps: ["Barridas", "Sweeps"],
+    };
+    return this.text(report, ...labels[field]);
+  }
+
+  private selectedFieldValue(
+    report: ProductionReport,
+    shipment: ProductionReportShipment,
+    field: ProductionReportField,
+  ): string | number {
+    switch (field) {
+      case "date":
+        return this.date(shipment.completedAtUtc, report.language);
+      case "shipment":
+        return shipment.shipmentCode;
+      case "supplier":
+        return this.safeText(shipment.supplierName);
+      case "line":
+        return this.safeText(shipment.productionLineName);
+      case "gold":
+        return (
+          shipment.goldAmountGrams ??
+          this.text(report, "Sin registrar", "Not recorded")
+        );
+      case "karat":
+        return this.shipmentKarats(report, shipment.shipmentId);
+      case "cajuelas":
+        return shipment.cajuelaTotal;
+      case "palos":
+        return shipment.goldAmountGrams === null
+          ? this.text(report, "Sin registrar", "Not recorded")
+          : shipment.goldAmountGrams * 10;
+      case "responsible":
+        return this.safeText(
+          shipment.responsibleWorkerName ??
+            this.text(report, "Sin responsable", "No responsible worker"),
+        );
+      case "sweeps":
+        return shipment.sweepCount;
+    }
+  }
+
+  private shipmentKarats(report: ProductionReport, shipmentId: string): string {
+    const values = report.financialSettlements
+      .flatMap((settlement) => settlement.lines)
+      .filter((line) => line.shipmentId === shipmentId)
+      .sort((left, right) => left.displayOrder - right.displayOrder)
+      .map((line) => this.numberText(line.karat, report.language, 2));
+    return values.length === 0
+      ? this.text(report, "Sin registrar", "Not recorded")
+      : values.join(" / ");
   }
 
   private summarySheet(
@@ -761,6 +941,17 @@ export class ReportsExcelExporter {
       timeStyle: "short",
       timeZone: "America/Costa_Rica",
     }).format(new Date(value));
+  }
+
+  private numberText(
+    value: number,
+    language: "es" | "en",
+    digits: number,
+  ): string {
+    return value.toLocaleString(language === "es" ? "es-CR" : "en-US", {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: digits,
+    });
   }
 
   private safeText(value: string): string {

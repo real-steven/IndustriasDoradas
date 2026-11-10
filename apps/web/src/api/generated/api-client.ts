@@ -232,6 +232,8 @@ export interface ManagementSweepMercury {
   remainderGrams: number | null;
   hasInputRecord: boolean;
   hasRemainderRecord: boolean;
+  inputMovementId: string | null;
+  remainderMovementId: string | null;
 }
 export interface GoldResultEntry {
   id: string;
@@ -244,6 +246,17 @@ export interface GoldResultEntry {
   recordedByDisplayName: string;
   supersedesResultId: string | null;
   correctionReason: string | null;
+}
+export interface GoldReviewEntry {
+  id: string;
+  organizationId: string;
+  shipmentId: string;
+  disposition: "PENDING" | "ACKNOWLEDGED" | "OMITTED";
+  recordedAtUtc: string;
+  recordedByProfileId: string;
+  recordedByDisplayName: string;
+  supersedesEntryId: string | null;
+  reason: string | null;
 }
 export interface GoldSupplierCoverage {
   supplierId: string;
@@ -260,6 +273,11 @@ export interface GoldSummary {
   totalShipments: number;
   registeredShipments: number;
   excludedShipments: number;
+  pendingShipments: number;
+  acknowledgedShipments: number;
+  acknowledgedShipmentIds: string[];
+  omittedShipments: number;
+  omittedShipmentIds: string[];
   coveragePercentage: number;
   totalGoldGrams: number;
   includedCajuelas: number;
@@ -268,6 +286,19 @@ export interface GoldSummary {
 }
 export interface RecordShipmentGoldInput {
   amountGrams: number;
+  correctionReason?: string;
+}
+export interface ReviewShipmentGoldInput {
+  disposition: "PENDING" | "ACKNOWLEDGED" | "OMITTED";
+  reason?: string;
+}
+export interface MercuryMeasurementInput {
+  lineComponentId: string;
+  inputGrams?: number;
+  remainderGrams?: number;
+}
+export interface RecordSweepMercuryInput {
+  measurements: MercuryMeasurementInput[];
   correctionReason?: string;
 }
 export interface PageManagementOperationLine {
@@ -498,6 +529,49 @@ export class ApiClient {
   ): Promise<GoldResultEntry> {
     return this.request<GoldResultEntry>(
       `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/gold-results`,
+      signal,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  }
+  listManagementShipmentGoldReviews(
+    organizationId: string,
+    shipmentId: string,
+    signal?: AbortSignal,
+  ): Promise<GoldReviewEntry[]> {
+    return this.request<GoldReviewEntry[]>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/gold-reviews`,
+      signal,
+    );
+  }
+  reviewManagementShipmentGold(
+    organizationId: string,
+    shipmentId: string,
+    input: ReviewShipmentGoldInput,
+    signal?: AbortSignal,
+  ): Promise<GoldReviewEntry> {
+    return this.request<GoldReviewEntry>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/gold-reviews`,
+      signal,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  }
+  recordManagementSweepMercury(
+    organizationId: string,
+    shipmentId: string,
+    sweepId: string,
+    input: RecordSweepMercuryInput,
+    signal?: AbortSignal,
+  ): Promise<PageManagementSweepMercury> {
+    return this.request<PageManagementSweepMercury>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/shipments/${encodeURIComponent(shipmentId)}/sweeps/${encodeURIComponent(sweepId)}/mercury`,
       signal,
       {
         method: "POST",

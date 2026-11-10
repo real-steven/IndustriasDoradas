@@ -124,6 +124,7 @@ export class WorkersController {
       organizationId,
       workerId,
       body.active,
+      body.reason,
       this.context(request),
     );
   }

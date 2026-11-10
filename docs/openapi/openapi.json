@@ -1015,6 +1015,15 @@
         ],
         "type": "object"
       },
+      "MercuryMeasurementDto": {
+        "properties": {
+          "inputGrams": { "minimum": 0, "type": "number" },
+          "lineComponentId": { "format": "uuid", "type": "string" },
+          "remainderGrams": { "minimum": 0, "type": "number" }
+        },
+        "required": ["lineComponentId"],
+        "type": "object"
+      },
       "MergeWorkerRequestDto": {
         "properties": {
           "canonicalWorkerId": { "format": "uuid", "type": "string" },
@@ -1191,6 +1200,24 @@
             ],
             "type": "object"
           },
+          "fields": {
+            "items": {
+              "enum": [
+                "date",
+                "shipment",
+                "supplier",
+                "line",
+                "gold",
+                "karat",
+                "cajuelas",
+                "palos",
+                "responsible",
+                "sweeps"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
           "filters": {
             "properties": {
               "plantId": {
@@ -1245,6 +1272,13 @@
             "required": ["fromUtc", "toUtc"],
             "type": "object"
           },
+          "sections": {
+            "items": {
+              "enum": ["summary", "shipments", "financial"],
+              "type": "string"
+            },
+            "type": "array"
+          },
           "shipments": {
             "items": {
               "$ref": "#/components/schemas/ProductionReportShipment"
@@ -1270,6 +1304,8 @@
           "language",
           "timezone",
           "generatedAtUtc",
+          "sections",
+          "fields",
           "period",
           "filters",
           "summary",
@@ -1567,6 +1603,23 @@
         "required": ["amountGrams"],
         "type": "object"
       },
+      "RecordSweepMercuryDto": {
+        "properties": {
+          "correctionReason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "measurements": {
+            "items": { "$ref": "#/components/schemas/MercuryMeasurementDto" },
+            "maxItems": 12,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": ["measurements"],
+        "type": "object"
+      },
       "ReportSettlement": {
         "properties": {
           "approvedAtUtc": {
@@ -1788,6 +1841,17 @@
         "required": ["reason", "occurredAtUtc"],
         "type": "object"
       },
+      "ReviewShipmentGoldDto": {
+        "properties": {
+          "disposition": {
+            "enum": ["PENDING", "ACKNOWLEDGED", "OMITTED"],
+            "type": "string"
+          },
+          "reason": { "maxLength": 500, "minLength": 1, "type": "string" }
+        },
+        "required": ["disposition"],
+        "type": "object"
+      },
       "SaveReportSettlementDto": {
         "properties": {
           "buyerName": { "maxLength": 160, "minLength": 1, "type": "string" },
@@ -1866,7 +1930,10 @@
         "type": "object"
       },
       "SetWorkerStateDto": {
-        "properties": { "active": { "type": "boolean" } },
+        "properties": {
+          "active": { "type": "boolean" },
+          "reason": { "maxLength": 300, "minLength": 3, "type": "string" }
+        },
         "required": ["active"],
         "type": "object"
       },
@@ -2002,14 +2069,27 @@
       },
       "UpdatePayrollWorkerProfileDto": {
         "properties": {
+          "email": {
+            "format": "email",
+            "maxLength": 254,
+            "nullable": true,
+            "type": "string"
+          },
           "identityNumber": {
             "maxLength": 30,
             "minLength": 4,
             "nullable": true,
             "type": "string"
+          },
+          "name": { "maxLength": 160, "minLength": 1, "type": "string" },
+          "phone": {
+            "maxLength": 40,
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
           }
         },
-        "required": ["identityNumber"],
+        "required": ["name", "identityNumber", "email", "phone"],
         "type": "object"
       },
       "UpdatePlantDto": {
@@ -8141,6 +8221,202 @@
         "tags": ["Gold"]
       }
     },
+    "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/gold-reviews": {
+      "get": {
+        "operationId": "GoldController_reviewHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "shipmentId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ManagementShipment" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Cargamento gerencial no encontrado"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Gold"]
+      },
+      "post": {
+        "operationId": "GoldController_review",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "shipmentId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReviewShipmentGoldDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ManagementShipment" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Cargamento gerencial no encontrado"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Gold"]
+      }
+    },
     "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/sweeps": {
       "get": {
         "operationId": "ManagementController_listShipmentSweeps",
@@ -8253,6 +8529,115 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Management"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/sweeps/{sweepId}/mercury": {
+      "post": {
+        "operationId": "GoldController_recordMercury",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "shipmentId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "sweepId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RecordSweepMercuryDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ManagementShipment" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Cargamento gerencial no encontrado"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Gold"]
       }
     },
     "/api/v1/organizations/{organizationId}/management/statistics": {
@@ -9545,6 +9930,45 @@
               "enum": ["es", "en"],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "sections",
+            "required": false,
+            "schema": {
+              "default": ["summary", "shipments"],
+              "items": {
+                "enum": ["summary", "shipments", "financial"],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fields",
+            "required": false,
+            "schema": {
+              "default": ["date", "shipment", "supplier", "gold", "karat"],
+              "items": {
+                "enum": [
+                  "date",
+                  "shipment",
+                  "supplier",
+                  "line",
+                  "gold",
+                  "karat",
+                  "cajuelas",
+                  "palos",
+                  "responsible",
+                  "sweeps"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
           }
         ],
         "responses": {
@@ -9666,6 +10090,45 @@
               "enum": ["es", "en"],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "sections",
+            "required": false,
+            "schema": {
+              "default": ["summary", "shipments"],
+              "items": {
+                "enum": ["summary", "shipments", "financial"],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fields",
+            "required": false,
+            "schema": {
+              "default": ["date", "shipment", "supplier", "gold", "karat"],
+              "items": {
+                "enum": [
+                  "date",
+                  "shipment",
+                  "supplier",
+                  "line",
+                  "gold",
+                  "karat",
+                  "cajuelas",
+                  "palos",
+                  "responsible",
+                  "sweeps"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
           }
         ],
         "responses": {
@@ -9786,6 +10249,45 @@
               "default": "es",
               "enum": ["es", "en"],
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sections",
+            "required": false,
+            "schema": {
+              "default": ["summary", "shipments"],
+              "items": {
+                "enum": ["summary", "shipments", "financial"],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fields",
+            "required": false,
+            "schema": {
+              "default": ["date", "shipment", "supplier", "gold", "karat"],
+              "items": {
+                "enum": [
+                  "date",
+                  "shipment",
+                  "supplier",
+                  "line",
+                  "gold",
+                  "karat",
+                  "cajuelas",
+                  "palos",
+                  "responsible",
+                  "sweeps"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
             }
           }
         ],

@@ -56,10 +56,10 @@ describe("portal gerencial", () => {
 
     const main = document.getElementById("contenido-gerencial");
     expect(main).not.toBeNull();
-    await user.click(screen.getByRole("link", { name: "Operación" }));
+    await user.click(screen.getByRole("link", { name: "Auditoría" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Operación" }),
+      await screen.findByRole("heading", { name: "Auditoría" }),
     ).toBeInTheDocument();
     await waitFor(() => expect(main).toHaveFocus());
   });
@@ -95,18 +95,18 @@ describe("portal gerencial", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("1 línea activa")).toBeInTheDocument();
     expect(screen.getByText("Cajuelas en proceso")).toBeInTheDocument();
-    expect(screen.getByText("260")).toBeInTheDocument();
-    expect(screen.getByText("Necesita atención")).toBeInTheDocument();
+    expect(screen.getAllByText("260").length).toBeGreaterThan(0);
     expect(
-      screen.getByText("1 cargamento está pendiente de registrar oro."),
+      await screen.findByRole("heading", { name: "Línea 1" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
+    expect(screen.queryByText("Actividad reciente")).not.toBeInTheDocument();
+    expect(screen.queryByText("Accesos rápidos")).not.toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Ver pendientes" }));
     expect(
-      screen.getByText("La planta registró una barrida de producción"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Línea 1" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("dialog", { name: "Pendientes de gerencia" }),
+    ).toHaveTextContent("1 cargamento está pendiente de registrar oro.");
     expect(
       dataRequests.some((url) =>
         url.includes("/management/operation-lines?page=1&pageSize=100"),
@@ -116,7 +116,7 @@ describe("portal gerencial", () => {
       dataRequests.some((url) => url.includes("/management/gold-summary")),
     ).toBe(true);
     expect(dataRequests.some((url) => url.includes("/audit-events"))).toBe(
-      true,
+      false,
     );
     expect(
       screen.queryByRole("link", { name: /Administración/u }),
@@ -126,7 +126,13 @@ describe("portal gerencial", () => {
   it("distingue una operacion vacia de una falla de conexion", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>(() => Promise.resolve(emptyPage())),
+      vi.fn<typeof fetch>((input) => {
+        if (isFreshnessRequest(input))
+          return Promise.resolve(freshnessResponse());
+        if (requestUrl(input).includes("/management/gold-summary"))
+          return Promise.resolve(portalResponse(input));
+        return Promise.resolve(emptyPage());
+      }),
     );
 
     renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
@@ -145,16 +151,20 @@ describe("portal gerencial", () => {
   it("presenta una barrida pendiente con la referencia entregada por la API", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>(() =>
-        Promise.resolve(
+      vi.fn<typeof fetch>((input) => {
+        if (isFreshnessRequest(input))
+          return Promise.resolve(freshnessResponse());
+        if (requestUrl(input).includes("/management/gold-summary"))
+          return Promise.resolve(portalResponse(input));
+        return Promise.resolve(
           managementPage({
             cajuelaTotal: 500,
             cajuelasSinceLastSweep: 250,
             sweepPending: true,
             nextSweepAt: 500,
           }),
-        ),
-      ),
+        );
+      }),
     );
 
     renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
@@ -172,6 +182,8 @@ describe("portal gerencial", () => {
     const transport = vi.fn<typeof fetch>((input) => {
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      if (requestUrl(input).includes("/management/gold-summary"))
+        return Promise.resolve(portalResponse(input));
       operationRequests += 1;
       return Promise.resolve(
         operationRequests === 1 ? managementPage() : errorResponse(),
@@ -201,6 +213,8 @@ describe("portal gerencial", () => {
     const transport = vi.fn<typeof fetch>((input) => {
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      if (requestUrl(input).includes("/management/gold-summary"))
+        return Promise.resolve(portalResponse(input));
       operationRequests += 1;
       return Promise.resolve(
         operationRequests === 1 ? errorResponse() : managementPage(),
@@ -238,46 +252,69 @@ describe("portal gerencial", () => {
   it("expone la navegacion confirmada y separa los modulos futuros", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia");
 
-    expect(screen.getByRole("link", { name: "Operación" })).toHaveAttribute(
-      "href",
-      "/gerencia/operacion",
-    );
-    expect(screen.getByRole("link", { name: "Oro" })).toHaveAttribute(
-      "href",
-      "/gerencia/oro",
-    );
+    expect(
+      screen.queryByRole("link", { name: "Operación" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Oro y mercurio" }),
+    ).toHaveAttribute("href", "/gerencia/oro");
+    expect(
+      screen.queryByRole("link", { name: "Cargamentos" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Trabajadores/u })).toHaveAttribute(
       "href",
       "/gerencia/trabajadores",
     );
+    expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
     expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("link", { name: "Ver estado del sistema" }),
     ).not.toBeInTheDocument();
   });
 
-  it.each([
-    ["/gerencia/operacion", "Operación"],
-    ["/gerencia/oro", "Oro por cargamento"],
-    ["/gerencia/cargamentos", "Cargamentos"],
-  ])("expone la ruta gerencial %s", (path, heading) => {
-    renderPortal("JEFE_EMPRESA", path);
+  it.each([["/gerencia/oro", "Oro y mercurio"]])(
+    "expone la ruta gerencial %s",
+    (path, heading) => {
+      renderPortal("JEFE_EMPRESA", path);
 
-    expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: heading }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("redirige el enlace anterior de cargamentos a auditoria", async () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia/cargamentos");
+
+    expect(await screen.findByRole("combobox", { name: "Área" })).toHaveValue(
+      "shipments",
+    );
   });
 
-  it("explica que el oro es opcional y no representa custodia", () => {
+  it("redirige el enlace anterior de operacion al resumen unificado", async () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia/operacion");
+
+    expect(
+      await screen.findByRole("heading", { name: "Buenos días, Lucía." }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Líneas en operación" }),
+    ).toBeInTheDocument();
+  });
+
+  it("abre oro y mercurio directamente en los filtros", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia/oro");
 
     expect(
-      screen.getByRole("heading", { name: "Oro por cargamento" }),
+      screen.getByRole("heading", { name: "Oro y mercurio" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Período")).toBeInTheDocument();
     expect(
-      screen.getByText(/Vacío significa no registrado/u),
-    ).toBeInTheDocument();
+      screen.queryByText("REGISTRO OPCIONAL DE GERENCIA"),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/sin custodia ni existencia acumulada/u),
-    ).toBeInTheDocument();
+      screen.queryByText(/pueden completarse o corregirse aquí/u),
+    ).not.toBeInTheDocument();
   });
 
   it("conserva la consulta real de auditoria en la nueva estructura", async () => {
@@ -385,6 +422,11 @@ function portalResponse(input: RequestInfo | URL): Response {
         totalShipments: 1,
         registeredShipments: 0,
         excludedShipments: 1,
+        pendingShipments: 1,
+        acknowledgedShipments: 0,
+        acknowledgedShipmentIds: [],
+        omittedShipments: 0,
+        omittedShipmentIds: [],
         coveragePercentage: 0,
         totalGoldGrams: 0,
         includedCajuelas: 0,

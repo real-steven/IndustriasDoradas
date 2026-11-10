@@ -76,8 +76,12 @@ describe("historial gerencial de cargamentos", () => {
 
     expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
     expect(
-      screen.getByRole("searchbox", { name: "Buscar por ID" }),
+      screen.getByRole("searchbox", { name: "Buscar actividad" }),
     ).toHaveValue("42000000");
+    expect(screen.getByRole("combobox", { name: "Área" })).toHaveValue(
+      "shipments",
+    );
+    expect(screen.queryByText("Historial")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(
         transport.mock.calls.some(([input]) => {
@@ -191,6 +195,38 @@ describe("historial gerencial de cargamentos", () => {
       within(detail).getByRole("button", { name: "Cerrar detalle" }),
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("filtra la auditoria por el area seleccionada", async () => {
+    const transport = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        json({
+          items: [],
+          page: 1,
+          pageSize: 12,
+          total: 0,
+          totalPages: 0,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal("/gerencia/auditoria?view=people");
+
+    expect(await screen.findByRole("combobox", { name: "Área" })).toHaveValue(
+      "people",
+    );
+    await waitFor(() => {
+      const request = transport.mock.calls.find(([input]) =>
+        requestUrl(input).includes("/audit-events"),
+      );
+      expect(request).toBeDefined();
+      expect(
+        new URL(requestUrl(request?.[0]), "http://localhost").searchParams.get(
+          "category",
+        ),
+      ).toBe("people");
+    });
   });
 
   it("identifica un cargamento activo sin ofrecer un enlace de detalle", async () => {

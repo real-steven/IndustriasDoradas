@@ -50,21 +50,48 @@ export interface ProductionReport {
   language: Language;
   timezone: "America/Costa_Rica";
   generatedAtUtc: string;
+  sections: ProductionReportSection[];
+  fields: ProductionReportField[];
   period: { fromUtc: string; toUtc: string };
   summary: ReportMetrics;
   suppliers: ReportSupplier[];
   shipments: ReportShipment[];
+  financialSettlements: ReportSettlement[];
+}
+
+export type ProductionReportSection = "summary" | "shipments" | "financial";
+export type ProductionReportField =
+  | "date"
+  | "shipment"
+  | "supplier"
+  | "line"
+  | "gold"
+  | "karat"
+  | "cajuelas"
+  | "palos"
+  | "responsible"
+  | "sweeps";
+
+export interface ReportSettlement {
+  id: string;
+  supplierId: string;
+  lines: Array<{
+    shipmentId: string;
+    karat: number;
+    displayOrder: number;
+  }>;
 }
 
 export function useProductionReport(
   filters: StatisticsFilters,
   language: Language,
+  fields: ProductionReportField[],
 ) {
   const auth = useAuth();
   const token = auth.session?.access_token ?? "";
   const organizationId = auth.profile?.organizationId ?? "";
   const profileId = auth.profile?.profileId ?? "";
-  const query = reportQuery(filters, language);
+  const query = reportQuery(filters, language, fields);
   return useQuery({
     queryKey: scopedQueryKey(
       "production-report",
@@ -90,8 +117,9 @@ export async function downloadProductionReport(
   filters: StatisticsFilters,
   language: Language,
   format: "xlsx" | "pdf",
+  fields: ProductionReportField[],
 ): Promise<void> {
-  const query = reportQuery(filters, language);
+  const query = reportQuery(filters, language, fields);
   const result = await apiDownload(
     `/organizations/${encodeURIComponent(organizationId)}/reports/production.${format}?${query}`,
     accessToken,
@@ -106,12 +134,18 @@ export async function downloadProductionReport(
   URL.revokeObjectURL(url);
 }
 
-function reportQuery(filters: StatisticsFilters, language: Language): string {
+function reportQuery(
+  filters: StatisticsFilters,
+  language: Language,
+  fields: ProductionReportField[],
+): string {
   const range = statisticsDateRange(filters);
   const parameters = new URLSearchParams({
     fromUtc: range.fromUtc,
     toUtc: range.toUtc,
     language,
+    sections: fields.includes("karat") ? "shipments,financial" : "shipments",
+    fields: fields.join(","),
   });
   if (filters.productionLineId !== undefined)
     parameters.set("productionLineId", filters.productionLineId);

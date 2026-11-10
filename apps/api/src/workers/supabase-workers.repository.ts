@@ -154,21 +154,22 @@ export class SupabaseWorkersRepository implements WorkersRepository {
     organizationId: string,
     workerId: string,
     active: boolean,
+    governorProfileId: string,
+    reason: string | undefined,
+    occurredAt: string,
   ): Promise<WorkerItem | null> {
-    const parameters = new URLSearchParams({
-      organization_id: `eq.${organizationId}`,
-      id: `eq.${workerId}`,
-    });
-    const response = await this.request(`workers?${parameters}`, {
+    await this.request("rpc/set_worker_management_state_v1", {
       body: JSON.stringify({
-        is_active: active,
-        deactivated_at: active ? null : new Date().toISOString(),
+        target_organization_id: organizationId,
+        target_worker_id: workerId,
+        governor_profile_id: governorProfileId,
+        worker_active: active,
+        governance_reason: reason ?? null,
+        governance_moment: occurredAt,
       }),
-      headers: { Prefer: "return=representation" },
-      method: "PATCH",
+      method: "POST",
     });
-    const rows = (await response.json()) as DatabaseRow[];
-    return rows[0] === undefined ? null : this.toWorker(rows[0]);
+    return this.findWorker(organizationId, workerId);
   }
 
   private async request(

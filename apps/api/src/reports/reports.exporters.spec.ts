@@ -7,7 +7,7 @@ import { ReportsPdfExporter } from "./reports.pdf";
 describe("report exporters", () => {
   const report = fixture();
 
-  it("creates a structured Excel workbook with management and detail sheets", async () => {
+  it("creates one concise Excel table with only the selected fields", async () => {
     const buffer = await new ReportsExcelExporter().export(report);
     const workbook = new ExcelJS.Workbook();
     const contents = buffer.buffer.slice(
@@ -17,18 +17,21 @@ describe("report exporters", () => {
     await workbook.xlsx.load(contents);
 
     expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
-      "Resumen",
-      "Cargamentos",
-      "Ingresos por oro",
-      "Gastos generales",
-      "Liquidación semanal",
-      "Definiciones",
+      "Reporte de oro",
     ]);
-    expect(workbook.getWorksheet("Resumen")?.getCell("A1").value).toBe(
-      "Reporte gerencial de producción y oro",
+    expect(workbook.getWorksheet("Reporte de oro")?.getCell("A1").value).toBe(
+      "Reporte de oro por cargamento",
     );
-    expect(workbook.getWorksheet("Cargamentos")?.getCell("A4").value).toBe(
-      "Proveedor Norte",
+    expect(workbook.getWorksheet("Reporte de oro")?.getRow(5).values).toEqual([
+      undefined,
+      "Fecha de cierre",
+      "Cargamento",
+      "Proveedor",
+      "Oro total (g)",
+      "Quilataje",
+    ]);
+    expect(workbook.getWorksheet("Reporte de oro")?.getCell("E6").value).toBe(
+      "13,42",
     );
     expect(buffer.subarray(0, 2).toString()).toBe("PK");
   });
@@ -39,7 +42,7 @@ describe("report exporters", () => {
     expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(buffer.length).toBeGreaterThan(2_000);
     expect(buffer.toString("latin1").match(/\/Type\s*\/Page\b/gu)).toHaveLength(
-      2,
+      1,
     );
   });
 });
@@ -62,6 +65,8 @@ function fixture(): ProductionReport {
     language: "es",
     timezone: "America/Costa_Rica",
     generatedAtUtc: "2026-11-04T18:00:00.000Z",
+    sections: ["summary", "shipments", "financial"],
+    fields: ["date", "shipment", "supplier", "gold", "karat"],
     period: {
       fromUtc: "2026-11-01T06:00:00.000Z",
       toUtc: "2026-12-01T06:00:00.000Z",
@@ -98,7 +103,51 @@ function fixture(): ProductionReport {
         palosPerCajuela: 5,
       },
     ],
-    financialSettlements: [],
+    financialSettlements: [
+      {
+        id: "settlement-id",
+        organizationId: "organization-id",
+        supplierId: "supplier-id",
+        supplierName: "Proveedor Norte",
+        weekStart: "2026-11-02",
+        buyerName: "Comprador",
+        destination: null,
+        currencyCode: "CRC",
+        participationPercentage: 0,
+        receivedAmountCrc: null,
+        notes: null,
+        status: "CLOSED",
+        revision: 1,
+        supersedesSettlementId: null,
+        rowVersion: 1,
+        createdByProfileId: "profile-id",
+        updatedByProfileId: "profile-id",
+        approvedByProfileId: "profile-id",
+        approvedAtUtc: "2026-11-04T18:00:00.000Z",
+        createdAtUtc: "2026-11-04T18:00:00.000Z",
+        updatedAtUtc: "2026-11-04T18:00:00.000Z",
+        totalGrams: 100,
+        grossAmountCrc: 0,
+        expensesCrc: 0,
+        netAmountCrc: 0,
+        participationAmountCrc: 0,
+        effectiveReceivedAmountCrc: 0,
+        lines: [
+          {
+            id: "line-id",
+            shipmentId: "42000000-0000-4000-8000-000000000001",
+            assayLabel: null,
+            karat: 13.42,
+            gramsLiquidated: 100,
+            pricePerKaratCrc: null,
+            pricePerGramCrc: 0,
+            grossAmountCrc: 0,
+            displayOrder: 1,
+          },
+        ],
+        expenses: [],
+      },
+    ],
     weeklyFinancialSummary: [],
     financialSummary: {
       settlements: 0,

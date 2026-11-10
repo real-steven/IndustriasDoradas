@@ -15,11 +15,16 @@ describe("oro por cargamento", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows supplier coverage and keeps a recorded zero distinct from pending", async () => {
+  it("keeps a recorded zero distinct from pending without duplicating supplier statistics", async () => {
     vi.stubGlobal("fetch", transport({ amount: 0, hasGold: true }));
     renderGold();
 
-    expect(await screen.findByText("50 %")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "CORREGIR RESULTADO" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Total registrado")).toBeInTheDocument();
+    expect(screen.getByText("Pendientes")).toBeInTheDocument();
+    expect(screen.getByText("Revisados sin dato")).toBeInTheDocument();
     expect(screen.queryByText("Resultados")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("columnheader", { name: "Excluidos" }),
@@ -65,7 +70,7 @@ describe("oro por cargamento", () => {
     renderGold();
 
     await user.click(
-      await screen.findByRole("button", { name: "REGISTRAR ORO" }),
+      await screen.findByRole("button", { name: "REGISTRAR DATOS" }),
     );
     await user.click(
       screen.getByRole("button", { name: "REGISTRAR RESULTADO" }),
@@ -131,7 +136,7 @@ describe("oro por cargamento", () => {
     renderGold();
 
     const trigger = await screen.findByRole("button", {
-      name: "REGISTRAR ORO",
+      name: "REGISTRAR DATOS",
     });
     await user.click(trigger);
 
@@ -144,12 +149,12 @@ describe("oro por cargamento", () => {
     ).toHaveFocus();
 
     const closeButton = screen.getByRole("button", {
-      name: "Cerrar registro de oro",
+      name: "Cerrar registro del cargamento",
     });
     closeButton.focus();
     await user.tab({ shift: true });
     expect(
-      screen.getByRole("button", { name: "REGISTRAR RESULTADO" }),
+      screen.getByRole("button", { name: "GUARDAR MERCURIO" }),
     ).toHaveFocus();
     await user.tab();
     expect(closeButton).toHaveFocus();
@@ -160,25 +165,111 @@ describe("oro por cargamento", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("labels the supplier comparison for keyboard and screen reader users", async () => {
+  it("combines gold and mercury without duplicating supplier statistics", async () => {
     vi.stubGlobal("fetch", transport({ amount: 2.5, hasGold: true }));
     renderGold();
 
-    const region = await screen.findByRole("region", {
-      name: "Comparación de oro por proveedor",
-    });
-    expect(region).toHaveAttribute("tabindex", "0");
     expect(
-      screen.getByRole("table", {
-        name: "Cobertura y resultados de oro agrupados por proveedor",
-      }),
+      await screen.findByRole("heading", { level: 1, name: "Oro y mercurio" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "Cobertura" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("columnheader", { name: "Excluidos" }),
+      screen.queryByText("Comparación por proveedor"),
     ).not.toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "CORREGIR RESULTADO" }),
+    );
+    expect(await screen.findByText("Mercurio por barrida")).toBeInTheDocument();
+    expect(screen.getByLabelText("Barrida")).toBeInTheDocument();
+  });
+
+  it("marks a shipment reviewed without turning missing gold into zero", async () => {
+    const user = userEvent.setup();
+    const fetchMock = transport({ amount: null, hasGold: false });
+    vi.stubGlobal("fetch", fetchMock);
+    renderGold();
+
+    await user.click(
+      await screen.findByRole("button", { name: "REVISADO SIN DATO" }),
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Motivo breve" }),
+      "No se conservó la pesada",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "CONFIRMAR SIN DATO" }),
+    );
+
+    expect(
+      await screen.findByText("Cargamento revisado sin dato."),
+    ).toBeInTheDocument();
+    expect(postBodyFor(fetchMock, "/gold-reviews")).toEqual({
+      disposition: "OMITTED",
+      reason: "No se conservó la pesada",
+    });
+  });
+
+  it("marks a shipment as read without hiding the option to register data", async () => {
+    const user = userEvent.setup();
+    const fetchMock = transport({ amount: null, hasGold: false });
+    vi.stubGlobal("fetch", fetchMock);
+    renderGold();
+
+    await user.click(
+      await screen.findByRole("button", { name: "MARCAR LEÍDO" }),
+    );
+
+    expect(
+      await screen.findByText("Cargamento marcado como leído."),
+    ).toBeInTheDocument();
+    expect(postBodyFor(fetchMock, "/gold-reviews")).toEqual({
+      disposition: "ACKNOWLEDGED",
+    });
+    expect(
+      screen.getByRole("button", { name: "REGISTRAR DATOS" }),
+    ).toBeInTheDocument();
+  });
+
+  it("requires a reason before correcting mercury received from desktop", async () => {
+    const user = userEvent.setup();
+    const fetchMock = transport({ amount: 2.5, hasGold: true });
+    vi.stubGlobal("fetch", fetchMock);
+    renderGold();
+
+    await user.click(
+      await screen.findByRole("button", { name: "CORREGIR RESULTADO" }),
+    );
+    const input = await screen.findByRole("textbox", {
+      name: "Mercurio de entrada (g)",
+    });
+    await user.clear(input);
+    await user.type(input, "14,25");
+    await user.click(screen.getByRole("button", { name: "GUARDAR MERCURIO" }));
+    expect(
+      screen.getByText(/Indique el motivo para corregir/u),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByPlaceholderText(
+        "Solo es obligatorio al cambiar un dato existente",
+      ),
+      "Corrección de pesada",
+    );
+    await user.click(screen.getByRole("button", { name: "GUARDAR MERCURIO" }));
+
+    expect(
+      await screen.findByText("Mercurio guardado correctamente."),
+    ).toBeInTheDocument();
+    expect(postBodyFor(fetchMock, `/sweeps/${SWEEP_ID}/mercury`)).toEqual({
+      measurements: [
+        {
+          lineComponentId: COMPONENT_ID,
+          inputGrams: 14.25,
+          remainderGrams: 8.25,
+        },
+      ],
+      correctionReason: "Corrección de pesada",
+    });
   });
 });
 
@@ -236,6 +327,35 @@ function transport({
   return vi.fn<typeof fetch>((input, init) => {
     const url = requestUrl(input);
     if (init?.method === "POST") {
+      if (url.includes("/gold-reviews")) {
+        const body = JSON.parse(requestBody(init)) as {
+          disposition: "PENDING" | "ACKNOWLEDGED" | "OMITTED";
+          reason?: string;
+        };
+        return Promise.resolve(
+          json({
+            id: REVIEW_ID,
+            organizationId: ORGANIZATION_ID,
+            shipmentId: SHIPMENT_ID,
+            disposition: body.disposition,
+            recordedAtUtc: "2026-10-12T18:05:00.000Z",
+            recordedByProfileId: PROFILE_ID,
+            recordedByDisplayName: "Lucía ficticia",
+            supersedesEntryId: null,
+            reason: body.reason ?? null,
+          }),
+        );
+      }
+      if (url.includes(`/sweeps/${SWEEP_ID}/mercury`))
+        return Promise.resolve(
+          json({
+            items: [],
+            page: 1,
+            pageSize: 100,
+            total: 0,
+            totalPages: 0,
+          }),
+        );
       const body = JSON.parse(requestBody(init)) as {
         amountGrams: number;
         correctionReason?: string;
@@ -261,6 +381,11 @@ function transport({
           totalShipments: 2,
           registeredShipments: 1,
           excludedShipments: 1,
+          pendingShipments: hasGold ? 1 : 2,
+          acknowledgedShipments: 0,
+          acknowledgedShipmentIds: [],
+          omittedShipments: 0,
+          omittedShipmentIds: [],
           coveragePercentage: 50,
           totalGoldGrams: amount ?? 0,
           includedCajuelas: hasGold ? 100 : 0,
@@ -300,6 +425,34 @@ function transport({
               ]
             : [],
         ),
+      );
+    if (url.includes("/gold-reviews")) return Promise.resolve(json([]));
+    if (url.includes("/sweeps"))
+      return Promise.resolve(
+        json({
+          items: [
+            {
+              organizationId: ORGANIZATION_ID,
+              shipmentId: SHIPMENT_ID,
+              sweepId: SWEEP_ID,
+              sweptAtUtc: "2026-10-12T17:00:00.000Z",
+              cajuelaCount: 100,
+              lineComponentId: COMPONENT_ID,
+              lineComponentName: "Rastra 1",
+              lineComponentOrder: 1,
+              inputGrams: 12.5,
+              remainderGrams: 8.25,
+              hasInputRecord: true,
+              hasRemainderRecord: true,
+              inputMovementId: MOVEMENT_INPUT_ID,
+              remainderMovementId: MOVEMENT_REMAINDER_ID,
+            },
+          ],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          totalPages: 1,
+        }),
       );
     if (url.includes("/management/shipments"))
       return Promise.resolve(json(shipmentPage(amount, hasGold)));
@@ -356,6 +509,18 @@ function postBodies(fetchMock: ReturnType<typeof transport>) {
     .map(([, init]) => JSON.parse(requestBody(init)) as unknown);
 }
 
+function postBodyFor(
+  fetchMock: ReturnType<typeof transport>,
+  pathname: string,
+): unknown {
+  const call = fetchMock.mock.calls.find(
+    ([input, init]) =>
+      init?.method === "POST" && requestUrl(input).includes(pathname),
+  );
+  if (call === undefined) throw new Error(`Expected POST ${pathname}`);
+  return JSON.parse(requestBody(call[1])) as unknown;
+}
+
 function requestBody(init: RequestInit | undefined): string {
   if (typeof init?.body !== "string")
     throw new Error("Expected a JSON request body");
@@ -383,3 +548,8 @@ const SHIPMENT_ID = "42000000-0000-4000-8000-000000000001";
 const SUPPLIER_ID = "35000000-0000-4000-8000-000000000001";
 const RESULT_ID = "46000000-0000-4000-8000-000000000002";
 const PREVIOUS_RESULT_ID = "46000000-0000-4000-8000-000000000001";
+const SWEEP_ID = "43000000-0000-4000-8000-000000000001";
+const COMPONENT_ID = "33000000-0000-4000-8000-000000000001";
+const MOVEMENT_INPUT_ID = "45000000-0000-4000-8000-000000000001";
+const MOVEMENT_REMAINDER_ID = "45000000-0000-4000-8000-000000000002";
+const REVIEW_ID = "47000000-0000-4000-8000-000000000001";

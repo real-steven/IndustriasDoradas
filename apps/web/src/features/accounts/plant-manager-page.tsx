@@ -41,7 +41,15 @@ const emptyForm: PlantManagerForm = {
   pinConfirmation: "",
 };
 
-export function PlantManagerPage() {
+export function PlantManagerPage({
+  embedded = false,
+  createOnly = false,
+  onCreated,
+}: {
+  embedded?: boolean;
+  createOnly?: boolean;
+  onCreated?: () => void;
+}) {
   const { language, locale, tr } = useLanguage();
   const managers = usePlantManagers();
   const workers = usePlantWorkers();
@@ -118,6 +126,7 @@ export function PlantManagerPage() {
             "Operator registered with pending approval status.",
           ),
         );
+        onCreated?.();
       } catch (error) {
         setFormError(accountError(error, language));
       }
@@ -141,6 +150,7 @@ export function PlantManagerPage() {
           "Account created pending activation. Deliver the password and PIN through a secure channel; they will not be shown again.",
         ),
       );
+      onCreated?.();
     } catch (error) {
       setFormError(accountError(error, language));
     }
@@ -182,18 +192,24 @@ export function PlantManagerPage() {
           onDismiss={dismissSuccess}
         />
       )}
-      <header className="portal-page-head">
-        <div>
-          <p className="eyebrow">{tr("ACCESO DE PLANTA", "PLANT ACCESS")}</p>
-          <h1>{tr("Usuarios de planta", "Plant users")}</h1>
-          <p>
-            {tr(
-              "Cree cuentas personales para desktop, prepare sus estaciones y actívelas cuando haya entregado las credenciales.",
-              "Create personal desktop accounts, prepare their stations, and activate them after delivering the credentials.",
-            )}
-          </p>
-        </div>
-      </header>
+      {embedded ? (
+        <h1 className="visually-hidden">
+          {tr("Usuarios de planta", "Plant users")}
+        </h1>
+      ) : (
+        <header className="portal-page-head">
+          <div>
+            <p className="eyebrow">{tr("ACCESO DE PLANTA", "PLANT ACCESS")}</p>
+            <h1>{tr("Usuarios de planta", "Plant users")}</h1>
+            <p>
+              {tr(
+                "Cree cuentas personales para desktop, prepare sus estaciones y actívelas cuando haya entregado las credenciales.",
+                "Create personal desktop accounts, prepare their stations, and activate them after delivering the credentials.",
+              )}
+            </p>
+          </div>
+        </header>
+      )}
 
       <section className="account-layout">
         <section className="portal-panel account-create-panel">
@@ -404,147 +420,212 @@ export function PlantManagerPage() {
           </form>
         </section>
 
+        {!createOnly && (
+          <section className="portal-panel account-list-panel">
+            <header>
+              <div>
+                <h2>{tr("Jefes de planta", "Plant managers")}</h2>
+                <p>
+                  {tr(
+                    "Active únicamente después de entregar las credenciales",
+                    "Activate only after delivering the credentials",
+                  )}
+                </p>
+              </div>
+              <span className="account-total">
+                {managers.data?.total ?? 0} {tr("cuentas", "accounts")}
+              </span>
+            </header>
+            {managers.isLoading && (
+              <p className="query-message">
+                {tr("Cargando cuentas…", "Loading accounts…")}
+              </p>
+            )}
+            {managers.isError && (
+              <p className="query-message error" role="alert">
+                {requestErrorMessage(managers.error, undefined, language)}
+              </p>
+            )}
+            {managers.data?.items.length === 0 && (
+              <div className="empty-state">
+                <span aria-hidden="true">♙</span>
+                <h3>{tr("Sin cuentas creadas", "No accounts created")}</h3>
+                <p>
+                  {tr(
+                    "Use el formulario para preparar el primer acceso de desktop.",
+                    "Use the form to prepare the first desktop access.",
+                  )}
+                </p>
+              </div>
+            )}
+            <div className="account-list">
+              {managerAccounts.slice(0, visibleManagerCount).map((account) => (
+                <article className="account-card" key={account.id}>
+                  <header>
+                    <div>
+                      <h3>{workerDisplayName(account.displayName)}</h3>
+                      <p>
+                        {tr("Creada", "Created")}{" "}
+                        {new Intl.DateTimeFormat(locale, {
+                          dateStyle: "medium",
+                        }).format(new Date(account.createdAt))}
+                      </p>
+                    </div>
+                    <span
+                      className={`account-status ${account.accountStatus.toLowerCase()}`}
+                    >
+                      {statusLabel(account, tr)}
+                    </span>
+                  </header>
+                  <dl>
+                    <div>
+                      <dt>{tr("Rol", "Role")}</dt>
+                      <dd>{tr("Jefe de planta", "Plant manager")}</dd>
+                    </div>
+                  </dl>
+                  {account.statusReason !== null && (
+                    <p className="account-reason">{account.statusReason}</p>
+                  )}
+                  {suspendingId === account.id ? (
+                    <div className="suspension-form">
+                      <label>
+                        {tr("Motivo de suspensión", "Suspension reason")}
+                        <textarea
+                          required
+                          maxLength={300}
+                          rows={3}
+                          value={suspensionReason}
+                          onChange={(event) =>
+                            setSuspensionReason(event.target.value)
+                          }
+                        />
+                      </label>
+                      <div>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => {
+                            setSuspendingId(null);
+                            setSuspensionReason("");
+                          }}
+                        >
+                          {tr("Cancelar", "Cancel")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            suspensionReason.trim().length === 0 ||
+                            governManager.isPending
+                          }
+                          onClick={() => void govern(account, "suspend")}
+                        >
+                          {tr("Confirmar suspensión", "Confirm suspension")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="account-actions">
+                      {account.accountStatus === "PENDING_APPROVAL" && (
+                        <button
+                          type="button"
+                          disabled={governManager.isPending}
+                          onClick={() => void govern(account, "approve")}
+                        >
+                          {tr("ACTIVAR CUENTA", "ACTIVATE ACCOUNT")}
+                        </button>
+                      )}
+                      {account.accountStatus === "ACTIVE" && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setSuspendingId(account.id)}
+                        >
+                          {tr("SUSPENDER", "SUSPEND")}
+                        </button>
+                      )}
+                      {account.accountStatus === "SUSPENDED" && (
+                        <button
+                          type="button"
+                          disabled={governManager.isPending}
+                          onClick={() => void govern(account, "reactivate")}
+                        >
+                          {tr("REACTIVAR", "REACTIVATE")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </article>
+              ))}
+              {visibleManagerCount < managerAccounts.length && (
+                <button
+                  type="button"
+                  className="secondary account-show-more"
+                  onClick={() =>
+                    setVisibleManagerCount(
+                      (current) => current + accountListBatchSize,
+                    )
+                  }
+                >
+                  {tr("VER MÁS", "SHOW MORE")}
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+      </section>
+      {!createOnly && (
         <section className="portal-panel account-list-panel">
           <header>
             <div>
-              <h2>{tr("Jefes de planta", "Plant managers")}</h2>
+              <h2>{tr("Operarios", "Operators")}</h2>
               <p>
                 {tr(
-                  "Active únicamente después de entregar las credenciales",
-                  "Activate only after delivering the credentials",
+                  "El prefijo OP identifica el rol sin modificar el nombre guardado.",
+                  "The OP prefix identifies the role without modifying the stored name.",
                 )}
               </p>
             </div>
-            <span className="account-total">
-              {managers.data?.total ?? 0} {tr("cuentas", "accounts")}
-            </span>
           </header>
-          {managers.isLoading && (
+          {workers.isLoading && (
             <p className="query-message">
-              {tr("Cargando cuentas…", "Loading accounts…")}
+              {tr("Cargando operarios…", "Loading operators…")}
             </p>
           )}
-          {managers.isError && (
+          {workers.isError && (
             <p className="query-message error" role="alert">
-              {requestErrorMessage(managers.error, undefined, language)}
+              {requestErrorMessage(workers.error, undefined, language)}
             </p>
-          )}
-          {managers.data?.items.length === 0 && (
-            <div className="empty-state">
-              <span aria-hidden="true">♙</span>
-              <h3>{tr("Sin cuentas creadas", "No accounts created")}</h3>
-              <p>
-                {tr(
-                  "Use el formulario para preparar el primer acceso de desktop.",
-                  "Use the form to prepare the first desktop access.",
-                )}
-              </p>
-            </div>
           )}
           <div className="account-list">
-            {managerAccounts.slice(0, visibleManagerCount).map((account) => (
-              <article className="account-card" key={account.id}>
+            {operatorAccounts.slice(0, visibleOperatorCount).map((worker) => (
+              <article className="account-card" key={worker.id}>
                 <header>
                   <div>
-                    <h3>{workerDisplayName(account.displayName)}</h3>
+                    <h3>{workerDisplayName(worker.name)}</h3>
                     <p>
-                      {tr("Creada", "Created")}{" "}
-                      {new Intl.DateTimeFormat(locale, {
-                        dateStyle: "medium",
-                      }).format(new Date(account.createdAt))}
+                      {worker.email ??
+                        worker.phone ??
+                        tr("Sin contacto", "No contact")}
                     </p>
                   </div>
                   <span
-                    className={`account-status ${account.accountStatus.toLowerCase()}`}
+                    className={`account-status ${worker.isActive ? "active" : "suspended"}`}
                   >
-                    {statusLabel(account, tr)}
+                    {worker.status === "PROVISIONAL"
+                      ? tr("PENDIENTE", "PENDING")
+                      : worker.isActive
+                        ? tr("ACTIVO", "ACTIVE")
+                        : tr("INACTIVO", "INACTIVE")}
                   </span>
                 </header>
-                <dl>
-                  <div>
-                    <dt>{tr("Rol", "Role")}</dt>
-                    <dd>{tr("Jefe de planta", "Plant manager")}</dd>
-                  </div>
-                </dl>
-                {account.statusReason !== null && (
-                  <p className="account-reason">{account.statusReason}</p>
-                )}
-                {suspendingId === account.id ? (
-                  <div className="suspension-form">
-                    <label>
-                      {tr("Motivo de suspensión", "Suspension reason")}
-                      <textarea
-                        required
-                        maxLength={300}
-                        rows={3}
-                        value={suspensionReason}
-                        onChange={(event) =>
-                          setSuspensionReason(event.target.value)
-                        }
-                      />
-                    </label>
-                    <div>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => {
-                          setSuspendingId(null);
-                          setSuspensionReason("");
-                        }}
-                      >
-                        {tr("Cancelar", "Cancel")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          suspensionReason.trim().length === 0 ||
-                          governManager.isPending
-                        }
-                        onClick={() => void govern(account, "suspend")}
-                      >
-                        {tr("Confirmar suspensión", "Confirm suspension")}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="account-actions">
-                    {account.accountStatus === "PENDING_APPROVAL" && (
-                      <button
-                        type="button"
-                        disabled={governManager.isPending}
-                        onClick={() => void govern(account, "approve")}
-                      >
-                        {tr("ACTIVAR CUENTA", "ACTIVATE ACCOUNT")}
-                      </button>
-                    )}
-                    {account.accountStatus === "ACTIVE" && (
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => setSuspendingId(account.id)}
-                      >
-                        {tr("SUSPENDER", "SUSPEND")}
-                      </button>
-                    )}
-                    {account.accountStatus === "SUSPENDED" && (
-                      <button
-                        type="button"
-                        disabled={governManager.isPending}
-                        onClick={() => void govern(account, "reactivate")}
-                      >
-                        {tr("REACTIVAR", "REACTIVATE")}
-                      </button>
-                    )}
-                  </div>
-                )}
               </article>
             ))}
-            {visibleManagerCount < managerAccounts.length && (
+            {visibleOperatorCount < operatorAccounts.length && (
               <button
                 type="button"
                 className="secondary account-show-more"
                 onClick={() =>
-                  setVisibleManagerCount(
+                  setVisibleOperatorCount(
                     (current) => current + accountListBatchSize,
                   )
                 }
@@ -554,68 +635,7 @@ export function PlantManagerPage() {
             )}
           </div>
         </section>
-      </section>
-      <section className="portal-panel account-list-panel">
-        <header>
-          <div>
-            <h2>{tr("Operarios", "Operators")}</h2>
-            <p>
-              {tr(
-                "El prefijo OP identifica el rol sin modificar el nombre guardado.",
-                "The OP prefix identifies the role without modifying the stored name.",
-              )}
-            </p>
-          </div>
-        </header>
-        {workers.isLoading && (
-          <p className="query-message">
-            {tr("Cargando operarios…", "Loading operators…")}
-          </p>
-        )}
-        {workers.isError && (
-          <p className="query-message error" role="alert">
-            {requestErrorMessage(workers.error, undefined, language)}
-          </p>
-        )}
-        <div className="account-list">
-          {operatorAccounts.slice(0, visibleOperatorCount).map((worker) => (
-            <article className="account-card" key={worker.id}>
-              <header>
-                <div>
-                  <h3>{workerDisplayName(worker.name)}</h3>
-                  <p>
-                    {worker.email ??
-                      worker.phone ??
-                      tr("Sin contacto", "No contact")}
-                  </p>
-                </div>
-                <span
-                  className={`account-status ${worker.isActive ? "active" : "suspended"}`}
-                >
-                  {worker.status === "PROVISIONAL"
-                    ? tr("PENDIENTE", "PENDING")
-                    : worker.isActive
-                      ? tr("ACTIVO", "ACTIVE")
-                      : tr("INACTIVO", "INACTIVE")}
-                </span>
-              </header>
-            </article>
-          ))}
-          {visibleOperatorCount < operatorAccounts.length && (
-            <button
-              type="button"
-              className="secondary account-show-more"
-              onClick={() =>
-                setVisibleOperatorCount(
-                  (current) => current + accountListBatchSize,
-                )
-              }
-            >
-              {tr("VER MÁS", "SHOW MORE")}
-            </button>
-          )}
-        </div>
-      </section>
+      )}
     </div>
   );
 }

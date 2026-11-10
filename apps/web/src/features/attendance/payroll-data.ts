@@ -26,6 +26,9 @@ export interface PayrollWorkerProfile {
   organizationId: string;
   plantId: string;
   name: string;
+  userProfileId: string | null;
+  email: string | null;
+  phone: string | null;
   identityNumber: string | null;
   category: string;
   status: string;
@@ -161,20 +164,70 @@ export function usePayrollReport(filters: PayrollFilters) {
   });
 }
 
-export function useUpdatePayrollIdentity() {
+export function useUpdatePayrollProfile() {
   const request = usePayrollRequest();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { workerId: string; identityNumber: string | null }) =>
-      apiRequest<PayrollWorkerProfile>(
-        `/organizations/${encodeURIComponent(request.organizationId)}/management/attendance/payroll/workers/${encodeURIComponent(input.workerId)}/profile`,
+    mutationFn: (input: {
+      workerId: string;
+      name: string;
+      identityNumber: string | null;
+      email: string | null;
+      phone: string | null;
+    }) => {
+      const { workerId, ...body } = input;
+      return apiRequest<PayrollWorkerProfile>(
+        `/organizations/${encodeURIComponent(request.organizationId)}/management/attendance/payroll/workers/${encodeURIComponent(workerId)}/profile`,
         request.token,
         {
           method: "PATCH",
-          body: JSON.stringify({ identityNumber: input.identityNumber }),
+          body: JSON.stringify(body),
+        },
+      );
+    },
+    onSuccess: () => invalidatePayroll(queryClient, request),
+  });
+}
+
+export function useSetPayrollWorkerState() {
+  const request = usePayrollRequest();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      workerId: string;
+      active: boolean;
+      reason?: string;
+    }) =>
+      apiRequest(
+        `/organizations/${encodeURIComponent(request.organizationId)}/workers/${encodeURIComponent(input.workerId)}/state`,
+        request.token,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            active: input.active,
+            ...(input.reason === undefined ? {} : { reason: input.reason }),
+          }),
         },
       ),
-    onSuccess: () => invalidatePayroll(queryClient, request),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidatePayroll(queryClient, request),
+        queryClient.invalidateQueries({
+          queryKey: scopedQueryKey(
+            "plant-workers",
+            request.profileId,
+            request.organizationId,
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: scopedQueryKey(
+            "plant-managers",
+            request.profileId,
+            request.organizationId,
+          ),
+        }),
+      ]);
+    },
   });
 }
 

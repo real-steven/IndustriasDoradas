@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 
 import type {
   ProductionReport,
+  ProductionReportField,
   ProductionReportShipment,
 } from "./reports.contracts";
 
@@ -43,12 +44,162 @@ export class ReportsPdfExporter {
       document.on("error", reject);
       document.on("end", () => resolve(Buffer.concat(chunks)));
 
-      this.summaryPage(document, report);
-      this.financialPages(document, report);
-      this.shipmentPages(document, report);
+      this.selectedReportPages(document, report);
       this.addFooters(document, report);
       document.end();
     });
+  }
+
+  private selectedReportPages(
+    document: PDFKit.PDFDocument,
+    report: ProductionReport,
+  ): void {
+    const fields = report.fields;
+    const baseWidths: Record<ProductionReportField, number> = {
+      date: 78,
+      shipment: 75,
+      supplier: 125,
+      line: 95,
+      gold: 72,
+      karat: 82,
+      cajuelas: 62,
+      palos: 60,
+      responsible: 115,
+      sweeps: 58,
+    };
+    const totalBaseWidth = fields.reduce(
+      (total, field) => total + baseWidths[field],
+      0,
+    );
+    const columns = fields.map((field) => ({
+      label: this.selectedFieldLabel(report, field),
+      width: (baseWidths[field] / totalBaseWidth) * 728,
+    }));
+    const shipments = [...report.shipments].sort((left, right) => {
+      const supplier = left.supplierName.localeCompare(
+        right.supplierName,
+        report.language,
+      );
+      return supplier === 0
+        ? left.completedAtUtc.localeCompare(right.completedAtUtc)
+        : supplier;
+    });
+
+    document.addPage();
+    this.pageHeader(document, report);
+    document
+      .fillColor(MUTED)
+      .font("Helvetica")
+      .fontSize(8)
+      .text(
+        `${this.text(report, "Período", "Period")}: ${this.date(report.period.fromUtc, report)} - ${this.date(report.period.toUtc, report)}`,
+        32,
+        88,
+      );
+    let y = 112;
+    this.tableHeader(document, columns, y);
+    y += 25;
+    for (const [index, shipment] of shipments.entries()) {
+      if (y > 535) {
+        document.addPage();
+        this.pageHeader(document, report);
+        y = 96;
+        this.tableHeader(document, columns, y);
+        y += 25;
+      }
+      this.tableRow(
+        document,
+        columns,
+        fields.map((field) => this.selectedFieldValue(report, shipment, field)),
+        y,
+        index % 2 === 0,
+      );
+      y += 23;
+    }
+
+    if (y > 505) {
+      document.addPage();
+      this.pageHeader(document, report);
+      y = 100;
+    }
+    document.roundedRect(32, y + 10, 728, 38, 6).fill("#e7f6ec");
+    document
+      .fillColor(NAVY)
+      .font("Helvetica-Bold")
+      .fontSize(10)
+      .text(this.text(report, "TOTAL GENERAL", "GRAND TOTAL"), 44, y + 24)
+      .text(
+        `${this.number(report.summary.totalGoldGrams, report, 2)} g`,
+        590,
+        y + 24,
+        { align: "right", width: 150 },
+      );
+  }
+
+  private selectedFieldLabel(
+    report: ProductionReport,
+    field: ProductionReportField,
+  ): string {
+    const labels: Record<ProductionReportField, [string, string]> = {
+      date: ["Fecha", "Date"],
+      shipment: ["Cargamento", "Shipment"],
+      supplier: ["Proveedor", "Supplier"],
+      line: ["Línea", "Line"],
+      gold: ["Oro (g)", "Gold (g)"],
+      karat: ["Quilataje", "Karat"],
+      cajuelas: ["Cajuelas", "Cajuelas"],
+      palos: ["Palos", "Palos"],
+      responsible: ["Responsable", "Responsible"],
+      sweeps: ["Barridas", "Sweeps"],
+    };
+    return this.text(report, ...labels[field]);
+  }
+
+  private selectedFieldValue(
+    report: ProductionReport,
+    shipment: ProductionReportShipment,
+    field: ProductionReportField,
+  ): string {
+    switch (field) {
+      case "date":
+        return this.date(shipment.completedAtUtc, report);
+      case "shipment":
+        return shipment.shipmentCode;
+      case "supplier":
+        return shipment.supplierName;
+      case "line":
+        return shipment.productionLineName;
+      case "gold":
+        return shipment.goldAmountGrams === null
+          ? this.text(report, "Sin registrar", "Not recorded")
+          : this.number(shipment.goldAmountGrams, report, 2);
+      case "karat":
+        return this.shipmentKarats(report, shipment.shipmentId);
+      case "cajuelas":
+        return this.number(shipment.cajuelaTotal, report, 0);
+      case "palos":
+        return shipment.goldAmountGrams === null
+          ? this.text(report, "Sin registrar", "Not recorded")
+          : this.number(shipment.goldAmountGrams * 10, report, 2);
+      case "responsible":
+        return (
+          shipment.responsibleWorkerName ??
+          this.text(report, "Sin responsable", "None")
+        );
+      case "sweeps":
+        return this.number(shipment.sweepCount, report, 0);
+    }
+  }
+
+  private shipmentKarats(report: ProductionReport, shipmentId: string): string {
+    const values = report.financialSettlements
+      .flatMap((settlement) => settlement.lines)
+      .filter((line) => line.shipmentId === shipmentId)
+      .sort((left, right) => left.displayOrder - right.displayOrder)
+      .map((line) => this.number(line.karat, report, 2));
+    return values.length === 0
+      ? this.text(report, "Sin registrar", "Not recorded")
+      : values.join(" / ");
   }
 
   private summaryPage(document: PDFKit.PDFDocument, report: ProductionReport) {

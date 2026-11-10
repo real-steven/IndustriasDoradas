@@ -4,6 +4,18 @@ import type {
 } from "./report-settlements.contracts";
 
 export type ReportLanguage = "es" | "en";
+export type ProductionReportSection = "summary" | "shipments" | "financial";
+export type ProductionReportField =
+  | "date"
+  | "shipment"
+  | "supplier"
+  | "line"
+  | "gold"
+  | "karat"
+  | "cajuelas"
+  | "palos"
+  | "responsible"
+  | "sweeps";
 
 export interface ProductionReportQuery {
   fromUtc: string;
@@ -12,6 +24,8 @@ export interface ProductionReportQuery {
   productionLineId?: string;
   supplierId?: string;
   language: ReportLanguage;
+  sections?: ProductionReportSection[];
+  fields?: ProductionReportField[];
 }
 
 export interface ProductionReportMetrics {
@@ -59,6 +73,8 @@ export interface ProductionReport {
   language: ReportLanguage;
   timezone: "America/Costa_Rica";
   generatedAtUtc: string;
+  sections: ProductionReportSection[];
+  fields: ProductionReportField[];
   period: {
     fromUtc: string;
     toUtc: string;

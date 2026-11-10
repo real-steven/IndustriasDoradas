@@ -1,6 +1,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -65,6 +66,79 @@ describe("expediente y pre-nómina por trabajador", () => {
     );
     expect(request.searchParams.get("toDate")).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
   });
+
+  it("edita el expediente y suspende al trabajador con motivo", async () => {
+    const user = userEvent.setup();
+    const profileBodies: unknown[] = [];
+    const stateBodies: unknown[] = [];
+    const transport = vi.fn<typeof fetch>((input, init) => {
+      const request = new URL(requestUrl(input), "http://localhost");
+      const method = init?.method ?? "GET";
+      if (
+        request.pathname.endsWith(`/payroll/workers/${WORKER_ID}/profile`) &&
+        method === "PATCH"
+      ) {
+        if (typeof init?.body !== "string")
+          throw new Error("Expected a JSON profile body");
+        profileBodies.push(JSON.parse(init.body));
+        return Promise.resolve(json(workerProfile()));
+      }
+      if (
+        request.pathname.endsWith(`/workers/${WORKER_ID}/state`) &&
+        method === "PATCH"
+      ) {
+        if (typeof init?.body !== "string")
+          throw new Error("Expected a JSON state body");
+        stateBodies.push(JSON.parse(init.body));
+        return Promise.resolve(json({ ...workerProfile(), isActive: false }));
+      }
+      if (request.pathname.endsWith("/payroll/workers"))
+        return Promise.resolve(json([workerProfile()]));
+      if (request.pathname.endsWith("/management/attendance/payroll"))
+        return Promise.resolve(json(payrollReport()));
+      throw new Error(`Unexpected request ${method} ${request.pathname}`);
+    });
+    vi.stubGlobal("fetch", transport);
+    renderAttendance("/gerencia/trabajadores");
+
+    await user.click(
+      await screen.findByRole("button", { name: /Operario Uno/u }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /EDITAR DATOS/u }),
+    );
+    const name = screen.getByLabelText("Nombre completo");
+    await user.clear(name);
+    await user.type(name, "Operario Actualizado");
+    const phone = screen.getByLabelText("Teléfono");
+    await user.clear(phone);
+    await user.type(phone, "8888-9999");
+    await user.click(screen.getByRole("button", { name: "GUARDAR CAMBIOS" }));
+
+    await screen.findByRole("button", { name: /EDITAR DATOS/u });
+    expect(profileBodies).toEqual([
+      {
+        name: "Operario Actualizado",
+        identityNumber: "1-1111-1111",
+        email: "operario@example.invalid",
+        phone: "8888-9999",
+      },
+    ]);
+
+    await user.click(
+      screen.getByRole("button", { name: "SUSPENDER TRABAJADOR" }),
+    );
+    await user.type(
+      screen.getByLabelText("Motivo de suspensión"),
+      "Permiso temporal",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "CONFIRMAR SUSPENSIÓN" }),
+    );
+    expect(stateBodies).toEqual([
+      { active: false, reason: "Permiso temporal" },
+    ]);
+  });
 });
 
 function renderAttendance(path: string): void {
@@ -105,6 +179,9 @@ function workerProfile() {
     organizationId: ORGANIZATION_ID,
     plantId: "31000000-0000-4000-8000-000000000001",
     name: "Operario Uno",
+    userProfileId: null,
+    email: "operario@example.invalid",
+    phone: "8888-1111",
     identityNumber: "1-1111-1111",
     category: "OPERARIO",
     status: "ACTIVO",

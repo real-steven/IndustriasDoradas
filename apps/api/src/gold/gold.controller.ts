@@ -10,7 +10,12 @@ import {
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 
-import { GoldFiltersDto, RecordShipmentGoldDto } from "./gold.dto";
+import {
+  GoldFiltersDto,
+  RecordShipmentGoldDto,
+  RecordSweepMercuryDto,
+  ReviewShipmentGoldDto,
+} from "./gold.dto";
 import { GoldService } from "./gold.service";
 import {
   RequireOrganizationParam,
@@ -58,6 +63,49 @@ export class GoldController {
     return this.gold.record(
       organizationId,
       shipmentId,
+      body,
+      this.context(request),
+    );
+  }
+
+  @Get("shipments/:shipmentId/gold-reviews")
+  @RequirePermissions("gold.read")
+  reviewHistory(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("shipmentId", ParseUUIDPipe) shipmentId: string,
+  ) {
+    return this.gold.reviewHistory(organizationId, shipmentId);
+  }
+
+  @Post("shipments/:shipmentId/gold-reviews")
+  @RequirePermissions("gold.results.manage")
+  review(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("shipmentId", ParseUUIDPipe) shipmentId: string,
+    @Body() body: ReviewShipmentGoldDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.gold.review(
+      organizationId,
+      shipmentId,
+      body,
+      this.context(request),
+    );
+  }
+
+  @Post("shipments/:shipmentId/sweeps/:sweepId/mercury")
+  @RequirePermissions("gold.results.manage")
+  recordMercury(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Param("shipmentId", ParseUUIDPipe) shipmentId: string,
+    @Param("sweepId", ParseUUIDPipe) sweepId: string,
+    @Body() body: RecordSweepMercuryDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.gold.recordMercury(
+      organizationId,
+      shipmentId,
+      sweepId,
       body,
       this.context(request),
     );

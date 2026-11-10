@@ -81,6 +81,28 @@ describe("ReportsService", () => {
       gramsPerCajuela: null,
       palosPerCajuela: null,
     });
+    expect(report.sections).toEqual(["summary", "shipments"]);
+    expect(report.fields).toEqual(["date", "shipment", "supplier", "gold"]);
+    expect(settlements.list.mock.calls).toHaveLength(0);
+  });
+
+  it("loads financial settlements only when the section is requested", async () => {
+    management.statistics.mockResolvedValue(statistics());
+    repository.listShipments.mockResolvedValue({
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      totalPages: 0,
+    });
+
+    const report = await service.production("organization-id", {
+      ...query(),
+      sections: ["financial"],
+    });
+
+    expect(report.sections).toEqual(["financial"]);
+    expect(settlements.list.mock.calls).toHaveLength(1);
   });
 
   it("rejects an invalid range before querying management data", async () => {

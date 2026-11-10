@@ -5,7 +5,11 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import type { ManagementShipment } from "../../api/generated/api-client";
+import type {
+  GoldReviewEntry,
+  ManagementShipment,
+  ManagementSweepMercury,
+} from "../../api/generated/api-client";
 import { useSearchParams } from "react-router-dom";
 import { useLanguage } from "../../i18n/language-context";
 
@@ -13,6 +17,8 @@ import {
   useGoldHistory,
   useGoldSummary,
   useRecordShipmentGold,
+  useRecordSweepMercury,
+  useReviewShipmentGold,
 } from "./gold-data";
 import {
   ApiConnectionError,
@@ -24,6 +30,7 @@ import {
   parseShipmentFilters,
   shortShipmentId,
   useManagementShipmentFilterOptions,
+  useManagementShipmentSweeps,
   useManagementShipments,
   type ShipmentFilters,
 } from "../management/management-shipments-data";
@@ -132,6 +139,11 @@ export function GoldFeature() {
                 <GoldShipmentRow
                   key={shipment.shipmentId}
                   shipment={shipment}
+                  disposition={reviewDisposition(
+                    shipment.shipmentId,
+                    summary.data?.acknowledgedShipmentIds ?? [],
+                    summary.data?.omittedShipmentIds ?? [],
+                  )}
                   open={(trigger) => openEditor(shipment, trigger)}
                 />
               ))}
@@ -147,7 +159,15 @@ export function GoldFeature() {
       </section>
       {selected !== null && (
         <div className="gold-dialog-layer">
-          <GoldEditor shipment={selected} close={closeEditor} />
+          <GoldEditor
+            shipment={selected}
+            disposition={reviewDisposition(
+              selected.shipmentId,
+              summary.data?.acknowledgedShipmentIds ?? [],
+              summary.data?.omittedShipmentIds ?? [],
+            )}
+            close={closeEditor}
+          />
         </div>
       )}
     </div>
@@ -176,6 +196,7 @@ function GoldSummaryPanel({
           label={tr("Oro por cajuela", "Gold per cajuela")}
           value="…"
         />
+        <GoldMetric label={tr("Leídos", "Read")} value="…" />
       </section>
     );
   if (query.isError || query.data === undefined)
@@ -199,104 +220,40 @@ function GoldSummaryPanel({
     );
 
   return (
-    <>
-      <section
-        className="gold-summary-grid"
-        aria-label={tr("Resumen de oro", "Gold summary")}
-      >
-        <GoldMetric
-          label={tr("Cobertura", "Coverage")}
-          value={`${formatNumber(query.data.coveragePercentage, locale)} %`}
-          detail={`${query.data.registeredShipments} / ${query.data.totalShipments} ${tr("cargamentos", "shipments")}`}
-        />
-        <GoldMetric
-          label={tr("Total registrado", "Recorded total")}
-          value={`${formatGrams(query.data.totalGoldGrams, locale)} g`}
-          detail={`${formatPalos(query.data.totalGoldGrams, locale)} ${tr("palos equivalentes", "equivalent palos")}`}
-        />
-        <GoldMetric
-          label={tr("Oro por cajuela", "Gold per cajuela")}
-          value={
-            query.data.gramsPerCajuela === null
-              ? tr("Sin datos", "No data")
-              : `${formatNumber(query.data.gramsPerCajuela, locale, 4)} g`
-          }
-          detail={`${query.data.includedCajuelas} ${tr("cajuelas incluidas", "included cajuelas")}`}
-        />
-      </section>
-      <section className="portal-panel supplier-coverage">
-        <header>
-          <div>
-            <h2>{tr("Comparación por proveedor", "Supplier comparison")}</h2>
-            <p>
-              {tr(
-                "Solo los cargamentos registrados aportan oro y cajuelas",
-                "Only recorded shipments contribute gold and cajuelas",
-              )}
-            </p>
-          </div>
-        </header>
-        {query.data.suppliers.length === 0 ? (
-          <GoldState
-            title={tr(
-              "Sin proveedores para comparar",
-              "No suppliers to compare",
-            )}
-          >
-            {tr(
-              "Cambie el período para ampliar la consulta.",
-              "Change the period to broaden the query.",
-            )}
-          </GoldState>
-        ) : (
-          <div
-            className="table-scroll"
-            role="region"
-            aria-label={tr(
-              "Comparación de oro por proveedor",
-              "Gold comparison by supplier",
-            )}
-            tabIndex={0}
-          >
-            <table>
-              <caption className="visually-hidden">
-                {tr(
-                  "Cobertura y resultados de oro agrupados por proveedor",
-                  "Gold coverage and results grouped by supplier",
-                )}
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">{tr("Proveedor", "Supplier")}</th>
-                  <th scope="col">{tr("Cobertura", "Coverage")}</th>
-                  <th scope="col">{tr("Oro", "Gold")}</th>
-                  <th scope="col">g / cajuela</th>
-                </tr>
-              </thead>
-              <tbody>
-                {query.data.suppliers.map((supplier) => (
-                  <tr key={supplier.supplierId}>
-                    <th scope="row">{supplier.supplierName}</th>
-                    <td data-label={tr("Cobertura", "Coverage")}>
-                      {supplier.registeredShipments}/{supplier.totalShipments} (
-                      {formatNumber(supplier.coveragePercentage, locale)} %)
-                    </td>
-                    <td data-label={tr("Oro", "Gold")}>
-                      {formatGrams(supplier.totalGoldGrams, locale)} g
-                    </td>
-                    <td data-label="g / cajuela">
-                      {supplier.gramsPerCajuela === null
-                        ? tr("Sin datos", "No data")
-                        : formatNumber(supplier.gramsPerCajuela, locale, 4)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+    <section
+      className="gold-summary-grid"
+      aria-label={tr("Resumen de oro", "Gold summary")}
+    >
+      <GoldMetric
+        label={tr("Total registrado", "Recorded total")}
+        value={`${formatGrams(query.data.totalGoldGrams, locale)} g`}
+        detail={`${query.data.registeredShipments} ${tr("cargamentos con dato", "shipments with data")}`}
+      />
+      <GoldMetric
+        label={tr("Pendientes", "Pending")}
+        value={String(query.data.pendingShipments)}
+        detail={tr(
+          "Requieren registrar oro o confirmar que no habrá dato",
+          "Require gold data or confirmation that no data will be recorded",
         )}
-      </section>
-    </>
+      />
+      <GoldMetric
+        label={tr("Leídos sin registrar", "Read without result")}
+        value={String(query.data.acknowledgedShipments)}
+        detail={tr(
+          "Ya no generan aviso, pero aún admiten registrar oro",
+          "No longer trigger a reminder, but gold can still be recorded",
+        )}
+      />
+      <GoldMetric
+        label={tr("Revisados sin dato", "Reviewed without data")}
+        value={String(query.data.omittedShipments)}
+        detail={tr(
+          "No se contabilizan como oro cero",
+          "They are not counted as zero gold",
+        )}
+      />
+    </section>
   );
 }
 
@@ -405,12 +362,52 @@ function FilterSelect({
 
 function GoldShipmentRow({
   shipment,
+  disposition,
   open,
 }: {
   shipment: ManagementShipment;
+  disposition: GoldReviewEntry["disposition"];
   open(this: void, trigger: HTMLButtonElement): void;
 }) {
   const { language, locale, tr } = useLanguage();
+  const reviewMutation = useReviewShipmentGold(shipment.shipmentId);
+  const [confirmWithoutData, setConfirmWithoutData] = useState(false);
+  const [reviewReason, setReviewReason] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const changeDisposition = async (
+    next: GoldReviewEntry["disposition"],
+    reason?: string,
+  ) => {
+    setFeedback(null);
+    try {
+      await reviewMutation.mutateAsync({
+        disposition: next,
+        ...(reason === undefined ? {} : { reason }),
+      });
+      setConfirmWithoutData(false);
+      setReviewReason("");
+      setFeedback(
+        next === "ACKNOWLEDGED"
+          ? tr("Cargamento marcado como leído.", "Shipment marked as read.")
+          : next === "OMITTED"
+            ? tr(
+                "Cargamento revisado sin dato.",
+                "Shipment reviewed without data.",
+              )
+            : tr(
+                "Cargamento devuelto a pendientes.",
+                "Shipment returned to pending.",
+              ),
+      );
+    } catch {
+      setFeedback(null);
+    }
+  };
+
+  const reviewError = reviewMutation.isError
+    ? mutationMessage(reviewMutation.error, language)
+    : null;
 
   return (
     <article className="gold-shipment-row">
@@ -433,6 +430,16 @@ function GoldShipmentRow({
               {tr("palos", "palos")}
             </small>
           </>
+        ) : disposition === "OMITTED" ? (
+          <>
+            <strong>{tr("Revisado", "Reviewed")}</strong>
+            <small>{tr("Sin dato de oro", "Without gold data")}</small>
+          </>
+        ) : disposition === "ACKNOWLEDGED" ? (
+          <>
+            <strong>{tr("Leído", "Read")}</strong>
+            <small>{tr("Sin registrar", "Not recorded")}</small>
+          </>
         ) : (
           <>
             <strong>{tr("Pendiente", "Pending")}</strong>
@@ -450,28 +457,111 @@ function GoldShipmentRow({
           <dd>{shipment.goldRevisionCount ?? 0}</dd>
         </div>
       </dl>
-      <button
-        type="button"
-        className="primary-button"
-        onClick={(event) => open(event.currentTarget)}
-      >
-        {shipment.hasGoldResult
-          ? tr("CORREGIR RESULTADO", "CORRECT RESULT")
-          : tr("REGISTRAR ORO", "RECORD GOLD")}
-      </button>
+      <div className="gold-row-actions">
+        <button
+          type="button"
+          className="primary-button"
+          onClick={(event) => open(event.currentTarget)}
+        >
+          {shipment.hasGoldResult
+            ? tr("CORREGIR RESULTADO", "CORRECT RESULT")
+            : tr("REGISTRAR DATOS", "RECORD DATA")}
+        </button>
+        {!shipment.hasGoldResult && disposition === "PENDING" && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={reviewMutation.isPending}
+            onClick={() => void changeDisposition("ACKNOWLEDGED")}
+          >
+            {tr("MARCAR LEÍDO", "MARK READ")}
+          </button>
+        )}
+        {!shipment.hasGoldResult && disposition !== "OMITTED" && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={reviewMutation.isPending}
+            onClick={() => {
+              setConfirmWithoutData(true);
+              setFeedback(null);
+            }}
+          >
+            {tr("REVISADO SIN DATO", "REVIEWED WITHOUT DATA")}
+          </button>
+        )}
+        {!shipment.hasGoldResult && disposition !== "PENDING" && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={reviewMutation.isPending}
+            onClick={() => void changeDisposition("PENDING")}
+          >
+            {tr("VOLVER A PENDIENTE", "RETURN TO PENDING")}
+          </button>
+        )}
+      </div>
+      {confirmWithoutData && (
+        <div className="gold-row-review-form">
+          <label>
+            <span>{tr("Motivo breve", "Brief reason")}</span>
+            <input
+              autoFocus
+              maxLength={500}
+              value={reviewReason}
+              onChange={(event) => {
+                setReviewReason(event.target.value);
+                if (reviewMutation.isError) reviewMutation.reset();
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setConfirmWithoutData(false);
+              setReviewReason("");
+            }}
+          >
+            {tr("CANCELAR", "CANCEL")}
+          </button>
+          <button
+            type="button"
+            disabled={
+              reviewReason.trim().length === 0 || reviewMutation.isPending
+            }
+            onClick={() =>
+              void changeDisposition("OMITTED", reviewReason.trim())
+            }
+          >
+            {tr("CONFIRMAR SIN DATO", "CONFIRM WITHOUT DATA")}
+          </button>
+        </div>
+      )}
+      {(reviewError !== null || feedback !== null) && (
+        <p
+          className={reviewError === null ? "form-success" : "form-error"}
+          role={reviewError === null ? "status" : "alert"}
+        >
+          {reviewError ?? feedback}
+        </p>
+      )}
     </article>
   );
 }
 
 function GoldEditor({
   shipment,
+  disposition,
   close,
 }: {
   shipment: ManagementShipment;
+  disposition: GoldReviewEntry["disposition"];
   close(this: void): void;
 }) {
   const { language, locale, tr } = useLanguage();
   const history = useGoldHistory(shipment.shipmentId);
+  const sweeps = useManagementShipmentSweeps(shipment.shipmentId);
   const mutation = useRecordShipmentGold(shipment.shipmentId);
   const [amount, setAmount] = useState(
     shipment.goldAmountGrams === null ? "" : String(shipment.goldAmountGrams),
@@ -585,7 +675,7 @@ function GoldEditor({
     >
       <header>
         <div>
-          <p className="eyebrow">{tr("RESULTADO TOTAL", "TOTAL RESULT")}</p>
+          <p className="eyebrow">{tr("ORO Y MERCURIO", "GOLD AND MERCURY")}</p>
           <h2 id="gold-editor-title">
             {tr("Cargamento", "Shipment")}{" "}
             {shortShipmentId(shipment.shipmentId)}
@@ -597,11 +687,33 @@ function GoldEditor({
         <button type="button" className="icon-button" onClick={close}>
           <span aria-hidden="true">×</span>
           <span className="visually-hidden">
-            {tr("Cerrar registro de oro", "Close gold record")}
+            {tr("Cerrar registro del cargamento", "Close shipment record")}
           </span>
         </button>
       </header>
 
+      <div className="gold-editor-section-heading">
+        <div>
+          <h3>{tr("Oro total", "Total gold")}</h3>
+          <p>
+            {tr(
+              "Dato opcional del cargamento completo.",
+              "Optional value for the complete shipment.",
+            )}
+          </p>
+        </div>
+        <span
+          className={`gold-review-status${disposition === "OMITTED" ? " omitted" : ""}`}
+        >
+          {hasCurrentResult
+            ? tr("Registrado", "Recorded")
+            : disposition === "OMITTED"
+              ? tr("Revisado sin dato", "Reviewed without data")
+              : disposition === "ACKNOWLEDGED"
+                ? tr("Leído", "Read")
+                : tr("Pendiente", "Pending")}
+        </span>
+      </div>
       <form onSubmit={(event) => void submit(event)}>
         <label>
           <span>{tr("Oro total en gramos", "Total gold in grams")}</span>
@@ -714,8 +826,315 @@ function GoldEditor({
           </ol>
         )}
       </div>
+      <MercuryEditor shipmentId={shipment.shipmentId} sweeps={sweeps} />
     </section>
   );
+}
+
+function MercuryEditor({
+  shipmentId,
+  sweeps,
+}: {
+  shipmentId: string;
+  sweeps: ReturnType<typeof useManagementShipmentSweeps>;
+}) {
+  const { language, tr } = useLanguage();
+  const groups = groupMercurySweeps(sweeps.data?.items ?? []);
+  const [selectedSweepId, setSelectedSweepId] = useState("");
+  const effectiveSweepId = groups.some(
+    (group) => group.sweepId === selectedSweepId,
+  )
+    ? selectedSweepId
+    : (groups[0]?.sweepId ?? "");
+
+  return (
+    <section className="mercury-management">
+      <div className="gold-editor-section-heading">
+        <div>
+          <h3>{tr("Mercurio por barrida", "Mercury by sweep")}</h3>
+          <p>
+            {tr(
+              "Revise los datos enviados por planta o complete los que hayan quedado pendientes.",
+              "Review plant data or complete measurements that remain pending.",
+            )}
+          </p>
+        </div>
+      </div>
+      {sweeps.isPending ? (
+        <p role="status">{tr("Cargando barridas…", "Loading sweeps…")}</p>
+      ) : sweeps.isError || sweeps.data === undefined ? (
+        <p className="form-error">
+          {tr(
+            "No se pudo consultar el mercurio del cargamento.",
+            "Shipment mercury data could not be loaded.",
+          )}
+        </p>
+      ) : groups.length === 0 ? (
+        <p className="gold-empty-note">
+          {tr(
+            "Este cargamento no tiene barridas registradas.",
+            "This shipment has no recorded sweeps.",
+          )}
+        </p>
+      ) : (
+        <>
+          <label className="mercury-sweep-select">
+            <span>{tr("Barrida", "Sweep")}</span>
+            <select
+              value={effectiveSweepId}
+              onChange={(event) => setSelectedSweepId(event.target.value)}
+            >
+              {groups.map((group, index) => (
+                <option key={group.sweepId} value={group.sweepId}>
+                  {tr("Barrida", "Sweep")} {index + 1} · {group.cajuelaCount}{" "}
+                  {tr("cajuelas", "cajuelas")} ·{" "}
+                  {formatCostaRicaDateTime(group.sweptAtUtc, language)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {groups.map((group) =>
+            group.sweepId === effectiveSweepId ? (
+              <MercurySweepForm
+                key={group.sweepId}
+                shipmentId={shipmentId}
+                group={group}
+              />
+            ) : null,
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+interface MercurySweepGroup {
+  sweepId: string;
+  sweptAtUtc: string;
+  cajuelaCount: number;
+  components: ManagementSweepMercury[];
+}
+
+function MercurySweepForm({
+  shipmentId,
+  group,
+}: {
+  shipmentId: string;
+  group: MercurySweepGroup;
+}) {
+  const { language, tr } = useLanguage();
+  const mutation = useRecordSweepMercury(shipmentId, group.sweepId);
+  const [values, setValues] = useState(() =>
+    Object.fromEntries(
+      group.components.flatMap((component) => [
+        [
+          `${component.lineComponentId}:input`,
+          amountText(component.inputGrams),
+        ],
+        [
+          `${component.lineComponentId}:remainder`,
+          amountText(component.remainderGrams),
+        ],
+      ]),
+    ),
+  );
+  const [reason, setReason] = useState("");
+  const [validation, setValidation] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const measurements = group.components.map((component) => ({
+      lineComponentId: component.lineComponentId,
+      inputGrams: parseOptionalAmount(
+        values[`${component.lineComponentId}:input`] ?? "",
+      ),
+      remainderGrams: parseOptionalAmount(
+        values[`${component.lineComponentId}:remainder`] ?? "",
+      ),
+    }));
+    if (
+      measurements.some(
+        (measurement) =>
+          measurement.inputGrams === null ||
+          measurement.remainderGrams === null,
+      )
+    ) {
+      setValidation(
+        tr(
+          "Use números positivos con máximo dos decimales o deje el campo vacío.",
+          "Use positive numbers with up to two decimals or leave the field empty.",
+        ),
+      );
+      return;
+    }
+    const validMeasurements = measurements.map((measurement) => ({
+      lineComponentId: measurement.lineComponentId,
+      ...(measurement.inputGrams === undefined
+        ? {}
+        : { inputGrams: measurement.inputGrams as number }),
+      ...(measurement.remainderGrams === undefined
+        ? {}
+        : { remainderGrams: measurement.remainderGrams as number }),
+    }));
+    const changedExisting = group.components.some((component, index) => {
+      const measurement = validMeasurements[index];
+      return (
+        (component.inputMovementId !== null &&
+          measurement?.inputGrams !== undefined &&
+          measurement.inputGrams !== component.inputGrams) ||
+        (component.remainderMovementId !== null &&
+          measurement?.remainderGrams !== undefined &&
+          measurement.remainderGrams !== component.remainderGrams)
+      );
+    });
+    if (changedExisting && reason.trim().length === 0) {
+      setValidation(
+        tr(
+          "Indique el motivo para corregir un dato de mercurio existente.",
+          "Enter a reason to correct existing mercury data.",
+        ),
+      );
+      return;
+    }
+    setValidation(null);
+    setSaved(false);
+    try {
+      await mutation.mutateAsync({
+        measurements: validMeasurements,
+        ...(reason.trim().length === 0
+          ? {}
+          : { correctionReason: reason.trim() }),
+      });
+      setReason("");
+      setSaved(true);
+    } catch {
+      setSaved(false);
+    }
+  };
+
+  return (
+    <form
+      className="mercury-sweep-form"
+      onSubmit={(event) => void submit(event)}
+    >
+      <div className="mercury-component-grid">
+        {group.components.map((component) => (
+          <fieldset key={component.lineComponentId}>
+            <legend>{component.lineComponentName}</legend>
+            <label>
+              <span>{tr("Mercurio de entrada (g)", "Input mercury (g)")}</span>
+              <input
+                inputMode="decimal"
+                value={values[`${component.lineComponentId}:input`] ?? ""}
+                placeholder={tr("Pendiente", "Pending")}
+                onChange={(event) => {
+                  setValues((current) => ({
+                    ...current,
+                    [`${component.lineComponentId}:input`]: event.target.value,
+                  }));
+                  setValidation(null);
+                  setSaved(false);
+                }}
+              />
+            </label>
+            <label>
+              <span>{tr("Remanente final (g)", "Final remainder (g)")}</span>
+              <input
+                inputMode="decimal"
+                value={values[`${component.lineComponentId}:remainder`] ?? ""}
+                placeholder={tr("Pendiente", "Pending")}
+                onChange={(event) => {
+                  setValues((current) => ({
+                    ...current,
+                    [`${component.lineComponentId}:remainder`]:
+                      event.target.value,
+                  }));
+                  setValidation(null);
+                  setSaved(false);
+                }}
+              />
+            </label>
+          </fieldset>
+        ))}
+      </div>
+      <label>
+        <span>{tr("Motivo de corrección", "Correction reason")}</span>
+        <input
+          value={reason}
+          maxLength={500}
+          placeholder={tr(
+            "Solo es obligatorio al cambiar un dato existente",
+            "Required only when changing existing data",
+          )}
+          onChange={(event) => {
+            setReason(event.target.value);
+            setValidation(null);
+            setSaved(false);
+          }}
+        />
+      </label>
+      {validation !== null && <p className="form-error">{validation}</p>}
+      {mutation.isError && (
+        <p className="form-error">
+          {mutationMessage(mutation.error, language)}
+        </p>
+      )}
+      {saved && (
+        <p className="form-success" role="status">
+          {tr(
+            "Mercurio guardado correctamente.",
+            "Mercury saved successfully.",
+          )}
+        </p>
+      )}
+      <div className="gold-editor-actions">
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={mutation.isPending}
+        >
+          {mutation.isPending
+            ? tr("GUARDANDO…", "SAVING…")
+            : tr("GUARDAR MERCURIO", "SAVE MERCURY")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function groupMercurySweeps(
+  items: readonly ManagementSweepMercury[],
+): MercurySweepGroup[] {
+  const groups = new Map<string, MercurySweepGroup>();
+  for (const item of items) {
+    const group = groups.get(item.sweepId);
+    if (group === undefined)
+      groups.set(item.sweepId, {
+        sweepId: item.sweepId,
+        sweptAtUtc: item.sweptAtUtc,
+        cajuelaCount: item.cajuelaCount,
+        components: [item],
+      });
+    else group.components.push(item);
+  }
+  return [...groups.values()]
+    .sort((left, right) => left.sweptAtUtc.localeCompare(right.sweptAtUtc))
+    .map((group) => ({
+      ...group,
+      components: [...group.components].sort(
+        (left, right) => left.lineComponentOrder - right.lineComponentOrder,
+      ),
+    }));
+}
+
+function amountText(value: number | null): string {
+  return value === null ? "" : String(value);
+}
+
+function parseOptionalAmount(value: string): number | null | undefined {
+  if (value.trim().length === 0) return undefined;
+  return parseAmount(value);
 }
 
 function GoldMetric({
@@ -813,6 +1232,16 @@ function uniqueOptions(
       label: optionLabel,
     }))
     .sort((left, right) => left.label.localeCompare(right.label, "es"));
+}
+
+function reviewDisposition(
+  shipmentId: string,
+  acknowledgedShipmentIds: readonly string[],
+  omittedShipmentIds: readonly string[],
+): GoldReviewEntry["disposition"] {
+  if (omittedShipmentIds.includes(shipmentId)) return "OMITTED";
+  if (acknowledgedShipmentIds.includes(shipmentId)) return "ACKNOWLEDGED";
+  return "PENDING";
 }
 
 function parseAmount(value: string): number | null {

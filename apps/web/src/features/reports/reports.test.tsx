@@ -20,6 +20,7 @@ let downloadClicks = 0;
 describe("reportes gerenciales", () => {
   beforeEach(() => {
     downloadClicks = 0;
+    localStorage.clear();
     const NativeUrl = URL;
     class TestUrl extends NativeUrl {
       static createObjectURL = vi.fn(() => "blob:report");
@@ -37,7 +38,8 @@ describe("reportes gerenciales", () => {
     vi.unstubAllGlobals();
   });
 
-  it("presents the operational report grouped by supplier without inventing financial data", async () => {
+  it("previews one concise shipment table with the recommended fields", async () => {
+    const user = userEvent.setup();
     const transport = vi.fn<typeof fetch>((input) =>
       Promise.resolve(responseFor(input)),
     );
@@ -46,19 +48,27 @@ describe("reportes gerenciales", () => {
     renderReports();
 
     expect(
-      await screen.findByRole("heading", { name: "Producción y oro" }),
+      await screen.findByRole("heading", { name: "Crear reporte operativo" }),
     ).toBeInTheDocument();
-    const shipment = await screen.findByText("42000001");
-    const group = shipment.closest("details");
-    expect(group).not.toBeNull();
-    if (group === null) throw new Error("Expected supplier group");
-    expect(within(group).getByText("Pendiente")).toBeInTheDocument();
-    expect(within(group).getAllByText("0,00 g")).not.toHaveLength(0);
-    expect(screen.getByText("Ingresos y gastos de oro")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "EXPORTAR EXCEL" }),
-    ).toBeEnabled();
-    expect(screen.getByRole("button", { name: "EXPORTAR PDF" })).toBeEnabled();
+      screen.queryByText("Ingresos y gastos de oro"),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "REVISAR VISTA PREVIA" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Vista previa del reporte" }),
+    ).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", {
+      name: "Vista previa del reporte",
+    });
+    expect(within(dialog).getByText("42000001")).toBeInTheDocument();
+    expect(within(dialog).getByText("13,42")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Proveedor Norte")).toHaveLength(2);
+    expect(within(dialog).queryByText("Cobertura")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Cajuelas")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "GENERAR EXCEL" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "GENERAR PDF" })).toBeEnabled();
   });
 
   it("sends the report filters to the API and downloads the PDF filename from the server", async () => {
@@ -69,10 +79,20 @@ describe("reportes gerenciales", () => {
     vi.stubGlobal("fetch", transport);
 
     renderReports();
-    await screen.findByText("42000001");
+    await screen.findByRole("heading", { name: "Crear reporte operativo" });
+    await screen.findByRole("option", { name: "Línea Norte" });
+    await screen.findByRole("option", { name: "Proveedor Norte" });
     await user.selectOptions(screen.getByLabelText("LÍNEA"), "line-id");
     await user.selectOptions(screen.getByLabelText("PROVEEDOR"), "supplier-id");
-    await user.click(screen.getByRole("button", { name: "EXPORTAR PDF" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "REVISAR VISTA PREVIA" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "REVISAR VISTA PREVIA" }),
+    );
+    await user.click(screen.getByRole("button", { name: "GENERAR PDF" }));
 
     await waitFor(() => {
       expect(
@@ -82,6 +102,9 @@ describe("reportes gerenciales", () => {
             url.pathname.endsWith("/reports/production.pdf") &&
             url.searchParams.get("productionLineId") === "line-id" &&
             url.searchParams.get("supplierId") === "supplier-id" &&
+            url.searchParams.get("sections") === "shipments,financial" &&
+            url.searchParams.get("fields") ===
+              "date,shipment,supplier,gold,karat" &&
             new Headers(init?.headers).get("Authorization") ===
               "Bearer fictitious-token"
           );
@@ -89,6 +112,57 @@ describe("reportes gerenciales", () => {
       ).toBe(true);
     });
     expect(downloadClicks).toBe(1);
+  });
+
+  it("saves the selected fields for future reports on the same device", async () => {
+    const user = userEvent.setup();
+    const transport = vi.fn<typeof fetch>((input, init) =>
+      Promise.resolve(responseFor(input, init)),
+    );
+    vi.stubGlobal("fetch", transport);
+
+    renderReports();
+    await screen.findByRole("heading", { name: "Crear reporte operativo" });
+    await user.click(screen.getByRole("checkbox", { name: /Cajuelas/u }));
+    await user.click(screen.getByRole("button", { name: "GUARDAR SELECCIÓN" }));
+    expect(
+      screen.getByText("Selección guardada en este equipo."),
+    ).toBeInTheDocument();
+    expect(
+      JSON.parse(
+        localStorage.getItem(
+          "industrias-doradas:reports:production-fields:v1",
+        ) ?? "[]",
+      ),
+    ).toContain("cajuelas");
+
+    cleanup();
+    renderReports();
+    expect(
+      await screen.findByRole("checkbox", { name: /Cajuelas/u }),
+    ).toBeChecked();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "REVISAR VISTA PREVIA" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "REVISAR VISTA PREVIA" }),
+    );
+    await user.click(screen.getByRole("button", { name: "GENERAR PDF" }));
+
+    await waitFor(() =>
+      expect(
+        transport.mock.calls.some(([input]) => {
+          const url = new URL(requestUrl(input), "http://localhost");
+          return (
+            url.pathname.endsWith("/reports/production.pdf") &&
+            url.searchParams.get("fields") ===
+              "date,shipment,supplier,gold,karat,cajuelas"
+          );
+        }),
+      ).toBe(true),
+    );
   });
 });
 
@@ -161,6 +235,8 @@ function statistics() {
   };
   return {
     generatedAtUtc: "2026-11-04T18:00:00.000Z",
+    sections: ["summary", "shipments"],
+    fields: ["date", "shipment", "supplier", "gold", "karat"],
     period: {
       fromUtc: "2026-11-01T06:00:00.000Z",
       toUtc: "2026-11-05T06:00:00.000Z",
@@ -215,6 +291,19 @@ function report() {
         gramsPerCajuela: null,
         palosPerCajuela: null,
       }),
+    ],
+    financialSettlements: [
+      {
+        id: "settlement-id",
+        supplierId: "supplier-id",
+        lines: [
+          {
+            shipmentId: "42000000-0000-4000-8000-000000000001",
+            karat: 13.42,
+            displayOrder: 1,
+          },
+        ],
+      },
     ],
   };
 }

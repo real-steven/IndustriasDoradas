@@ -10,8 +10,8 @@ begin
   where table_schema = 'app'
     and table_type = 'BASE TABLE';
 
-  if actual_count <> 51 then
-    raise exception 'expected 51 app tables, found %', actual_count;
+  if actual_count <> 52 then
+    raise exception 'expected 52 app tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count from app.roles;
@@ -98,8 +98,8 @@ begin
     and relations.relkind = 'r'
     and relations.relrowsecurity;
 
-  if actual_count <> 51 then
-    raise exception 'RLS must be enabled on all 51 app tables, found %', actual_count;
+  if actual_count <> 52 then
+    raise exception 'RLS must be enabled on all 52 app tables, found %', actual_count;
   end if;
 
   if exists (

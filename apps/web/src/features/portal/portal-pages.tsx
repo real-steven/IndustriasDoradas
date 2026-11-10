@@ -5,18 +5,12 @@ import { useLanguage } from "../../i18n/language-context";
 import { GoldFeature } from "../gold/gold";
 import { AttendanceFeature } from "../attendance/attendance";
 import {
-  OperationFreshness,
-  OperationLinesPanel,
-  OperationRefreshButton,
-} from "../management/management-operation";
-import {
   type ManagementFreshnessQuery,
   useManagementOperation,
 } from "../management/management-operation-data";
 import {
   ShipmentAuditFeature,
   ShipmentDetailFeature,
-  ShipmentsFeature,
 } from "../management/management-shipments";
 import { DashboardSummary } from "./dashboard-summary";
 import { StatisticsFeature } from "../statistics/statistics";
@@ -33,72 +27,15 @@ export function DashboardPage() {
   return <DashboardSummary operation={operation} freshness={freshness} />;
 }
 
-export function OperationPage() {
-  const { tr } = useLanguage();
-  const operation = useManagementOperation();
-  const freshness = usePortalFreshness();
-
-  return (
-    <PortalPage
-      title={tr("Operación", "Operations")}
-      eyebrow={tr("ESTADO ACTUAL DE LA PLANTA", "CURRENT PLANT STATUS")}
-      description={tr(
-        "Consulte las líneas activas, la producción acumulada, sus responsables y el avance de cada barrida.",
-        "Review active lines, accumulated production, assigned workers, and sweep progress.",
-      )}
-      actions={
-        <OperationRefreshButton query={operation} freshness={freshness} />
-      }
-    >
-      <div
-        className={`operation-freshness${operation.isError && operation.data !== undefined ? " stale" : ""}`}
-      >
-        <OperationFreshness query={operation} freshness={freshness} />
-      </div>
-      <OperationLinesPanel query={operation} />
-    </PortalPage>
-  );
-}
-
 export function GoldPage() {
   const { tr } = useLanguage();
 
   return (
-    <PortalPage
-      title={tr("Oro por cargamento", "Gold by shipment")}
-      eyebrow={tr(
-        "REGISTRO OPCIONAL DE GERENCIA",
-        "OPTIONAL MANAGEMENT RECORD",
-      )}
-      description={tr(
-        "Registre un único total después de cerrar cada cargamento. Vacío significa no registrado y nunca se interpreta como cero.",
-        "Record one total after closing each shipment. An empty value means not recorded and is never interpreted as zero.",
-      )}
-    >
-      <p className="scope-note">
-        {tr(
-          "El dato se usa para comparar proveedores desde la puesta en marcha, sin custodia ni existencia acumulada de oro.",
-          "This data is used to compare suppliers from commissioning onward, without tracking custody or accumulated gold inventory.",
-        )}
-      </p>
+    <PortalPage title="" eyebrow="" description="" compact>
+      <h1 className="visually-hidden">
+        {tr("Oro y mercurio", "Gold and mercury")}
+      </h1>
       <GoldFeature />
-    </PortalPage>
-  );
-}
-
-export function ShipmentsPage() {
-  const { tr } = useLanguage();
-
-  return (
-    <PortalPage
-      title={tr("Cargamentos", "Shipments")}
-      eyebrow={tr("CONSULTA CONSOLIDADA", "CONSOLIDATED VIEW")}
-      description={tr(
-        "Una entrada por cargamento cerrado, con cajuelas, barridas, mercurio y resultado opcional de oro.",
-        "One entry per closed shipment, including cajuelas, sweeps, mercury, and an optional gold result.",
-      )}
-    >
-      <ShipmentsFeature />
     </PortalPage>
   );
 }
@@ -142,28 +79,9 @@ export function AuditPage() {
   const { tr } = useLanguage();
 
   return (
-    <PortalPage
-      title={tr("Auditoría", "Audit")}
-      eyebrow={tr("CONTROL Y SEGUIMIENTO", "CONTROL AND FOLLOW-UP")}
-      description={tr(
-        "Consulte las acciones importantes del negocio, quién las realizó y si fueron completadas.",
-        "Review important business actions, who performed them, and whether they were completed.",
-      )}
-    >
-      <section className="portal-panel manager-audit-panel">
-        <header>
-          <div>
-            <h2>{tr("Actividad del sistema", "System activity")}</h2>
-            <p>
-              {tr(
-                "Filtre por acción para separar cargamentos, producción, personal, seguridad y cambios administrativos",
-                "Filter by action to separate shipments, production, personnel, security, and administrative changes",
-              )}
-            </p>
-          </div>
-        </header>
-        <ShipmentAuditFeature />
-      </section>
+    <PortalPage title="" eyebrow="" description="" compact>
+      <h1 className="visually-hidden">{tr("Auditoría", "Audit")}</h1>
+      <ShipmentAuditFeature />
     </PortalPage>
   );
 }

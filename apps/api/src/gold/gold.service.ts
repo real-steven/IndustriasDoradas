@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 
 import {
   GOLD_REPOSITORY,
@@ -65,6 +65,240 @@ export class GoldService {
     } catch (error) {
       this.throwRepositoryError(error);
     }
+  }
+
+  async reviewHistory(organizationId: string, shipmentId: string) {
+    await this.requireShipment(organizationId, shipmentId);
+    try {
+      return await this.repository.listReviews(organizationId, shipmentId);
+    } catch (error) {
+      this.throwRepositoryError(error);
+    }
+  }
+
+  async review(
+    organizationId: string,
+    shipmentId: string,
+    input: {
+      disposition: "PENDING" | "ACKNOWLEDGED" | "OMITTED";
+      reason?: string;
+    },
+    context: GoldMutationContext,
+  ) {
+    const shipment = await this.requireShipment(organizationId, shipmentId);
+    if (shipment.hasGoldResult && input.disposition !== "PENDING") {
+      throw new ApplicationError(
+        HttpStatus.CONFLICT,
+        "GOLD_REVIEW_ALREADY_RECORDED",
+        "A shipment with a gold result cannot be marked without data",
+      );
+    }
+    const history = await this.repository.listReviews(
+      organizationId,
+      shipmentId,
+    );
+    const current = history[0] ?? null;
+    if ((current?.disposition ?? "PENDING") === input.disposition) {
+      throw new ApplicationError(
+        HttpStatus.CONFLICT,
+        "GOLD_REVIEW_UNCHANGED",
+        "The gold review disposition is unchanged",
+      );
+    }
+    const reason = input.reason?.trim();
+    if (input.disposition === "OMITTED" && reason === undefined) {
+      throw new ApplicationError(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        "GOLD_REVIEW_REASON_REQUIRED",
+        "A reason is required when reviewing a shipment without data",
+      );
+    }
+    const changes = {
+      gold_review_disposition: {
+        before: current?.disposition ?? "PENDING",
+        after: input.disposition,
+      },
+      ...(reason === undefined
+        ? {}
+        : { gold_review_reason: { before: null, after: reason } }),
+    };
+    return this.auditTrail.execute(
+      {
+        correlationId: context.correlationId,
+        organizationId,
+        actor: this.actor(context.auth),
+        origin: "API",
+        action: AUDIT_ACTIONS.BUSINESS_MUTATION,
+        entityType: "shipment",
+        entityId: shipmentId,
+        failureResult: "REJECTED",
+        failureReasonCode: "GOLD_REVIEW_REJECTED",
+        allowedChangeFields: Object.keys(changes),
+        changes,
+      },
+      async () => {
+        try {
+          return await this.repository.createReview({
+            id: randomUUID(),
+            organizationId,
+            shipmentId,
+            disposition: input.disposition,
+            recordedAtUtc: new Date().toISOString(),
+            recordedByProfileId: context.auth.profile.id,
+            recordedByDisplayName: context.auth.profile.displayName,
+            supersedesEntryId: current?.id ?? null,
+            reason: reason ?? null,
+          });
+        } catch (error) {
+          this.throwRepositoryError(error);
+        }
+      },
+    );
+  }
+
+  async recordMercury(
+    organizationId: string,
+    shipmentId: string,
+    sweepId: string,
+    input: {
+      measurements: readonly {
+        lineComponentId: string;
+        inputGrams?: number;
+        remainderGrams?: number;
+      }[];
+      correctionReason?: string;
+    },
+    context: GoldMutationContext,
+  ) {
+    const shipment = await this.requireShipment(organizationId, shipmentId);
+    const sweeps = await this.management.listShipmentSweeps(
+      organizationId,
+      shipmentId,
+      { page: 1, pageSize: 1000 },
+    );
+    const components = sweeps.items.filter((item) => item.sweepId === sweepId);
+    if (components.length === 0) {
+      throw new ApplicationError(
+        HttpStatus.NOT_FOUND,
+        "MERCURY_SWEEP_NOT_FOUND",
+        "The production sweep was not found",
+      );
+    }
+    const reason = input.correctionReason?.trim();
+    const recordedAtUtc = new Date().toISOString();
+    const sequenceBase = Date.now() * 1000 + randomInt(0, 100);
+    const movements = input.measurements.flatMap((measurement) => {
+      const component = components.find(
+        (candidate) =>
+          candidate.lineComponentId === measurement.lineComponentId,
+      );
+      if (component === undefined) {
+        throw new ApplicationError(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          "MERCURY_COMPONENT_INVALID",
+          "The component does not belong to the selected sweep",
+        );
+      }
+      const values = [
+        {
+          kind: "SWEEP_INPUT" as const,
+          value: measurement.inputGrams,
+          previous: component.inputGrams,
+          previousId: component.inputMovementId,
+        },
+        {
+          kind: "SWEEP_REMAINDER" as const,
+          value: measurement.remainderGrams,
+          previous: component.remainderGrams,
+          previousId: component.remainderMovementId,
+        },
+      ];
+      return values.flatMap((value) => {
+        if (value.value === undefined || value.value === value.previous)
+          return [];
+        this.validateAmount(value.value);
+        if (value.previousId !== null && reason === undefined) {
+          throw new ApplicationError(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "MERCURY_CORRECTION_REASON_REQUIRED",
+            "A reason is required to correct mercury data",
+          );
+        }
+        return [
+          {
+            id: randomUUID(),
+            organizationId,
+            plantId: shipment.plantId,
+            stationId: shipment.stationId,
+            productionLineId: shipment.productionLineId,
+            feedCycleId: shipment.feedCycleId,
+            shipmentId,
+            lineComponentId: component.lineComponentId,
+            sweepId,
+            clientInstanceId: context.auth.profile.id,
+            clientSequence: sequenceBase,
+            movementKind: value.kind,
+            amountGrams: value.value,
+            occurredAtUtc: component.sweptAtUtc,
+            recordedAtUtc,
+            recordedByProfileId: context.auth.profile.id,
+            supersedesMovementId: value.previousId,
+            notes: reason ?? null,
+          },
+        ];
+      });
+    });
+    movements.forEach((movement, index) => {
+      movement.clientSequence = sequenceBase + index;
+    });
+    if (movements.length === 0) {
+      throw new ApplicationError(
+        HttpStatus.CONFLICT,
+        "MERCURY_VALUES_UNCHANGED",
+        "No mercury values changed",
+      );
+    }
+    const changes = Object.fromEntries(
+      movements.map((movement) => {
+        const component = components.find(
+          (candidate) => candidate.lineComponentId === movement.lineComponentId,
+        );
+        const before =
+          movement.movementKind === "SWEEP_INPUT"
+            ? (component?.inputGrams ?? null)
+            : (component?.remainderGrams ?? null);
+        return [
+          `mercury_${movement.lineComponentId}_${movement.movementKind.toLowerCase()}`,
+          { before, after: movement.amountGrams },
+        ];
+      }),
+    );
+    await this.auditTrail.execute(
+      {
+        correlationId: context.correlationId,
+        organizationId,
+        actor: this.actor(context.auth),
+        origin: "API",
+        action: AUDIT_ACTIONS.BUSINESS_MUTATION,
+        entityType: "production_sweep",
+        entityId: sweepId,
+        failureResult: "REJECTED",
+        failureReasonCode: "MERCURY_MEASUREMENT_REJECTED",
+        allowedChangeFields: Object.keys(changes),
+        changes,
+      },
+      async () => {
+        try {
+          await this.repository.createMercuryMovements(movements);
+        } catch (error) {
+          this.throwRepositoryError(error);
+        }
+      },
+    );
+    return this.management.listShipmentSweeps(organizationId, shipmentId, {
+      page: 1,
+      pageSize: 1000,
+    });
   }
 
   async record(
@@ -150,6 +384,9 @@ export class GoldService {
   private aggregate(facts: readonly GoldShipmentFact[]): GoldSummary {
     const suppliers = new Map<string, CoverageAccumulator>();
     let registeredShipments = 0;
+    let pendingShipments = 0;
+    let acknowledgedShipments = 0;
+    let omittedShipments = 0;
     let totalGoldCentigrams = 0;
     let includedCajuelas = 0;
 
@@ -171,6 +408,12 @@ export class GoldService {
         registeredShipments += 1;
         totalGoldCentigrams += amount;
         includedCajuelas += fact.cajuelaTotal;
+      } else if (fact.reviewDisposition === "OMITTED") {
+        omittedShipments += 1;
+      } else if (fact.reviewDisposition === "ACKNOWLEDGED") {
+        acknowledgedShipments += 1;
+      } else {
+        pendingShipments += 1;
       }
       suppliers.set(fact.supplierId, current);
     }
@@ -179,6 +422,15 @@ export class GoldService {
       totalShipments: facts.length,
       registeredShipments,
       excludedShipments: facts.length - registeredShipments,
+      pendingShipments,
+      acknowledgedShipments,
+      acknowledgedShipmentIds: facts
+        .filter((fact) => fact.reviewDisposition === "ACKNOWLEDGED")
+        .map((fact) => fact.shipmentId),
+      omittedShipments,
+      omittedShipmentIds: facts
+        .filter((fact) => fact.reviewDisposition === "OMITTED")
+        .map((fact) => fact.shipmentId),
       coveragePercentage: this.percentage(registeredShipments, facts.length),
       totalGoldGrams: this.grams(totalGoldCentigrams),
       includedCajuelas,

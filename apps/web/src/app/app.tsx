@@ -1,15 +1,19 @@
-import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import {
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 
 import { LoginPage } from "../auth/login-page";
-import { PlantManagerPage } from "../features/accounts/plant-manager-page";
 import {
   AuditPage,
   DashboardPage,
   GoldPage,
-  OperationPage,
   ReportsPage,
   ShipmentDetailPage,
-  ShipmentsPage,
   StatisticsPage,
   WorkersPage,
   UpcomingPage,
@@ -28,15 +32,23 @@ export function App() {
       <Route element={<ProtectedPortal roles={["JEFE_EMPRESA"]} />}>
         <Route path="gerencia" element={<PortalLayout />}>
           <Route index element={<DashboardPage />} />
-          <Route path="operacion" element={<OperationPage />} />
+          <Route
+            path="operacion"
+            element={<Navigate to="/gerencia" replace />}
+          />
           <Route path="oro" element={<GoldPage />} />
-          <Route path="cargamentos" element={<ShipmentsPage />} />
+          <Route path="cargamentos" element={<LegacyShipmentsRedirect />} />
           <Route
             path="cargamentos/:shipmentId"
             element={<ShipmentDetailPage />}
           />
           <Route path="auditoria" element={<AuditPage />} />
-          <Route path="usuarios" element={<PlantManagerPage />} />
+          <Route
+            path="usuarios"
+            element={
+              <Navigate to="/gerencia/trabajadores?action=create" replace />
+            }
+          />
           <Route path="estadisticas" element={<StatisticsPage />} />
           <Route path="trabajadores" element={<WorkersPage />} />
           <Route path="reportes" element={<ReportsPage />} />
@@ -64,6 +76,19 @@ export function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
+  );
+}
+
+function LegacyShipmentsRedirect() {
+  const location = useLocation();
+  const search = new URLSearchParams(location.search);
+  search.set("view", "shipments");
+
+  return (
+    <Navigate
+      to={{ pathname: "/gerencia/auditoria", search: search.toString() }}
+      replace
+    />
   );
 }
 

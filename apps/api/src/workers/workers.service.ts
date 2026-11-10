@@ -188,6 +188,7 @@ export class WorkersService {
     organizationId: string,
     workerId: string,
     active: boolean,
+    reason: string | undefined,
     context: WorkerMutationContext,
   ): Promise<WorkerItem> {
     let before: WorkerItem | null;
@@ -225,6 +226,9 @@ export class WorkersService {
             organizationId,
             workerId,
             active,
+            context.auth.profile.id,
+            reason?.trim() || undefined,
+            new Date().toISOString(),
           );
           if (result === null) this.notFound();
           return result;

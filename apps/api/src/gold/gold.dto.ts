@@ -1,6 +1,10 @@
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsISO8601,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -8,6 +12,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from "class-validator";
 
 const trim = ({ value }: { value: unknown }): unknown =>
@@ -43,6 +48,49 @@ export class RecordShipmentGoldDto {
   @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 2 })
   @Min(0)
   amountGrams!: number;
+
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  correctionReason?: string;
+}
+
+export class ReviewShipmentGoldDto {
+  @IsIn(["PENDING", "ACKNOWLEDGED", "OMITTED"])
+  disposition!: "PENDING" | "ACKNOWLEDGED" | "OMITTED";
+
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  reason?: string;
+}
+
+export class MercuryMeasurementDto {
+  @IsUUID()
+  lineComponentId!: string;
+
+  @IsOptional()
+  @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 2 })
+  @Min(0)
+  inputGrams?: number;
+
+  @IsOptional()
+  @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 2 })
+  @Min(0)
+  remainderGrams?: number;
+}
+
+export class RecordSweepMercuryDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => MercuryMeasurementDto)
+  measurements!: MercuryMeasurementDto[];
 
   @Transform(trim)
   @IsOptional()

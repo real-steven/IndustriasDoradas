@@ -32,6 +32,8 @@ export class ReportsService {
     query: ProductionReportQuery,
   ): Promise<ProductionReport> {
     this.validateRange(query);
+    const sections = query.sections ?? ["summary", "shipments"];
+    const fields = query.fields ?? ["date", "shipment", "supplier", "gold"];
     const [statistics, shipments, allFinancialSettlements] = await Promise.all([
       this.management.statistics(organizationId, {
         fromUtc: query.fromUtc,
@@ -43,13 +45,15 @@ export class ReportsService {
         comparePrevious: false,
       }),
       this.listShipments(organizationId, query),
-      this.settlements.list(organizationId, {
-        fromDate: this.localDate(query.fromUtc),
-        toDate: this.localDate(new Date(Date.parse(query.toUtc) - 1)),
-        ...(query.supplierId === undefined
-          ? {}
-          : { supplierId: query.supplierId }),
-      }),
+      sections.includes("financial") || fields.includes("karat")
+        ? this.settlements.list(organizationId, {
+            fromDate: this.localDate(query.fromUtc),
+            toDate: this.localDate(new Date(Date.parse(query.toUtc) - 1)),
+            ...(query.supplierId === undefined
+              ? {}
+              : { supplierId: query.supplierId }),
+          })
+        : Promise.resolve([]),
     ]);
     const financialSettlements = this.officialSettlements(
       allFinancialSettlements,
@@ -62,6 +66,8 @@ export class ReportsService {
       language: query.language,
       timezone: "America/Costa_Rica",
       generatedAtUtc: new Date().toISOString(),
+      sections,
+      fields,
       period: { fromUtc: query.fromUtc, toUtc: query.toUtc },
       filters: {
         plantId: query.plantId ?? null,

@@ -14,6 +14,8 @@ describe("SupabaseGoldRepository", () => {
     const requests: CapturedRequest[] = [];
     global.fetch = jest.fn((input, init) => {
       requests.push({ input, ...(init === undefined ? {} : { init }) });
+      if (requestUrl(input).includes("management_current_gold_review"))
+        return Promise.resolve(response([]));
       return Promise.resolve(
         response([
           {
@@ -38,6 +40,7 @@ describe("SupabaseGoldRepository", () => {
     expect(facts[0]).toMatchObject({
       hasGoldResult: true,
       goldAmountGrams: 0,
+      reviewDisposition: "PENDING",
     });
     const url = requestUrl(requests[0]?.input);
     expect(url).toContain("management_shipment_facts?");

@@ -21,6 +21,9 @@ describe("GoldService", () => {
       listShipmentFacts: jest.fn(),
       listResults: jest.fn(),
       createResult: jest.fn(),
+      listReviews: jest.fn().mockResolvedValue([]),
+      createReview: jest.fn(),
+      createMercuryMovements: jest.fn().mockResolvedValue(undefined),
     };
     management = {
       findLatestChange: jest.fn(),
@@ -49,6 +52,11 @@ describe("GoldService", () => {
       totalShipments: 3,
       registeredShipments: 2,
       excludedShipments: 1,
+      pendingShipments: 1,
+      acknowledgedShipments: 0,
+      acknowledgedShipmentIds: [],
+      omittedShipments: 0,
+      omittedShipmentIds: [],
       coveragePercentage: 66.67,
       totalGoldGrams: 10,
       includedCajuelas: 150,
@@ -69,6 +77,118 @@ describe("GoldService", () => {
           gramsPerCajuela: 0,
         }),
       ],
+    });
+  });
+
+  it("keeps reviewed shipments without data out of the pending total", async () => {
+    repository.listShipmentFacts.mockResolvedValue([
+      fact("supplier-a", "Proveedor A", 100, null, "OMITTED"),
+      fact("supplier-a", "Proveedor A", 200, null),
+    ]);
+
+    const summary = await service.summary(ORGANIZATION_ID, {});
+
+    expect(summary).toMatchObject({
+      totalShipments: 2,
+      registeredShipments: 0,
+      pendingShipments: 1,
+      omittedShipments: 1,
+    });
+    expect(summary.omittedShipmentIds).toHaveLength(1);
+  });
+
+  it("keeps acknowledged shipments visible without repeating the pending reminder", async () => {
+    repository.listShipmentFacts.mockResolvedValue([
+      fact("supplier-a", "Proveedor A", 100, null, "ACKNOWLEDGED"),
+      fact("supplier-a", "Proveedor A", 200, null),
+    ]);
+
+    const summary = await service.summary(ORGANIZATION_ID, {});
+
+    expect(summary).toMatchObject({
+      totalShipments: 2,
+      pendingShipments: 1,
+      acknowledgedShipments: 1,
+      omittedShipments: 0,
+    });
+    expect(summary.acknowledgedShipmentIds).toHaveLength(1);
+  });
+
+  it("marks a shipment as reviewed without treating missing gold as zero", async () => {
+    management.findShipment.mockResolvedValue(shipment());
+    repository.createReview.mockImplementation((input) =>
+      Promise.resolve({ ...input }),
+    );
+
+    const created = await service.review(
+      ORGANIZATION_ID,
+      SHIPMENT_ID,
+      { disposition: "OMITTED", reason: "La gerencia no conservó el dato" },
+      { auth: AUTH, correlationId: CORRELATION_ID },
+    );
+
+    expect(created).toMatchObject({
+      disposition: "OMITTED",
+      reason: "La gerencia no conservó el dato",
+      supersedesEntryId: null,
+    });
+    expect(auditEvents.insert.mock.calls[0]?.[0]).toMatchObject({
+      changes: {
+        gold_review_disposition: { before: "PENDING", after: "OMITTED" },
+      },
+    });
+  });
+
+  it("requires a reason to correct existing mercury and preserves the previous value in audit", async () => {
+    management.findShipment.mockResolvedValue(shipment());
+    management.listShipmentSweeps.mockResolvedValue({
+      items: [sweepMercury()],
+      page: 1,
+      pageSize: 1000,
+      total: 1,
+      totalPages: 1,
+    });
+
+    await expect(
+      service.recordMercury(
+        ORGANIZATION_ID,
+        SHIPMENT_ID,
+        SWEEP_ID,
+        {
+          measurements: [{ lineComponentId: COMPONENT_ID, inputGrams: 14.25 }],
+        },
+        { auth: AUTH, correlationId: CORRELATION_ID },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "MERCURY_CORRECTION_REASON_REQUIRED" },
+    });
+
+    await service.recordMercury(
+      ORGANIZATION_ID,
+      SHIPMENT_ID,
+      SWEEP_ID,
+      {
+        measurements: [{ lineComponentId: COMPONENT_ID, inputGrams: 14.25 }],
+        correctionReason: "Corrección de pesada",
+      },
+      { auth: AUTH, correlationId: CORRELATION_ID },
+    );
+
+    expect(
+      repository.createMercuryMovements.mock.calls[0]?.[0]?.[0],
+    ).toMatchObject({
+      movementKind: "SWEEP_INPUT",
+      amountGrams: 14.25,
+      supersedesMovementId: MERCURY_INPUT_ID,
+      notes: "Corrección de pesada",
+    });
+    expect(auditEvents.insert.mock.calls[0]?.[0]).toMatchObject({
+      changes: {
+        [`mercury_${COMPONENT_ID}_sweep_input`]: {
+          before: 12.5,
+          after: 14.25,
+        },
+      },
     });
   });
 
@@ -171,6 +291,10 @@ describe("GoldService", () => {
 const ORGANIZATION_ID = "30000000-0000-4000-8000-000000000001";
 const SHIPMENT_ID = "42000000-0000-4000-8000-000000000001";
 const RESULT_ID = "46000000-0000-4000-8000-000000000001";
+const SWEEP_ID = "43000000-0000-4000-8000-000000000001";
+const COMPONENT_ID = "33000000-0000-4000-8000-000000000001";
+const MERCURY_INPUT_ID = "45000000-0000-4000-8000-000000000001";
+const MERCURY_REMAINDER_ID = "45000000-0000-4000-8000-000000000002";
 const CORRELATION_ID = "40000000-0000-4000-8000-000000000001";
 
 const AUTH: AuthenticatedContext = {
@@ -203,6 +327,7 @@ function fact(
   supplierName: string,
   cajuelaTotal: number,
   amount: number | null,
+  reviewDisposition: "PENDING" | "ACKNOWLEDGED" | "OMITTED" = "PENDING",
 ) {
   return {
     shipmentId: crypto.randomUUID(),
@@ -211,6 +336,27 @@ function fact(
     cajuelaTotal,
     hasGoldResult: amount !== null,
     goldAmountGrams: amount,
+    reviewEntryId: reviewDisposition === "PENDING" ? null : crypto.randomUUID(),
+    reviewDisposition,
+  };
+}
+
+function sweepMercury() {
+  return {
+    organizationId: ORGANIZATION_ID,
+    shipmentId: SHIPMENT_ID,
+    sweepId: SWEEP_ID,
+    sweptAtUtc: "2026-10-01T18:00:00.000Z",
+    cajuelaCount: 100,
+    lineComponentId: COMPONENT_ID,
+    lineComponentName: "Rastra 1",
+    lineComponentOrder: 1,
+    inputGrams: 12.5,
+    remainderGrams: 8.25,
+    hasInputRecord: true,
+    hasRemainderRecord: true,
+    inputMovementId: MERCURY_INPUT_ID,
+    remainderMovementId: MERCURY_REMAINDER_ID,
   };
 }
 

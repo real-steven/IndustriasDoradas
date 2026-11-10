@@ -1,8 +1,5 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
-import type {
-  ManagementShipment,
-  ManagementSweepMercury,
-} from "../../api/generated/api-client";
+import type { ManagementSweepMercury } from "../../api/generated/api-client";
 import {
   Link,
   useLocation,
@@ -33,66 +30,123 @@ import { ManagementAuditDetail } from "./management-audit-detail";
 import { requestErrorMessage } from "../../api/http";
 import { useLanguage } from "../../i18n/language-context";
 
-export function ShipmentsFeature() {
+export function ShipmentsFeature({
+  view,
+  onViewChange,
+}: {
+  view: AuditViewKey;
+  onViewChange: (view: AuditViewKey) => void;
+}) {
   const { language, tr } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedFilters = parseShipmentFilters(searchParams);
-  const filterOptions = useManagementShipmentFilterOptions(requestedFilters);
+  const search = searchParams.get("search")?.trim();
+  const fromDate = auditDate(searchParams.get("from"));
+  const toDate = auditDate(searchParams.get("to"));
+  const requestedPage = Number(searchParams.get("page") ?? "1");
+  const unifiedFilters =
+    search !== undefined || fromDate !== undefined || toDate !== undefined;
+  const requestedRangeStart = fromDate ?? toDate ?? requestedFilters.date;
+  const requestedRangeEnd = toDate ?? fromDate ?? requestedFilters.toDate;
+  const [rangeStart, rangeEnd] =
+    requestedRangeStart <= requestedRangeEnd
+      ? [requestedRangeStart, requestedRangeEnd]
+      : [requestedRangeEnd, requestedRangeStart];
+  const baseFilters: ShipmentFilters = unifiedFilters
+    ? {
+        period: fromDate === undefined && toDate === undefined ? "all" : "date",
+        date: rangeStart,
+        toDate: rangeEnd,
+        shipmentReference: search ?? "",
+        page:
+          Number.isSafeInteger(requestedPage) && requestedPage > 0
+            ? requestedPage
+            : 1,
+      }
+    : requestedFilters;
+  const filterOptions = useManagementShipmentFilterOptions(baseFilters);
   const shipmentId = resolveShipmentReference(
-    requestedFilters.shipmentReference,
+    baseFilters.shipmentReference,
     filterOptions.data?.items ?? [],
   );
   const filters: ShipmentFilters = {
-    ...requestedFilters,
+    ...baseFilters,
     ...(shipmentId === undefined ? {} : { shipmentId }),
   };
   const shipments = useManagementShipments(filters);
+  const [draftSearch, setDraftSearch] = useState(filters.shipmentReference);
 
-  const update = (key: string, value: string) => {
+  const update = (key: "from" | "to", value: string) => {
     const next = new URLSearchParams(searchParams);
     if (value.length === 0) next.delete(key);
     else next.set(key, value);
+    next.delete("date");
+    next.delete("shipment");
+    next.set("period", "all");
     next.delete("page");
-    if (key === "period" && value !== "date") {
-      next.delete("date");
-      next.delete("to");
-    }
-    if (key === "period" && value === "date") {
-      if (!next.has("date")) next.set("date", filters.date);
-      if (!next.has("to")) next.set("to", filters.toDate);
-    }
-    if (key === "date" && value > filters.toDate) next.set("to", value);
-    if (key === "to" && value < filters.date) next.set("date", value);
     setSearchParams(next);
+  };
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const next = new URLSearchParams(searchParams);
+    const value = draftSearch.trim();
+    if (value.length === 0) next.delete("search");
+    else next.set("search", value);
+    next.delete("shipment");
+    next.delete("page");
+    setSearchParams(next);
+  };
+
+  const clear = () => {
+    setDraftSearch("");
+    setSearchParams(new URLSearchParams({ view: "shipments", period: "all" }));
   };
 
   return (
     <>
-      <ShipmentFiltersPanel
-        filters={filters}
-        items={filterOptions.data?.items ?? shipments.data?.items ?? []}
-        update={update}
-      />
-      <section className="portal-panel shipment-history" aria-live="polite">
-        <header>
-          <div>
-            <h2>{tr("Historial", "History")}</h2>
-            <p>
-              {tr(
-                "Cargamentos cerrados, ordenados por cierre más reciente",
-                "Closed shipments, ordered by most recent closing time",
-              )}
-            </p>
-          </div>
-          {shipments.data !== undefined && (
-            <span className="history-total">
-              {shipments.data.total}{" "}
-              {shipments.data.total === 1
-                ? tr("resultado", "result")
-                : tr("resultados", "results")}
-            </span>
-          )}
-        </header>
+      <form className="audit-filters" onSubmit={submitSearch}>
+        <AuditViewField value={view} onChange={onViewChange} />
+        <label className="audit-search">
+          <span>{tr("Buscar actividad", "Search activity")}</span>
+          <input
+            type="search"
+            value={draftSearch}
+            placeholder={tr(
+              "ID completo o referencia de cargamento",
+              "Full shipment ID or reference",
+            )}
+            onChange={(event) => setDraftSearch(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>{tr("Desde", "From")}</span>
+          <input
+            type="date"
+            value={fromDate ?? ""}
+            max={toDate}
+            onChange={(event) => update("from", event.target.value)}
+          />
+        </label>
+        <label>
+          <span>{tr("Hasta", "To")}</span>
+          <input
+            type="date"
+            value={toDate ?? ""}
+            min={fromDate}
+            onChange={(event) => update("to", event.target.value)}
+          />
+        </label>
+        <div className="audit-filter-actions">
+          <button type="submit" className="primary-button">
+            {tr("BUSCAR", "SEARCH")}
+          </button>
+          <button type="button" className="secondary" onClick={clear}>
+            {tr("LIMPIAR", "CLEAR")}
+          </button>
+        </div>
+      </form>
+      <section className="shipment-history" aria-live="polite">
         {shipments.isPending ? (
           <ShipmentState
             title={tr("Consultando cargamentos", "Loading shipments")}
@@ -238,12 +292,17 @@ export function ShipmentDetailFeature() {
     (event) => event.entityType === "shipment" && event.entityId === shipmentId,
   );
   const sweepGroups = groupSweeps(sweeps.data?.items ?? []);
+  const backSearch = new URLSearchParams(location.search);
+  backSearch.set("view", "shipments");
 
   return (
     <div className="shipment-detail">
       <Link
         className="secondary-link back-link"
-        to={{ pathname: "/gerencia/cargamentos", search: location.search }}
+        to={{
+          pathname: "/gerencia/auditoria",
+          search: backSearch.toString(),
+        }}
       >
         {tr("← VOLVER AL HISTORIAL", "← BACK TO HISTORY")}
       </Link>
@@ -456,19 +515,37 @@ export function ShipmentDetailFeature() {
 }
 
 export function ShipmentAuditFeature() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = selectedAuditView(searchParams.get("view"));
+
+  const selectView = (nextView: AuditViewKey) => {
+    const next = new URLSearchParams();
+    if (nextView !== "all") next.set("view", nextView);
+    if (nextView === "shipments") next.set("period", "all");
+    setSearchParams(next);
+  };
+
+  if (view === "shipments")
+    return (
+      <div className="manager-audit">
+        <ShipmentsFeature view={view} onViewChange={selectView} />
+      </div>
+    );
+
+  return <AuditActivityFeature view={view} onViewChange={selectView} />;
+}
+
+function AuditActivityFeature({
+  view,
+  onViewChange,
+}: {
+  view: Exclude<AuditViewKey, "shipments">;
+  onViewChange: (view: AuditViewKey) => void;
+}) {
   const { language, tr } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search")?.trim() ?? "";
-  const requestedAction = selectedAuditActionFilter(searchParams.get("action"));
-  const requestedGroup = selectedAuditGroup(searchParams.get("group"));
-  const actionFilter =
-    requestedGroup === undefined ||
-    requestedAction?.group === requestedGroup.key
-      ? requestedAction
-      : undefined;
-  const selectedGroup =
-    requestedGroup ??
-    auditGroups.find((group) => group.key === actionFilter?.group);
+  const selectedGroup = view === "all" ? undefined : selectedAuditGroup(view);
   const fromDate = auditDate(searchParams.get("from"));
   const toDate = auditDate(searchParams.get("to"));
   const requestedPage = Number(searchParams.get("page") ?? "1");
@@ -479,13 +556,7 @@ export function ShipmentAuditFeature() {
   const [draftSearch, setDraftSearch] = useState(search);
   const audit = useShipmentAuditEvents({
     search,
-    ...(selectedGroup === undefined || actionFilter !== undefined
-      ? {}
-      : { category: selectedGroup.key }),
-    ...(actionFilter === undefined ? {} : { action: actionFilter.action }),
-    ...(actionFilter?.entityType === undefined
-      ? {}
-      : { entityType: actionFilter.entityType }),
+    ...(selectedGroup === undefined ? {} : { category: selectedGroup.key }),
     fromDate,
     toDate,
     page,
@@ -507,120 +578,18 @@ export function ShipmentAuditFeature() {
 
   const clear = () => {
     setDraftSearch("");
-    setSearchParams(new URLSearchParams());
-  };
-
-  const selectGroup = (group: AuditGroupKey | undefined) => {
     const next = new URLSearchParams(searchParams);
-    if (group === undefined) next.delete("group");
-    else next.set("group", group);
-    next.delete("action");
-    next.delete("page");
-    setSearchParams(next);
-  };
-
-  const selectAction = (action: string | undefined) => {
-    const next = new URLSearchParams(searchParams);
-    if (action === undefined) next.delete("action");
-    else next.set("action", action);
+    next.delete("search");
+    next.delete("from");
+    next.delete("to");
     next.delete("page");
     setSearchParams(next);
   };
 
   return (
     <div className="manager-audit">
-      <section className="audit-category-panel" aria-labelledby="audit-groups">
-        <header className="audit-category-heading">
-          <div>
-            <h3 id="audit-groups">
-              {tr("Explorar por área", "Browse by area")}
-            </h3>
-            <p>
-              {tr(
-                "Seleccione un grupo y luego refine la actividad que desea consultar.",
-                "Select a group and then refine the activity you want to review.",
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            className={`audit-all-button${selectedGroup === undefined ? " active" : ""}`}
-            aria-pressed={selectedGroup === undefined}
-            onClick={() => selectGroup(undefined)}
-          >
-            {tr("VER TODO", "VIEW ALL")}
-          </button>
-        </header>
-
-        <div className="audit-category-cards" role="group">
-          {auditGroups.map((group) => {
-            const active = selectedGroup?.key === group.key;
-            return (
-              <button
-                key={group.key}
-                type="button"
-                className={`audit-category-card${active ? " active" : ""}`}
-                aria-pressed={active}
-                onClick={() => selectGroup(group.key)}
-              >
-                <span className="audit-category-icon" aria-hidden="true">
-                  {group.icon}
-                </span>
-                <span className="audit-category-copy">
-                  <strong>{tr(group.spanish, group.english)}</strong>
-                  <small>
-                    {tr(group.descriptionSpanish, group.descriptionEnglish)}
-                  </small>
-                </span>
-                <span className="audit-category-state" aria-hidden="true">
-                  {active ? "✓" : "›"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {selectedGroup !== undefined && (
-          <div className="audit-subactions">
-            <span>{tr("Acciones del grupo", "Group actions")}</span>
-            <div
-              className="audit-subaction-chips"
-              role="group"
-              aria-label={tr(
-                `Acciones de ${selectedGroup.spanish}`,
-                `${selectedGroup.english} actions`,
-              )}
-            >
-              <button
-                type="button"
-                className={actionFilter === undefined ? "active" : ""}
-                aria-pressed={actionFilter === undefined}
-                onClick={() => selectAction(undefined)}
-              >
-                {tr("Todo el grupo", "Entire group")}
-              </button>
-              {auditActionFilters
-                .filter((option) => option.group === selectedGroup.key)
-                .map((option) => {
-                  const active = actionFilter?.key === option.key;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      className={active ? "active" : ""}
-                      aria-pressed={active}
-                      onClick={() => selectAction(option.key)}
-                    >
-                      {tr(option.spanish, option.english)}
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-        )}
-      </section>
-
       <form className="audit-filters" onSubmit={submitSearch}>
+        <AuditViewField value={view} onChange={onViewChange} />
         <label className="audit-search">
           <span>{tr("Buscar actividad", "Search activity")}</span>
           <input
@@ -704,6 +673,36 @@ export function ShipmentAuditFeature() {
         </>
       )}
     </div>
+  );
+}
+
+function AuditViewField({
+  value,
+  onChange,
+}: {
+  value: AuditViewKey;
+  onChange: (view: AuditViewKey) => void;
+}) {
+  const { tr } = useLanguage();
+
+  return (
+    <label className="audit-view-field">
+      <span>{tr("Área", "Area")}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as AuditViewKey)}
+      >
+        <option value="all">{tr("Toda la actividad", "All activity")}</option>
+        <option value="shipments">
+          {tr("Cargamentos finalizados", "Completed shipments")}
+        </option>
+        {auditGroups.map((group) => (
+          <option key={group.key} value={group.key}>
+            {tr(group.spanish, group.english)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -845,140 +844,29 @@ function auditDate(value: string | null): string | undefined {
 }
 
 type AuditGroupKey = "operation" | "people" | "administration";
+type AuditViewKey = "all" | "shipments" | AuditGroupKey;
 
 interface AuditGroupOption {
   key: AuditGroupKey;
-  icon: string;
   spanish: string;
   english: string;
-  descriptionSpanish: string;
-  descriptionEnglish: string;
-}
-
-interface AuditActionFilterOption {
-  key: string;
-  group: AuditGroupKey;
-  spanish: string;
-  english: string;
-  action: string;
-  entityType?: string;
 }
 
 const auditGroups: readonly AuditGroupOption[] = [
   {
     key: "operation",
-    icon: "▤",
     spanish: "Operación de planta",
     english: "Plant operations",
-    descriptionSpanish: "Cargamentos, producción y movimientos de planta",
-    descriptionEnglish: "Shipments, production, and plant movements",
   },
   {
     key: "people",
-    icon: "♙",
     spanish: "Personal",
     english: "People",
-    descriptionSpanish: "Marcaciones y correcciones de asistencia",
-    descriptionEnglish: "Attendance entries and corrections",
   },
   {
     key: "administration",
-    icon: "⚙",
     spanish: "Seguridad y administración",
     english: "Security and administration",
-    descriptionSpanish: "Cuentas, permisos y accesos protegidos",
-    descriptionEnglish: "Accounts, permissions, and protected access",
-  },
-];
-
-const auditActionFilters: readonly AuditActionFilterOption[] = [
-  {
-    key: "desktop-shipments",
-    group: "operation",
-    spanish: "Cargamentos del desktop",
-    english: "Desktop shipments",
-    action: "sync.ingest",
-    entityType: "shipment",
-  },
-  {
-    key: "desktop-cajuelas",
-    group: "operation",
-    spanish: "Cajuelas registradas",
-    english: "Recorded cajuelas",
-    action: "sync.ingest",
-    entityType: "production_event",
-  },
-  {
-    key: "desktop-sweeps",
-    group: "operation",
-    spanish: "Barridas de producción",
-    english: "Production sweeps",
-    action: "sync.ingest",
-    entityType: "production_sweep",
-  },
-  {
-    key: "desktop-mercury",
-    group: "operation",
-    spanish: "Movimientos de mercurio",
-    english: "Mercury movements",
-    action: "sync.ingest",
-    entityType: "mercury_movement",
-  },
-  {
-    key: "attendance-recorded",
-    group: "people",
-    spanish: "Marcaciones de asistencia",
-    english: "Attendance entries",
-    action: "attendance.record",
-  },
-  {
-    key: "attendance-corrected",
-    group: "people",
-    spanish: "Correcciones de asistencia",
-    english: "Attendance corrections",
-    action: "attendance.correct",
-  },
-  {
-    key: "account-created",
-    group: "administration",
-    spanish: "Cuentas creadas",
-    english: "Created accounts",
-    action: "account.provision",
-  },
-  {
-    key: "account-status",
-    group: "administration",
-    spanish: "Estados de cuenta",
-    english: "Account status changes",
-    action: "account.governance",
-  },
-  {
-    key: "permissions",
-    group: "administration",
-    spanish: "Cambios de permisos",
-    english: "Permission changes",
-    action: "permission.governance",
-  },
-  {
-    key: "protected-access",
-    group: "administration",
-    spanish: "Accesos protegidos",
-    english: "Protected access",
-    action: "privilege.elevation",
-  },
-  {
-    key: "authorization-blocks",
-    group: "administration",
-    spanish: "Bloqueos por autorización",
-    english: "Authorization blocks",
-    action: "authorization.policy",
-  },
-  {
-    key: "business-changes",
-    group: "administration",
-    spanish: "Cambios administrativos",
-    english: "Administrative changes",
-    action: "business.mutation",
   },
 ];
 
@@ -988,159 +876,9 @@ function selectedAuditGroup(
   return auditGroups.find((group) => group.key === value);
 }
 
-function selectedAuditActionFilter(
-  value: string | null,
-): AuditActionFilterOption | undefined {
-  return auditActionFilters.find((option) => option.key === value);
-}
-
-function ShipmentFiltersPanel({
-  filters,
-  items,
-  update,
-}: {
-  filters: ShipmentFilters;
-  items: ManagementShipment[];
-  update(this: void, key: string, value: string): void;
-}) {
-  const { tr } = useLanguage();
-  const lines = uniqueOptions(
-    items.map((item) => [item.productionLineId, item.productionLineName]),
-  );
-  const suppliers = uniqueOptions(
-    items.map((item) => [item.supplierId, item.supplierName]),
-  );
-  const responsible = uniqueOptions(
-    items.flatMap((item) =>
-      item.responsibleWorkerId === null
-        ? []
-        : [
-            [
-              item.responsibleWorkerId,
-              item.responsibleWorkerName ?? tr("Sin nombre", "No name"),
-            ],
-          ],
-    ),
-  );
-
-  return (
-    <section
-      className="shipment-filters"
-      aria-label={tr("Filtros de cargamentos", "Shipment filters")}
-    >
-      <label className="shipment-reference-filter">
-        {tr("Buscar por ID", "Search by ID")}
-        <input
-          type="search"
-          value={filters.shipmentReference}
-          placeholder={tr("Ej. 22B1CC83", "E.g. 22B1CC83")}
-          autoComplete="off"
-          maxLength={36}
-          onChange={(event) => update("shipment", event.target.value)}
-        />
-      </label>
-      <label>
-        {tr("Período", "Period")}
-        <select
-          value={filters.period}
-          onChange={(event) => update("period", event.target.value)}
-        >
-          <option value="current">{tr("Esta semana", "This week")}</option>
-          <option value="previous">
-            {tr("Semana anterior", "Previous week")}
-          </option>
-          <option value="date">{tr("Rango de fechas", "Date range")}</option>
-          <option value="all">{tr("Mostrar todo", "All")}</option>
-        </select>
-      </label>
-      {filters.period === "date" && (
-        <>
-          <label>
-            {tr("Desde", "From")}
-            <input
-              type="date"
-              max={filters.toDate}
-              value={filters.date}
-              onChange={(event) => update("date", event.target.value)}
-            />
-          </label>
-          <label>
-            {tr("Hasta", "To")}
-            <input
-              type="date"
-              min={filters.date}
-              value={filters.toDate}
-              onChange={(event) => update("to", event.target.value)}
-            />
-          </label>
-        </>
-      )}
-      <FilterSelect
-        label={tr("Línea", "Line")}
-        name="line"
-        value={filters.productionLineId ?? ""}
-        options={lines}
-        all={tr("Todas las líneas", "All lines")}
-        update={update}
-      />
-      <FilterSelect
-        label={tr("Proveedor", "Supplier")}
-        name="supplier"
-        value={filters.supplierId ?? ""}
-        options={suppliers}
-        all={tr("Todos los proveedores", "All suppliers")}
-        update={update}
-      />
-      <FilterSelect
-        label={tr("Responsable", "Responsible worker")}
-        name="responsible"
-        value={filters.responsibleWorkerId ?? ""}
-        options={responsible}
-        all={tr("Todos los responsables", "All responsible workers")}
-        update={update}
-      />
-    </section>
-  );
-}
-
-function FilterSelect({
-  label,
-  name,
-  value,
-  options,
-  all,
-  update,
-}: {
-  label: string;
-  name: string;
-  value: string;
-  options: [string, string][];
-  all: string;
-  update(this: void, key: string, value: string): void;
-}) {
-  const { tr } = useLanguage();
-
-  return (
-    <label>
-      {label}
-      <select
-        value={value}
-        onChange={(event) => update(name, event.target.value)}
-      >
-        <option value="">{all}</option>
-        {value.length > 0 && !options.some(([id]) => id === value) && (
-          <option value={value}>
-            {tr("Filtro seleccionado", "Selected filter")}
-          </option>
-        )}
-        {options.map(([id, nameValue]) => (
-          <option value={id} key={id}>
-            {nameValue}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
+function selectedAuditView(value: string | null): AuditViewKey {
+  if (value === "shipments" || value === "all") return value;
+  return selectedAuditGroup(value)?.key ?? "all";
 }
 
 function Pagination({
@@ -1271,12 +1009,6 @@ function groupSweeps(items: ManagementSweepMercury[]) {
     } else group.components.push(item);
   }
   return [...groups.values()];
-}
-
-function uniqueOptions(items: [string, string][]): [string, string][] {
-  return [...new Map(items).entries()].sort((left, right) =>
-    left[1].localeCompare(right[1], "es"),
-  );
 }
 
 function mercuryValue(value: number | null, language: "es" | "en"): string {

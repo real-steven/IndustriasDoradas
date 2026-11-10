@@ -3,9 +3,12 @@ import { ConfigService } from "@nestjs/config";
 
 import type {
   CreateGoldResultEntry,
+  CreateGoldReviewEntry,
+  CreateMercuryMovement,
   GoldFilters,
   GoldRepository,
   GoldResultEntry,
+  GoldReviewEntry,
   GoldShipmentFact,
 } from "./gold.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
@@ -42,7 +45,14 @@ export class SupabaseGoldRepository implements GoldRepository {
     });
     this.appendFilters(parameters, filters);
     const rows = await this.allRows("management_shipment_facts", parameters);
-    return rows.map((row) => this.shipmentFact(row));
+    const shipmentIds = rows.map((row) => this.string(row, "shipment_id"));
+    const reviews = await this.currentReviews(organizationId, shipmentIds);
+    return rows.map((row) =>
+      this.shipmentFact(
+        row,
+        reviews.get(this.string(row, "shipment_id")) ?? null,
+      ),
+    );
   }
 
   async listResults(
@@ -94,6 +104,107 @@ export class SupabaseGoldRepository implements GoldRepository {
         "shipment_gold_result_entries",
       );
     return this.result(row, input.recordedByDisplayName);
+  }
+
+  async listReviews(
+    organizationId: string,
+    shipmentId: string,
+  ): Promise<readonly GoldReviewEntry[]> {
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${organizationId}`,
+      shipment_id: `eq.${shipmentId}`,
+      order: "recorded_at_utc.desc,id.desc",
+      select:
+        "id,organization_id,shipment_id,disposition,recorded_at_utc,recorded_by_profile_id,supersedes_entry_id,reason",
+    });
+    const rows = await this.allRows("shipment_gold_review_entries", parameters);
+    const names = await this.profileNames(
+      organizationId,
+      rows.map((row) => this.string(row, "recorded_by_profile_id")),
+    );
+    return rows.map((row) =>
+      this.review(
+        row,
+        names.get(this.string(row, "recorded_by_profile_id")) ??
+          "Cuenta gerencial",
+      ),
+    );
+  }
+
+  async createReview(input: CreateGoldReviewEntry): Promise<GoldReviewEntry> {
+    const response = await this.request("shipment_gold_review_entries", {
+      body: JSON.stringify({
+        id: input.id,
+        organization_id: input.organizationId,
+        shipment_id: input.shipmentId,
+        disposition: input.disposition,
+        recorded_at_utc: input.recordedAtUtc,
+        recorded_by_profile_id: input.recordedByProfileId,
+        supersedes_entry_id: input.supersedesEntryId,
+        reason: input.reason,
+      }),
+      headers: { Prefer: "return=representation" },
+      method: "POST",
+    });
+    const rows = (await response.json()) as Row[];
+    const row = rows[0];
+    if (row === undefined)
+      throw new SupabaseDataError(
+        "EMPTY_RESPONSE",
+        "shipment_gold_review_entries",
+      );
+    return this.review(row, input.recordedByDisplayName);
+  }
+
+  async createMercuryMovements(
+    inputs: readonly CreateMercuryMovement[],
+  ): Promise<void> {
+    if (inputs.length === 0) return;
+    await this.request("mercury_movements", {
+      body: JSON.stringify(
+        inputs.map((input) => ({
+          id: input.id,
+          organization_id: input.organizationId,
+          plant_id: input.plantId,
+          station_id: input.stationId,
+          production_line_id: input.productionLineId,
+          feed_cycle_id: input.feedCycleId,
+          shipment_id: input.shipmentId,
+          line_component_id: input.lineComponentId,
+          sweep_id: input.sweepId,
+          client_instance_id: input.clientInstanceId,
+          client_sequence: input.clientSequence,
+          movement_kind: input.movementKind,
+          amount_grams: input.amountGrams,
+          unit_code: "g",
+          occurred_at_utc: input.occurredAtUtc,
+          recorded_at_utc: input.recordedAtUtc,
+          recorded_by_profile_id: input.recordedByProfileId,
+          supersedes_movement_id: input.supersedesMovementId,
+          notes: input.notes,
+        })),
+      ),
+      method: "POST",
+    });
+  }
+
+  private async currentReviews(
+    organizationId: string,
+    shipmentIds: readonly string[],
+  ): Promise<ReadonlyMap<string, Row>> {
+    if (shipmentIds.length === 0) return new Map();
+    const parameters = new URLSearchParams({
+      organization_id: `eq.${organizationId}`,
+      shipment_id: `in.(${shipmentIds.join(",")})`,
+      select:
+        "review_entry_id,shipment_id,disposition,recorded_at_utc,recorded_by_profile_id,reason",
+      limit: String(PAGE_SIZE),
+    });
+    const response = await this.request(
+      `management_current_gold_review?${parameters}`,
+    );
+    const rows = (await response.json()) as Row[];
+    return new Map(rows.map((row) => [this.string(row, "shipment_id"), row]));
   }
 
   private async profileNames(
@@ -206,7 +317,7 @@ export class SupabaseGoldRepository implements GoldRepository {
     };
   }
 
-  private shipmentFact(row: Row): GoldShipmentFact {
+  private shipmentFact(row: Row, review: Row | null): GoldShipmentFact {
     const hasGoldResult = this.boolean(row, "has_gold_result");
     const goldAmountGrams = this.nullableNumber(row, "gold_amount_grams");
     if (hasGoldResult !== (goldAmountGrams !== null))
@@ -218,7 +329,32 @@ export class SupabaseGoldRepository implements GoldRepository {
       cajuelaTotal: this.number(row, "cajuela_total"),
       hasGoldResult,
       goldAmountGrams,
+      reviewEntryId:
+        review === null ? null : this.string(review, "review_entry_id"),
+      reviewDisposition:
+        review === null ? "PENDING" : this.reviewDisposition(review),
     };
+  }
+
+  private review(row: Row, displayName: string): GoldReviewEntry {
+    return {
+      id: this.string(row, "id"),
+      organizationId: this.string(row, "organization_id"),
+      shipmentId: this.string(row, "shipment_id"),
+      disposition: this.reviewDisposition(row),
+      recordedAtUtc: this.string(row, "recorded_at_utc"),
+      recordedByProfileId: this.string(row, "recorded_by_profile_id"),
+      recordedByDisplayName: displayName,
+      supersedesEntryId: this.nullableString(row, "supersedes_entry_id"),
+      reason: this.nullableString(row, "reason"),
+    };
+  }
+
+  private reviewDisposition(row: Row): "PENDING" | "ACKNOWLEDGED" | "OMITTED" {
+    const value = this.string(row, "disposition");
+    if (value === "PENDING" || value === "ACKNOWLEDGED" || value === "OMITTED")
+      return value;
+    throw new SupabaseDataError("INVALID_ROW", "disposition");
   }
 
   private string(row: Row, key: string): string {

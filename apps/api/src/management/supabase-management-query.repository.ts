@@ -68,6 +68,8 @@ const SWEEP_SELECT = [
   "remainder_grams",
   "has_input_record",
   "has_remainder_record",
+  "input_movement_id",
+  "remainder_movement_id",
 ].join(",");
 
 const STATISTICS_SELECT = [
@@ -383,6 +385,8 @@ export class SupabaseManagementQueryRepository implements ManagementQueryReposit
       remainderGrams: this.nullableNumber(row, "remainder_grams"),
       hasInputRecord: this.booleanOrFalse(row, "has_input_record"),
       hasRemainderRecord: this.booleanOrFalse(row, "has_remainder_record"),
+      inputMovementId: this.nullableString(row, "input_movement_id"),
+      remainderMovementId: this.nullableString(row, "remainder_movement_id"),
     };
   }
 

@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { requestErrorMessage } from "../../api/http";
 import { useLanguage } from "../../i18n/language-context";
 import { workerDisplayName } from "../workers/worker-display";
+import { PlantManagerPage } from "../accounts/plant-manager-page";
 import { formatMinutes } from "./attendance-data";
 import {
   currentPayrollWeek,
@@ -12,7 +13,8 @@ import {
   useCreatePayrollRate,
   usePayrollReport,
   usePayrollWorkers,
-  useUpdatePayrollIdentity,
+  useSetPayrollWorkerState,
+  useUpdatePayrollProfile,
   type PayrollAdjustment,
   type PayrollAdjustmentType,
   type PayrollWorkerResult,
@@ -50,19 +52,39 @@ export function AttendanceFeature() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const workers = usePayrollWorkers(search);
-  const totalWorkers = workers.data?.length ?? 0;
+  const orderedWorkers = useMemo(
+    () =>
+      [...(Array.isArray(workers.data) ? workers.data : [])].sort(
+        (left, right) =>
+          roleOrder(left.category) - roleOrder(right.category) ||
+          left.name.localeCompare(right.name, "es"),
+      ),
+    [workers.data],
+  );
+  const totalWorkers = orderedWorkers.length;
   const totalPages = Math.max(1, Math.ceil(totalWorkers / WORKERS_PER_PAGE));
-  const visibleWorkers = (workers.data ?? []).slice(
+  const visibleWorkers = orderedWorkers.slice(
     (page - 1) * WORKERS_PER_PAGE,
     page * WORKERS_PER_PAGE,
   );
   const selectedWorkerId = parameters.get("worker") ?? undefined;
-  const selectedWorker = workers.data?.find(
+  const selectedWorker = orderedWorkers.find(
     (worker) => worker.id === selectedWorkerId,
   );
+  const createWorkerOpen = parameters.get("action") === "create";
   const closeWorker = () => {
     const next = new URLSearchParams(parameters);
     next.delete("worker");
+    setParameters(next, { replace: true });
+  };
+  const openCreateWorker = () => {
+    const next = new URLSearchParams(parameters);
+    next.set("action", "create");
+    setParameters(next, { replace: true });
+  };
+  const closeCreateWorker = () => {
+    const next = new URLSearchParams(parameters);
+    next.delete("action");
     setParameters(next, { replace: true });
   };
 
@@ -77,21 +99,26 @@ export function AttendanceFeature() {
               {tr("empleados", "employees")}
             </p>
           </div>
-          <label className="payroll-search payroll-search-inline">
-            <span className="sr-only">{tr("BUSCAR", "SEARCH")}</span>
-            <input
-              type="search"
-              value={search}
-              placeholder={tr(
-                "Buscar por nombre o cédula",
-                "Search by name or identity",
-              )}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-            />
-          </label>
+          <div className="payroll-directory-actions">
+            <label className="payroll-search payroll-search-inline">
+              <span className="sr-only">{tr("BUSCAR", "SEARCH")}</span>
+              <input
+                type="search"
+                value={search}
+                placeholder={tr(
+                  "Buscar por nombre o cédula",
+                  "Search by name or identity",
+                )}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
+            <button type="button" onClick={openCreateWorker}>
+              + {tr("AGREGAR NUEVO", "ADD NEW")}
+            </button>
+          </div>
         </header>
 
         {workers.isPending && (
@@ -104,7 +131,7 @@ export function AttendanceFeature() {
             {requestErrorMessage(workers.error, undefined, language)}
           </p>
         )}
-        {workers.data !== undefined && (
+        {Array.isArray(workers.data) && (
           <>
             <div className="payroll-worker-list">
               {visibleWorkers.map((worker) => (
@@ -166,8 +193,57 @@ export function AttendanceFeature() {
           onClose={closeWorker}
         />
       )}
+      {createWorkerOpen && (
+        <PlantUserCreateDialog onClose={closeCreateWorker} />
+      )}
     </div>
   );
+}
+
+function PlantUserCreateDialog({ onClose }: { onClose: () => void }) {
+  const { tr } = useLanguage();
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="payroll-modal-backdrop" onMouseDown={onClose}>
+      <section
+        className="payroll-modal worker-create-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={tr("Crear usuario de planta", "Create plant user")}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="secondary payroll-modal-close worker-create-close"
+          onClick={onClose}
+          aria-label={tr("Cerrar", "Close")}
+        >
+          ×
+        </button>
+        <PlantManagerPage embedded createOnly onCreated={onClose} />
+      </section>
+    </div>
+  );
+}
+
+function roleOrder(category: string): number {
+  return category === "JEFE_PLANTA" ? 0 : 1;
+}
+
+function roleLabel(
+  category: string,
+  tr: (spanish: string, english: string) => string,
+): string {
+  return category === "JEFE_PLANTA"
+    ? tr("Jefe de planta", "Plant manager")
+    : tr("Operario", "Operator");
 }
 
 function WorkerDirectoryRow({
@@ -181,8 +257,14 @@ function WorkerDirectoryRow({
   return (
     <button type="button" className="payroll-worker-row" onClick={onOpen}>
       <span className="payroll-worker-identity">
-        <strong>{workerDisplayName(worker.name)}</strong>
+        <strong>
+          <span className="worker-role-prefix">
+            {worker.category === "JEFE_PLANTA" ? "JF" : "OP"}
+          </span>{" "}
+          {workerDisplayName(worker.name)}
+        </strong>
         <small>
+          {roleLabel(worker.category, tr)} ·{" "}
           {worker.identityNumber === null
             ? tr("Cédula pendiente", "Identity number pending")
             : `${tr("Cédula", "Identity")}: ${worker.identityNumber}`}
@@ -244,7 +326,20 @@ function WorkerPayrollDialog({
                 ? tr("Trabajador", "Worker")
                 : workerDisplayName(worker.name)}
             </h2>
-            {worker !== undefined && <InlineIdentityEditor worker={worker} />}
+            {worker !== undefined && (
+              <div className="payroll-worker-heading-meta">
+                <span className="worker-role-prefix">
+                  {worker.category === "JEFE_PLANTA" ? "JF" : "OP"}
+                </span>
+                <span>{roleLabel(worker.category, tr)}</span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {worker.isActive
+                    ? tr("Activo", "Active")
+                    : tr("Suspendido", "Suspended")}
+                </span>
+              </div>
+            )}
           </div>
           <div className="payroll-date-range">
             <label>
@@ -364,6 +459,17 @@ function SummaryTab({
           toDate={toDate}
         />
       </section>
+      <WorkerProfilePanel
+        key={[
+          result.worker.id,
+          result.worker.name,
+          result.worker.identityNumber,
+          result.worker.email,
+          result.worker.phone,
+          result.worker.isActive,
+        ].join("|")}
+        worker={result.worker}
+      />
     </div>
   );
 }
@@ -427,73 +533,226 @@ function CommentsTab({
   );
 }
 
-function InlineIdentityEditor({ worker }: { worker: PayrollWorkerProfile }) {
+function WorkerProfilePanel({ worker }: { worker: PayrollWorkerProfile }) {
   const { language, tr } = useLanguage();
-  const mutation = useUpdatePayrollIdentity();
+  const profileMutation = useUpdatePayrollProfile();
+  const stateMutation = useSetPayrollWorkerState();
   const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(worker.name);
   const [identityNumber, setIdentityNumber] = useState(
     worker.identityNumber ?? "",
   );
+  const [email, setEmail] = useState(worker.email ?? "");
+  const [phone, setPhone] = useState(worker.phone ?? "");
+  const [suspending, setSuspending] = useState(false);
+  const [suspensionReason, setSuspensionReason] = useState("");
+
   if (!editing) {
     return (
-      <div className="payroll-inline-identity">
-        <span>
-          {worker.identityNumber === null
-            ? tr("Cédula pendiente", "Identity pending")
-            : `${tr("Cédula", "Identity")}: ${worker.identityNumber}`}
-        </span>
-        <button
-          type="button"
-          className="payroll-pencil"
-          aria-label={tr("Editar cédula", "Edit identity")}
-          onClick={() => setEditing(true)}
-        >
-          ✎
-        </button>
-      </div>
+      <section className="worker-profile-panel">
+        <header>
+          <div>
+            <span>{tr("DATOS DEL EXPEDIENTE", "RECORD DETAILS")}</span>
+            <h3>
+              {tr(
+                "Información personal y estado",
+                "Personal information and status",
+              )}
+            </h3>
+          </div>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setEditing(true)}
+          >
+            ✎ {tr("EDITAR DATOS", "EDIT DETAILS")}
+          </button>
+        </header>
+        <dl className="worker-profile-grid">
+          <div>
+            <dt>{tr("Cédula", "Identity")}</dt>
+            <dd>{worker.identityNumber ?? tr("Pendiente", "Pending")}</dd>
+          </div>
+          <div>
+            <dt>{tr("Correo de contacto", "Contact email")}</dt>
+            <dd>{worker.email ?? tr("Sin registrar", "Not recorded")}</dd>
+          </div>
+          <div>
+            <dt>{tr("Teléfono", "Phone")}</dt>
+            <dd>{worker.phone ?? tr("Sin registrar", "Not recorded")}</dd>
+          </div>
+          <div>
+            <dt>{tr("Estado", "Status")}</dt>
+            <dd>
+              {worker.isActive
+                ? tr("Activo", "Active")
+                : tr("Suspendido", "Suspended")}
+            </dd>
+          </div>
+        </dl>
+        <div className="worker-profile-state-actions">
+          {worker.isActive ? (
+            suspending ? (
+              <div className="worker-suspension-box">
+                <label>
+                  {tr("Motivo de suspensión", "Suspension reason")}
+                  <textarea
+                    required
+                    minLength={3}
+                    maxLength={300}
+                    rows={2}
+                    value={suspensionReason}
+                    onChange={(event) =>
+                      setSuspensionReason(event.target.value)
+                    }
+                  />
+                </label>
+                <MutationError mutation={stateMutation} language={language} />
+                <div>
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={
+                      stateMutation.isPending ||
+                      suspensionReason.trim().length < 3
+                    }
+                    onClick={() =>
+                      stateMutation.mutate(
+                        {
+                          workerId: worker.id,
+                          active: false,
+                          reason: suspensionReason.trim(),
+                        },
+                        {
+                          onSuccess: () => {
+                            setSuspending(false);
+                            setSuspensionReason("");
+                          },
+                        },
+                      )
+                    }
+                  >
+                    {tr("CONFIRMAR SUSPENSIÓN", "CONFIRM SUSPENSION")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setSuspending(false)}
+                  >
+                    {tr("CANCELAR", "CANCEL")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="danger secondary"
+                onClick={() => setSuspending(true)}
+              >
+                {tr("SUSPENDER TRABAJADOR", "SUSPEND WORKER")}
+              </button>
+            )
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={stateMutation.isPending}
+                onClick={() =>
+                  stateMutation.mutate({ workerId: worker.id, active: true })
+                }
+              >
+                {tr("REACTIVAR TRABAJADOR", "REACTIVATE WORKER")}
+              </button>
+              <MutationError mutation={stateMutation} language={language} />
+            </>
+          )}
+        </div>
+      </section>
     );
   }
   return (
     <form
-      className="payroll-inline-identity payroll-inline-identity-edit"
+      className="worker-profile-panel worker-profile-editor"
       onSubmit={(event) => {
         event.preventDefault();
-        mutation.mutate(
+        profileMutation.mutate(
           {
             workerId: worker.id,
+            name: name.trim(),
             identityNumber: identityNumber.trim() || null,
+            email: email.trim() || null,
+            phone: phone.trim() || null,
           },
           { onSuccess: () => setEditing(false) },
         );
       }}
     >
-      <input
-        autoFocus
-        aria-label={tr("Número de cédula", "Identity number")}
-        value={identityNumber}
-        maxLength={30}
-        onChange={(event) => setIdentityNumber(event.target.value)}
-      />
-      <MutationError mutation={mutation} language={language} />
-      <button
-        type="submit"
-        className="payroll-pencil"
-        disabled={mutation.isPending}
-        aria-label={tr("Guardar cédula", "Save identity")}
-      >
-        ✓
-      </button>
-      <button
-        type="button"
-        className="payroll-pencil"
-        aria-label={tr("Cancelar", "Cancel")}
-        onClick={() => {
-          setIdentityNumber(worker.identityNumber ?? "");
-          setEditing(false);
-        }}
-      >
-        ×
-      </button>
+      <header>
+        <div>
+          <span>{tr("EDITAR EXPEDIENTE", "EDIT RECORD")}</span>
+          <h3>{tr("Datos del trabajador", "Worker details")}</h3>
+        </div>
+      </header>
+      <div className="worker-profile-form-grid">
+        <label>
+          {tr("Nombre completo", "Full name")}
+          <input
+            autoFocus
+            required
+            maxLength={160}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label>
+          {tr("Cédula", "Identity")}
+          <input
+            minLength={4}
+            maxLength={30}
+            value={identityNumber}
+            onChange={(event) => setIdentityNumber(event.target.value)}
+          />
+        </label>
+        <label>
+          {tr("Correo de contacto", "Contact email")}
+          <input
+            type="email"
+            maxLength={254}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <label>
+          {tr("Teléfono", "Phone")}
+          <input
+            type="tel"
+            maxLength={40}
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        </label>
+      </div>
+      {worker.category === "JEFE_PLANTA" && (
+        <p className="field-help">
+          {tr(
+            "Este correo es informativo; no cambia el correo usado para iniciar sesión.",
+            "This is a contact email; it does not change the sign-in email.",
+          )}
+        </p>
+      )}
+      <MutationError mutation={profileMutation} language={language} />
+      <div className="payroll-editor-actions">
+        <button type="submit" disabled={profileMutation.isPending}>
+          {tr("GUARDAR CAMBIOS", "SAVE CHANGES")}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setEditing(false)}
+        >
+          {tr("CANCELAR", "CANCEL")}
+        </button>
+      </div>
     </form>
   );
 }

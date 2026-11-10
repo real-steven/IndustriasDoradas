@@ -1,5 +1,7 @@
 export const GOLD_REPOSITORY = Symbol("GOLD_REPOSITORY");
 
+export type GoldReviewDisposition = "PENDING" | "ACKNOWLEDGED" | "OMITTED";
+
 export interface GoldFilters {
   fromUtc?: string;
   toUtc?: string;
@@ -16,6 +18,48 @@ export interface GoldShipmentFact {
   cajuelaTotal: number;
   hasGoldResult: boolean;
   goldAmountGrams: number | null;
+  reviewEntryId: string | null;
+  reviewDisposition: GoldReviewDisposition;
+}
+
+export interface GoldReviewEntry {
+  id: string;
+  organizationId: string;
+  shipmentId: string;
+  disposition: GoldReviewDisposition;
+  recordedAtUtc: string;
+  recordedByProfileId: string;
+  recordedByDisplayName: string;
+  supersedesEntryId: string | null;
+  reason: string | null;
+}
+
+export interface CreateGoldReviewEntry extends Omit<
+  GoldReviewEntry,
+  "recordedByDisplayName"
+> {
+  recordedByDisplayName: string;
+}
+
+export interface CreateMercuryMovement {
+  id: string;
+  organizationId: string;
+  plantId: string;
+  stationId: string;
+  productionLineId: string;
+  feedCycleId: string;
+  shipmentId: string;
+  lineComponentId: string;
+  sweepId: string;
+  clientInstanceId: string;
+  clientSequence: number;
+  movementKind: "SWEEP_INPUT" | "SWEEP_REMAINDER";
+  amountGrams: number;
+  occurredAtUtc: string;
+  recordedAtUtc: string;
+  recordedByProfileId: string;
+  supersedesMovementId: string | null;
+  notes: string | null;
 }
 
 export interface GoldResultEntry {
@@ -59,6 +103,11 @@ export interface GoldSummary {
   totalShipments: number;
   registeredShipments: number;
   excludedShipments: number;
+  pendingShipments: number;
+  acknowledgedShipments: number;
+  acknowledgedShipmentIds: readonly string[];
+  omittedShipments: number;
+  omittedShipmentIds: readonly string[];
   coveragePercentage: number;
   totalGoldGrams: number;
   includedCajuelas: number;
@@ -76,4 +125,12 @@ export interface GoldRepository {
     shipmentId: string,
   ): Promise<readonly GoldResultEntry[]>;
   createResult(input: CreateGoldResultEntry): Promise<GoldResultEntry>;
+  listReviews(
+    organizationId: string,
+    shipmentId: string,
+  ): Promise<readonly GoldReviewEntry[]>;
+  createReview(input: CreateGoldReviewEntry): Promise<GoldReviewEntry>;
+  createMercuryMovements(
+    inputs: readonly CreateMercuryMovement[],
+  ): Promise<void>;
 }

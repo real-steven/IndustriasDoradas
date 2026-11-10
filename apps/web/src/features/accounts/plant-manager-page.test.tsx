@@ -1,12 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,20 +9,20 @@ import { App } from "../../app/app";
 import { QueryProvider } from "../../app/query-provider";
 import { AuthContext, type AuthState } from "../../auth/auth-context";
 
-describe("gestion de usuarios de planta", () => {
+describe("gestion unificada de trabajadores", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
   });
 
-  it("crea una cuenta pendiente y permite activarla por separado", async () => {
+  it("abre el formulario emergente y crea una jefatura pendiente", async () => {
     const user = userEvent.setup();
     const api = createAccountsApi();
     vi.stubGlobal("fetch", api.fetch);
     renderPage();
 
     expect(
-      await screen.findByRole("heading", { name: "Usuarios de planta" }),
+      await screen.findByRole("dialog", { name: "Crear usuario de planta" }),
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Planta");
     await user.type(
@@ -45,24 +39,12 @@ describe("gestion de usuarios de planta", () => {
     );
     await user.type(screen.getByLabelText("PIN de elevación"), "123456");
     await user.type(screen.getByLabelText("Confirmar PIN"), "123456");
-    expect(
-      screen.queryByRole("combobox", { name: "Idioma inicial" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("combobox", { name: "Planta" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("checkbox", { name: "Estación central" }),
-    ).not.toBeInTheDocument();
     const createButton = screen.getByRole("button", {
       name: "CREAR CUENTA PENDIENTE",
     });
     await waitFor(() => expect(createButton).toBeEnabled());
     await user.click(createButton);
 
-    expect(
-      await screen.findByRole("status", { name: "Notificación de éxito" }),
-    ).toHaveTextContent(/Cuenta creada pendiente de activación/u);
     expect(api.creationBody).toEqual({
       displayName: "Ana Planta",
       email: "ana@example.invalid",
@@ -72,15 +54,12 @@ describe("gestion de usuarios de planta", () => {
       stationIds: [STATION_ID],
       preferredLocale: "es",
     });
-
-    await user.click(
-      await screen.findByRole("button", { name: "ACTIVAR CUENTA" }),
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Crear usuario de planta" }),
+      ).not.toBeInTheDocument(),
     );
-    expect(
-      await screen.findByRole("status", { name: "Notificación de éxito" }),
-    ).toHaveTextContent("Cuenta activada correctamente.");
-    await waitFor(() => expect(screen.getByText("ACTIVA")).toBeInTheDocument());
-    expect(api.approvalCount()).toBe(1);
+    expect(screen.getByRole("heading", { name: "Trabajadores" })).toBeVisible();
   });
 
   it("no envia credenciales cuando las confirmaciones no coinciden", async () => {
@@ -107,11 +86,9 @@ describe("gestion de usuarios de planta", () => {
     );
     await user.type(screen.getByLabelText("PIN de elevación"), "123456");
     await user.type(screen.getByLabelText("Confirmar PIN"), "123456");
-    const createButton = screen.getByRole("button", {
-      name: "CREAR CUENTA PENDIENTE",
-    });
-    await waitFor(() => expect(createButton).toBeEnabled());
-    await user.click(createButton);
+    await user.click(
+      screen.getByRole("button", { name: "CREAR CUENTA PENDIENTE" }),
+    );
 
     expect(
       await screen.findByText("Las contraseñas no coinciden."),
@@ -119,7 +96,7 @@ describe("gestion de usuarios de planta", () => {
     expect(api.creationBody).toBeNull();
   });
 
-  it("registra un operario con el rol seleccionado y muestra el prefijo OP", async () => {
+  it("registra un operario desde el mismo formulario emergente", async () => {
     const user = userEvent.setup();
     const api = createAccountsApi();
     vi.stubGlobal("fetch", api.fetch);
@@ -139,82 +116,50 @@ describe("gestion de usuarios de planta", () => {
       screen.getByRole("button", { name: "REGISTRAR OPERARIO" }),
     );
 
-    expect(
-      await screen.findByRole("status", { name: "Notificación de éxito" }),
-    ).toHaveTextContent("Operario registrado con estado pendiente");
     expect(api.operatorCreationBody).toEqual({
       name: "Mario Planta",
       plantId: PLANT_ID,
       email: "mario@example.invalid",
       phone: "8888-0000",
     });
-    expect(await screen.findByText("Mario Planta")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Crear usuario de planta" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
-  it("muestra jefaturas y operarios en bloques acumulables de cinco", async () => {
-    const user = userEvent.setup();
+  it("muestra primero las jefaturas y luego los operarios en una sola lista", async () => {
     const api = createAccountsApi({
-      managers: Array.from({ length: 6 }, (_, index) =>
-        plantManagerFixture(index + 1),
-      ),
-      operators: Array.from({ length: 12 }, (_, index) =>
-        operatorFixture(index + 1),
-      ),
+      payrollWorkers: [operatorPayrollFixture(), managerPayrollFixture()],
     });
     vi.stubGlobal("fetch", api.fetch);
-    renderPage();
+    renderPage("/gerencia/trabajadores");
 
-    const managersHeading = await screen.findByRole("heading", {
-      name: "Jefes de planta",
-    });
-    const managersSection = managersHeading.closest("section");
-    if (managersSection === null) throw new Error("Managers section missing");
-    const managersList = within(managersSection);
-    expect(await managersList.findByText("Jefe listado 5")).toBeInTheDocument();
-    expect(managersList.queryByText("Jefe listado 6")).not.toBeInTheDocument();
-
-    const operatorsHeading = screen.getByRole("heading", { name: "Operarios" });
-    const operatorsSection = operatorsHeading.closest("section");
-    if (operatorsSection === null) throw new Error("Operators section missing");
-    const operatorsList = within(operatorsSection);
-    expect(
-      await operatorsList.findByText("Operario listado 5"),
-    ).toBeInTheDocument();
-    expect(
-      operatorsList.queryByText("Operario listado 6"),
-    ).not.toBeInTheDocument();
-
-    await user.click(operatorsList.getByRole("button", { name: "VER MÁS" }));
-    expect(operatorsList.getByText("Operario listado 10")).toBeInTheDocument();
-    expect(
-      operatorsList.queryByText("Operario listado 11"),
-    ).not.toBeInTheDocument();
-    expect(
-      operatorsList.getByRole("button", { name: "VER MÁS" }),
-    ).toBeInTheDocument();
-
-    await user.click(operatorsList.getByRole("button", { name: "VER MÁS" }));
-    expect(operatorsList.getByText("Operario listado 12")).toBeInTheDocument();
-    expect(
-      operatorsList.queryByRole("button", { name: "VER MÁS" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(managersList.getByRole("button", { name: "VER MÁS" }));
-    expect(managersList.getByText("Jefe listado 6")).toBeInTheDocument();
-    expect(
-      managersList.queryByRole("button", { name: "VER MÁS" }),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText("Daniela Demo")).toBeInTheDocument();
+    const rows = screen.getAllByRole("button", { name: /ABRIR/u });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("JF Daniela Demo");
+    expect(rows[0]).toHaveTextContent("Jefe de planta");
+    expect(rows[1]).toHaveTextContent("OP Mario Planta");
+    expect(rows[1]).toHaveTextContent("Operario");
   });
 });
 
-function renderPage() {
+function renderPage(path = "/gerencia/usuarios") {
   const auth: AuthState = {
     session: { access_token: "manager-token" } as Session,
     profile: {
       profileId: PROFILE_ID,
       organizationId: ORGANIZATION_ID,
       role: "JEFE_EMPRESA",
-      permissions: ["plant_managers.manage", "organization_catalogs.read"],
+      permissions: [
+        "plant_managers.manage",
+        "organization_catalogs.read",
+        "attendance.read",
+        "payroll.read",
+        "payroll.manage",
+      ],
       expiresAt: "2027-01-01T00:00:00.000Z",
     },
     foundSession: null,
@@ -234,7 +179,7 @@ function renderPage() {
   render(
     <AuthContext.Provider value={auth}>
       <QueryProvider client={client}>
-        <MemoryRouter initialEntries={["/gerencia/usuarios"]}>
+        <MemoryRouter initialEntries={[path]}>
           <App />
         </MemoryRouter>
       </QueryProvider>
@@ -243,22 +188,15 @@ function renderPage() {
 }
 
 function createAccountsApi(
-  seed: {
-    managers?: Record<string, unknown>[];
-    operators?: Record<string, unknown>[];
-  } = {},
+  seed: { payrollWorkers?: Record<string, unknown>[] } = {},
 ): {
   fetch: typeof fetch;
   creationBody: Record<string, unknown> | null;
   operatorCreationBody: Record<string, unknown> | null;
-  approvalCount: () => number;
 } {
-  let account: Record<string, unknown> | null = null;
   let creationBody: Record<string, unknown> | null = null;
   let operatorCreationBody: Record<string, unknown> | null = null;
-  const managers = seed.managers ?? [];
-  let operators: Record<string, unknown>[] = [...(seed.operators ?? [])];
-  let approvals = 0;
+  const payrollWorkers = seed.payrollWorkers ?? [];
   const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
     const url = new URL(requestUrl(input), "http://localhost");
     const method = init?.method ?? "GET";
@@ -272,6 +210,8 @@ function createAccountsApi(
           pollAfterSeconds: 30,
         }),
       );
+    if (url.pathname.endsWith("/management/attendance/payroll/workers"))
+      return Promise.resolve(json(payrollWorkers));
     if (url.pathname.endsWith("/plants") && method === "GET")
       return Promise.resolve(
         page([{ id: PLANT_ID, name: "Planta principal", isActive: true }]),
@@ -288,31 +228,13 @@ function createAccountsApi(
         ]),
       );
     if (url.pathname.endsWith("/accounts") && method === "GET")
-      return Promise.resolve(
-        page(account === null ? managers : [account, ...managers]),
-      );
+      return Promise.resolve(page([]));
     if (url.pathname.endsWith("/workers") && method === "GET")
-      return Promise.resolve(page(operators));
+      return Promise.resolve(page([]));
     if (url.pathname.endsWith("/worker-requests") && method === "POST") {
       if (typeof init?.body !== "string") throw new Error("Expected body");
       operatorCreationBody = JSON.parse(init.body) as Record<string, unknown>;
-      const operator = {
-        id: WORKER_ID,
-        organizationId: ORGANIZATION_ID,
-        plantId: PLANT_ID,
-        sourceRequestId: REQUEST_ID,
-        userProfileId: null,
-        category: "OPERARIO",
-        name: "Mario Planta",
-        email: "mario@example.invalid",
-        phone: "8888-0000",
-        status: "PROVISIONAL",
-        statusChangedAt: "2026-10-28T12:00:00.000Z",
-        isActive: true,
-        deactivatedAt: null,
-      };
-      operators = [operator];
-      return Promise.resolve(json(operator, 201));
+      return Promise.resolve(json(operatorPayrollFixture(), 201));
     }
     if (
       url.pathname.endsWith("/accounts/plant-managers") &&
@@ -320,16 +242,7 @@ function createAccountsApi(
     ) {
       if (typeof init?.body !== "string") throw new Error("Expected body");
       creationBody = JSON.parse(init.body) as Record<string, unknown>;
-      account = plantManager("PENDING_APPROVAL");
-      return Promise.resolve(json(account, 201));
-    }
-    if (
-      url.pathname.endsWith(`/accounts/${ACCOUNT_ID}/approve`) &&
-      method === "POST"
-    ) {
-      approvals += 1;
-      account = plantManager("ACTIVE");
-      return Promise.resolve(json(account));
+      return Promise.resolve(json(plantManager(), 201));
     }
     return Promise.reject(new Error(`Unexpected request: ${method} ${url}`));
   });
@@ -341,17 +254,16 @@ function createAccountsApi(
     get operatorCreationBody() {
       return operatorCreationBody;
     },
-    approvalCount: () => approvals,
   };
 }
 
-function plantManager(status: "PENDING_APPROVAL" | "ACTIVE") {
+function plantManager() {
   return {
     id: ACCOUNT_ID,
     organizationId: ORGANIZATION_ID,
     displayName: "Ana Planta",
     preferredLocale: "es",
-    accountStatus: status,
+    accountStatus: "PENDING_APPROVAL",
     roleCode: "JEFE_PLANTA",
     provisioningMethod: "DIRECT",
     statusReason: null,
@@ -361,29 +273,43 @@ function plantManager(status: "PENDING_APPROVAL" | "ACTIVE") {
   };
 }
 
-function plantManagerFixture(index: number) {
-  return {
-    ...plantManager("ACTIVE"),
-    id: `a2000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
-    displayName: `Jefe listado ${index}`,
-  };
+function managerPayrollFixture() {
+  return payrollFixture({
+    id: ACCOUNT_ID,
+    name: "Daniela Demo",
+    category: "JEFE_PLANTA",
+    userProfileId: PROFILE_ID,
+  });
 }
 
-function operatorFixture(index: number) {
+function operatorPayrollFixture() {
+  return payrollFixture({
+    id: WORKER_ID,
+    name: "Mario Planta",
+    category: "OPERARIO",
+    userProfileId: null,
+  });
+}
+
+function payrollFixture(input: {
+  id: string;
+  name: string;
+  category: string;
+  userProfileId: string | null;
+}) {
   return {
-    id: `45000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    ...input,
     organizationId: ORGANIZATION_ID,
     plantId: PLANT_ID,
-    sourceRequestId: REQUEST_ID,
-    userProfileId: null,
-    category: "OPERARIO",
-    name: `Operario listado ${index}`,
-    email: `operario${index}@example.invalid`,
+    identityNumber: null,
+    email: null,
     phone: null,
     status: "ACTIVO",
-    statusChangedAt: "2026-10-28T12:00:00.000Z",
     isActive: true,
-    deactivatedAt: null,
+    currentRateId: null,
+    currentHourlyRateCrc: null,
+    nightMultiplier: null,
+    rateEffectiveFromUtc: null,
   };
 }
 
@@ -418,4 +344,3 @@ const PLANT_ID = "31000000-0000-4000-8000-000000000001";
 const STATION_ID = "34000000-0000-4000-8000-000000000001";
 const ACCOUNT_ID = "a1000000-0000-4000-8000-000000000099";
 const WORKER_ID = "b1000000-0000-4000-8000-000000000099";
-const REQUEST_ID = "b0000000-0000-4000-8000-000000000099";

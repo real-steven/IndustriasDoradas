@@ -24,6 +24,9 @@ export interface PayrollWorkerProfile {
   organizationId: string;
   plantId: string;
   name: string;
+  userProfileId: string | null;
+  email: string | null;
+  phone: string | null;
   identityNumber: string | null;
   category: string;
   status: string;
@@ -127,10 +130,15 @@ export interface PayrollRepository {
     organizationId: string,
     workerId: string,
   ): Promise<PayrollWorkerProfile | null>;
-  updateIdentity(
+  updateProfile(
     organizationId: string,
     workerId: string,
-    identityNumber: string | null,
+    profile: {
+      name: string;
+      identityNumber: string | null;
+      email: string | null;
+      phone: string | null;
+    },
   ): Promise<void>;
   listRates(
     organizationId: string,

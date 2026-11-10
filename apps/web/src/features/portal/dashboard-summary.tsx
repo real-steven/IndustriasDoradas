@@ -1,21 +1,20 @@
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { useAuth, type RoleCode } from "../../auth/auth-context";
 import { useLanguage } from "../../i18n/language-context";
 import { useGoldSummary } from "../gold/gold-data";
-import { OperationFreshness } from "../management/management-operation";
 import {
-  formatCostaRicaDateTime,
+  OperationFreshness,
+  OperationLinesPanel,
+  OperationRefreshButton,
+} from "../management/management-operation";
+import {
   operationHeadline,
   type ManagementFreshnessQuery,
   type ManagementOperationQuery,
 } from "../management/management-operation-data";
-import {
-  useShipmentAuditEvents,
-  type AuditEvent,
-  type ShipmentFilters,
-} from "../management/management-shipments-data";
-import { managerAuditAction } from "../management/management-audit-labels";
+import type { ShipmentFilters } from "../management/management-shipments-data";
 
 const allShipmentFilters: ShipmentFilters = {
   period: "all",
@@ -35,11 +34,7 @@ export function DashboardSummary({
   const auth = useAuth();
   const { language, locale, tr } = useLanguage();
   const gold = useGoldSummary(allShipmentFilters);
-  const activity = useShipmentAuditEvents({
-    search: "",
-    page: 1,
-    pageSize: 3,
-  });
+  const [showPending, setShowPending] = useState(false);
   const lines = operation.data?.items ?? [];
   const activeShipments = new Set(lines.map((line) => line.shipmentId)).size;
   const activeCajuelas = lines.reduce(
@@ -47,17 +42,12 @@ export function DashboardSummary({
     0,
   );
   const pendingSweeps = lines.filter((line) => line.sweepPending).length;
-  const pendingGold = gold.data?.excludedShipments ?? 0;
+  const pendingGold = gold.data?.pendingShipments ?? 0;
   const pendingTotal = pendingSweeps + pendingGold;
   const pendingValue =
     operation.data === undefined || gold.data === undefined
       ? null
       : pendingTotal;
-  const refreshing =
-    operation.isFetching ||
-    freshness.isFetching ||
-    gold.isFetching ||
-    activity.isFetching;
   const displayName = managementDisplayName(
     auth.profile?.displayName,
     auth.profile?.role,
@@ -66,7 +56,7 @@ export function DashboardSummary({
 
   return (
     <div className="portal-view dashboard-summary">
-      <section className="manager-hero">
+      <section className="manager-hero dashboard-hero">
         <div>
           <p className="eyebrow light">
             {tr("CONTROL DE PLANTA", "PLANT CONTROL")}
@@ -124,92 +114,29 @@ export function DashboardSummary({
           label={tr("Pendientes", "Pending")}
           value={metricValue(pendingValue, locale)}
           tone={pendingTotal > 0 ? "red" : "neutral"}
+          actionLabel={tr("Ver pendientes", "View pending items")}
+          onClick={() => setShowPending(true)}
         />
       </section>
 
-      <div className="dashboard-columns">
-        <section className="portal-panel dashboard-attention">
-          <header>
-            <div>
-              <h2>{tr("Necesita atención", "Needs attention")}</h2>
-              <p>
-                {tr(
-                  "Asuntos que requieren seguimiento de gerencia",
-                  "Items that need management follow-up",
-                )}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="secondary"
-              disabled={refreshing}
-              onClick={() =>
-                void Promise.all([
-                  operation.refetch(),
-                  freshness.refetch(),
-                  gold.refetch(),
-                  activity.refetch(),
-                ])
-              }
-            >
-              {refreshing
-                ? tr("Actualizando…", "Refreshing…")
-                : tr("Actualizar datos", "Refresh data")}
-            </button>
-          </header>
-          <AttentionList
-            pendingSweeps={pendingSweeps}
-            pendingGold={pendingGold}
-            operationReady={operation.data !== undefined}
-            goldReady={gold.data !== undefined}
-          />
-        </section>
-
-        <section className="portal-panel dashboard-activity">
-          <header>
-            <div>
-              <h2>{tr("Actividad reciente", "Recent activity")}</h2>
-              <p>
-                {tr(
-                  "Últimos movimientos importantes",
-                  "Latest important activity",
-                )}
-              </p>
-            </div>
-            <NavLink className="inline-link" to="/gerencia/auditoria">
-              {tr("Ver auditoría →", "View audit →")}
-            </NavLink>
-          </header>
-          <RecentActivity
-            events={activity.data?.items}
-            pending={activity.isPending}
-          />
-        </section>
+      <div id="operacion-actual">
+        <OperationLinesPanel
+          query={operation}
+          action={
+            <OperationRefreshButton query={operation} freshness={freshness} />
+          }
+        />
       </div>
 
-      <nav
-        className="portal-panel dashboard-shortcuts"
-        aria-label={tr("Accesos rápidos", "Quick links")}
-      >
-        <h2>{tr("Accesos rápidos", "Quick links")}</h2>
-        <div>
-          <NavLink to="/gerencia/operacion">
-            <span aria-hidden="true">↗</span>
-            {tr("Ver operación", "View operations")}
-            <strong aria-hidden="true">→</strong>
-          </NavLink>
-          <NavLink to="/gerencia/oro">
-            <span aria-hidden="true">◆</span>
-            {tr("Registrar oro", "Record gold")}
-            <strong aria-hidden="true">→</strong>
-          </NavLink>
-          <NavLink to="/gerencia/cargamentos">
-            <span aria-hidden="true">▣</span>
-            {tr("Ver cargamentos", "View shipments")}
-            <strong aria-hidden="true">→</strong>
-          </NavLink>
-        </div>
-      </nav>
+      {showPending && (
+        <PendingDialog
+          pendingSweeps={pendingSweeps}
+          pendingGold={pendingGold}
+          operationReady={operation.data !== undefined}
+          goldReady={gold.data !== undefined}
+          onClose={() => setShowPending(false)}
+        />
+      )}
     </div>
   );
 }
@@ -219,14 +146,18 @@ function ExecutiveMetric({
   label,
   value,
   tone,
+  actionLabel,
+  onClick,
 }: {
   icon: string;
   label: string;
   value: string;
   tone: "blue" | "gold" | "green" | "red" | "neutral";
+  actionLabel?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <article className="executive-metric">
+  const content = (
+    <>
       <span className={`executive-metric-icon ${tone}`} aria-hidden="true">
         {icon}
       </span>
@@ -234,7 +165,89 @@ function ExecutiveMetric({
         <span>{label}</span>
         <strong>{value}</strong>
       </div>
-    </article>
+      {onClick !== undefined && (
+        <span className="executive-metric-action" aria-hidden="true">
+          →
+        </span>
+      )}
+    </>
+  );
+
+  if (onClick !== undefined)
+    return (
+      <button
+        type="button"
+        className="executive-metric executive-metric-button"
+        aria-label={actionLabel}
+        onClick={onClick}
+      >
+        {content}
+      </button>
+    );
+
+  return <article className="executive-metric">{content}</article>;
+}
+
+function PendingDialog({
+  pendingSweeps,
+  pendingGold,
+  operationReady,
+  goldReady,
+  onClose,
+}: {
+  pendingSweeps: number;
+  pendingGold: number;
+  operationReady: boolean;
+  goldReady: boolean;
+  onClose: () => void;
+}) {
+  const { tr } = useLanguage();
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButton.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="dashboard-dialog-backdrop" onMouseDown={onClose}>
+      <section
+        className="dashboard-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dashboard-pending-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <p className="eyebrow">{tr("SEGUIMIENTO", "FOLLOW-UP")}</p>
+            <h2 id="dashboard-pending-title">
+              {tr("Pendientes de gerencia", "Management pending items")}
+            </h2>
+          </div>
+          <button
+            ref={closeButton}
+            type="button"
+            className="icon-button"
+            aria-label={tr("Cerrar pendientes", "Close pending items")}
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+        <AttentionList
+          pendingSweeps={pendingSweeps}
+          pendingGold={pendingGold}
+          operationReady={operationReady}
+          goldReady={goldReady}
+          onClose={onClose}
+        />
+      </section>
+    </div>
   );
 }
 
@@ -243,11 +256,13 @@ function AttentionList({
   pendingGold,
   operationReady,
   goldReady,
+  onClose,
 }: {
   pendingSweeps: number;
   pendingGold: number;
   operationReady: boolean;
   goldReady: boolean;
+  onClose: () => void;
 }) {
   const { tr } = useLanguage();
 
@@ -295,9 +310,9 @@ function AttentionList({
               )}
             </p>
           </div>
-          <NavLink to="/gerencia/operacion">
+          <a href="#operacion-actual" onClick={onClose}>
             {tr("Ver operación →", "View operations →")}
-          </NavLink>
+          </a>
         </article>
       )}
       {pendingGold > 0 && (
@@ -322,63 +337,12 @@ function AttentionList({
               )}
             </p>
           </div>
-          <NavLink to="/gerencia/oro">
+          <NavLink to="/gerencia/oro" onClick={onClose}>
             {tr("Registrar oro →", "Record gold →")}
           </NavLink>
         </article>
       )}
     </div>
-  );
-}
-
-function RecentActivity({
-  events,
-  pending,
-}: {
-  events: AuditEvent[] | undefined;
-  pending: boolean;
-}) {
-  const { language, tr } = useLanguage();
-
-  if (pending)
-    return (
-      <p className="dashboard-loading" role="status">
-        {tr("Consultando actividad…", "Loading activity…")}
-      </p>
-    );
-  if (events === undefined)
-    return (
-      <p className="dashboard-loading">
-        {tr(
-          "No fue posible consultar la actividad reciente.",
-          "Recent activity could not be loaded.",
-        )}
-      </p>
-    );
-  if (events.length === 0)
-    return (
-      <p className="dashboard-loading">
-        {tr("Todavía no hay actividad registrada.", "No activity yet.")}
-      </p>
-    );
-
-  return (
-    <ol className="recent-activity-list">
-      {events.map((event, index) => (
-        <li key={event.id ?? `${event.entityId ?? "activity"}-${index}`}>
-          <span
-            className={event.result === "SUCCEEDED" ? "complete" : "issue"}
-            aria-hidden="true"
-          >
-            {event.result === "SUCCEEDED" ? "✓" : "!"}
-          </span>
-          <div>
-            <strong>{managerAuditAction(event, language)}</strong>
-            <small>{activityTime(event.occurredAt, language, tr)}</small>
-          </div>
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -395,14 +359,4 @@ function managementDisplayName(
 
 function metricValue(value: number | null, locale: string): string {
   return value === null ? "—" : value.toLocaleString(locale);
-}
-
-function activityTime(
-  value: string,
-  language: "es" | "en",
-  tr: (spanish: string, english: string) => string,
-): string {
-  if (Number.isNaN(Date.parse(value)))
-    return tr("Fecha no disponible", "Date unavailable");
-  return formatCostaRicaDateTime(value, language);
 }
