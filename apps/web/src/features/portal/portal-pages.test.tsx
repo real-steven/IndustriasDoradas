@@ -265,7 +265,9 @@ describe("portal gerencial", () => {
       "href",
       "/gerencia/trabajadores",
     );
-    expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Usuarios" }),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("link", { name: "Ver estado del sistema" }),

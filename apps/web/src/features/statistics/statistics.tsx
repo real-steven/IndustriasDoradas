@@ -19,6 +19,7 @@ import { useLanguage } from "../../i18n/language-context";
 import { lineChartColor } from "../management/line-accent";
 import {
   parseStatisticsFilters,
+  previousStatisticsDateRange,
   statisticsDateRange,
   useManagementStatistics,
   type StatisticsFilters,
@@ -38,6 +39,9 @@ export function StatisticsFeature() {
     comparePrevious: false,
   });
   const range = statisticsDateRange(filters);
+  const previousRange = previousStatisticsDateRange(filters);
+  const currentRangeLabel = formatDateRange(range, language);
+  const previousRangeLabel = formatDateRange(previousRange, language);
 
   const update = (changes: Partial<StatisticsFilters>) => {
     const next = { ...filters, ...changes };
@@ -66,30 +70,10 @@ export function StatisticsFeature() {
 
   return (
     <div className="statistics-feature">
-      <section className="portal-panel statistics-filters">
-        <header>
-          <div>
-            <h2>{tr("Período y alcance", "Period and scope")}</h2>
-            <p>
-              {tr(
-                "Todos los resultados corresponden a cargamentos finalizados.",
-                "All results correspond to completed shipments.",
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="secondary"
-            disabled={statistics.isFetching}
-            onClick={() =>
-              void Promise.all([statistics.refetch(), options.refetch()])
-            }
-          >
-            {statistics.isFetching
-              ? tr("Actualizando…", "Refreshing…")
-              : tr("Actualizar datos", "Refresh data")}
-          </button>
-        </header>
+      <section
+        className="portal-panel statistics-filters"
+        aria-label={tr("Filtros de estadísticas", "Statistics filters")}
+      >
         <div className="statistics-filter-grid">
           <label>
             {tr("PERÍODO", "PERIOD")}
@@ -182,11 +166,35 @@ export function StatisticsFeature() {
               )}
             </span>
           </label>
+          <button
+            type="button"
+            className="secondary statistics-refresh"
+            disabled={statistics.isFetching}
+            aria-label={tr("Actualizar estadísticas", "Refresh statistics")}
+            onClick={() =>
+              void Promise.all([statistics.refetch(), options.refetch()])
+            }
+          >
+            {statistics.isFetching
+              ? tr("Actualizando…", "Refreshing…")
+              : tr("Actualizar", "Refresh")}
+          </button>
         </div>
-        <p className="statistics-range">
-          {tr("Mostrando", "Showing")} {formatDate(range.fromDate, language)} –{" "}
-          {formatDate(range.toDate, language)}
-        </p>
+        <div
+          className="statistics-ranges"
+          aria-label={tr("Períodos consultados", "Queried periods")}
+        >
+          <div>
+            <span>{tr("Período analizado", "Analyzed period")}</span>
+            <strong>{currentRangeLabel}</strong>
+          </div>
+          {filters.comparePrevious && (
+            <div>
+              <span>{tr("Comparado con", "Compared with")}</span>
+              <strong>{previousRangeLabel}</strong>
+            </div>
+          )}
+        </div>
       </section>
 
       {statistics.isPending && (
@@ -246,7 +254,7 @@ export function StatisticsFeature() {
                     "Cajuelas from completed shipments by period.",
                   )}
                 >
-                  <ResponsiveContainer width="100%" height={290}>
+                  <ResponsiveContainer width="100%" height={250}>
                     <AreaChart data={trendData} accessibilityLayer>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis
@@ -292,7 +300,7 @@ export function StatisticsFeature() {
                     "Cajuelas comparison using the colors from Operations.",
                   )}
                 >
-                  <ResponsiveContainer width="100%" height={290}>
+                  <ResponsiveContainer width="100%" height={250}>
                     <BarChart
                       data={statistics.data.productionLines}
                       accessibilityLayer
@@ -318,41 +326,10 @@ export function StatisticsFeature() {
                 </ChartPanel>
               </section>
 
-              <section className="statistics-chart-grid suppliers">
-                <ChartPanel
-                  title={tr(
-                    "Proveedores por rendimiento",
-                    "Suppliers by yield",
-                  )}
-                  description={tr(
-                    "Gramos por cajuela únicamente donde existe resultado de oro.",
-                    "Grams per cajuela only where a gold result exists.",
-                  )}
-                >
-                  <ResponsiveContainer width="100%" height={320}>
-                    <BarChart
-                      data={statistics.data.suppliers.slice(0, 8)}
-                      layout="vertical"
-                      accessibilityLayer
-                      margin={{ left: 24 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={115} />
-                      <Tooltip />
-                      <Bar
-                        dataKey="gramsPerCajuela"
-                        name={tr("g por cajuela", "g per cajuela")}
-                        fill="#c78a08"
-                        radius={[0, 6, 6, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartPanel>
+              <section className="statistics-insight-grid">
+                <SupplierRanking suppliers={statistics.data.suppliers} />
                 <CoveragePanel metrics={statistics.data.summary} />
               </section>
-
-              <StatisticsTable suppliers={statistics.data.suppliers} />
             </>
           )}
           <p className="statistics-updated">
@@ -392,7 +369,7 @@ function SummaryCards({
       delta: metricDelta(current.totalCajuelas, previous?.totalCajuelas),
     },
     {
-      label: tr("Oro registrado", "Recorded gold"),
+      label: tr("Oro del período", "Period gold"),
       value: `${current.totalGoldGrams.toLocaleString(locale)} g`,
       delta: metricDelta(current.totalGoldGrams, previous?.totalGoldGrams),
     },
@@ -460,7 +437,7 @@ function CoveragePanel({ metrics }: { metrics: StatisticsMetrics }) {
     <section className="portal-panel statistics-coverage">
       <header>
         <div>
-          <h2>{tr("Cobertura del dato de oro", "Gold data coverage")}</h2>
+          <h2>{tr("Cobertura del período", "Period coverage")}</h2>
           <p>
             {tr(
               "El rendimiento excluye cargamentos sin resultado para evitar falsos ceros.",
@@ -499,60 +476,99 @@ function CoveragePanel({ metrics }: { metrics: StatisticsMetrics }) {
   );
 }
 
-function StatisticsTable({
+function SupplierRanking({
   suppliers,
 }: {
   suppliers: Array<StatisticsMetrics & { id: string; name: string }>;
 }) {
   const { locale, tr } = useLanguage();
+  const orderedSuppliers = [...suppliers].sort(
+    (left, right) =>
+      (right.gramsPerCajuela ?? -1) - (left.gramsPerCajuela ?? -1),
+  );
+  const maximumYield = Math.max(
+    ...orderedSuppliers.map((supplier) => supplier.gramsPerCajuela ?? 0),
+    0,
+  );
   return (
-    <section className="portal-panel statistics-table">
+    <section className="portal-panel statistics-suppliers">
       <header>
         <div>
-          <h2>{tr("Detalle por proveedor", "Supplier detail")}</h2>
+          <h2>{tr("Rendimiento por proveedor", "Supplier yield")}</h2>
           <p>
             {tr(
-              "Valores exactos usados en la comparación.",
-              "Exact values used in the comparison.",
+              "Lectura compacta del rendimiento y la cobertura dentro del período.",
+              "Compact view of yield and coverage within the period.",
             )}
           </p>
         </div>
+        <span className="statistics-supplier-count">
+          {suppliers.length.toLocaleString(locale)}{" "}
+          {tr("proveedores", "suppliers")}
+        </span>
       </header>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>{tr("Proveedor", "Supplier")}</th>
-              <th>{tr("Cargamentos", "Shipments")}</th>
-              <th>{tr("Cajuelas", "Cajuelas")}</th>
-              <th>{tr("Oro", "Gold")}</th>
-              <th>{tr("Rendimiento", "Yield")}</th>
-              <th>{tr("Cobertura", "Coverage")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {suppliers.map((supplier) => (
-              <tr key={supplier.id}>
-                <th scope="row">{supplier.name}</th>
-                <td>{supplier.completedShipments.toLocaleString(locale)}</td>
-                <td>{supplier.totalCajuelas.toLocaleString(locale)}</td>
-                <td>{supplier.totalGoldGrams.toLocaleString(locale)} g</td>
-                <td>
-                  {supplier.gramsPerCajuela === null
-                    ? "—"
-                    : `${supplier.gramsPerCajuela.toLocaleString(locale, { maximumFractionDigits: 4 })} g/cajuela`}
-                </td>
-                <td>
-                  {supplier.goldCoveragePercentage.toLocaleString(locale)}%
-                  {supplier.completedShipments < 3 && (
-                    <small>{tr("Muestra pequeña", "Small sample")}</small>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ol className="statistics-supplier-ranking">
+        {orderedSuppliers.map((supplier, index) => (
+          <li key={supplier.id}>
+            <span className="statistics-supplier-rank" aria-hidden="true">
+              {index + 1}
+            </span>
+            <div className="statistics-supplier-copy">
+              <div>
+                <h3>{supplier.name}</h3>
+                {supplier.completedShipments < 3 && (
+                  <small>{tr("Muestra pequeña", "Small sample")}</small>
+                )}
+              </div>
+              <div
+                className="statistics-supplier-yield-bar"
+                role="img"
+                aria-label={`${supplier.name}: ${
+                  supplier.gramsPerCajuela === null
+                    ? tr("sin rendimiento", "no yield")
+                    : `${supplier.gramsPerCajuela.toLocaleString(locale, { maximumFractionDigits: 4 })} g/cajuela`
+                }`}
+              >
+                <span
+                  style={{
+                    width: `${
+                      maximumYield === 0
+                        ? 0
+                        : ((supplier.gramsPerCajuela ?? 0) / maximumYield) * 100
+                    }%`,
+                  }}
+                />
+              </div>
+              <p>
+                {supplier.completedShipments.toLocaleString(locale)}{" "}
+                {tr("cargamentos", "shipments")} ·{" "}
+                {supplier.totalCajuelas.toLocaleString(locale)}{" "}
+                {tr("cajuelas", "cajuelas")} ·{" "}
+                {supplier.totalGoldGrams.toLocaleString(locale)} g{" "}
+                {tr("de oro", "gold")}
+              </p>
+            </div>
+            <div className="statistics-supplier-result">
+              <strong>
+                {supplier.gramsPerCajuela === null
+                  ? "—"
+                  : supplier.gramsPerCajuela.toLocaleString(locale, {
+                      maximumFractionDigits: 4,
+                    })}
+              </strong>
+              <span>
+                {supplier.gramsPerCajuela === null
+                  ? tr("Sin rendimiento", "No yield")
+                  : "g/cajuela"}
+              </span>
+              <small>
+                {supplier.goldCoveragePercentage.toLocaleString(locale)}%{" "}
+                {tr("con oro", "with gold")}
+              </small>
+            </div>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -580,6 +596,13 @@ function formatDate(value: string, language: string): string {
     dateStyle: "medium",
     timeZone: "UTC",
   }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function formatDateRange(
+  range: { fromDate: string; toDate: string },
+  language: string,
+): string {
+  return `${formatDate(range.fromDate, language)} – ${formatDate(range.toDate, language)}`;
 }
 
 function chartLabel(value: unknown): string {

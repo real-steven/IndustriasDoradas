@@ -155,6 +155,26 @@ export function statisticsDateRange(
   };
 }
 
+export function previousStatisticsDateRange(
+  filters: StatisticsFilters,
+  now = new Date(),
+): { fromDate: string; toDate: string } {
+  const current = statisticsDateRange(filters, now);
+  const currentStart = parseCalendarDate(current.fromDate);
+  const currentEnd = parseCalendarDate(current.toDate);
+  const durationDays =
+    Math.round((currentEnd.getTime() - currentStart.getTime()) / 86_400_000) +
+    1;
+  const previousEnd = new Date(currentStart);
+  previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
+  const previousStart = new Date(currentStart);
+  previousStart.setUTCDate(previousStart.getUTCDate() - durationDays);
+  return {
+    fromDate: calendarDate(previousStart),
+    toDate: calendarDate(previousEnd),
+  };
+}
+
 function statisticsQuery(filters: StatisticsFilters): string {
   const range = statisticsDateRange(filters);
   const days = Math.max(

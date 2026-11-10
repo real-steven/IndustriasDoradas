@@ -899,10 +899,8 @@ export class ReportsExcelExporter {
         };
       });
     });
-    sheet.properties.outlineProperties = {
-      summaryBelow: true,
-      summaryRight: true,
-    };
+    // ExcelJS 4.4 writes outlinePr after pageSetUpPr, which makes Excel reject
+    // the worksheet XML. The outline defaults are already true, so omit them.
     sheet.pageSetup.margins = {
       top: 0.5,
       right: 0.35,

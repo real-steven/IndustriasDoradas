@@ -16,13 +16,12 @@ describe("report exporters", () => {
     ) as ArrayBuffer;
     await workbook.xlsx.load(contents);
 
-    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
+    const sheet = workbook.getWorksheet("Reporte de oro");
+    expect(workbook.worksheets.map((item) => item.name)).toEqual([
       "Reporte de oro",
     ]);
-    expect(workbook.getWorksheet("Reporte de oro")?.getCell("A1").value).toBe(
-      "Reporte de oro por cargamento",
-    );
-    expect(workbook.getWorksheet("Reporte de oro")?.getRow(5).values).toEqual([
+    expect(sheet?.getCell("A1").value).toBe("Reporte de oro por cargamento");
+    expect(sheet?.getRow(5).values).toEqual([
       undefined,
       "Fecha de cierre",
       "Cargamento",
@@ -30,9 +29,8 @@ describe("report exporters", () => {
       "Oro total (g)",
       "Quilataje",
     ]);
-    expect(workbook.getWorksheet("Reporte de oro")?.getCell("E6").value).toBe(
-      "13,42",
-    );
+    expect(sheet?.getCell("E6").value).toBe("13,42");
+    expect(sheet?.properties.outlineProperties).toBeUndefined();
     expect(buffer.subarray(0, 2).toString()).toBe("PK");
   });
 

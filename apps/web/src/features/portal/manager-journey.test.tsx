@@ -137,7 +137,10 @@ describe("recorrido gerencial de aceptación", () => {
 
     await user.click(screen.getByRole("link", { name: /Estadísticas/u }));
     expect(
-      await screen.findByRole("heading", { name: "Período y alcance" }),
+      await screen.findByRole("region", { name: "Filtros de estadísticas" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Actualizar estadísticas" }),
     ).toBeInTheDocument();
     const main = document.getElementById("contenido-gerencial");
     expect(main).not.toBeNull();

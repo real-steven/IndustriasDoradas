@@ -94,9 +94,10 @@ export function StatisticsPage() {
       title={tr("Estadísticas", "Statistics")}
       eyebrow={tr("ANÁLISIS GERENCIAL", "MANAGEMENT ANALYTICS")}
       description={tr(
-        "Compare producción, líneas y proveedores con cobertura visible de los resultados de oro.",
-        "Compare production, lines, and suppliers with visible gold-result coverage.",
+        "Compare cargamentos finalizados por período, línea y proveedor, con cobertura visible del oro.",
+        "Compare completed shipments by period, line, and supplier, with visible gold coverage.",
       )}
+      dense
     >
       <StatisticsFeature />
     </PortalPage>
@@ -159,6 +160,7 @@ function PortalPage({
   description,
   actions,
   compact = false,
+  dense = false,
   children,
 }: PropsWithChildren<{
   title: string;
@@ -166,9 +168,12 @@ function PortalPage({
   description: string;
   actions?: ReactNode;
   compact?: boolean;
+  dense?: boolean;
 }>) {
   return (
-    <div className={`portal-view${compact ? " portal-view-compact" : ""}`}>
+    <div
+      className={`portal-view${compact ? " portal-view-compact" : ""}${dense ? " portal-view-dense" : ""}`}
+    >
       {!compact && (
         <header className="portal-page-head">
           <div>
