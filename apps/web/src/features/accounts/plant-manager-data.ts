@@ -181,6 +181,40 @@ export function useGovernPlantManager() {
   });
 }
 
+export function useSetPlantWorkerState() {
+  const request = useAccountRequest();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { workerId: string; active: boolean }) =>
+      apiRequest<Worker>(
+        `/organizations/${encodeURIComponent(request.organizationId)}/workers/${encodeURIComponent(input.workerId)}/state`,
+        request.token,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ active: input.active }),
+        },
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: scopedQueryKey(
+            "plant-workers",
+            request.profileId,
+            request.organizationId,
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: scopedQueryKey(
+            "payroll-workers",
+            request.profileId,
+            request.organizationId,
+          ),
+        }),
+      ]);
+    },
+  });
+}
+
 function useAccountRequest() {
   const auth = useAuth();
   return {

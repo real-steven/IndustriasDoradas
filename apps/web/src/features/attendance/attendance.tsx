@@ -162,23 +162,25 @@ export function AttendanceFeature() {
                 <button
                   type="button"
                   className="secondary"
+                  aria-label={tr("Página anterior", "Previous page")}
                   disabled={page === 1}
                   onClick={() => setPage((value) => Math.max(1, value - 1))}
                 >
-                  ← {tr("ANTERIOR", "PREVIOUS")}
+                  ‹
                 </button>
                 <span>
-                  {tr("Página", "Page")} {page} / {totalPages}
+                  {page} / {totalPages}
                 </span>
                 <button
                   type="button"
                   className="secondary"
+                  aria-label={tr("Página siguiente", "Next page")}
                   disabled={page === totalPages}
                   onClick={() =>
                     setPage((value) => Math.min(totalPages, value + 1))
                   }
                 >
-                  {tr("SIGUIENTE", "NEXT")} →
+                  ›
                 </button>
               </nav>
             )}
