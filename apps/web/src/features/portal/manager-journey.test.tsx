@@ -64,18 +64,10 @@ describe("recorrido gerencial de aceptación", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Buenos días, Lucía." }),
+      await screen.findByRole("heading", { name: "Líneas en operación" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("1 línea activa")).toBeInTheDocument();
-    expect(screen.getByText("Cajuelas en proceso")).toBeInTheDocument();
-    expect(screen.getByText("260")).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Línea 1" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("link", { name: "Operación" }));
-    expect(
-      await screen.findByRole("heading", { name: "Operación" }),
+      await screen.findByRole("heading", { name: "Línea 1" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/10 de 250 cajuelas/u)).toBeInTheDocument();
 

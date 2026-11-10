@@ -1,17 +1,15 @@
 import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 
 import { LoginPage } from "../auth/login-page";
-import { PlantManagerPage } from "../features/accounts/plant-manager-page";
 import {
   AuditPage,
   DashboardPage,
   GoldPage,
-  OperationPage,
+  PersonnelPage,
   ReportsPage,
   ShipmentDetailPage,
   ShipmentsPage,
   StatisticsPage,
-  WorkersPage,
   UpcomingPage,
 } from "../features/portal/portal-pages";
 import { PortalLayout, ProtectedPortal } from "../features/portal/portal-shell";
@@ -28,7 +26,10 @@ export function App() {
       <Route element={<ProtectedPortal roles={["JEFE_EMPRESA"]} />}>
         <Route path="gerencia" element={<PortalLayout />}>
           <Route index element={<DashboardPage />} />
-          <Route path="operacion" element={<OperationPage />} />
+          <Route
+            path="operacion"
+            element={<Navigate to="/gerencia" replace />}
+          />
           <Route path="oro" element={<GoldPage />} />
           <Route path="cargamentos" element={<ShipmentsPage />} />
           <Route
@@ -36,9 +37,18 @@ export function App() {
             element={<ShipmentDetailPage />}
           />
           <Route path="auditoria" element={<AuditPage />} />
-          <Route path="usuarios" element={<PlantManagerPage />} />
+          <Route path="personal" element={<PersonnelPage />} />
+          <Route
+            path="usuarios"
+            element={
+              <Navigate to="/gerencia/personal?seccion=accesos" replace />
+            }
+          />
           <Route path="estadisticas" element={<StatisticsPage />} />
-          <Route path="trabajadores" element={<WorkersPage />} />
+          <Route
+            path="trabajadores"
+            element={<Navigate to="/gerencia/personal" replace />}
+          />
           <Route path="reportes" element={<ReportsPage />} />
           <Route
             path="inventario"

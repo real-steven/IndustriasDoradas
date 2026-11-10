@@ -1,14 +1,10 @@
 import type { PropsWithChildren, ReactNode } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 
 import { useLanguage } from "../../i18n/language-context";
 import { GoldFeature } from "../gold/gold";
 import { AttendanceFeature } from "../attendance/attendance";
-import {
-  OperationFreshness,
-  OperationLinesPanel,
-  OperationRefreshButton,
-} from "../management/management-operation";
+import { PlantManagerPage } from "../accounts/plant-manager-page";
 import {
   type ManagementFreshnessQuery,
   useManagementOperation,
@@ -33,33 +29,6 @@ export function DashboardPage() {
   return <DashboardSummary operation={operation} freshness={freshness} />;
 }
 
-export function OperationPage() {
-  const { tr } = useLanguage();
-  const operation = useManagementOperation();
-  const freshness = usePortalFreshness();
-
-  return (
-    <PortalPage
-      title={tr("Operación", "Operations")}
-      eyebrow={tr("ESTADO ACTUAL DE LA PLANTA", "CURRENT PLANT STATUS")}
-      description={tr(
-        "Consulte las líneas activas, la producción acumulada, sus responsables y el avance de cada barrida.",
-        "Review active lines, accumulated production, assigned workers, and sweep progress.",
-      )}
-      actions={
-        <OperationRefreshButton query={operation} freshness={freshness} />
-      }
-    >
-      <div
-        className={`operation-freshness${operation.isError && operation.data !== undefined ? " stale" : ""}`}
-      >
-        <OperationFreshness query={operation} freshness={freshness} />
-      </div>
-      <OperationLinesPanel query={operation} />
-    </PortalPage>
-  );
-}
-
 export function GoldPage() {
   const { tr } = useLanguage();
 
@@ -71,16 +40,10 @@ export function GoldPage() {
         "OPTIONAL MANAGEMENT RECORD",
       )}
       description={tr(
-        "Registre un único total después de cerrar cada cargamento. Vacío significa no registrado y nunca se interpreta como cero.",
-        "Record one total after closing each shipment. An empty value means not recorded and is never interpreted as zero.",
+        "Registre o corrija el oro total de cada cargamento cerrado para comparar proveedores. Un vacío queda pendiente, no representa cero ni custodia de oro.",
+        "Record or correct the total gold for each closed shipment to compare suppliers. An empty value remains pending and represents neither zero nor gold custody.",
       )}
     >
-      <p className="scope-note">
-        {tr(
-          "El dato se usa para comparar proveedores desde la puesta en marcha, sin custodia ni existencia acumulada de oro.",
-          "This data is used to compare suppliers from commissioning onward, without tracking custody or accumulated gold inventory.",
-        )}
-      </p>
       <GoldFeature />
     </PortalPage>
   );
@@ -103,21 +66,60 @@ export function ShipmentsPage() {
   );
 }
 
-export function WorkersPage() {
+export function PersonnelPage() {
   const { tr } = useLanguage();
+  const [parameters, setParameters] = useSearchParams();
+  const section =
+    parameters.get("seccion") === "accesos" ? "access" : "records";
+
+  const selectSection = (next: "records" | "access") => {
+    const nextParameters = new URLSearchParams(parameters);
+    nextParameters.delete("worker");
+    if (next === "access") nextParameters.set("seccion", "accesos");
+    else nextParameters.delete("seccion");
+    setParameters(nextParameters, { replace: true });
+  };
 
   return (
-    <PortalPage
-      title={tr("Trabajadores", "Workers")}
-      eyebrow={tr("EXPEDIENTES Y TARIFAS", "RECORDS AND RATES")}
-      description={tr(
-        "Busque un empleado por nombre o cédula para revisar sus horas, tarifa, bruto y notas.",
-        "Find an employee by name or identity number to review hours, rate, gross amount, and notes.",
-      )}
-      compact
-    >
-      <AttendanceFeature />
-    </PortalPage>
+    <div className="portal-view portal-view-compact personnel-page">
+      <header className="personnel-page-head">
+        <div>
+          <p className="eyebrow">
+            {tr("GESTIÓN DE PERSONAL", "PEOPLE MANAGEMENT")}
+          </p>
+          <h1>{tr("Personal", "People")}</h1>
+          <p>
+            {tr(
+              "Expedientes, pagos y accesos en un mismo lugar.",
+              "Records, pay, and access in one place.",
+            )}
+          </p>
+        </div>
+        <nav
+          className="personnel-section-switch"
+          aria-label={tr("Secciones de personal", "People sections")}
+        >
+          <button
+            type="button"
+            className={section === "records" ? "active" : ""}
+            aria-pressed={section === "records"}
+            onClick={() => selectSection("records")}
+          >
+            {tr("Expedientes y pagos", "Records and pay")}
+          </button>
+          <button
+            type="button"
+            className={section === "access" ? "active" : ""}
+            aria-pressed={section === "access"}
+            onClick={() => selectSection("access")}
+          >
+            {tr("Cuentas y accesos", "Accounts and access")}
+          </button>
+        </nav>
+      </header>
+
+      {section === "records" ? <AttendanceFeature /> : <PlantManagerPage />}
+    </div>
   );
 }
 
@@ -151,17 +153,6 @@ export function AuditPage() {
       )}
     >
       <section className="portal-panel manager-audit-panel">
-        <header>
-          <div>
-            <h2>{tr("Actividad del sistema", "System activity")}</h2>
-            <p>
-              {tr(
-                "Filtre por acción para separar cargamentos, producción, personal, seguridad y cambios administrativos",
-                "Filter by action to separate shipments, production, personnel, security, and administrative changes",
-              )}
-            </p>
-          </div>
-        </header>
         <ShipmentAuditFeature />
       </section>
     </PortalPage>

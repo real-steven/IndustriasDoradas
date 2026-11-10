@@ -40,7 +40,7 @@ describe("portal gerencial", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia/inventario");
 
     expect(
-      await screen.findByRole("heading", { name: "Buenos días, Lucía." }),
+      await screen.findByRole("heading", { name: "Líneas en operación" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Inventario" }),
@@ -56,10 +56,10 @@ describe("portal gerencial", () => {
 
     const main = document.getElementById("contenido-gerencial");
     expect(main).not.toBeNull();
-    await user.click(screen.getByRole("link", { name: "Operación" }));
+    await user.click(screen.getByRole("link", { name: "Auditoría" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Operación" }),
+      await screen.findByRole("heading", { name: "Auditoría" }),
     ).toBeInTheDocument();
     await waitFor(() => expect(main).toHaveFocus());
   });
@@ -91,22 +91,16 @@ describe("portal gerencial", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia");
 
     expect(
-      screen.getByRole("heading", { name: "Buenos días, Lucía." }),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("1 línea activa")).toBeInTheDocument();
-    expect(screen.getByText("Cajuelas en proceso")).toBeInTheDocument();
-    expect(screen.getByText("260")).toBeInTheDocument();
-    expect(screen.getByText("Necesita atención")).toBeInTheDocument();
-    expect(
-      screen.getByText("1 cargamento está pendiente de registrar oro."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
-    expect(
-      screen.getByText("La planta registró una barrida de producción"),
+      screen.getByRole("heading", { name: "Líneas en operación" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Línea 1" }),
-    ).not.toBeInTheDocument();
+      await screen.findByRole("heading", { name: "Línea 1" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/10 de 250 cajuelas/u)).toBeInTheDocument();
+    expect(screen.getByText("Pendientes")).toBeInTheDocument();
+    expect(
+      await screen.findByText("1 cargamento está pendiente de registrar oro."),
+    ).toBeInTheDocument();
     expect(
       dataRequests.some((url) =>
         url.includes("/management/operation-lines?page=1&pageSize=100"),
@@ -116,7 +110,7 @@ describe("portal gerencial", () => {
       dataRequests.some((url) => url.includes("/management/gold-summary")),
     ).toBe(true);
     expect(dataRequests.some((url) => url.includes("/audit-events"))).toBe(
-      true,
+      false,
     );
     expect(
       screen.queryByRole("link", { name: /Administración/u }),
@@ -172,6 +166,8 @@ describe("portal gerencial", () => {
     const transport = vi.fn<typeof fetch>((input) => {
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      if (!requestUrl(input).includes("/management/operation-lines"))
+        return Promise.resolve(portalResponse(input));
       operationRequests += 1;
       return Promise.resolve(
         operationRequests === 1 ? managementPage() : errorResponse(),
@@ -201,6 +197,8 @@ describe("portal gerencial", () => {
     const transport = vi.fn<typeof fetch>((input) => {
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      if (!requestUrl(input).includes("/management/operation-lines"))
+        return Promise.resolve(portalResponse(input));
       operationRequests += 1;
       return Promise.resolve(
         operationRequests === 1 ? errorResponse() : managementPage(),
@@ -238,17 +236,16 @@ describe("portal gerencial", () => {
   it("expone la navegacion confirmada y separa los modulos futuros", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia");
 
-    expect(screen.getByRole("link", { name: "Operación" })).toHaveAttribute(
-      "href",
-      "/gerencia/operacion",
-    );
+    expect(
+      screen.queryByRole("link", { name: "Operación" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Oro" })).toHaveAttribute(
       "href",
       "/gerencia/oro",
     );
-    expect(screen.getByRole("link", { name: /Trabajadores/u })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Personal/u })).toHaveAttribute(
       "href",
-      "/gerencia/trabajadores",
+      "/gerencia/personal",
     );
     expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
     expect(
@@ -257,7 +254,6 @@ describe("portal gerencial", () => {
   });
 
   it.each([
-    ["/gerencia/operacion", "Operación"],
     ["/gerencia/oro", "Oro por cargamento"],
     ["/gerencia/cargamentos", "Cargamentos"],
   ])("expone la ruta gerencial %s", (path, heading) => {
@@ -272,11 +268,9 @@ describe("portal gerencial", () => {
     expect(
       screen.getByRole("heading", { name: "Oro por cargamento" }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Un vacío queda pendiente/u)).toBeInTheDocument();
     expect(
-      screen.getByText(/Vacío significa no registrado/u),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/sin custodia ni existencia acumulada/u),
+      screen.getByText(/no representa cero ni custodia de oro/u),
     ).toBeInTheDocument();
   });
 

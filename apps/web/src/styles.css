@@ -927,6 +927,56 @@ footer {
   font-size: 0.78rem;
   line-height: 1.55;
 }
+.dashboard-summary {
+  gap: 12px;
+}
+.dashboard-summary .manager-hero {
+  min-height: 118px;
+  padding: 20px 28px;
+}
+.dashboard-summary .dashboard-greeting {
+  min-height: 92px;
+  grid-template-columns: 1fr;
+  padding-block: 16px;
+}
+.dashboard-summary .manager-hero h1 {
+  font-size: 1.7rem;
+}
+.dashboard-summary > .portal-panel,
+.dashboard-summary .dashboard-columns > .portal-panel {
+  padding: 14px 16px;
+}
+.dashboard-summary > .portal-panel > header,
+.dashboard-summary .dashboard-columns .portal-panel > header {
+  margin-bottom: 10px;
+}
+.dashboard-summary > .portal-panel .line-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+.dashboard-summary .line-card {
+  padding: 12px 12px 11px 16px;
+}
+.dashboard-summary .line-card p,
+.dashboard-summary .line-card .line-station {
+  margin-bottom: 8px;
+}
+.dashboard-summary .line-card .line-station,
+.dashboard-summary .line-status.current {
+  display: none;
+}
+.dashboard-summary .operation-panel-status {
+  color: #0d7548;
+  font-weight: 750;
+}
+.dashboard-summary .line-details {
+  gap: 6px 10px;
+  margin: 10px 0;
+}
+.dashboard-summary .sweep-reference {
+  gap: 5px;
+  padding: 8px 10px;
+}
 .hero-status {
   z-index: 1;
   padding-left: 28px;
@@ -2842,6 +2892,291 @@ td {
   padding-top: 12px;
 }
 
+.account-modal-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(5 33 47 / 62%);
+  backdrop-filter: blur(3px);
+}
+.account-create-modal {
+  position: static;
+  width: min(680px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-shadow: 0 24px 70px rgb(5 33 47 / 28%);
+}
+.account-create-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.account-modal-close {
+  flex: 0 0 36px;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 1.2rem;
+}
+.account-directory-panel {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+}
+.account-directory-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.account-directory-panel > header h1 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+}
+.account-directory-panel > header p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.account-directory-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.account-directory-controls input {
+  width: min(300px, 28vw);
+  min-height: 36px;
+  font-size: 0.72rem;
+}
+.account-directory-controls button {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.account-role-switch {
+  display: flex;
+  gap: 2px;
+  border-radius: 9px;
+  padding: 2px;
+  background: #edf2f4;
+}
+.account-role-switch button {
+  min-height: 32px;
+  border: 0;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.64rem;
+}
+.account-role-switch button.active {
+  color: #fff;
+  background: var(--navy);
+}
+.account-directory-list {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.account-directory-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.7fr) minmax(110px, 0.7fr) auto minmax(
+      110px,
+      auto
+    );
+  align-items: center;
+  gap: 10px;
+  min-height: 43px;
+  padding: 5px 10px;
+  background: #fff;
+}
+.account-directory-row + .account-directory-row {
+  border-top: 1px solid var(--line);
+}
+.account-directory-row:hover {
+  background: #f8fafb;
+}
+.account-directory-identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.account-directory-identity strong {
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-directory-identity span,
+.account-role-label {
+  color: var(--muted);
+  font-size: 0.67rem;
+}
+.account-directory-row .account-status {
+  padding: 3px 7px;
+  font-size: 0.58rem;
+}
+.account-directory-action {
+  display: flex;
+  justify-content: flex-end;
+}
+.account-directory-action button,
+.account-inline-confirm button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 0.64rem;
+}
+.account-inline-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.67rem;
+}
+.account-manager-confirm {
+  grid-column: 4;
+}
+.account-manager-confirm input {
+  width: min(260px, 100%);
+  min-height: 32px;
+}
+.account-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.account-pagination button {
+  width: 31px;
+  min-height: 31px;
+  padding: 4px;
+  font-size: 0.68rem;
+}
+.account-pagination button.active {
+  color: #fff;
+  background: var(--navy);
+}
+
+.portal-view.personnel-page {
+  gap: 10px;
+}
+.personnel-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 2px;
+}
+.personnel-page-head .eyebrow {
+  margin: 0 0 2px;
+}
+.personnel-page-head h1 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+}
+.personnel-page-head > div > p:last-child {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.personnel-section-switch {
+  display: flex;
+  gap: 3px;
+  border-radius: 11px;
+  padding: 3px;
+  background: #e7eef1;
+}
+.personnel-section-switch button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.67rem;
+  white-space: nowrap;
+}
+.personnel-section-switch button.active {
+  color: #fff;
+  background: var(--navy);
+  box-shadow: 0 4px 10px rgb(20 56 76 / 18%);
+}
+
+@media (max-width: 820px) {
+  .personnel-page-head {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .personnel-section-switch button {
+    flex: 1;
+  }
+  .account-directory-panel > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .account-directory-controls input {
+    width: 100%;
+  }
+  .account-directory-controls label {
+    flex: 1;
+  }
+  .account-directory-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .account-role-label {
+    display: none;
+  }
+  .account-manager-confirm,
+  .account-inline-confirm {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .account-modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+  .account-create-modal {
+    width: 100%;
+    max-height: 94vh;
+    border-radius: 16px 16px 0 0;
+  }
+  .account-directory-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .account-role-switch button {
+    flex: 1;
+  }
+  .account-directory-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .account-directory-row > .account-status {
+    display: none;
+  }
+  .account-inline-confirm {
+    flex-wrap: wrap;
+  }
+  .account-manager-confirm input {
+    width: 100%;
+  }
+  .account-pagination {
+    justify-content: space-between;
+  }
+}
+
 /* 5.7: reflujo, lectura ampliada y navegacion tactil */
 .portal-page-head,
 .manager-hero,
@@ -4086,6 +4421,9 @@ td {
 }
 
 @media (max-width: 960px) {
+  .dashboard-summary > .portal-panel .line-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .manager-shell {
     display: block;
   }
@@ -4409,6 +4747,12 @@ td {
 }
 
 @media (max-width: 760px) {
+  .dashboard-summary > .portal-panel .line-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-summary .manager-hero {
+    min-height: 0;
+  }
   .sweep-reference > div:first-child {
     align-items: flex-start;
     flex-direction: column;
@@ -4879,6 +5223,10 @@ button.payroll-worker-row:focus-visible {
   gap: 0;
 }
 
+.portal-view-compact.dashboard-summary {
+  gap: 12px;
+}
+
 .manager-content:has(.portal-view-compact) {
   padding-top: 16px;
   padding-bottom: 16px;
@@ -4941,9 +5289,9 @@ button.payroll-worker-row:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  min-height: 42px;
-  padding-top: 8px;
+  gap: 6px;
+  min-height: 36px;
+  padding-top: 5px;
   border-top: 1px solid var(--line);
 }
 
@@ -4954,9 +5302,10 @@ button.payroll-worker-row:focus-visible {
 }
 
 .payroll-pagination button {
+  width: 30px;
   min-height: 32px;
-  padding: 5px 10px;
-  font-size: 0.68rem;
+  padding: 4px;
+  font-size: 0.74rem;
 }
 
 .payroll-modal-backdrop {

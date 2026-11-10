@@ -21,12 +21,6 @@ const primaryNavigation = [
     icon: "⌂",
     end: true,
   },
-  {
-    to: "/gerencia/operacion",
-    label: "Operación",
-    labelEn: "Operations",
-    icon: "◫",
-  },
   { to: "/gerencia/oro", label: "Oro", labelEn: "Gold", icon: "◆" },
   {
     to: "/gerencia/cargamentos",
@@ -41,16 +35,10 @@ const primaryNavigation = [
     icon: "◷",
   },
   {
-    to: "/gerencia/usuarios",
-    label: "Usuarios",
-    labelEn: "Users",
+    to: "/gerencia/personal",
+    label: "Personal",
+    labelEn: "People",
     icon: "♙",
-  },
-  {
-    to: "/gerencia/trabajadores",
-    label: "Trabajadores",
-    labelEn: "Workers",
-    icon: "◷",
   },
   {
     to: "/gerencia/estadisticas",
@@ -77,13 +65,14 @@ const futureNavigation = [
 
 const pageTitles: Record<string, readonly [string, string]> = {
   "/gerencia": ["Resumen", "Overview"],
-  "/gerencia/operacion": ["Operación", "Operations"],
+  "/gerencia/operacion": ["Resumen", "Overview"],
   "/gerencia/oro": ["Oro", "Gold"],
   "/gerencia/cargamentos": ["Cargamentos", "Shipments"],
   "/gerencia/auditoria": ["Auditoría", "Audit"],
-  "/gerencia/usuarios": ["Usuarios", "Users"],
+  "/gerencia/personal": ["Personal", "People"],
+  "/gerencia/usuarios": ["Personal", "People"],
   "/gerencia/estadisticas": ["Estadísticas", "Statistics"],
-  "/gerencia/trabajadores": ["Trabajadores", "Workers"],
+  "/gerencia/trabajadores": ["Personal", "People"],
   "/gerencia/reportes": ["Reportes", "Reports"],
   "/gerencia/configuracion": ["Configuración", "Settings"],
 };

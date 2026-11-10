@@ -14,9 +14,11 @@ import { lineAccent } from "./line-accent";
 export function OperationLinesPanel({
   query,
   action,
+  status,
 }: {
   query: ManagementOperationQuery;
   action?: ReactNode;
+  status?: ReactNode;
 }) {
   const { tr } = useLanguage();
 
@@ -25,12 +27,16 @@ export function OperationLinesPanel({
       <header>
         <div>
           <h2>{tr("Líneas en operación", "Operating lines")}</h2>
-          <p>
-            {tr(
-              "Resumen de la producción que se encuentra abierta en este momento",
-              "Summary of production currently in progress",
-            )}
-          </p>
+          {status === undefined ? (
+            <p>
+              {tr(
+                "Producción abierta en este momento",
+                "Production currently in progress",
+              )}
+            </p>
+          ) : (
+            <p className="operation-panel-status">{status}</p>
+          )}
         </div>
         {action}
       </header>

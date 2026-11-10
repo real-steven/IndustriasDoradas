@@ -30,6 +30,7 @@ describe("gestion de usuarios de planta", () => {
     expect(
       await screen.findByRole("heading", { name: "Usuarios de planta" }),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "+ CREAR USUARIO" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Planta");
     await user.type(
       screen.getByLabelText("Correo de acceso"),
@@ -73,9 +74,7 @@ describe("gestion de usuarios de planta", () => {
       preferredLocale: "es",
     });
 
-    await user.click(
-      await screen.findByRole("button", { name: "ACTIVAR CUENTA" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "ACTIVAR" }));
     expect(
       await screen.findByRole("status", { name: "Notificación de éxito" }),
     ).toHaveTextContent("Cuenta activada correctamente.");
@@ -89,6 +88,9 @@ describe("gestion de usuarios de planta", () => {
     vi.stubGlobal("fetch", api.fetch);
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: "+ CREAR USUARIO" }),
+    );
     await user.type(
       await screen.findByLabelText("Nombre completo"),
       "Ana Planta",
@@ -125,6 +127,9 @@ describe("gestion de usuarios de planta", () => {
     vi.stubGlobal("fetch", api.fetch);
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: "+ CREAR USUARIO" }),
+    );
     await user.selectOptions(
       await screen.findByLabelText("Rol de la persona"),
       "OPERARIO",
@@ -148,10 +153,16 @@ describe("gestion de usuarios de planta", () => {
       email: "mario@example.invalid",
       phone: "8888-0000",
     });
-    expect(await screen.findByText("Mario Planta")).toBeInTheDocument();
+    const directory = screen
+      .getByRole("heading", { name: "Usuarios de planta" })
+      .closest("section");
+    if (directory === null) throw new Error("Users directory missing");
+    expect(
+      await within(directory).findByText("Mario Planta"),
+    ).toBeInTheDocument();
   });
 
-  it("muestra jefaturas y operarios en bloques acumulables de cinco", async () => {
+  it("unifica jefaturas y operarios con busqueda y paginacion compacta", async () => {
     const user = userEvent.setup();
     const api = createAccountsApi({
       managers: Array.from({ length: 6 }, (_, index) =>
@@ -164,46 +175,56 @@ describe("gestion de usuarios de planta", () => {
     vi.stubGlobal("fetch", api.fetch);
     renderPage();
 
-    const managersHeading = await screen.findByRole("heading", {
-      name: "Jefes de planta",
+    const heading = await screen.findByRole("heading", {
+      name: "Usuarios de planta",
     });
-    const managersSection = managersHeading.closest("section");
-    if (managersSection === null) throw new Error("Managers section missing");
-    const managersList = within(managersSection);
-    expect(await managersList.findByText("Jefe listado 5")).toBeInTheDocument();
-    expect(managersList.queryByText("Jefe listado 6")).not.toBeInTheDocument();
+    const section = heading.closest("section");
+    if (section === null) throw new Error("Users directory missing");
+    const directory = within(section);
 
-    const operatorsHeading = screen.getByRole("heading", { name: "Operarios" });
-    const operatorsSection = operatorsHeading.closest("section");
-    if (operatorsSection === null) throw new Error("Operators section missing");
-    const operatorsList = within(operatorsSection);
-    expect(
-      await operatorsList.findByText("Operario listado 5"),
-    ).toBeInTheDocument();
-    expect(
-      operatorsList.queryByText("Operario listado 6"),
-    ).not.toBeInTheDocument();
+    expect(await directory.findByText("Jefe listado 6")).toBeInTheDocument();
+    expect(directory.queryByText("Operario listado 1")).not.toBeInTheDocument();
 
-    await user.click(operatorsList.getByRole("button", { name: "VER MÁS" }));
-    expect(operatorsList.getByText("Operario listado 10")).toBeInTheDocument();
-    expect(
-      operatorsList.queryByText("Operario listado 11"),
-    ).not.toBeInTheDocument();
-    expect(
-      operatorsList.getByRole("button", { name: "VER MÁS" }),
-    ).toBeInTheDocument();
+    await user.click(directory.getByRole("button", { name: "Operarios" }));
+    expect(directory.getByText("Operario listado 8")).toBeInTheDocument();
+    expect(directory.queryByText("Operario listado 9")).not.toBeInTheDocument();
 
-    await user.click(operatorsList.getByRole("button", { name: "VER MÁS" }));
-    expect(operatorsList.getByText("Operario listado 12")).toBeInTheDocument();
-    expect(
-      operatorsList.queryByRole("button", { name: "VER MÁS" }),
-    ).not.toBeInTheDocument();
+    await user.click(
+      directory.getByRole("button", { name: "Página siguiente" }),
+    );
+    expect(directory.getByText("Operario listado 9")).toBeInTheDocument();
+    expect(directory.getByText("Operario listado 12")).toBeInTheDocument();
 
-    await user.click(managersList.getByRole("button", { name: "VER MÁS" }));
-    expect(managersList.getByText("Jefe listado 6")).toBeInTheDocument();
-    expect(
-      managersList.queryByRole("button", { name: "VER MÁS" }),
-    ).not.toBeInTheDocument();
+    await user.type(
+      directory.getByRole("searchbox", { name: "Buscar usuario" }),
+      "Operario listado 12",
+    );
+    expect(directory.getByText("Operario listado 12")).toBeInTheDocument();
+    expect(directory.queryByText("Operario listado 1")).not.toBeInTheDocument();
+  });
+
+  it("permite suspender y reactivar un operario", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi({ operators: [operatorFixture(1)] });
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage();
+
+    const heading = await screen.findByRole("heading", {
+      name: "Usuarios de planta",
+    });
+    const section = heading.closest("section");
+    if (section === null) throw new Error("Users directory missing");
+    const directory = within(section);
+
+    await user.click(directory.getByRole("button", { name: "Operarios" }));
+    await user.click(directory.getByRole("button", { name: "SUSPENDER" }));
+    await user.click(directory.getByRole("button", { name: "CONFIRMAR" }));
+    expect(await directory.findByText("SUSPENDIDO")).toBeInTheDocument();
+    expect(api.workerStateChanges()).toEqual([false]);
+
+    await user.click(directory.getByRole("button", { name: "REACTIVAR" }));
+    expect(await directory.findByText("ACTIVO")).toBeInTheDocument();
+    expect(api.workerStateChanges()).toEqual([false, true]);
   });
 });
 
@@ -214,7 +235,11 @@ function renderPage() {
       profileId: PROFILE_ID,
       organizationId: ORGANIZATION_ID,
       role: "JEFE_EMPRESA",
-      permissions: ["plant_managers.manage", "organization_catalogs.read"],
+      permissions: [
+        "plant_managers.manage",
+        "organization_catalogs.read",
+        "workers.resolve",
+      ],
       expiresAt: "2027-01-01T00:00:00.000Z",
     },
     foundSession: null,
@@ -252,6 +277,7 @@ function createAccountsApi(
   creationBody: Record<string, unknown> | null;
   operatorCreationBody: Record<string, unknown> | null;
   approvalCount: () => number;
+  workerStateChanges: () => boolean[];
 } {
   let account: Record<string, unknown> | null = null;
   let creationBody: Record<string, unknown> | null = null;
@@ -259,6 +285,7 @@ function createAccountsApi(
   const managers = seed.managers ?? [];
   let operators: Record<string, unknown>[] = [...(seed.operators ?? [])];
   let approvals = 0;
+  const workerStates: boolean[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
     const url = new URL(requestUrl(input), "http://localhost");
     const method = init?.method ?? "GET";
@@ -293,6 +320,24 @@ function createAccountsApi(
       );
     if (url.pathname.endsWith("/workers") && method === "GET")
       return Promise.resolve(page(operators));
+    if (/\/workers\/[^/]+\/state$/u.test(url.pathname) && method === "PATCH") {
+      if (typeof init?.body !== "string") throw new Error("Expected body");
+      const body = JSON.parse(init.body) as { active: boolean };
+      const workerId = url.pathname.split("/").at(-2);
+      workerStates.push(body.active);
+      operators = operators.map((operator) =>
+        operator.id === workerId
+          ? {
+              ...operator,
+              isActive: body.active,
+              status: body.active ? "ACTIVO" : "INACTIVO",
+            }
+          : operator,
+      );
+      const updated = operators.find((operator) => operator.id === workerId);
+      if (updated === undefined) throw new Error("Worker missing");
+      return Promise.resolve(json(updated));
+    }
     if (url.pathname.endsWith("/worker-requests") && method === "POST") {
       if (typeof init?.body !== "string") throw new Error("Expected body");
       operatorCreationBody = JSON.parse(init.body) as Record<string, unknown>;
@@ -342,6 +387,7 @@ function createAccountsApi(
       return operatorCreationBody;
     },
     approvalCount: () => approvals,
+    workerStateChanges: () => workerStates,
   };
 }
 
