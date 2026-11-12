@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+} from "react";
 
 import type {
   Account,
@@ -15,10 +21,15 @@ import {
   usePlantManagers,
   usePlantWorkers,
 } from "./plant-manager-data";
+import {
+  useCanManageSuppliers,
+  useCreateSupplier,
+} from "../attendance/supplier-data";
 import { workerDisplayName } from "../workers/worker-display";
+import { SecretField } from "./secret-field";
 
 interface PlantManagerForm {
-  role: "OPERARIO" | "JEFE_PLANTA";
+  role: "OPERARIO" | "JEFE_PLANTA" | "PROVEEDOR";
   displayName: string;
   email: string;
   phone: string;
@@ -29,6 +40,22 @@ interface PlantManagerForm {
 }
 
 const accountListBatchSize = 5;
+
+const passwordInputProps = {
+  required: true,
+  minLength: 12,
+  maxLength: 128,
+  autoComplete: "new-password",
+} as const;
+
+const pinInputProps = {
+  required: true,
+  inputMode: "numeric",
+  pattern: "[0-9]{6,12}",
+  minLength: 6,
+  maxLength: 12,
+  autoComplete: "off",
+} as const;
 
 const emptyForm: PlantManagerForm = {
   role: "JEFE_PLANTA",
@@ -74,11 +101,19 @@ export function PlantManagerPage({
   const createManager = useCreatePlantManager();
   const createOperator = useCreateOperator();
   const governManager = useGovernPlantManager();
-  const isCreating = createManager.isPending || createOperator.isPending;
+  const createSupplier = useCreateSupplier();
+  const canManageSuppliers = useCanManageSuppliers();
+  const isCreating =
+    createManager.isPending ||
+    createOperator.isPending ||
+    createSupplier.isPending;
   const isResolvingAutomaticStation =
     selectedStationId.length === 0 &&
     (plants.isLoading || stations.isLoading || stations.isFetching);
   const [form, setForm] = useState(emptyForm);
+  const isSupplier = form.role === "PROVEEDOR";
+  // Tras crear la cuenta se remontan los campos secretos para volver a ocultarlos.
+  const [credentialFieldsKey, setCredentialFieldsKey] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
@@ -105,6 +140,30 @@ export function PlantManagerPage({
     );
     if (validation !== null) {
       setFormError(validation);
+      return;
+    }
+    if (form.role === "PROVEEDOR") {
+      try {
+        await createSupplier.mutateAsync({
+          name: form.displayName.trim(),
+          ...(form.email.trim().length === 0
+            ? {}
+            : { email: form.email.trim() }),
+          ...(form.phone.trim().length === 0
+            ? {}
+            : { phone: form.phone.trim() }),
+        });
+        setForm(emptyForm);
+        setSuccess(
+          tr(
+            "Proveedor registrado. Aparecerá en planta en la próxima sincronización.",
+            "Supplier registered. It will appear at the plant after the next sync.",
+          ),
+        );
+        onCreated?.();
+      } catch (error) {
+        setFormError(supplierError(error, language));
+      }
       return;
     }
     if (form.role === "OPERARIO") {
@@ -144,6 +203,7 @@ export function PlantManagerPage({
     try {
       await createManager.mutateAsync(input);
       setForm(emptyForm);
+      setCredentialFieldsKey((current) => current + 1);
       setSuccess(
         tr(
           "Cuenta creada pendiente de activación. Entregue la contraseña y el PIN por un canal seguro; no volverán a mostrarse.",
@@ -243,14 +303,21 @@ export function PlantManagerPage({
                   {tr("Jefe de planta", "Plant manager")}
                 </option>
                 <option value="OPERARIO">{tr("Operario", "Operator")}</option>
+                {canManageSuppliers && (
+                  <option value="PROVEEDOR">
+                    {tr("Proveedor", "Supplier")}
+                  </option>
+                )}
               </select>
             </label>
             <label>
-              {tr("Nombre completo", "Full name")}
+              {isSupplier
+                ? tr("Nombre de la empresa", "Company name")
+                : tr("Nombre completo", "Full name")}
               <input
                 required
-                maxLength={120}
-                autoComplete="name"
+                maxLength={isSupplier ? 160 : 120}
+                autoComplete={isSupplier ? "organization" : "name"}
                 value={form.displayName}
                 onChange={(event) =>
                   setForm({ ...form, displayName: event.target.value })
@@ -275,7 +342,7 @@ export function PlantManagerPage({
                 }
               />
             </label>
-            {form.role === "OPERARIO" && (
+            {(form.role === "OPERARIO" || isSupplier) && (
               <label>
                 {tr("Teléfono (opcional)", "Phone (optional)")}
                 <input
@@ -290,39 +357,38 @@ export function PlantManagerPage({
               </label>
             )}
             {form.role === "JEFE_PLANTA" && (
-              <>
+              <Fragment key={credentialFieldsKey}>
                 <div className="account-form-grid">
-                  <label>
-                    {tr("Contraseña temporal", "Temporary password")}
-                    <input
-                      required
-                      type="password"
-                      minLength={12}
-                      maxLength={128}
-                      autoComplete="new-password"
-                      value={form.password}
-                      onChange={(event) =>
-                        setForm({ ...form, password: event.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    {tr("Confirmar contraseña", "Confirm password")}
-                    <input
-                      required
-                      type="password"
-                      minLength={12}
-                      maxLength={128}
-                      autoComplete="new-password"
-                      value={form.passwordConfirmation}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          passwordConfirmation: event.target.value,
-                        })
-                      }
-                    />
-                  </label>
+                  <SecretField
+                    label={tr("Contraseña temporal", "Temporary password")}
+                    showLabel={tr(
+                      "Mostrar contraseña temporal",
+                      "Show temporary password",
+                    )}
+                    hideLabel={tr(
+                      "Ocultar contraseña temporal",
+                      "Hide temporary password",
+                    )}
+                    value={form.password}
+                    onChange={(password) => setForm({ ...form, password })}
+                    inputProps={passwordInputProps}
+                  />
+                  <SecretField
+                    label={tr("Confirmar contraseña", "Confirm password")}
+                    showLabel={tr(
+                      "Mostrar confirmación de contraseña",
+                      "Show password confirmation",
+                    )}
+                    hideLabel={tr(
+                      "Ocultar confirmación de contraseña",
+                      "Hide password confirmation",
+                    )}
+                    value={form.passwordConfirmation}
+                    onChange={(passwordConfirmation) =>
+                      setForm({ ...form, passwordConfirmation })
+                    }
+                    inputProps={passwordInputProps}
+                  />
                 </div>
                 <p className="field-help">
                   {tr(
@@ -331,41 +397,36 @@ export function PlantManagerPage({
                   )}
                 </p>
                 <div className="account-form-grid">
-                  <label>
-                    {tr("PIN de elevación", "Elevation PIN")}
-                    <input
-                      required
-                      type="password"
-                      inputMode="numeric"
-                      pattern="[0-9]{6,12}"
-                      minLength={6}
-                      maxLength={12}
-                      autoComplete="off"
-                      value={form.pin}
-                      onChange={(event) =>
-                        setForm({ ...form, pin: event.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    {tr("Confirmar PIN", "Confirm PIN")}
-                    <input
-                      required
-                      type="password"
-                      inputMode="numeric"
-                      pattern="[0-9]{6,12}"
-                      minLength={6}
-                      maxLength={12}
-                      autoComplete="off"
-                      value={form.pinConfirmation}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          pinConfirmation: event.target.value,
-                        })
-                      }
-                    />
-                  </label>
+                  <SecretField
+                    label={tr("PIN de elevación", "Elevation PIN")}
+                    showLabel={tr(
+                      "Mostrar PIN de elevación",
+                      "Show elevation PIN",
+                    )}
+                    hideLabel={tr(
+                      "Ocultar PIN de elevación",
+                      "Hide elevation PIN",
+                    )}
+                    value={form.pin}
+                    onChange={(pin) => setForm({ ...form, pin })}
+                    inputProps={pinInputProps}
+                  />
+                  <SecretField
+                    label={tr("Confirmar PIN", "Confirm PIN")}
+                    showLabel={tr(
+                      "Mostrar confirmación de PIN",
+                      "Show PIN confirmation",
+                    )}
+                    hideLabel={tr(
+                      "Ocultar confirmación de PIN",
+                      "Hide PIN confirmation",
+                    )}
+                    value={form.pinConfirmation}
+                    onChange={(pinConfirmation) =>
+                      setForm({ ...form, pinConfirmation })
+                    }
+                    inputProps={pinInputProps}
+                  />
                 </div>
                 <div className="credential-warning">
                   <strong>{tr("Entrega segura", "Secure delivery")}</strong>
@@ -376,7 +437,7 @@ export function PlantManagerPage({
                     )}
                   </p>
                 </div>
-              </>
+              </Fragment>
             )}
             {formError !== null && (
               <p className="form-error" role="alert">
@@ -407,7 +468,7 @@ export function PlantManagerPage({
               aria-busy={isCreating}
               disabled={
                 isCreating ||
-                selectedPlantId.length === 0 ||
+                (!isSupplier && selectedPlantId.length === 0) ||
                 (form.role === "JEFE_PLANTA" && selectedStationId.length === 0)
               }
             >
@@ -415,7 +476,9 @@ export function PlantManagerPage({
                 ? tr("CREANDO…", "CREATING…")
                 : form.role === "JEFE_PLANTA"
                   ? tr("CREAR CUENTA PENDIENTE", "CREATE PENDING ACCOUNT")
-                  : tr("REGISTRAR OPERARIO", "REGISTER OPERATOR")}
+                  : isSupplier
+                    ? tr("REGISTRAR PROVEEDOR", "REGISTER SUPPLIER")
+                    : tr("REGISTRAR OPERARIO", "REGISTER OPERATOR")}
             </button>
           </form>
         </section>
@@ -580,8 +643,8 @@ export function PlantManagerPage({
               <h2>{tr("Operarios", "Operators")}</h2>
               <p>
                 {tr(
-                  "El prefijo OP identifica el rol sin modificar el nombre guardado.",
-                  "The OP prefix identifies the role without modifying the stored name.",
+                  "Personal de planta registrado sin credenciales de acceso.",
+                  "Plant staff registered without sign-in credentials.",
                 )}
               </p>
             </div>
@@ -683,6 +746,10 @@ function validateForm(
 ): string | null {
   const message = (spanish: string, english: string) =>
     language === "es" ? spanish : english;
+  if (form.role === "PROVEEDOR")
+    return form.displayName.trim().length === 0
+      ? message("Indique el nombre de la empresa.", "Enter the company name.")
+      : null;
   if (form.displayName.trim().length === 0)
     return message("Indique el nombre completo.", "Enter the full name.");
   if (plantId.length === 0)
@@ -730,6 +797,21 @@ function accountError(error: unknown, language: "es" | "en"): string {
     language === "es"
       ? "No se pudo completar la gestión de la cuenta."
       : "The account operation could not be completed.",
+    language,
+  );
+}
+
+function supplierError(error: unknown, language: "es" | "en"): string {
+  if (error instanceof ApiRequestError && error.code === "CATALOG_DUPLICATE") {
+    return language === "es"
+      ? "Ya existe un proveedor con ese nombre."
+      : "A supplier with that name already exists.";
+  }
+  return requestErrorMessage(
+    error,
+    language === "es"
+      ? "No se pudo registrar el proveedor."
+      : "The supplier could not be registered.",
     language,
   );
 }

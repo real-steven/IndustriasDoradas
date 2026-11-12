@@ -1,19 +1,27 @@
 import {
   keepPreviousData,
+  useQueries,
   useQuery,
   type UseQueryResult,
 } from "@tanstack/react-query";
 
 import type {
   ManagementShipment,
+  PageCatalog,
   PageManagementShipment,
   PageManagementSweepMercury,
+  PageWorker,
 } from "../../api/generated/api-client";
 import { apiRequest } from "../../api/http";
 import { cachePolicy } from "../../app/cache-policy";
 import { scopedQueryKey } from "../../app/query-keys";
 import { useAuth } from "../../auth/auth-context";
 import type { Language } from "../../i18n/language-context";
+import type {
+  AuditFilterSource,
+  AuditGroupKey,
+  ShipmentSort,
+} from "./management-audit-filters";
 
 export type ShipmentPeriod = "current" | "previous" | "date" | "all";
 
@@ -23,9 +31,13 @@ export interface ShipmentFilters {
   toDate: string;
   shipmentReference: string;
   shipmentId?: string;
+  /** Código corto o UUID completo; el servidor busca la coincidencia. */
+  shipmentCode?: string;
   productionLineId?: string;
   supplierId?: string;
   responsibleWorkerId?: string;
+  sort?: ShipmentSort;
+  goldResult?: "recorded" | "pending";
   page: number;
 }
 
@@ -38,6 +50,12 @@ export interface AuditEvent {
   entityType: string;
   entityId: string | null;
   shipmentStatus?: "ACTIVE" | "COMPLETED" | null;
+  auditArea?: AuditGroupKey | null;
+  auditKind?: string;
+  subjectWorkerId?: string | null;
+  subjectName?: string | null;
+  subjectOccurredAtUtc?: string | null;
+  productionLineId?: string | null;
   result: "SUCCEEDED" | "REJECTED" | "FAILED";
   reasonCode: string | null;
   changedFields?: string[];
@@ -48,7 +66,10 @@ export interface AuditEvent {
 
 export interface AuditFilters {
   search: string;
-  category?: "operation" | "people" | "administration";
+  category?: AuditGroupKey;
+  kinds?: string;
+  workerId?: string;
+  productionLineId?: string;
   action?: string;
   entityType?: string;
   fromDate?: string;
@@ -104,6 +125,7 @@ export function parseShipmentFilters(params: URLSearchParams): ShipmentFilters {
 
 export function useManagementShipments(
   filters: ShipmentFilters,
+  options: { enabled?: boolean } = {},
 ): ShipmentListQuery {
   const auth = useAuth();
   const token = auth.session?.access_token ?? "";
@@ -118,7 +140,10 @@ export function useManagementShipments(
       organizationId,
       query,
     ),
-    enabled: auth.session !== null && auth.profile !== null,
+    enabled:
+      auth.session !== null &&
+      auth.profile !== null &&
+      options.enabled !== false,
     queryFn: ({ signal }) =>
       apiRequest<PageManagementShipment>(
         `/organizations/${encodeURIComponent(organizationId)}/management/shipments?${query}`,
@@ -251,6 +276,10 @@ export function useShipmentAuditEvents(filters?: AuditFilters) {
   const search = filters?.search.trim() ?? "shipment";
   if (search.length > 0) params.set("search", search);
   if (filters?.category !== undefined) params.set("category", filters.category);
+  if (filters?.kinds !== undefined) params.set("kinds", filters.kinds);
+  if (filters?.workerId !== undefined) params.set("workerId", filters.workerId);
+  if (filters?.productionLineId !== undefined)
+    params.set("productionLineId", filters.productionLineId);
   if (filters?.action !== undefined) params.set("action", filters.action);
   if (filters?.entityType !== undefined)
     params.set("entityType", filters.entityType);
@@ -316,30 +345,25 @@ export function formatCostaRicaDateTime(
   }).format(new Date(value));
 }
 
+/**
+ * Código corto del cargamento: los primeros 8 caracteres de su UUID en
+ * mayúsculas. Es el mismo en desktop, API, web, auditoría y reportes; el UUID
+ * sigue siendo el identificador para navegar y consultar.
+ */
 export function shortShipmentId(value: string): string {
   return value.slice(0, 8).toUpperCase();
 }
 
-export function resolveShipmentReference(
-  reference: string,
-  items: ManagementShipment[],
-): string | undefined {
-  const requested = reference.trim();
-  if (requested.length === 0) return undefined;
-  if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
-      requested,
-    )
-  )
-    return requested;
+const shipmentCodePattern =
+  /^(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/iu;
 
-  const normalized = requested.replaceAll("-", "").toLowerCase();
-  const matches = items.filter((item) =>
-    item.shipmentId.replaceAll("-", "").toLowerCase().startsWith(normalized),
-  );
-  return matches.length === 1
-    ? matches[0]?.shipmentId
-    : "00000000-0000-4000-8000-000000000000";
+/**
+ * Normaliza lo que se pega en la búsqueda: quita espacios al inicio y al final
+ * e ignora mayúsculas. Devuelve undefined si no es un código corto ni un UUID.
+ */
+export function normalizeShipmentCode(value: string): string | undefined {
+  const normalized = value.trim().toLowerCase();
+  return shipmentCodePattern.test(normalized) ? normalized : undefined;
 }
 
 function shipmentQuery(filters: ShipmentFilters, pageSize: number): string {
@@ -358,6 +382,12 @@ function shipmentQuery(filters: ShipmentFilters, pageSize: number): string {
     params.set("responsibleWorkerId", filters.responsibleWorkerId);
   if (filters.shipmentId !== undefined)
     params.set("shipmentId", filters.shipmentId);
+  if (filters.shipmentCode !== undefined)
+    params.set("shipmentCode", filters.shipmentCode);
+  if (filters.sort !== undefined && filters.sort !== "recent")
+    params.set("sort", filters.sort);
+  if (filters.goldResult !== undefined)
+    params.set("goldResult", filters.goldResult);
   return params.toString();
 }
 
@@ -422,4 +452,138 @@ function validDate(value: string | null): string | null {
 
 function optional(value: string | null): string | undefined {
   return value === null || value.trim().length === 0 ? undefined : value;
+}
+
+export interface AuditCatalogOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface AuditCatalogResult {
+  options: AuditCatalogOption[];
+  isPending: boolean;
+  isError: boolean;
+}
+
+/**
+ * Valores del segundo selector cuando dependen de un catálogo. Solo consulta el
+ * catálogo que el filtro elegido necesita; incluye registros inactivos para
+ * poder auditar historia de líneas, proveedores o personas desactivadas.
+ */
+export function useAuditFilterCatalog(
+  source: AuditFilterSource | undefined,
+): AuditCatalogResult {
+  const auth = useAuth();
+  const token = auth.session?.access_token ?? "";
+  const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
+  const ready = auth.session !== null && auth.profile !== null;
+  const base = `/organizations/${encodeURIComponent(organizationId)}`;
+
+  const plants = useQuery({
+    queryKey: scopedQueryKey("audit-filter-plants", profileId, organizationId),
+    enabled: ready && source === "line",
+    queryFn: ({ signal }) =>
+      apiRequest<PageCatalog>(
+        `${base}/plants?page=1&pageSize=100&state=all`,
+        token,
+        { signal },
+      ),
+    ...cachePolicy.catalog,
+  });
+  const lines = useQueries({
+    queries: (source === "line" ? (plants.data?.items ?? []) : []).map(
+      (plant) => ({
+        queryKey: scopedQueryKey(
+          "audit-filter-lines",
+          profileId,
+          organizationId,
+          plant.id,
+        ),
+        enabled: ready,
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          apiRequest<PageCatalog>(
+            `${base}/plants/${encodeURIComponent(plant.id)}/lines?page=1&pageSize=100&state=all`,
+            token,
+            { signal },
+          ),
+        ...cachePolicy.catalog,
+      }),
+    ),
+  });
+  const suppliers = useQuery({
+    queryKey: scopedQueryKey(
+      "audit-filter-suppliers",
+      profileId,
+      organizationId,
+    ),
+    enabled: ready && source === "supplier",
+    queryFn: ({ signal }) =>
+      apiRequest<PageCatalog>(
+        `${base}/suppliers?page=1&pageSize=100&state=all`,
+        token,
+        { signal },
+      ),
+    ...cachePolicy.catalog,
+  });
+  const workers = useQuery({
+    queryKey: scopedQueryKey("audit-filter-workers", profileId, organizationId),
+    enabled: ready && source === "person",
+    queryFn: ({ signal }) =>
+      apiRequest<PageWorker>(
+        `${base}/workers?page=1&pageSize=100&state=all`,
+        token,
+        { signal },
+      ),
+    ...cachePolicy.catalog,
+  });
+
+  if (source === "line")
+    return {
+      options: sortOptions(
+        lines.flatMap((query) =>
+          (query.data?.items ?? []).map((line) => ({
+            id: line.id,
+            name: line.name,
+            isActive: line.isActive,
+          })),
+        ),
+      ),
+      isPending: plants.isPending || lines.some((query) => query.isPending),
+      isError: plants.isError || lines.some((query) => query.isError),
+    };
+  if (source === "supplier")
+    return {
+      options: sortOptions(
+        (suppliers.data?.items ?? []).map((supplier) => ({
+          id: supplier.id,
+          name: supplier.name,
+          isActive: supplier.isActive,
+        })),
+      ),
+      isPending: suppliers.isPending,
+      isError: suppliers.isError,
+    };
+  if (source === "person")
+    return {
+      options: sortOptions(
+        (workers.data?.items ?? []).map((worker) => ({
+          id: worker.id,
+          name: worker.name,
+          isActive: worker.isActive,
+        })),
+      ),
+      isPending: workers.isPending,
+      isError: workers.isError,
+    };
+  return { options: [], isPending: false, isError: false };
+}
+
+function sortOptions(options: AuditCatalogOption[]): AuditCatalogOption[] {
+  return [...options].sort(
+    (left, right) =>
+      Number(right.isActive) - Number(left.isActive) ||
+      left.name.localeCompare(right.name, "es"),
+  );
 }

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
+import { flushSync } from "react-dom";
 import { Navigate } from "react-router-dom";
 
 import { translateKnownMessage, useLanguage } from "../i18n/language-context";
@@ -22,13 +23,31 @@ export function LoginPage() {
     text: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Solo controla la visibilidad; el valor vive en el input y nunca se guarda en estado.
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   if (auth.profile !== null) {
     return <Navigate to="/gerencia" replace />;
   }
 
+  function togglePasswordVisibility() {
+    const input = passwordRef.current;
+    const keepFieldFocus = input !== null && document.activeElement === input;
+    const selectionStart = input?.selectionStart ?? null;
+    const selectionEnd = input?.selectionEnd ?? null;
+    flushSync(() => setPasswordVisible((visible) => !visible));
+    if (input === null || !keepFieldFocus) return;
+    input.focus();
+    if (selectionStart !== null && selectionEnd !== null) {
+      input.setSelectionRange(selectionStart, selectionEnd);
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Los administradores de contraseñas esperan el campo oculto al enviar.
+    flushSync(() => setPasswordVisible(false));
     setBusy(true);
     setFeedback(null);
     const form = new FormData(event.currentTarget);
@@ -48,6 +67,10 @@ export function LoginPage() {
       setBusy(false);
     }
   }
+
+  const passwordToggleLabel = passwordVisible
+    ? tr("Ocultar contraseña", "Hide password")
+    : tr("Mostrar contraseña", "Show password");
 
   async function recover() {
     const normalizedEmail = email.trim();
@@ -109,6 +132,7 @@ export function LoginPage() {
   async function switchAccount() {
     setBusy(true);
     setFeedback(null);
+    setPasswordVisible(false);
     try {
       await auth.signOut();
       setEmail("");
@@ -205,14 +229,33 @@ export function LoginPage() {
                 />
 
                 <label htmlFor="password">{tr("CONTRASEÑA", "PASSWORD")}</label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  disabled={busy}
-                  required
-                />
+                <div className="auth-password-field">
+                  <input
+                    ref={passwordRef}
+                    id="password"
+                    name="password"
+                    type={passwordVisible ? "text" : "password"}
+                    autoComplete="current-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    disabled={busy}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="auth-password-toggle"
+                    aria-controls="password"
+                    aria-label={passwordToggleLabel}
+                    title={passwordToggleLabel}
+                    disabled={busy}
+                    // Con mouse el foco y el cursor se quedan en el campo de contraseña.
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={togglePasswordVisibility}
+                  >
+                    <PasswordVisibilityIcon visible={passwordVisible} />
+                  </button>
+                </div>
 
                 <div className="auth-form-options">
                   <label className="auth-remember">
@@ -330,6 +373,28 @@ export function LoginPage() {
         </section>
       </section>
     </main>
+  );
+}
+
+function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      data-icon={visible ? "hide-password" : "show-password"}
+    >
+      <path d="M1.5 10C4 5.2 7 3.8 10 3.8S16 5.2 18.5 10C16 14.8 13 16.2 10 16.2S4 14.8 1.5 10Z" />
+      <circle cx="10" cy="10" r="3" />
+      {visible && <path d="M3 2.5 17 17.5" />}
+    </svg>
   );
 }
 

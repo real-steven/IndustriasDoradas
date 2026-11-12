@@ -152,6 +152,145 @@ describe("LoginPage", () => {
     expect(signOut).toHaveBeenCalledOnce();
   });
 
+  it("starts with the password hidden behind an accessible eye button", () => {
+    renderLogin();
+
+    const password = screen.getByLabelText("CONTRASEÑA");
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
+    expect(password).toHaveAttribute("type", "password");
+    expect(password).toHaveAttribute("autocomplete", "current-password");
+    expect(toggle).toHaveAttribute("type", "button");
+    expect(toggle).toHaveAttribute("title", "Mostrar contraseña");
+    expect(toggle).toHaveAttribute("aria-controls", "password");
+    expect(toggle.querySelector("svg")).toHaveAttribute(
+      "data-icon",
+      "show-password",
+    );
+  });
+
+  it("shows and hides the exact password without submitting", async () => {
+    const user = userEvent.setup();
+    const signIn = vi.fn(() => Promise.resolve());
+    renderLogin({ signIn });
+    const password = screen.getByLabelText<HTMLInputElement>("CONTRASEÑA");
+    const secret = "Clave ñ 123 €";
+
+    await user.type(password, secret);
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    );
+
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue(secret);
+    const hideToggle = screen.getByRole("button", {
+      name: "Ocultar contraseña",
+    });
+    expect(hideToggle.querySelector("svg")).toHaveAttribute(
+      "data-icon",
+      "hide-password",
+    );
+
+    await user.click(hideToggle);
+
+    expect(password).toHaveAttribute("type", "password");
+    expect(password).toHaveValue(secret);
+    expect(signIn).not.toHaveBeenCalled();
+    expect(JSON.stringify(window.localStorage)).not.toContain(secret);
+  });
+
+  it("keeps focus and caret in the field when toggled with the pointer", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    const password = screen.getByLabelText<HTMLInputElement>("CONTRASEÑA");
+
+    await user.type(password, "clave-privada");
+    password.setSelectionRange(3, 5);
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    );
+
+    expect(password).toHaveFocus();
+    expect(password.selectionStart).toBe(3);
+    expect(password.selectionEnd).toBe(5);
+
+    await user.click(
+      screen.getByRole("button", { name: "Ocultar contraseña" }),
+    );
+
+    expect(password).toHaveFocus();
+    expect(password.selectionStart).toBe(3);
+    expect(password.selectionEnd).toBe(5);
+  });
+
+  it("toggles from the keyboard and keeps focus on the eye button", async () => {
+    const user = userEvent.setup();
+    const signIn = vi.fn(() => Promise.resolve());
+    renderLogin({ signIn });
+    const password = screen.getByLabelText("CONTRASEÑA");
+
+    await user.type(password, "clave-privada");
+    await user.tab();
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
+    expect(toggle).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(password).toHaveAttribute("type", "text");
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAccessibleName("Ocultar contraseña");
+
+    await user.keyboard(" ");
+    expect(password).toHaveAttribute("type", "password");
+    expect(toggle).toHaveAccessibleName("Mostrar contraseña");
+    expect(signIn).not.toHaveBeenCalled();
+  });
+
+  it("submits with Enter while visible and hides the password again", async () => {
+    const user = userEvent.setup();
+    const signIn = vi.fn(() => Promise.resolve());
+    renderLogin({ signIn });
+    const password = screen.getByLabelText("CONTRASEÑA");
+
+    await user.type(
+      screen.getByRole("textbox", { name: "CORREO" }),
+      "gerencia@example.com",
+    );
+    await user.type(password, "clave-privada");
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    );
+    await user.type(password, "{Enter}");
+
+    await waitFor(() =>
+      expect(signIn).toHaveBeenCalledWith(
+        "gerencia@example.com",
+        "clave-privada",
+      ),
+    );
+    expect(password).toHaveAttribute("type", "password");
+    expect(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    ).toBeInTheDocument();
+    expect(JSON.stringify(window.localStorage)).not.toContain("clave-privada");
+  });
+
+  it("starts hidden again when the login view is opened again", async () => {
+    const user = userEvent.setup();
+    const firstRender = renderLogin();
+
+    await user.type(screen.getByLabelText("CONTRASEÑA"), "clave-privada");
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    );
+    firstRender.unmount();
+    renderLogin();
+
+    expect(screen.getByLabelText("CONTRASEÑA")).toHaveAttribute(
+      "type",
+      "password",
+    );
+    expect(screen.getByLabelText("CONTRASEÑA")).toHaveValue("");
+  });
+
   it("translates the complete login without reloading", async () => {
     const user = userEvent.setup();
     const auth = createAuth();
@@ -173,6 +312,7 @@ describe("LoginPage", () => {
     expect(screen.getByRole("heading", { name: "Welcome" })).toBeVisible();
     expect(screen.getByLabelText("EMAIL")).toBeVisible();
     expect(screen.getByLabelText("PASSWORD")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Show password" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: "ENTER PORTAL →" }),
     ).toBeVisible();

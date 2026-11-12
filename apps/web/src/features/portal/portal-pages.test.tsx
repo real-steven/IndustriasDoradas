@@ -80,6 +80,9 @@ describe("portal gerencial", () => {
       const url = requestUrl(input);
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      // El avatar consulta el perfil propio; no cuenta como dato de la página.
+      if (requestUrl(input).includes("/me/profile"))
+        return Promise.resolve(portalResponse(input));
       dataRequests.push(url);
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer fictitious-token",
@@ -182,6 +185,9 @@ describe("portal gerencial", () => {
     const transport = vi.fn<typeof fetch>((input) => {
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      // El avatar consulta el perfil propio; no cuenta como dato de la página.
+      if (requestUrl(input).includes("/me/profile"))
+        return Promise.resolve(portalResponse(input));
       if (requestUrl(input).includes("/management/gold-summary"))
         return Promise.resolve(portalResponse(input));
       operationRequests += 1;
@@ -213,6 +219,9 @@ describe("portal gerencial", () => {
     const transport = vi.fn<typeof fetch>((input) => {
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      // El avatar consulta el perfil propio; no cuenta como dato de la página.
+      if (requestUrl(input).includes("/me/profile"))
+        return Promise.resolve(portalResponse(input));
       if (requestUrl(input).includes("/management/gold-summary"))
         return Promise.resolve(portalResponse(input));
       operationRequests += 1;
@@ -249,7 +258,7 @@ describe("portal gerencial", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("expone la navegacion confirmada y separa los modulos futuros", () => {
+  it("expone la navegacion confirmada sin modulos futuros", () => {
     renderPortal("JEFE_EMPRESA", "/gerencia");
 
     expect(
@@ -268,7 +277,10 @@ describe("portal gerencial", () => {
     expect(
       screen.queryByRole("link", { name: "Usuarios" }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("PRÓXIMAMENTE").length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("link", { name: /Configuración/u }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("PRÓXIMAMENTE")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Ver estado del sistema" }),
     ).not.toBeInTheDocument();
@@ -284,6 +296,14 @@ describe("portal gerencial", () => {
       ).toBeInTheDocument();
     },
   );
+
+  it("redirige el enlace anterior de configuracion a trabajadores", async () => {
+    renderPortal("JEFE_EMPRESA", "/gerencia/configuracion");
+
+    expect(
+      await screen.findByRole("heading", { name: "Trabajadores" }),
+    ).toBeInTheDocument();
+  });
 
   it("redirige el enlace anterior de cargamentos a auditoria", async () => {
     renderPortal("JEFE_EMPRESA", "/gerencia/cargamentos");
@@ -325,6 +345,9 @@ describe("portal gerencial", () => {
       const url = requestUrl(input);
       if (isFreshnessRequest(input))
         return Promise.resolve(freshnessResponse());
+      // El avatar consulta el perfil propio; no cuenta como dato de la página.
+      if (requestUrl(input).includes("/me/profile"))
+        return Promise.resolve(portalResponse(input));
       dataRequests.push(url);
       expect(url).toContain("/audit-events");
       expect(new Headers(init?.headers).get("Authorization")).toBe(
@@ -347,7 +370,10 @@ describe("portal gerencial", () => {
     const signOut = vi.fn(() => Promise.resolve());
     renderPortal("JEFE_EMPRESA", "/gerencia", signOut);
 
-    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    await user.click(screen.getByRole("button", { name: /^Perfil de / }));
+    await user.click(
+      await screen.findByRole("button", { name: "Cerrar sesión" }),
+    );
 
     expect(signOut).toHaveBeenCalledOnce();
   });
@@ -417,6 +443,20 @@ function emptyPage(): Response {
 
 function portalResponse(input: RequestInfo | URL): Response {
   const url = requestUrl(input);
+  if (url.endsWith("/me/profile"))
+    return new Response(
+      JSON.stringify({
+        id: "a1000000-0000-4000-8000-000000000001",
+        organizationId: "30000000-0000-4000-8000-000000000001",
+        role: "JEFE_EMPRESA",
+        displayName: "Lucía",
+        email: "lucia@example.test",
+        pendingEmail: null,
+        phone: null,
+        photo: null,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
   if (url.includes("/management/freshness")) return freshnessResponse();
   if (url.includes("/management/gold-summary"))
     return new Response(

@@ -29,6 +29,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
+    // El lector de cuerpos de Express rechaza cuerpos grandes antes de Nest.
+    if (
+      !(exception instanceof HttpException) &&
+      typeof exception === "object" &&
+      exception !== null &&
+      (exception as { type?: unknown }).type === "entity.too.large"
+    ) {
+      exception = new HttpException(
+        { code: "PAYLOAD_TOO_LARGE", message: "Request body is too large" },
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
+    }
     const context = host.switchToHttp();
     const request = context.getRequest<Request & CorrelatedRequest>();
     const response = context.getResponse<Response>();

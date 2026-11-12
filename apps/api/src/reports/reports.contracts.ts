@@ -64,6 +64,8 @@ export interface ProductionReportShipment {
   sweepCount: number;
   goldStatus: "REGISTERED" | "PENDING";
   goldAmountGrams: number | null;
+  /** Quilataje vigente del registro de oro; null significa no registrado. */
+  goldKarat: number | null;
   gramsPerCajuela: number | null;
   palosPerCajuela: number | null;
 }

@@ -1,6 +1,12 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -91,7 +97,10 @@ describe("oro por cargamento", () => {
     expect(
       await screen.findByText("Resultado registrado correctamente."),
     ).toBeInTheDocument();
-    expect(postBodies(fetchMock)).toContainEqual({ amountGrams: 0 });
+    expect(postBodies(fetchMock)).toContainEqual({
+      amountGrams: 0,
+      karat: null,
+    });
   });
 
   it("requires and sends a reason for a correction", async () => {
@@ -126,6 +135,7 @@ describe("oro por cargamento", () => {
     ).toBeInTheDocument();
     expect(postBodies(fetchMock)).toContainEqual({
       amountGrams: 3.25,
+      karat: null,
       correctionReason: "Corrección de pesada",
     });
   });
@@ -230,6 +240,188 @@ describe("oro por cargamento", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows gold, karat, mercury, cajuelas, revisions and status in the row", async () => {
+    const fetchMock = transport({
+      amount: 2.5,
+      hasGold: true,
+      karat: 21.125,
+      overview: [
+        {
+          shipmentId: SHIPMENT_ID,
+          mercury: {
+            sweepCount: 3,
+            completeSweepCount: 2,
+            latestCompleteSweep: {
+              sweepId: SWEEP_ID,
+              sweptAtUtc: "2026-10-12T17:00:00.000Z",
+              inputGrams: 240.6,
+              remainderGrams: 30.9,
+            },
+          },
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderGold();
+
+    const row = (await screen.findByText("Oro registrado")).closest("article");
+    if (row === null) throw new Error("Expected shipment row");
+    const facts = within(row);
+    expect(facts.getByText("2,5 g")).toBeInTheDocument();
+    expect(facts.getByText("21,125 k")).toBeInTheDocument();
+    expect(
+      await facts.findByText(/Entrada 240,6 g · Final 30,9 g/u),
+    ).toBeInTheDocument();
+    expect(
+      facts.getByText(/Última barrida completa · 2 de 3 barridas completas/u),
+    ).toBeInTheDocument();
+    expect(facts.getByText("100")).toBeInTheDocument();
+    expect(facts.getByText("Registrado")).toBeInTheDocument();
+    expect(
+      facts.getByRole("button", { name: "CORREGIR RESULTADO" }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        latestRequest(fetchMock, "/gold-overview").searchParams.get(
+          "shipmentIds",
+        ),
+      ).toBe(SHIPMENT_ID),
+    );
+  });
+
+  it("shows Sin registrar for missing karat and mercury and pending status", async () => {
+    vi.stubGlobal("fetch", transport({ amount: null, hasGold: false }));
+    renderGold();
+
+    const row = (await screen.findByText("Quilataje")).closest("article");
+    if (row === null) throw new Error("Expected shipment row");
+    expect(await within(row).findByText("Sin barridas")).toBeInTheDocument();
+    expect(within(row).getAllByText("Sin registrar")).toHaveLength(2);
+    expect(within(row).getByText("Pendiente")).toBeInTheDocument();
+  });
+
+  it("keeps current gold and karat visible and hides a history that only repeats them", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      transport({ amount: 2.5, hasGold: true, karat: 18 }),
+    );
+    renderGold();
+
+    await user.click(
+      await screen.findByRole("button", { name: "CORREGIR RESULTADO" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Oro vigente")).toBeInTheDocument();
+    expect(await within(dialog).findByText("2,5 g")).toBeInTheDocument();
+    expect(within(dialog).getByText("Quilataje vigente")).toBeInTheDocument();
+    expect(within(dialog).getByText("18 k")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("textbox", { name: "Quilataje (opcional)" }),
+    ).toHaveValue("18");
+    expect(within(dialog).queryByText(/append-only/iu)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("VIGENTE")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Correcciones anteriores"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("records karat with the gold and corrects only the karat with a reason", async () => {
+    const user = userEvent.setup();
+    const fetchMock = transport({ amount: null, hasGold: false });
+    vi.stubGlobal("fetch", fetchMock);
+    renderGold();
+
+    await user.click(
+      await screen.findByRole("button", { name: "REGISTRAR DATOS" }),
+    );
+    await user.type(screen.getByPlaceholderText("Ej. 12,50"), "2,5");
+    const karat = screen.getByRole("textbox", { name: "Quilataje (opcional)" });
+    await user.type(karat, "25");
+    await user.click(
+      screen.getByRole("button", { name: "REGISTRAR RESULTADO" }),
+    );
+    expect(
+      screen.getByText(/El quilataje debe estar entre 0 y 24/u),
+    ).toBeInTheDocument();
+    expect(postBodies(fetchMock)).toHaveLength(0);
+
+    await user.clear(karat);
+    await user.type(karat, "18,5");
+    await user.click(
+      screen.getByRole("button", { name: "REGISTRAR RESULTADO" }),
+    );
+    expect(
+      await screen.findByText("Resultado registrado correctamente."),
+    ).toBeInTheDocument();
+    expect(postBodies(fetchMock)).toContainEqual({
+      amountGrams: 2.5,
+      karat: 18.5,
+    });
+
+    await user.clear(karat);
+    await user.type(karat, "21");
+    await user.type(
+      screen.getByRole("textbox", { name: "Motivo de la corrección" }),
+      "Ensayo de laboratorio",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "GUARDAR CORRECCIÓN" }),
+    );
+    expect(
+      await screen.findByText("Corrección registrada como una nueva entrada."),
+    ).toBeInTheDocument();
+    expect(postBodies(fetchMock)).toContainEqual({
+      amountGrams: 2.5,
+      karat: 21,
+      correctionReason: "Ensayo de laboratorio",
+    });
+  });
+
+  it("lists only previous corrections when the result was corrected", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      transport({
+        amount: 3.25,
+        hasGold: true,
+        history: [
+          resultEntry(
+            RESULT_ID,
+            3.25,
+            "2026-10-12T19:00:00.000Z",
+            "Corrección de pesada",
+          ),
+          resultEntry(
+            PREVIOUS_RESULT_ID,
+            2.5,
+            "2026-10-12T17:00:00.000Z",
+            null,
+          ),
+        ],
+      }),
+    );
+    renderGold();
+
+    await user.click(
+      await screen.findByRole("button", { name: "CORREGIR RESULTADO" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      await within(dialog).findByText("Correcciones anteriores"),
+    ).toBeInTheDocument();
+    const previous = within(dialog).getByRole("list", { name: "" });
+    expect(within(previous).getAllByRole("listitem")).toHaveLength(1);
+    expect(
+      within(previous).getByText("2,5 g · Sin registrar"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        /Motivo del valor vigente: Corrección de pesada/u,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("requires a reason before correcting mercury received from desktop", async () => {
     const user = userEvent.setup();
     const fetchMock = transport({ amount: 2.5, hasGold: true });
@@ -320,12 +512,19 @@ function latestRequest(
 function transport({
   amount,
   hasGold,
+  karat = null,
+  overview = defaultOverview(),
+  history,
 }: {
   amount: number | null;
   hasGold: boolean;
+  karat?: number | null;
+  overview?: unknown;
+  history?: unknown[];
 }) {
   return vi.fn<typeof fetch>((input, init) => {
     const url = requestUrl(input);
+    if (url.includes("/gold-overview")) return Promise.resolve(json(overview));
     if (init?.method === "POST") {
       if (url.includes("/gold-reviews")) {
         const body = JSON.parse(requestBody(init)) as {
@@ -358,6 +557,7 @@ function transport({
         );
       const body = JSON.parse(requestBody(init)) as {
         amountGrams: number;
+        karat?: number | null;
         correctionReason?: string;
       };
       return Promise.resolve(
@@ -366,6 +566,7 @@ function transport({
           organizationId: ORGANIZATION_ID,
           shipmentId: SHIPMENT_ID,
           amountGrams: body.amountGrams,
+          karat: body.karat ?? null,
           unitCode: "g",
           recordedAtUtc: "2026-10-12T18:00:00.000Z",
           recordedByProfileId: PROFILE_ID,
@@ -408,22 +609,24 @@ function transport({
     if (url.includes("/gold-results"))
       return Promise.resolve(
         json(
-          hasGold
-            ? [
-                {
-                  id: PREVIOUS_RESULT_ID,
-                  organizationId: ORGANIZATION_ID,
-                  shipmentId: SHIPMENT_ID,
-                  amountGrams: amount,
-                  unitCode: "g",
-                  recordedAtUtc: "2026-10-12T17:00:00.000Z",
-                  recordedByProfileId: PROFILE_ID,
-                  recordedByDisplayName: "Lucía ficticia",
-                  supersedesResultId: null,
-                  correctionReason: null,
-                },
-              ]
-            : [],
+          history ??
+            (hasGold
+              ? [
+                  {
+                    id: PREVIOUS_RESULT_ID,
+                    organizationId: ORGANIZATION_ID,
+                    shipmentId: SHIPMENT_ID,
+                    amountGrams: amount,
+                    karat,
+                    unitCode: "g",
+                    recordedAtUtc: "2026-10-12T17:00:00.000Z",
+                    recordedByProfileId: PROFILE_ID,
+                    recordedByDisplayName: "Lucía ficticia",
+                    supersedesResultId: null,
+                    correctionReason: null,
+                  },
+                ]
+              : []),
         ),
       );
     if (url.includes("/gold-reviews")) return Promise.resolve(json([]));
@@ -455,12 +658,50 @@ function transport({
         }),
       );
     if (url.includes("/management/shipments"))
-      return Promise.resolve(json(shipmentPage(amount, hasGold)));
+      return Promise.resolve(json(shipmentPage(amount, hasGold, karat)));
     throw new Error(`Unexpected request: ${url}`);
   });
 }
 
-function shipmentPage(amount: number | null, hasGold: boolean) {
+function defaultOverview() {
+  return [
+    {
+      shipmentId: SHIPMENT_ID,
+      mercury: {
+        sweepCount: 0,
+        completeSweepCount: 0,
+        latestCompleteSweep: null,
+      },
+    },
+  ];
+}
+
+function resultEntry(
+  id: string,
+  amountGrams: number,
+  recordedAtUtc: string,
+  correctionReason: string | null,
+) {
+  return {
+    id,
+    organizationId: ORGANIZATION_ID,
+    shipmentId: SHIPMENT_ID,
+    amountGrams,
+    karat: null,
+    unitCode: "g",
+    recordedAtUtc,
+    recordedByProfileId: PROFILE_ID,
+    recordedByDisplayName: "Lucía ficticia",
+    supersedesResultId: null,
+    correctionReason,
+  };
+}
+
+function shipmentPage(
+  amount: number | null,
+  hasGold: boolean,
+  karat: number | null = null,
+) {
   return {
     items: [
       {
@@ -493,6 +734,7 @@ function shipmentPage(amount: number | null, hasGold: boolean) {
         goldRecordedAtUtc: hasGold ? "2026-10-12T18:00:00.000Z" : null,
         goldRecordedByProfileId: hasGold ? PROFILE_ID : null,
         goldRevisionCount: hasGold ? 1 : null,
+        goldKarat: hasGold ? karat : null,
         hasGoldResult: hasGold,
       },
     ],

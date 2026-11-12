@@ -58,6 +58,11 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="NavChrome" Property="Opacity" Value="0.76" />
                             </Trigger>
+                            <!-- Módulos protegidos sin Modo Jefe de Planta: visibles pero inactivos. -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="NavChrome" Property="Opacity" Value="0.42" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -297,10 +302,149 @@
                                 </StackPanel>
                             </Grid>
                         </Button>
-                        <Border Width="38" Height="38" Margin="0,0,7,0" CornerRadius="19" Background="#517487">
-                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="White" FontWeight="Bold" Text="JP" />
-                        </Border>
+                        <Grid x:Name="ProfileAvatarHost" Margin="0,0,7,0" VerticalAlignment="Center">
+                            <Button x:Name="ProfileAvatarButton" Width="38" Height="38" MinHeight="0" Padding="0"
+                                    Cursor="Hand" Click="OnProfileAvatarClick"
+                                    ToolTip="Ver mi perfil"
+                                    AutomationProperties.Name="{Binding DisplayName, StringFormat=Perfil de {0}}"
+                                    AutomationProperties.HelpText="Abre su perfil">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Grid>
+                                            <Ellipse x:Name="Ring" Fill="#517487" Stroke="Transparent" StrokeThickness="2" />
+                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Foreground="White" FontWeight="Bold" Text="{Binding Initials}"
+                                                       Visibility="{Binding ShowInitials, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                            <Ellipse Margin="2"
+                                                     Visibility="{Binding HasPhoto, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <Ellipse.Fill>
+                                                    <ImageBrush ImageSource="{Binding Photo}" Stretch="UniformToFill" />
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Ring" Property="Stroke" Value="#E7B91F" />
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="Ring" Property="Stroke" Value="#0874A3" />
+                                                <Setter TargetName="Ring" Property="StrokeThickness" Value="3" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                            <Popup x:Name="ProfilePopup" PlacementTarget="{Binding ElementName=ProfileAvatarButton}"
+                                   Placement="Bottom" HorizontalOffset="-270" VerticalOffset="8"
+                                   StaysOpen="True" AllowsTransparency="True" Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Border x:Name="ProfilePopupPanel" Width="310" Margin="0,0,10,10" Padding="16"
+                                        Background="White" BorderBrush="#D6E1E6" BorderThickness="1" CornerRadius="14"
+                                        KeyboardNavigation.TabNavigation="Cycle"
+                                        KeyboardNavigation.DirectionalNavigation="Cycle"
+                                        PreviewKeyDown="OnProfilePopupKeyDown"
+                                        AutomationProperties.Name="Mi perfil">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.22" />
+                                    </Border.Effect>
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid Width="52" Height="52">
+                                                <Ellipse Fill="#517487" />
+                                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           Foreground="White" FontSize="17" FontWeight="Bold" Text="{Binding Initials}"
+                                                           Visibility="{Binding ShowInitials, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <Ellipse Visibility="{Binding HasPhoto, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <Ellipse.Fill>
+                                                        <ImageBrush ImageSource="{Binding Photo}" Stretch="UniformToFill" />
+                                                    </Ellipse.Fill>
+                                                </Ellipse>
+                                            </Grid>
+                                            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock FontSize="15" FontWeight="Bold" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource Ink900Brush}" Text="{Binding DisplayName}" />
+                                                <Border Margin="0,4,0,0" Padding="8,2" HorizontalAlignment="Left"
+                                                        Background="#FFF3D9" CornerRadius="9">
+                                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="#6B4A00" Text="Jefe de planta" />
+                                                </Border>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <TextBlock Margin="0,12,0,0" FontSize="10" FontWeight="Bold" Foreground="#5F7480" Text="CORREO" />
+                                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Ink900Brush}" Text="{Binding Email}" />
+                                        <TextBlock Margin="0,8,0,0" FontSize="10" FontWeight="Bold" Foreground="#5F7480" Text="TELÉFONO" />
+                                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Ink900Brush}" Text="{Binding PhoneText}" />
+                                        <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#8A6D1E" TextWrapping="Wrap"
+                                                   Text="Sin conexión: se muestran los últimos datos conocidos."
+                                                   Visibility="{Binding IsOfflineData, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                        <TextBlock Margin="0,8,0,0" FontSize="10" FontWeight="Bold" Foreground="#5F7480" Text="ACCESO" />
+                                        <TextBlock Foreground="{StaticResource Ink900Brush}" Text="{Binding AccessStateText}" />
+
+                                        <Border Margin="0,12,0,0" Padding="10,8" Background="#F2F7F9" CornerRadius="9"
+                                                Visibility="{Binding IsReadOnly, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock TextWrapping="Wrap" Foreground="#536A77" FontSize="11"
+                                                       Text="Eleve el acceso para modificar su fotografía o teléfono." />
+                                        </Border>
+
+                                        <StackPanel Margin="0,12,0,0"
+                                                    Visibility="{Binding ShowElevatedActions, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Button x:Name="ProfileFirstAction" Margin="0,0,0,6" HorizontalContentAlignment="Left"
+                                                    Command="{Binding BeginEditPhoneCommand}" Content="Cambiar teléfono" />
+                                            <Button Margin="0,0,0,6" HorizontalContentAlignment="Left"
+                                                    Command="{Binding ChangePhotoCommand}" Content="Cambiar fotografía" />
+                                            <Button HorizontalContentAlignment="Left"
+                                                    Command="{Binding RemovePhotoCommand}" Content="Quitar fotografía"
+                                                    Visibility="{Binding HasPhoto, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                            <TextBlock Margin="0,6,0,0" FontSize="10" Foreground="#5F7480" TextWrapping="Wrap"
+                                                       Text="La fotografía se guarda solo en este equipo." />
+                                        </StackPanel>
+
+                                        <StackPanel Margin="0,12,0,0"
+                                                    Visibility="{Binding ShowPhoneEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Label Padding="0" Target="{Binding ElementName=ProfilePhoneBox}" FontSize="11" FontWeight="Bold"
+                                                   Foreground="#5F7480" Content="_Teléfono (opcional)" />
+                                            <TextBox x:Name="ProfilePhoneBox" Margin="0,4,0,0" MaxLength="24"
+                                                     Text="{Binding PhoneDraft, UpdateSourceTrigger=PropertyChanged}"
+                                                     AutomationProperties.Name="Teléfono (opcional)" />
+                                            <Label Padding="0" Margin="0,8,0,0" Target="{Binding ElementName=ProfilePinBox}" FontSize="11"
+                                                   FontWeight="Bold" Foreground="#5F7480" Content="_PIN para confirmar en la central" />
+                                            <PasswordBox x:Name="ProfilePinBox" Margin="0,4,0,0" MaxLength="12"
+                                                         KeyDown="OnProfilePinKeyDown"
+                                                         AutomationProperties.Name="PIN para confirmar en la central" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#5F7480" TextWrapping="Wrap"
+                                                       Text="Requiere conexión a Internet. Ejemplos: 8888-7777 o +1 415 555 0100." />
+                                            <StackPanel Margin="0,8,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <Button Command="{Binding CancelEditCommand}" Content="Cancelar" />
+                                                <Button Margin="8,0,0,0" Click="OnProfileSavePhone"
+                                                        Background="{StaticResource NavyBrush}" BorderBrush="{StaticResource NavyBrush}"
+                                                        Foreground="White" Content="Guardar"
+                                                        IsEnabled="{Binding ShowPhoneEditor}" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="9"
+                                                Visibility="{Binding HasStatus, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#E7F6EC" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding StatusIsError}" Value="True">
+                                                            <Setter Property="Background" Value="#FDECEA" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Text="{Binding StatusMessage}"
+                                                       AutomationProperties.LiveSetting="Polite" />
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
+                        </Grid>
                         <Button Click="OnCloseStation" ToolTip="Cerrar la sesión de esta estación"
                                 Background="#F7F5F0" BorderBrush="#DED8CB" Foreground="#665B48"
                                 Content="↪  CERRAR ESTACIÓN" FontSize="11" />

@@ -1,5 +1,8 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
-import type { ManagementSweepMercury } from "../../api/generated/api-client";
+import type {
+  GoldShipmentOverview,
+  ManagementSweepMercury,
+} from "../../api/generated/api-client";
 import {
   Link,
   useLocation,
@@ -9,17 +12,25 @@ import {
 
 import {
   formatCostaRicaDateTime,
+  normalizeShipmentCode,
   parseShipmentFilters,
-  resolveShipmentReference,
   shortShipmentId,
   useManagementShipment,
-  useManagementShipmentFilterOptions,
   useManagementShipments,
   useManagementShipmentSweeps,
+  useAuditFilterCatalog,
   useShipmentAuditEvents,
   type AuditEvent,
   type ShipmentFilters,
 } from "./management-shipments-data";
+import {
+  auditActivityServerFilters,
+  auditFilterDefinitions,
+  selectedAuditFilter,
+  shipmentServerFilters,
+  type AuditGroupKey,
+  type AuditViewKey,
+} from "./management-audit-filters";
 import {
   managerAuditAction,
   managerAuditArea,
@@ -27,6 +38,8 @@ import {
   managerAuditResult,
 } from "./management-audit-labels";
 import { ManagementAuditDetail } from "./management-audit-detail";
+import { ShipmentIdentifier } from "./shipment-identifier";
+import { useGoldOverview } from "../gold/gold-data";
 import { requestErrorMessage } from "../../api/http";
 import { useLanguage } from "../../i18n/language-context";
 
@@ -37,7 +50,7 @@ export function ShipmentsFeature({
   view: AuditViewKey;
   onViewChange: (view: AuditViewKey) => void;
 }) {
-  const { language, tr } = useLanguage();
+  const { language, locale, tr } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedFilters = parseShipmentFilters(searchParams);
   const search = searchParams.get("search")?.trim();
@@ -64,16 +77,23 @@ export function ShipmentsFeature({
             : 1,
       }
     : requestedFilters;
-  const filterOptions = useManagementShipmentFilterOptions(baseFilters);
-  const shipmentId = resolveShipmentReference(
-    baseFilters.shipmentReference,
-    filterOptions.data?.items ?? [],
-  );
+  // El código se busca en el servidor (código corto o UUID completo); nunca se
+  // descargan los cargamentos para buscarlo en el navegador.
+  const searchedReference = baseFilters.shipmentReference.trim();
+  const shipmentCode = normalizeShipmentCode(searchedReference);
+  const searchingCode = searchedReference.length > 0;
+  const invalidCode = searchingCode && shipmentCode === undefined;
   const filters: ShipmentFilters = {
     ...baseFilters,
-    ...(shipmentId === undefined ? {} : { shipmentId }),
+    ...shipmentServerFilters(selectedAuditFilter(view, searchParams)),
+    ...(shipmentCode === undefined ? {} : { shipmentCode }),
   };
-  const shipments = useManagementShipments(filters);
+  const shipments = useManagementShipments(filters, { enabled: !invalidCode });
+  const mercury = useGoldOverview(
+    invalidCode
+      ? []
+      : (shipments.data?.items ?? []).map((item) => item.shipmentId),
+  );
   const [draftSearch, setDraftSearch] = useState(filters.shipmentReference);
 
   const update = (key: "from" | "to", value: string) => {
@@ -107,14 +127,19 @@ export function ShipmentsFeature({
     <>
       <form className="audit-filters" onSubmit={submitSearch}>
         <AuditViewField value={view} onChange={onViewChange} />
+        <AuditDependentFilters
+          view={view}
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+        />
         <label className="audit-search">
           <span>{tr("Buscar actividad", "Search activity")}</span>
           <input
             type="search"
             value={draftSearch}
             placeholder={tr(
-              "ID completo o referencia de cargamento",
-              "Full shipment ID or reference",
+              "Código del cargamento (5510B16A) o UUID",
+              "Shipment code (5510B16A) or UUID",
             )}
             onChange={(event) => setDraftSearch(event.target.value)}
           />
@@ -147,7 +172,19 @@ export function ShipmentsFeature({
         </div>
       </form>
       <section className="shipment-history" aria-live="polite">
-        {shipments.isPending ? (
+        {invalidCode ? (
+          <ShipmentState
+            title={tr(
+              "No se encontró un cargamento con ese código.",
+              "No shipment was found with that code.",
+            )}
+          >
+            {tr(
+              "Pegue el código de 8 caracteres (por ejemplo 5510B16A) o el identificador completo.",
+              "Paste the 8-character code (for example 5510B16A) or the full identifier.",
+            )}
+          </ShipmentState>
+        ) : shipments.isPending ? (
           <ShipmentState
             title={tr("Consultando cargamentos", "Loading shipments")}
           >
@@ -165,6 +202,18 @@ export function ShipmentsFeature({
             error
           >
             {requestErrorMessage(shipments.error, undefined, language)}
+          </ShipmentState>
+        ) : shipments.data.items.length === 0 && searchingCode ? (
+          <ShipmentState
+            title={tr(
+              "No se encontró un cargamento con ese código.",
+              "No shipment was found with that code.",
+            )}
+          >
+            {tr(
+              "Revise el código o quite los demás filtros y el rango de fechas.",
+              "Check the code or remove the other filters and the date range.",
+            )}
           </ShipmentState>
         ) : shipments.data.items.length === 0 ? (
           <ShipmentState
@@ -184,11 +233,15 @@ export function ShipmentsFeature({
               {shipments.data.items.map((shipment) => (
                 <article className="shipment-row" key={shipment.shipmentId}>
                   <div className="shipment-primary">
-                    <span>
-                      {tr("CARGAMENTO", "SHIPMENT")}{" "}
-                      {shortShipmentId(shipment.shipmentId)}
-                    </span>
+                    <ShipmentIdentifier
+                      shipmentId={shipment.shipmentId}
+                      supplierName={shipment.supplierName}
+                    />
                     <strong>{shipment.productionLineName}</strong>
+                    <small>
+                      {tr("Inicio", "Started")}{" "}
+                      {formatCostaRicaDateTime(shipment.startedAtUtc, language)}
+                    </small>
                     <small>
                       {tr("Cerrado", "Closed")}{" "}
                       {formatCostaRicaDateTime(
@@ -196,6 +249,9 @@ export function ShipmentsFeature({
                         language,
                       )}
                     </small>
+                    <span className="shipment-row-status">
+                      {tr("FINALIZADO", "COMPLETED")}
+                    </span>
                   </div>
                   <dl>
                     <div>
@@ -219,6 +275,34 @@ export function ShipmentsFeature({
                       <dt>{tr("Barridas", "Sweeps")}</dt>
                       <dd>{shipment.sweepCount}</dd>
                     </div>
+                    {shipment.hasGoldResult &&
+                      shipment.goldAmountGrams !== null && (
+                        <div>
+                          <dt>{tr("Oro", "Gold")}</dt>
+                          <dd>
+                            {formatShipmentNumber(
+                              shipment.goldAmountGrams,
+                              locale,
+                              2,
+                            )}{" "}
+                            g
+                          </dd>
+                        </div>
+                      )}
+                    {shipment.hasGoldResult && shipment.goldKarat !== null && (
+                      <div>
+                        <dt>{tr("Quilataje", "Karat")}</dt>
+                        <dd>
+                          {formatShipmentNumber(shipment.goldKarat, locale, 3)}{" "}
+                          k
+                        </dd>
+                      </div>
+                    )}
+                    <ShipmentMercuryFact
+                      overview={mercury.data?.find(
+                        (item) => item.shipmentId === shipment.shipmentId,
+                      )}
+                    />
                   </dl>
                   <Link
                     className="secondary-link"
@@ -316,6 +400,11 @@ export function ShipmentDetailFeature() {
           <p>
             {shipment.data.productionLineName} · {shipment.data.supplierName}
           </p>
+          <ShipmentIdentifier
+            className="light"
+            shipmentId={shipment.data.shipmentId}
+            supplierName={shipment.data.supplierName}
+          />
         </div>
         <span className="line-status current">
           {tr("CONFIRMADO", "CONFIRMED")}
@@ -554,9 +643,11 @@ function AuditActivityFeature({
       ? requestedPage
       : 1;
   const [draftSearch, setDraftSearch] = useState(search);
+  const searchedShipmentCode = normalizeShipmentCode(search);
   const audit = useShipmentAuditEvents({
     search,
     ...(selectedGroup === undefined ? {} : { category: selectedGroup.key }),
+    ...auditActivityServerFilters(selectedAuditFilter(view, searchParams)),
     fromDate,
     toDate,
     page,
@@ -577,12 +668,10 @@ function AuditActivityFeature({
   };
 
   const clear = () => {
+    // Limpiar conserva solo el área elegida.
     setDraftSearch("");
-    const next = new URLSearchParams(searchParams);
-    next.delete("search");
-    next.delete("from");
-    next.delete("to");
-    next.delete("page");
+    const next = new URLSearchParams();
+    if (view !== "all") next.set("view", view);
     setSearchParams(next);
   };
 
@@ -590,14 +679,19 @@ function AuditActivityFeature({
     <div className="manager-audit">
       <form className="audit-filters" onSubmit={submitSearch}>
         <AuditViewField value={view} onChange={onViewChange} />
+        <AuditDependentFilters
+          view={view}
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+        />
         <label className="audit-search">
           <span>{tr("Buscar actividad", "Search activity")}</span>
           <input
             type="search"
             value={draftSearch}
             placeholder={tr(
-              "ID completo de cargamento, persona o referencia",
-              "Full shipment ID, person, or reference",
+              "Código de cargamento, persona o referencia",
+              "Shipment code, person, or reference",
             )}
             onChange={(event) => setDraftSearch(event.target.value)}
           />
@@ -629,6 +723,31 @@ function AuditActivityFeature({
           </button>
         </div>
       </form>
+
+      {searchedShipmentCode !== undefined && (
+        <div className="audit-shipment-code-hint" role="note">
+          <span>
+            {tr(
+              "Parece un identificador de cargamento.",
+              "This looks like a shipment identifier.",
+            )}
+          </span>
+          <Link
+            className="secondary-link"
+            to={{
+              pathname: "/gerencia/auditoria",
+              search: new URLSearchParams({
+                view: "shipments",
+                period: "all",
+                search: search,
+              }).toString(),
+            }}
+          >
+            {tr("BUSCAR EL CARGAMENTO", "FIND THE SHIPMENT")}{" "}
+            {shortShipmentId(searchedShipmentCode)} →
+          </Link>
+        </div>
+      )}
 
       {audit.isPending ? (
         <ShipmentState title={tr("Consultando auditoría", "Loading audit")}>
@@ -703,6 +822,91 @@ function AuditViewField({
         ))}
       </select>
     </label>
+  );
+}
+
+/** «Filtrar por» y su valor; ambos dependen del área y se guardan en la URL. */
+function AuditDependentFilters({
+  view,
+  searchParams,
+  setSearchParams,
+}: {
+  view: AuditViewKey;
+  searchParams: URLSearchParams;
+  setSearchParams(this: void, params: URLSearchParams): void;
+}) {
+  const { tr } = useLanguage();
+  const definitions = auditFilterDefinitions(view);
+  const selected = selectedAuditFilter(view, searchParams);
+  const catalog = useAuditFilterCatalog(
+    selected.definition?.source === "fixed"
+      ? undefined
+      : selected.definition?.source,
+  );
+
+  const change = (key: "filter" | "value", nextValue: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextValue.length === 0) next.delete(key);
+    else next.set(key, nextValue);
+    if (key === "filter") next.delete("value");
+    next.delete("page");
+    setSearchParams(next);
+  };
+
+  const valuePlaceholder =
+    selected.definition === undefined
+      ? tr("Elija primero un filtro", "Choose a filter first")
+      : catalog.isPending
+        ? tr("Cargando…", "Loading…")
+        : catalog.isError
+          ? tr("No se pudo cargar", "Could not load")
+          : tr("Todos", "All");
+
+  return (
+    <>
+      <label className="audit-filter-by">
+        <span>{tr("Filtrar por", "Filter by")}</span>
+        <select
+          value={selected.definition?.key ?? ""}
+          disabled={definitions.length === 0}
+          onChange={(event) => change("filter", event.target.value)}
+        >
+          <option value="">
+            {definitions.length === 0
+              ? tr("Elija un área", "Choose an area")
+              : tr("Sin filtro", "No filter")}
+          </option>
+          {definitions.map((definition) => (
+            <option key={definition.key} value={definition.key}>
+              {tr(definition.spanish, definition.english)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="audit-filter-value">
+        <span>{tr("Valor del filtro", "Filter value")}</span>
+        <select
+          value={selected.value ?? ""}
+          disabled={selected.definition === undefined}
+          onChange={(event) => change("value", event.target.value)}
+        >
+          <option value="">{valuePlaceholder}</option>
+          {selected.definition?.source === "fixed"
+            ? (selected.definition.values ?? []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {tr(option.spanish, option.english)}
+                </option>
+              ))
+            : catalog.options.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.isActive
+                    ? option.name
+                    : `${option.name} (${tr("inactivo", "inactive")})`}
+                </option>
+              ))}
+        </select>
+      </label>
+    </>
   );
 }
 
@@ -843,9 +1047,6 @@ function auditDate(value: string | null): string | undefined {
   return value;
 }
 
-type AuditGroupKey = "operation" | "people" | "administration";
-type AuditViewKey = "all" | "shipments" | AuditGroupKey;
-
 interface AuditGroupOption {
   key: AuditGroupKey;
   spanish: string;
@@ -864,9 +1065,14 @@ const auditGroups: readonly AuditGroupOption[] = [
     english: "People",
   },
   {
+    key: "security",
+    spanish: "Seguridad",
+    english: "Security",
+  },
+  {
     key: "administration",
-    spanish: "Seguridad y administración",
-    english: "Security and administration",
+    spanish: "Administración",
+    english: "Administration",
   },
 ];
 
@@ -1035,4 +1241,43 @@ function auditResult(
     return language === "es" ? "Confirmado" : "Confirmed";
   if (value === "REJECTED") return language === "es" ? "Rechazado" : "Rejected";
   return language === "es" ? "Falló" : "Failed";
+}
+
+function ShipmentMercuryFact({
+  overview,
+}: {
+  overview: GoldShipmentOverview | undefined;
+}) {
+  const { locale, tr } = useLanguage();
+  const latest = overview?.mercury.latestCompleteSweep;
+  if (overview === undefined || latest === null || latest === undefined)
+    return null;
+  // Última barrida completa (suma de sus rastras); nunca se suman barridas.
+  return (
+    <div>
+      <dt>{tr("Mercurio", "Mercury")}</dt>
+      <dd>
+        {tr("Entrada", "Input")}{" "}
+        {formatShipmentNumber(latest.inputGrams, locale, 2)} g ·{" "}
+        {tr("Final", "Final")}{" "}
+        {formatShipmentNumber(latest.remainderGrams, locale, 2)} g
+        <small>
+          {overview.mercury.completeSweepCount} {tr("de", "of")}{" "}
+          {overview.mercury.sweepCount}{" "}
+          {tr("barridas completas", "complete sweeps")}
+        </small>
+      </dd>
+    </div>
+  );
+}
+
+function formatShipmentNumber(
+  value: number,
+  locale: string,
+  maximumFractionDigits: number,
+): string {
+  return new Intl.NumberFormat(locale, {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  }).format(value);
 }

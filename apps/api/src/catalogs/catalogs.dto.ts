@@ -118,4 +118,12 @@ export class UpdateSupplierDto extends PartialType(CreateSupplierDto) {}
 export class SetCatalogStateDto {
   @IsBoolean()
   active!: boolean;
+
+  /** Motivo breve del cambio; obligatorio al suspender un proveedor. */
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(300)
+  reason?: string;
 }

@@ -74,7 +74,7 @@ public sealed class MercuryRastraEntryViewModel(
     }
 }
 
-public sealed class StationViewModel : ObservableObject, IDisposable
+public sealed class StationViewModel : ObservableObject, IDisposable, ILoginCredentialsTarget
 {
     private const string DefaultOwnMaterialSupplierName = "Material propio";
 
@@ -93,6 +93,9 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private readonly Guid configuredStationId;
     private readonly DispatcherTimer idleTimer;
     private bool isClosingForIdle;
+    // Marca que en la solicitud de elevación actual ya se intentó biometría; un PIN posterior
+    // se audita como alternativa (PIN_FALLBACK).
+    private bool biometricAttemptedInRequest;
     private bool isMaintainingSession;
     private bool wasSessionRestored;
     private bool isApplicationUnlocked;
@@ -223,7 +226,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             TimeSpan.FromSeconds(options.Value.PrivilegedIdleSeconds),
             TimeSpan.FromSeconds(options.Value.SessionIdleSeconds));
         CloseStationCommand = new AsyncRelayCommand(CloseStationAsync, () => IsStationOpen && !IsBusy);
-        ExitManagerModeCommand = new RelayCommand(ExitManagerMode);
+        ExitManagerModeCommand = new RelayCommand(ExitManagerMode, () => IsPlantManager);
         PrepareLineCommand = new AsyncRelayCommand(PrepareLineAsync, CanPrepareLine);
         ConfirmLineCommand = new AsyncRelayCommand(
             ConfirmLineAsync,
@@ -268,6 +271,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(CanManageActiveOperation));
                 OnPropertyChanged(nameof(CanUseContextActions));
                 OnPropertyChanged(nameof(CanRecordMercury));
+                ExitManagerModeCommand.NotifyCanExecuteChanged();
                 NotifyOperationCommands();
             }
         }
@@ -289,6 +293,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         }
     }
     public bool IsPlantManager => Mode == StationMode.PlantManager;
+    public event EventHandler? CredentialsAccepted;
+
     public bool IsStationOpen => state is not null;
     public Guid? CurrentProfileId => state?.Session.ProfileId;
     public string CurrentProfileDisplayName => state?.Session.DisplayName ?? "Jefe de planta";
@@ -566,6 +572,12 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 LoginSessionState = LoginSessionState.Available;
                 StationSessionStatus =
                     "Estación con sesión protegida restaurada, encontrada y lista para continuar.";
+                await RecordSecurityEventAsync(
+                    SecurityAudit.SessionFound,
+                    "ENCONTRADA",
+                    "Se encontró una sesión protegida guardada en este equipo.",
+                    state,
+                    SecurityAudit.MethodSession).ConfigureAwait(true);
                 bool hasLocalCopy = initialSynchronization is not null &&
                     await initialSynchronization.HasUsableLocalCopyAsync().ConfigureAwait(true);
                 if (hasLocalCopy)
@@ -683,6 +695,7 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         {
             Status = "Abriendo y validando la estación…";
             state = await coordinator.SignInAsync(email, password).ConfigureAwait(true);
+            CredentialsAccepted?.Invoke(this, EventArgs.Empty);
             WasSessionRestored = false;
             isSessionSynchronized = false;
             initialSyncCompletionMessage = "La estación está lista.";
@@ -699,10 +712,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             IsApplicationUnlocked = true;
             OpenOperationMode(SynchronizedOperationMessage());
             await RecordSecurityEventAsync(
-                "SESSION_OPENED",
+                SecurityAudit.SessionOpened,
                 "EXITOSO",
                 "La estación se abrió mediante autenticación reciente.",
-                state).ConfigureAwait(true);
+                state,
+                SecurityAudit.MethodPassword).ConfigureAwait(true);
         }, "No se pudo abrir la estación.").ConfigureAwait(true);
 
         if (state is null)
@@ -712,10 +726,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             StationSessionStatus = LoginSessionTitle;
             Status = LoginSessionDescription;
             await RecordSecurityEventAsync(
-                "SESSION_REJECTED",
+                SecurityAudit.SessionRejected,
                 "RECHAZADO",
                 "No se pudo abrir una sesión nueva con las credenciales proporcionadas.",
-                null).ConfigureAwait(true);
+                null,
+                SecurityAudit.MethodPassword).ConfigureAwait(true);
         }
     }
 
@@ -723,6 +738,10 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     {
         if (state is null) { Status = "Primero abre la estación."; return; }
         if (string.IsNullOrWhiteSpace(pin)) { Status = "Ingrese su PIN individual."; return; }
+        // El PIN nunca se audita; solo el método (directo o alternativa a la biometría).
+        string pinMethod = biometricAttemptedInRequest
+            ? SecurityAudit.MethodPinFallback
+            : SecurityAudit.MethodPin;
         await RunAsync(async () =>
         {
             Status = "Validando elevación individual…";
@@ -759,20 +778,25 @@ public sealed class StationViewModel : ObservableObject, IDisposable
                 Mode = modeController.Mode;
                 Status = "Modo Jefe de Planta activo. Se cerrará tras cinco minutos de inactividad total.";
                 await RecordSecurityEventAsync(
-                    "ELEVATION_ACCEPTED",
+                    SecurityAudit.ElevationAccepted,
                     "ACEPTADO",
-                    "PIN validado; se activó Modo Jefe de Planta.",
-                    state).ConfigureAwait(true);
+                    pinMethod == SecurityAudit.MethodPinFallback
+                        ? "PIN validado como alternativa a la biometría; se activó Modo Jefe de Planta."
+                        : "PIN validado; se activó Modo Jefe de Planta.",
+                    state,
+                    pinMethod).ConfigureAwait(true);
+                biometricAttemptedInRequest = false;
                 await LoadPreparationCatalogsAsync().ConfigureAwait(true);
             }
             else
             {
                 Status = $"Elevación rechazada: {result.Result}. Modo Operación continúa activo.";
                 await RecordSecurityEventAsync(
-                    "ELEVATION_REJECTED",
-                    result.Result,
+                    SecurityAudit.ElevationRejected,
+                    SecurityAudit.ResultCode(result.Result),
                     "El intento de elevar permisos fue rechazado; Modo Operación continuó activo.",
-                    state).ConfigureAwait(true);
+                    state,
+                    pinMethod).ConfigureAwait(true);
             }
         }, "No se pudo validar el PIN; Modo Operación continúa activo.");
     }
@@ -789,11 +813,13 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         if (profileId == Guid.Empty || state.Session.ProfileId != profileId)
         {
             Status = "El rostro registrado no corresponde a la sesión abierta. Use el PIN.";
+            biometricAttemptedInRequest = true;
             await RecordSecurityEventAsync(
-                "BIOMETRIC_ELEVATION_REJECTED",
+                SecurityAudit.BiometricRejected,
                 "PERFIL_DISTINTO",
-                "La plantilla biométrica no correspondía al perfil de la sesión abierta.",
-                state).ConfigureAwait(true);
+                "El rostro reconocido no correspondía al perfil de la sesión abierta.",
+                state,
+                SecurityAudit.MethodBiometric).ConfigureAwait(true);
             return false;
         }
 
@@ -811,10 +837,12 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             elevated = true;
             Status = "Rostro reconocido. Modo Jefe de Planta activo durante cinco minutos de inactividad total.";
             await RecordSecurityEventAsync(
-                "BIOMETRIC_ELEVATION_ACCEPTED",
+                SecurityAudit.ElevationAccepted,
                 "ACEPTADO",
                 "Identidad facial validada localmente; se activó Modo Jefe de Planta.",
-                state).ConfigureAwait(true);
+                state,
+                SecurityAudit.MethodBiometric).ConfigureAwait(true);
+            biometricAttemptedInRequest = false;
             await LoadPreparationCatalogsAsync().ConfigureAwait(true);
         }, "No se pudo activar el acceso biométrico; use el PIN.").ConfigureAwait(true);
 
@@ -836,12 +864,22 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     private Task CloseStationAsync() => RunAsync(async () =>
     {
         ProtectedStationState? closingState = state;
+        bool wasElevated = IsPlantManager;
         await coordinator.CloseSessionAsync().ConfigureAwait(true);
+        if (wasElevated)
+        {
+            await RecordSecurityEventAsync(
+                "ELEVATION_ENDED",
+                "CIERRE_ESTACION",
+                "Modo Jefe de Planta terminó porque la estación se cerró manualmente.",
+                closingState).ConfigureAwait(true);
+        }
         await RecordSecurityEventAsync(
-            "SESSION_CLOSED",
+            SecurityAudit.SessionClosed,
             "MANUAL",
             "La estación fue cerrada manualmente.",
-            closingState).ConfigureAwait(true);
+            closingState,
+            SecurityAudit.MethodSession).ConfigureAwait(true);
         state = null;
         WasSessionRestored = false;
         isSessionSynchronized = false;
@@ -885,10 +923,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         IsApplicationUnlocked = true;
         OpenOperationMode(SynchronizedOperationMessage());
         _ = RecordSecurityEventAsync(
-            "SESSION_RESTORED",
+            SecurityAudit.SessionRestored,
             "EXITOSO",
             "Se abrió una sesión protegida restaurada en este equipo.",
-            state);
+            state,
+            SecurityAudit.MethodSession);
     }
 
     private string SynchronizedOperationMessage() =>
@@ -944,6 +983,8 @@ public sealed class StationViewModel : ObservableObject, IDisposable
     }
     private void ExitManagerMode()
     {
+        // Execute no revalida CanExecute: sin elevación activa no hay nada que cerrar ni auditar.
+        if (!IsPlantManager) return;
         CancelPreparation();
         CancelManagementChange();
         modeController.ExitPlantManagerMode();
@@ -955,7 +996,14 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             "Modo Jefe de Planta fue cerrado manualmente.",
             state);
     }
-    private async void OnIdleTick(object? sender, EventArgs e)
+    private async void OnIdleTick(object? sender, EventArgs e) =>
+        await EvaluateInactivityAsync().ConfigureAwait(true);
+
+    /// <summary>
+    /// Evalúa el vencimiento de la elevación y de la sesión. El temporizador de la vista lo invoca
+    /// cada segundo; las pruebas lo llaman directamente con un reloj controlado.
+    /// </summary>
+    public async Task EvaluateInactivityAsync()
     {
         if (isClosingForIdle || isMaintainingSession) return;
         if (modeController.EvaluateSessionIdleTimeout())
@@ -985,10 +1033,11 @@ public sealed class StationViewModel : ObservableObject, IDisposable
             ProtectedStationState? closingState = state;
             await coordinator.CloseSessionAsync().ConfigureAwait(true);
             await RecordSecurityEventAsync(
-                "SESSION_EXPIRED",
+                SecurityAudit.SessionExpired,
                 "INACTIVIDAD",
                 "La estación se cerró tras una hora sin actividad.",
-                closingState).ConfigureAwait(true);
+                closingState,
+                SecurityAudit.MethodSession).ConfigureAwait(true);
             Status = "Estación cerrada tras una hora sin actividad. Inicie sesión para continuar.";
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException)
@@ -1009,28 +1058,78 @@ public sealed class StationViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Inicio de una solicitud de elevación (se abrió la pantalla de PIN/biometría). Reinicia
+    /// el seguimiento de la alternativa con PIN para esta solicitud.
+    /// </summary>
+    public Task RecordElevationRequestedAsync()
+    {
+        biometricAttemptedInRequest = false;
+        if (state is null || IsPlantManager) return Task.CompletedTask;
+        return RecordSecurityEventAsync(
+            SecurityAudit.ElevationRequested,
+            "SOLICITADA",
+            "Se solicitó elevar el acceso a Modo Jefe de Planta.",
+            state);
+    }
+
+    /// <summary>
+    /// Comienza una verificación facial. Un PIN usado después en la misma solicitud se registra
+    /// como alternativa, aunque la verificación se cancele al escribirlo.
+    /// </summary>
+    public void BeginBiometricAttempt() => biometricAttemptedInRequest = true;
+
+    /// <summary>
+    /// Registra el único resultado final de un intento biométrico fallido. No recibe ni guarda
+    /// fotogramas, plantilla, similitud ni características faciales.
+    /// </summary>
+    public Task RecordBiometricFailureAsync(BiometricOperationResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var outcome = SecurityAudit.ClassifyBiometricFailure(result);
+        if (outcome is null || state is null) return Task.CompletedTask;
+        biometricAttemptedInRequest = true;
+        return RecordSecurityEventAsync(
+            outcome.Value.EventType,
+            outcome.Value.Result,
+            outcome.Value.Details,
+            state,
+            SecurityAudit.MethodBiometric);
+    }
+
+    /// <summary>Excepción inesperada de cámara o modelo durante la verificación.</summary>
+    public Task RecordBiometricTechnicalFailureAsync() =>
+        RecordBiometricFailureAsync(new BiometricOperationResult(false, "BIOMETRIC_ERROR", string.Empty));
+
     private async Task RecordSecurityEventAsync(
         string eventType,
         string result,
         string details,
-        ProtectedStationState? sourceState)
+        ProtectedStationState? sourceState,
+        string? method = null)
     {
         if (localAudit is null) return;
         try
         {
+            DateTimeOffset occurredAt = timeProvider.GetUtcNow();
             await localAudit.RecordSecurityEventAsync(new RecordLocalSecurityAuditEvent(
                 sourceState?.Authorization.StationId ?? configuredStationId,
                 sourceState?.Session.ProfileId,
                 sourceState?.Session.DisplayName ?? "Sistema de estación",
                 eventType,
-                result,
+                SecurityAudit.ResultCode(result),
                 details,
-                timeProvider.GetUtcNow())).ConfigureAwait(true);
+                occurredAt,
+                method,
+                Guid.NewGuid(),
+                sourceState is null ? null : OutboxAuthorizationCapture.From(sourceState, occurredAt)))
+                .ConfigureAwait(true);
         }
         catch (Exception exception) when (
-            exception is IOException or InvalidOperationException or SqliteException)
+            exception is IOException or InvalidOperationException or SqliteException or
+                ArgumentException or UnauthorizedAccessException)
         {
-            // La auditoría nunca debe bloquear la operación o el cierre de la estación.
+            // La auditoría nunca debe bloquear la operación, el PIN ni el cierre de la estación.
         }
     }
 

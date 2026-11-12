@@ -12,6 +12,7 @@ import { ApiTags } from "@nestjs/swagger";
 
 import {
   GoldFiltersDto,
+  GoldOverviewQueryDto,
   RecordShipmentGoldDto,
   RecordSweepMercuryDto,
   ReviewShipmentGoldDto,
@@ -41,6 +42,15 @@ export class GoldController {
     @Query() query: GoldFiltersDto,
   ) {
     return this.gold.summary(organizationId, query);
+  }
+
+  @Get("gold-overview")
+  @RequirePermissions("gold.read")
+  overview(
+    @Param("organizationId", ParseUUIDPipe) organizationId: string,
+    @Query() query: GoldOverviewQueryDto,
+  ) {
+    return this.gold.overview(organizationId, query.shipmentIds);
   }
 
   @Get("shipments/:shipmentId/gold-results")

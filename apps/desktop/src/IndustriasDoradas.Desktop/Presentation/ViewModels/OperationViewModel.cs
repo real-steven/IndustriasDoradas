@@ -255,6 +255,15 @@ public sealed class OperationViewModel : ObservableObject
             throw new ArgumentException("El UUID del comando de entrada es obligatorio.", nameof(command));
         }
 
+        // El teclado es compartido por todas las líneas: solo «Seleccionar línea» cambia de línea;
+        // las demás teclas actúan sobre la línea que el operario tiene seleccionada.
+        if (command.Action != OperationInputAction.SelectLine &&
+            string.Equals(command.Origin.SourceKind, "KEYBOARD", StringComparison.OrdinalIgnoreCase) &&
+            Lines.Contains(Line))
+        {
+            command = command with { Origin = command.Origin with { LineSlot = Line.LineSlot } };
+        }
+
         OperationLinePanelViewModel? requestedLine = Lines.FirstOrDefault(
             item => item.LineSlot == command.Origin.LineSlot);
         if (requestedLine is null && command.Origin.LineSlot == 1 && Line.IsReady)
@@ -267,6 +276,13 @@ public sealed class OperationViewModel : ObservableObject
             return;
         }
         Line = requestedLine;
+
+        // Mantener una tecla presionada nunca repite correcciones, barridas ni confirmaciones.
+        // Los registros de cajuelas pasan por OperationInputGuard, que además deja la métrica.
+        if (command.Origin.IsRepeat && IgnoresAutoRepeat(command.Action))
+        {
+            return;
+        }
 
         switch (command.Action)
         {
@@ -296,13 +312,43 @@ public sealed class OperationViewModel : ObservableObject
             case OperationInputAction.MoveRight:
                 MoveFocus(previous: false);
                 break;
+            case OperationInputAction.RegisterFiveCajuelas:
+                await TryRegisterFiveCajuelasAsync(command).ConfigureAwait(true);
+                break;
+            case OperationInputAction.PrepareSweep:
+                if (CanPrepareLineSweep(Line.LineId))
+                {
+                    await PrepareLineSweepAsync(Line.LineId).ConfigureAwait(true);
+                }
+                else
+                {
+                    ShowFeedback(
+                        OperationFeedbackKind.Warning,
+                        IsSweepConfirmationPending
+                            ? "Ya hay una barrida preparada. Confírmela o cancélela."
+                            : "No hay cajuelas nuevas disponibles para registrar en una barrida.");
+                }
+
+                break;
             case OperationInputAction.Confirm:
-                await ActivateFocusedAsync(command).ConfigureAwait(true);
+                if (!IsCorrectionPending && IsSweepConfirmationPending)
+                {
+                    await ConfirmSweepFromInputAsync().ConfigureAwait(true);
+                }
+                else
+                {
+                    await ActivateFocusedAsync(command).ConfigureAwait(true);
+                }
+
                 break;
             case OperationInputAction.Cancel:
                 if (IsCorrectionPending)
                 {
                     CancelCorrection();
+                }
+                else if (CanCancelSweep())
+                {
+                    CancelSweep();
                 }
 
                 break;
@@ -384,6 +430,48 @@ public sealed class OperationViewModel : ObservableObject
             return;
         }
 
+        await RegisterFiveCajuelasAsync(new OperationInputOrigin(
+            "CLICK",
+            "shared-pointer",
+            "RegisterFiveCajuelas",
+            Line.LineSlot,
+            false)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Atajo de teclado para cinco cajuelas: una pulsación pasa una sola vez por el antirrebote y
+    /// nunca se repite al mantener la tecla. Cada cajuela conserva el origen TECLADO.
+    /// </summary>
+    private async Task TryRegisterFiveCajuelasAsync(OperationInputCommand inputCommand)
+    {
+        long started = timeProvider.GetTimestamp();
+        OperationInputCommand guardCommand = inputCommand with { Action = OperationInputAction.RegisterCajuela };
+        if (inputCommand.Origin.IsRepeat)
+        {
+            SuppressRegistration(guardCommand, inputGuard.TryAcceptRegistration(guardCommand), started);
+            return;
+        }
+
+        if (!CanRegisterLineCajuela(Line.LineId))
+        {
+            ShowFeedback(OperationFeedbackKind.Warning,
+                "Agregar cinco cajuelas no está disponible en el estado actual.");
+            RecordMetric(guardCommand, OperationInputMetricOutcome.Unavailable, started, null, "CONTEXT_UNAVAILABLE");
+            return;
+        }
+
+        OperationInputGuardDecision decision = inputGuard.TryAcceptRegistration(guardCommand);
+        if (!decision.IsAccepted)
+        {
+            SuppressRegistration(guardCommand, decision, started);
+            return;
+        }
+
+        await RegisterFiveCajuelasAsync(inputCommand.Origin with { IsRepeat = false }).ConfigureAwait(true);
+    }
+
+    private async Task RegisterFiveCajuelasAsync(OperationInputOrigin origin)
+    {
         OperationLinePanelViewModel selectedLine = Line;
         int previousTotal = selectedLine.Total;
         int savedCount = 0;
@@ -395,12 +483,7 @@ public sealed class OperationViewModel : ObservableObject
                 var inputCommand = new OperationInputCommand(
                     Guid.NewGuid(),
                     OperationInputAction.RegisterCajuela,
-                    new OperationInputOrigin(
-                        "CLICK",
-                        "shared-pointer",
-                        "RegisterFiveCajuelas",
-                        selectedLine.LineSlot,
-                        false),
+                    origin with { LineSlot = selectedLine.LineSlot },
                     timeProvider.GetUtcNow());
                 long started = timeProvider.GetTimestamp();
                 try
@@ -448,7 +531,8 @@ public sealed class OperationViewModel : ObservableObject
 
             ShowFeedback(
                 OperationFeedbackKind.Success,
-                $"{savedCount} cajuelas guardadas en {selectedLine.LineName}. Total: {currentTotal}.");
+                $"{savedCount} cajuelas guardadas en {selectedLine.LineName}. Total: {currentTotal}.",
+                FeedbackSoundEvent.FiveCajuelasAdded);
             await RefreshSnapshotAsync().ConfigureAwait(true);
         }, "No se completó el registro de cinco cajuelas. Revise el contexto local.").ConfigureAwait(true);
 
@@ -502,7 +586,8 @@ public sealed class OperationViewModel : ObservableObject
                 result.WasDuplicate
                     ? $"La barrida ya estaba registrada. Acumulado barrido: {result.CumulativeSweptTotal}."
                     : $"Barrida registrada: {result.Sweep.CajuelaQuantity} cajuelas. " +
-                      $"Próxima referencia: {result.CumulativeSweptTotal + 250}.");
+                      $"Próxima referencia: {result.CumulativeSweptTotal + 250}.",
+                FeedbackSoundEvent.SweepRegistered);
             await RefreshSnapshotAsync().ConfigureAwait(true);
         }, "No se pudo confirmar la barrida; prepárela nuevamente.").ConfigureAwait(true);
         if (!confirmed)
@@ -512,6 +597,29 @@ public sealed class OperationViewModel : ObservableObject
             SweepConfirmationSummary = string.Empty;
             ShowFeedback(OperationFeedbackKind.Error, LastResult);
         }
+    }
+
+    private bool IgnoresAutoRepeat(OperationInputAction action) => action switch
+    {
+        OperationInputAction.RevertLastCajuela or
+        OperationInputAction.PrepareSweep or
+        OperationInputAction.Cancel => true,
+        OperationInputAction.Confirm => IsCorrectionPending || IsSweepConfirmationPending,
+        _ => false,
+    };
+
+    private async Task ConfirmSweepFromInputAsync()
+    {
+        if (!CanConfirmSweep()) return;
+        if (managerMode?.IsActive != true)
+        {
+            ShowFeedback(
+                OperationFeedbackKind.Warning,
+                "Active el Modo Jefe de Planta desde la barra superior antes de confirmar la barrida.");
+            return;
+        }
+
+        await ConfirmSweepAsync().ConfigureAwait(true);
     }
 
     private void CancelSweep()
@@ -587,7 +695,8 @@ public sealed class OperationViewModel : ObservableObject
             }
             ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Cajuela ya registrada. Total: {result.Total}."
-                : $"Cajuela guardada localmente. Total: {result.Total}.");
+                : $"Cajuela guardada localmente. Total: {result.Total}.",
+                FeedbackSoundEvent.CajuelaAdded);
             await RefreshSnapshotAsync().ConfigureAwait(true);
         }, "No se guardó la cajuela. Revise el contexto local.").ConfigureAwait(true);
         if (!succeeded)
@@ -668,7 +777,8 @@ public sealed class OperationViewModel : ObservableObject
             ApplyMilestones(Line, result.Total, Line.LastSweepCumulativeTotal);
             ShowFeedback(OperationFeedbackKind.Success, result.WasDuplicate
                 ? $"Corrección ya aplicada. Total: {result.Total}."
-                : $"Última cajuela corregida con trazabilidad. Total: {result.Total}.");
+                : $"Última cajuela corregida con trazabilidad. Total: {result.Total}.",
+                FeedbackSoundEvent.CajuelaSubtracted);
             await RefreshSnapshotAsync().ConfigureAwait(true);
         }, "La corrección no se aplicó porque cambió el contexto. Prepárela nuevamente.")
             .ConfigureAwait(true);
@@ -804,6 +914,9 @@ public sealed class OperationViewModel : ObservableObject
         panel.LineId = snapshot.LineId;
         panel.LineSlot = lineSlot;
         panel.LineName = snapshot.LineName;
+        panel.ShipmentCode = snapshot.IsReady && snapshot.Session is not null
+            ? ShipmentCode.From(snapshot.Session.ShipmentId)
+            : string.Empty;
         panel.AccentColor = accents[(lineSlot - 1) % accents.Length];
         panel.IsReady = snapshot.IsReady;
         panel.StateLabel = snapshot.IsReady ? "LÍNEA LISTA" : "LÍNEA SIN PREPARAR";
@@ -1145,11 +1258,16 @@ public sealed class OperationViewModel : ObservableObject
             recordedAt));
     }
 
-    private void ShowFeedback(OperationFeedbackKind kind, string message)
+    private void ShowFeedback(
+        OperationFeedbackKind kind,
+        string message,
+        FeedbackSoundEvent? sound = null)
     {
+        // La respuesta visual no depende del sonido: se muestra aunque esté desactivado.
         LastResult = message;
         FeedbackKind = safetyOptions.VisualFeedbackEnabled ? kind : OperationFeedbackKind.Neutral;
-        feedbackPlayer.Play(kind);
+        if (sound is FeedbackSoundEvent specific) feedbackPlayer.Play(kind, specific);
+        else feedbackPlayer.Play(kind);
     }
 
     private bool IsLocalStorageAvailable

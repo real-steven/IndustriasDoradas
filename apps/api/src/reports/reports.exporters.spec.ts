@@ -29,7 +29,9 @@ describe("report exporters", () => {
       "Oro total (g)",
       "Quilataje",
     ]);
-    expect(sheet?.getCell("E6").value).toBe("13,42");
+    // El quilataje sale del registro de oro del cargamento, como número.
+    expect(sheet?.getCell("E6").value).toBe(13.42);
+    expect(sheet?.getCell("E6").numFmt).toBe("0.0##");
     expect(sheet?.properties.outlineProperties).toBeUndefined();
     expect(buffer.subarray(0, 2).toString()).toBe("PK");
   });
@@ -97,6 +99,7 @@ function fixture(): ProductionReport {
         sweepCount: 2,
         goldStatus: "REGISTERED",
         goldAmountGrams: 100,
+        goldKarat: 13.42,
         gramsPerCajuela: 0.5,
         palosPerCajuela: 5,
       },

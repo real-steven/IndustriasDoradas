@@ -188,6 +188,21 @@ internal sealed record OperationalNoveltyChangeOutboxPayload(
     DateTimeOffset OccurredAtUtc,
     DateTimeOffset RecordedAtUtc);
 
+/// <summary>
+/// Evento de seguridad sincronizable. Solo códigos: sin nombres, detalles libres, PIN,
+/// contraseña, token, plantilla, imagen ni características faciales.
+/// </summary>
+internal sealed record SecurityEventOutboxPayload(
+    int SchemaVersion,
+    Guid EventId,
+    Guid StationId,
+    long ClientSequence,
+    Guid? ActorProfileId,
+    string EventType,
+    string? Method,
+    string Result,
+    DateTimeOffset OccurredAtUtc);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ProductionEventOutboxPayload))]
 [JsonSerializable(typeof(ProductionEventReversalOutboxPayload))]
@@ -198,6 +213,7 @@ internal sealed record OperationalNoveltyChangeOutboxPayload(
 [JsonSerializable(typeof(InventoryReviewOutboxPayload))]
 [JsonSerializable(typeof(RastraComponentChangeOutboxPayload))]
 [JsonSerializable(typeof(OperationalNoveltyChangeOutboxPayload))]
+[JsonSerializable(typeof(SecurityEventOutboxPayload))]
 internal sealed partial class LocalStorageJsonSerializerContext : JsonSerializerContext
 {
 }

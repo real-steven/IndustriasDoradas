@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -44,10 +45,35 @@ export class GoldFiltersDto {
   responsibleWorkerId?: string;
 }
 
+export class GoldOverviewQueryDto {
+  // Los cargamentos de una página: identificadores separados por comas.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string"
+      ? value
+          .split(",")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+      : value,
+  )
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @IsUUID("all", { each: true })
+  shipmentIds!: string[];
+}
+
 export class RecordShipmentGoldDto {
   @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 2 })
   @Min(0)
   amountGrams!: number;
+
+  // Opcional. null deja el quilataje sin registrar; omitirlo en una corrección
+  // conserva el vigente.
+  @IsOptional()
+  @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 3 })
+  @Min(0)
+  @Max(24)
+  karat?: number | null;
 
   @Transform(trim)
   @IsOptional()

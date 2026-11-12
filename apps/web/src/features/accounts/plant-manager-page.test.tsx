@@ -1,6 +1,12 @@
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -60,6 +66,43 @@ describe("gestion unificada de trabajadores", () => {
       ).not.toBeInTheDocument(),
     );
     expect(screen.getByRole("heading", { name: "Trabajadores" })).toBeVisible();
+  });
+
+  it("registra un proveedor solo con nombre, correo y teléfono", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi();
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage();
+
+    await screen.findByRole("dialog", { name: "Crear usuario de planta" });
+    await user.selectOptions(
+      screen.getByLabelText("Rol de la persona"),
+      "PROVEEDOR",
+    );
+    expect(screen.queryByLabelText("Contraseña temporal")).toBeNull();
+    expect(screen.queryByLabelText("PIN de elevación")).toBeNull();
+    await user.type(
+      screen.getByLabelText("Nombre de la empresa"),
+      "Minera El Roble",
+    );
+    await user.type(
+      screen.getByLabelText("Correo de contacto (opcional)"),
+      "contacto@roble.example",
+    );
+    await user.type(screen.getByLabelText("Teléfono (opcional)"), "8888-1234");
+    await user.click(
+      screen.getByRole("button", { name: "REGISTRAR PROVEEDOR" }),
+    );
+
+    await waitFor(() =>
+      expect(api.supplierCreationBody).toEqual({
+        name: "Minera El Roble",
+        email: "contacto@roble.example",
+        phone: "8888-1234",
+      }),
+    );
+    expect(api.creationBody).toBeNull();
+    expect(api.operatorCreationBody).toBeNull();
   });
 
   it("no envia credenciales cuando las confirmaciones no coinciden", async () => {
@@ -129,7 +172,99 @@ describe("gestion unificada de trabajadores", () => {
     );
   });
 
-  it("muestra primero las jefaturas y luego los operarios en una sola lista", async () => {
+  it("oculta por defecto la contraseña y el PIN, con un botón accesible por campo", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi();
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage();
+
+    const fields = [
+      ["Contraseña temporal", "contraseña temporal"],
+      ["Confirmar contraseña", "confirmación de contraseña"],
+      ["PIN de elevación", "PIN de elevación"],
+      ["Confirmar PIN", "confirmación de PIN"],
+    ] as const;
+    await screen.findByLabelText("Contraseña temporal");
+
+    for (const [label] of fields) {
+      expect(screen.getByLabelText(label)).toHaveAttribute("type", "password");
+    }
+
+    for (const [label, buttonName] of fields) {
+      const input = screen.getByLabelText(label);
+      const show = screen.getByRole("button", {
+        name: `Mostrar ${buttonName}`,
+      });
+      expect(show).toHaveAttribute("type", "button");
+      expect(show).toHaveAttribute("aria-controls", input.id);
+
+      await user.click(show);
+      expect(input).toHaveAttribute("type", "text");
+      // Solo cambia el campo de este botón.
+      for (const [otherLabel] of fields) {
+        if (otherLabel !== label) {
+          expect(screen.getByLabelText(otherLabel)).toHaveAttribute(
+            "type",
+            "password",
+          );
+        }
+      }
+
+      const hide = screen.getByRole("button", {
+        name: `Ocultar ${buttonName}`,
+      });
+      await user.click(hide);
+      expect(input).toHaveAttribute("type", "password");
+    }
+    // Mostrar u ocultar no envía nada.
+    expect(api.creationBody).toBeNull();
+  });
+
+  it("no guarda la contraseña ni el PIN en la URL ni en el almacenamiento del navegador", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi();
+    vi.stubGlobal("fetch", api.fetch);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    renderPage();
+
+    await user.type(
+      await screen.findByLabelText("Contraseña temporal"),
+      "StrongPassword1!",
+    );
+    await user.type(screen.getByLabelText("PIN de elevación"), "987654");
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña temporal" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar PIN de elevación" }),
+    );
+
+    const storedValues = setItem.mock.calls.map((call) => call.join("="));
+    expect(storedValues.join("|")).not.toMatch(/StrongPassword1!|987654/u);
+    expect(window.location.href).not.toMatch(/StrongPassword1|987654/u);
+    setItem.mockRestore();
+  });
+
+  it("el operario no pide contraseña ni PIN y su correo es opcional", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi();
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage();
+
+    await user.selectOptions(
+      await screen.findByLabelText("Rol de la persona"),
+      "OPERARIO",
+    );
+
+    expect(screen.queryByLabelText("Contraseña temporal")).toBeNull();
+    expect(screen.queryByLabelText("PIN de elevación")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Mostrar/u })).toBeNull();
+    expect(
+      screen.getByLabelText("Correo de contacto (opcional)"),
+    ).not.toBeRequired();
+  });
+
+  it("muestra primero las jefaturas y luego los operarios, sin prefijos en el nombre", async () => {
     const api = createAccountsApi({
       payrollWorkers: [operatorPayrollFixture(), managerPayrollFixture()],
     });
@@ -139,12 +274,99 @@ describe("gestion unificada de trabajadores", () => {
     expect(await screen.findByText("Daniela Demo")).toBeInTheDocument();
     const rows = screen.getAllByRole("button", { name: /ABRIR/u });
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent("JF Daniela Demo");
-    expect(rows[0]).toHaveTextContent("Jefe de planta");
-    expect(rows[1]).toHaveTextContent("OP Mario Planta");
-    expect(rows[1]).toHaveTextContent("Operario");
+    const [managerRow, operatorRow] = rows as [HTMLElement, HTMLElement];
+    expect(within(managerRow).getByText("Daniela Demo").tagName).toBe("STRONG");
+    expect(managerRow).toHaveTextContent("Jefe de planta");
+    expect(within(operatorRow).getByText("Mario Planta").tagName).toBe(
+      "STRONG",
+    );
+    expect(operatorRow).toHaveTextContent("Operario");
+    for (const row of rows) {
+      expect(row.textContent).not.toMatch(/\b(JF|OP)\b/u);
+    }
+  });
+
+  it("ordena por rol y alfabéticamente con reglas del español", async () => {
+    const api = createAccountsApi({
+      payrollWorkers: [
+        payrollFixture({
+          id: id(1),
+          name: "Óscar Zamora",
+          category: "OPERARIO",
+          userProfileId: null,
+        }),
+        payrollFixture({
+          id: id(2),
+          name: "Zoila Mena",
+          category: "JEFE_PLANTA",
+          userProfileId: null,
+        }),
+        payrollFixture({
+          id: id(3),
+          name: "ana Brenes",
+          category: "OPERARIO",
+          userProfileId: null,
+        }),
+        payrollFixture({
+          id: id(4),
+          name: "Ñandú Rojas",
+          category: "OPERARIO",
+          userProfileId: null,
+        }),
+        payrollFixture({
+          id: id(5),
+          name: "Álvaro Solís",
+          category: "JEFE_PLANTA",
+          userProfileId: null,
+        }),
+        payrollFixture({
+          id: id(6),
+          name: "Nora Vega",
+          category: "OPERARIO",
+          userProfileId: null,
+        }),
+      ],
+    });
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage("/gerencia/trabajadores");
+
+    await screen.findByText("Zoila Mena");
+    const names = screen
+      .getAllByRole("button", { name: /ABRIR/u })
+      .map((row) => row.querySelector("strong")?.textContent);
+    expect(names).toEqual([
+      "Álvaro Solís",
+      "Zoila Mena",
+      "ana Brenes",
+      "Nora Vega",
+      "Ñandú Rojas",
+      "Óscar Zamora",
+    ]);
+  });
+
+  it("muestra el nombre una sola vez en el expediente, sin prefijo de rol", async () => {
+    const user = userEvent.setup();
+    const api = createAccountsApi({
+      payrollWorkers: [managerPayrollFixture()],
+    });
+    vi.stubGlobal("fetch", api.fetch);
+    renderPage("/gerencia/trabajadores");
+
+    await user.click(await screen.findByRole("button", { name: /ABRIR/u }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Expediente del trabajador",
+    });
+    expect(
+      within(dialog).getByRole("heading", { name: "Daniela Demo" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("Jefe de planta")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/^(JF|OP)$/u)).toBeNull();
   });
 });
+
+function id(value: number): string {
+  return `c1000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
+}
 
 function renderPage(path = "/gerencia/usuarios") {
   const auth: AuthState = {
@@ -159,6 +381,7 @@ function renderPage(path = "/gerencia/usuarios") {
         "attendance.read",
         "payroll.read",
         "payroll.manage",
+        "suppliers.manage",
       ],
       expiresAt: "2027-01-01T00:00:00.000Z",
     },
@@ -193,9 +416,11 @@ function createAccountsApi(
   fetch: typeof fetch;
   creationBody: Record<string, unknown> | null;
   operatorCreationBody: Record<string, unknown> | null;
+  supplierCreationBody: Record<string, unknown> | null;
 } {
   let creationBody: Record<string, unknown> | null = null;
   let operatorCreationBody: Record<string, unknown> | null = null;
+  let supplierCreationBody: Record<string, unknown> | null = null;
   const payrollWorkers = seed.payrollWorkers ?? [];
   const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
     const url = new URL(requestUrl(input), "http://localhost");
@@ -231,6 +456,26 @@ function createAccountsApi(
       return Promise.resolve(page([]));
     if (url.pathname.endsWith("/workers") && method === "GET")
       return Promise.resolve(page([]));
+    if (url.pathname.endsWith("/suppliers") && method === "GET")
+      return Promise.resolve(page([]));
+    if (url.pathname.endsWith("/suppliers") && method === "POST") {
+      if (typeof init?.body !== "string") throw new Error("Expected body");
+      supplierCreationBody = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve(
+        json(
+          {
+            id: "35000000-0000-4000-8000-000000000020",
+            organizationId: ORGANIZATION_ID,
+            ...supplierCreationBody,
+            isActive: true,
+            deactivatedAt: null,
+            createdAt: "2026-11-11T12:00:00.000Z",
+            updatedAt: "2026-11-11T12:00:00.000Z",
+          },
+          201,
+        ),
+      );
+    }
     if (url.pathname.endsWith("/worker-requests") && method === "POST") {
       if (typeof init?.body !== "string") throw new Error("Expected body");
       operatorCreationBody = JSON.parse(init.body) as Record<string, unknown>;
@@ -253,6 +498,9 @@ function createAccountsApi(
     },
     get operatorCreationBody() {
       return operatorCreationBody;
+    },
+    get supplierCreationBody() {
+      return supplierCreationBody;
     },
   };
 }

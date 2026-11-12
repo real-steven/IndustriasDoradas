@@ -99,6 +99,107 @@ describe("SupabaseManagementQueryRepository", () => {
     expect(url.searchParams.get("offset")).toBe("1");
   });
 
+  it.each([
+    [
+      "5510b16a",
+      [
+        "gte.5510b16a-0000-0000-0000-000000000000",
+        "lte.5510b16a-ffff-ffff-ffff-ffffffffffff",
+      ],
+    ],
+    [
+      " 5510B16A-0000-4000-8000-00000000000A ",
+      [
+        "gte.5510b16a-0000-4000-8000-00000000000a",
+        "lte.5510b16a-0000-4000-8000-00000000000a",
+      ],
+    ],
+  ] as const)(
+    "searches completed shipments by code %s inside the organization",
+    async (shipmentCode, expected) => {
+      const fetchMock = jest
+        .spyOn(global, "fetch")
+        .mockResolvedValue(json([], { "Content-Range": "*/0" }));
+      const repository = new SupabaseManagementQueryRepository(createConfig());
+
+      await repository.listShipments(ORGANIZATION_ID, {
+        page: 1,
+        pageSize: 20,
+        shipmentCode,
+      });
+
+      const url = requestedUrl(fetchMock);
+      expect(url.searchParams.getAll("shipment_id")).toEqual(expected);
+      expect(url.searchParams.get("organization_id")).toBe(
+        `eq.${ORGANIZATION_ID}`,
+      );
+      expect(url.searchParams.get("status")).toBe("eq.COMPLETED");
+    },
+  );
+
+  it("rejects malformed shipment codes before querying Supabase", async () => {
+    const fetchMock = jest.spyOn(global, "fetch");
+    const repository = new SupabaseManagementQueryRepository(createConfig());
+
+    await expect(
+      repository.listShipments(ORGANIZATION_ID, {
+        page: 1,
+        pageSize: 20,
+        shipmentCode: "5510b16a*",
+      }),
+    ).rejects.toThrow(RangeError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["recent", "completed_at_utc.desc,shipment_id.asc"],
+    ["oldest", "completed_at_utc.asc,shipment_id.asc"],
+    [
+      "cajuelas_desc",
+      "cajuela_total.desc,completed_at_utc.desc,shipment_id.asc",
+    ],
+    ["cajuelas_asc", "cajuela_total.asc,completed_at_utc.desc,shipment_id.asc"],
+  ] as const)(
+    "orders completed shipments by %s on the server",
+    async (sort, order) => {
+      const fetchMock = jest
+        .spyOn(global, "fetch")
+        .mockResolvedValue(json([], { "Content-Range": "*/0" }));
+      const repository = new SupabaseManagementQueryRepository(createConfig());
+
+      await repository.listShipments(ORGANIZATION_ID, {
+        page: 1,
+        pageSize: 10,
+        sort,
+      });
+
+      expect(requestedUrl(fetchMock).searchParams.get("order")).toBe(order);
+    },
+  );
+
+  it.each([
+    ["recorded", "is.true"],
+    ["pending", "is.false"],
+  ] as const)(
+    "filters completed shipments whose gold result is %s",
+    async (goldResult, expected) => {
+      const fetchMock = jest
+        .spyOn(global, "fetch")
+        .mockResolvedValue(json([], { "Content-Range": "*/0" }));
+      const repository = new SupabaseManagementQueryRepository(createConfig());
+
+      await repository.listShipments(ORGANIZATION_ID, {
+        page: 1,
+        pageSize: 10,
+        goldResult,
+      });
+
+      const url = requestedUrl(fetchMock);
+      expect(url.searchParams.get("has_gold_result")).toBe(expected);
+      expect(url.searchParams.get("status")).toBe("eq.COMPLETED");
+    },
+  );
+
   it("normalizes absent mercury readings to stable false and null values", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue(
       json(

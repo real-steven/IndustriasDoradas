@@ -4,10 +4,13 @@ import { randomInt, randomUUID } from "node:crypto";
 import {
   GOLD_REPOSITORY,
   type GoldFilters,
+  type GoldMercurySynthesis,
   type GoldRepository,
   type GoldShipmentFact,
+  type GoldShipmentOverview,
   type GoldSummary,
   type GoldSupplierCoverage,
+  type SweepMercuryRow,
 } from "./gold.contracts";
 import { AUDIT_ACTIONS, type AuditActor } from "../audit/audit.contracts";
 import { AuditTrailService } from "../audit/audit-trail.service";
@@ -56,6 +59,78 @@ export class GoldService {
     } catch (error) {
       this.throwRepositoryError(error);
     }
+  }
+
+  /**
+   * Síntesis de mercurio de los cargamentos visibles en una página. El oro y el
+   * quilataje vigentes ya llegan en la proyección de cargamentos.
+   */
+  async overview(
+    organizationId: string,
+    shipmentIds: readonly string[],
+  ): Promise<GoldShipmentOverview[]> {
+    const ids = [...new Set(shipmentIds.map((id) => id.toLowerCase()))];
+    try {
+      const mercuryRows = await this.repository.listSweepMercury(
+        organizationId,
+        ids,
+      );
+      return ids.map((shipmentId) => ({
+        shipmentId,
+        mercury: this.mercurySynthesis(
+          mercuryRows.filter((row) => row.shipmentId === shipmentId),
+        ),
+      }));
+    } catch (error) {
+      this.throwRepositoryError(error);
+    }
+  }
+
+  private mercurySynthesis(
+    rows: readonly SweepMercuryRow[],
+  ): GoldMercurySynthesis {
+    const sweeps = new Map<string, SweepMercuryRow[]>();
+    for (const row of rows) {
+      const components = sweeps.get(row.sweepId) ?? [];
+      components.push(row);
+      sweeps.set(row.sweepId, components);
+    }
+    const complete = [...sweeps.values()]
+      .filter((components) =>
+        components.every(
+          (component) =>
+            component.inputGrams !== null && component.remainderGrams !== null,
+        ),
+      )
+      .sort(
+        (left, right) =>
+          left[0]!.sweptAtUtc.localeCompare(right[0]!.sweptAtUtc) ||
+          left[0]!.sweepId.localeCompare(right[0]!.sweepId),
+      );
+    const latest = complete.at(-1);
+    // Dentro de una barrida, sumar sus rastras sí es una magnitud válida: el
+    // mercurio de la línea en ese ciclo. Entre barridas no se suma.
+    return {
+      sweepCount: sweeps.size,
+      completeSweepCount: complete.length,
+      latestCompleteSweep:
+        latest === undefined
+          ? null
+          : {
+              sweepId: latest[0]!.sweepId,
+              sweptAtUtc: latest[0]!.sweptAtUtc,
+              inputGrams: this.sumGrams(latest.map((row) => row.inputGrams!)),
+              remainderGrams: this.sumGrams(
+                latest.map((row) => row.remainderGrams!),
+              ),
+            },
+    };
+  }
+
+  private sumGrams(values: readonly number[]): number {
+    return (
+      values.reduce((total, value) => total + Math.round(value * 100), 0) / 100
+    );
   }
 
   async history(organizationId: string, shipmentId: string) {
@@ -304,12 +379,22 @@ export class GoldService {
   async record(
     organizationId: string,
     shipmentId: string,
-    input: { amountGrams: number; correctionReason?: string },
+    input: {
+      amountGrams: number;
+      karat?: number | null;
+      correctionReason?: string;
+    },
     context: GoldMutationContext,
   ) {
     this.validateAmount(input.amountGrams);
+    this.validateKarat(input.karat);
     const shipment = await this.requireShipment(organizationId, shipmentId);
     const previous = this.currentAmount(shipment);
+    const previousKarat = previous === null ? null : shipment.goldKarat;
+    // Cada entrada es el resultado completo. Omitir el quilataje en una corrección
+    // conserva el vigente; enviarlo vacío (null) lo deja sin registrar.
+    const karat =
+      input.karat === undefined ? previousKarat : (input.karat ?? null);
     const reason = input.correctionReason?.trim();
 
     if (previous === null && reason !== undefined) {
@@ -326,20 +411,25 @@ export class GoldService {
         "A correction reason is required",
       );
     }
-    if (
-      previous !== null &&
-      this.centigrams(previous) === this.centigrams(input.amountGrams)
-    ) {
+    const amountChanged =
+      previous === null ||
+      this.centigrams(previous) !== this.centigrams(input.amountGrams);
+    const karatChanged =
+      this.milliKarat(previousKarat) !== this.milliKarat(karat);
+    if (previous !== null && !amountChanged && !karatChanged) {
       throw new ApplicationError(
         HttpStatus.CONFLICT,
         "GOLD_AMOUNT_UNCHANGED",
-        "The corrected gold amount must be different",
+        "The corrected gold amount or karat must be different",
       );
     }
 
     const id = randomUUID();
     const changes = {
       gold_amount_grams: { before: previous, after: input.amountGrams },
+      ...(karatChanged
+        ? { gold_karat: { before: previousKarat, after: karat } }
+        : {}),
       ...(reason === undefined
         ? {}
         : {
@@ -368,6 +458,7 @@ export class GoldService {
             organizationId,
             shipmentId,
             amountGrams: input.amountGrams,
+            karat,
             recordedAtUtc: new Date().toISOString(),
             recordedByProfileId: context.auth.profile.id,
             recordedByDisplayName: context.auth.profile.displayName,
@@ -515,6 +606,27 @@ export class GoldService {
         "Gold amount must be non-negative with at most two decimals",
       );
     }
+  }
+
+  // Mismo contrato que el quilataje de liquidaciones: 0 a 24, hasta tres decimales.
+  private validateKarat(karat: number | null | undefined): void {
+    if (karat === undefined || karat === null) return;
+    if (
+      !Number.isFinite(karat) ||
+      karat < 0 ||
+      karat > 24 ||
+      Math.abs(karat * 1000 - Math.round(karat * 1000)) > 1e-8
+    ) {
+      throw new ApplicationError(
+        HttpStatus.BAD_REQUEST,
+        "GOLD_KARAT_INVALID",
+        "Karat must be between 0 and 24 with at most three decimals",
+      );
+    }
+  }
+
+  private milliKarat(karat: number | null): number | null {
+    return karat === null ? null : Math.round(karat * 1000);
   }
 
   private validateDateRange(filters: GoldFilters): void {

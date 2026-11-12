@@ -67,6 +67,7 @@ export interface GoldResultEntry {
   organizationId: string;
   shipmentId: string;
   amountGrams: number;
+  karat: number | null;
   unitCode: "g";
   recordedAtUtc: string;
   recordedByProfileId: string;
@@ -80,6 +81,7 @@ export interface CreateGoldResultEntry {
   organizationId: string;
   shipmentId: string;
   amountGrams: number;
+  karat: number | null;
   recordedAtUtc: string;
   recordedByProfileId: string;
   recordedByDisplayName: string;
@@ -115,7 +117,40 @@ export interface GoldSummary {
   suppliers: readonly GoldSupplierCoverage[];
 }
 
+/**
+ * Síntesis de mercurio sin sumar barridas: la última barrida con entrada y
+ * remanente en todas sus rastras, más cuántas barridas están completas.
+ */
+export interface GoldMercurySynthesis {
+  sweepCount: number;
+  completeSweepCount: number;
+  latestCompleteSweep: {
+    sweepId: string;
+    sweptAtUtc: string;
+    inputGrams: number;
+    remainderGrams: number;
+  } | null;
+}
+
+export interface GoldShipmentOverview {
+  shipmentId: string;
+  mercury: GoldMercurySynthesis;
+}
+
+export interface SweepMercuryRow {
+  shipmentId: string;
+  sweepId: string;
+  sweptAtUtc: string;
+  lineComponentId: string;
+  inputGrams: number | null;
+  remainderGrams: number | null;
+}
+
 export interface GoldRepository {
+  listSweepMercury(
+    organizationId: string,
+    shipmentIds: readonly string[],
+  ): Promise<readonly SweepMercuryRow[]>;
   listShipmentFacts(
     organizationId: string,
     filters: GoldFilters,

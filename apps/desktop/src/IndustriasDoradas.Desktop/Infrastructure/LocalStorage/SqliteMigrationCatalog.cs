@@ -42,6 +42,7 @@ public static class SqliteMigrationCatalog
         Read(27, "repair_unsafe_client_sequences", "027_repair_unsafe_client_sequences.sql"),
         Read(28, "reenvelope_idempotency_sequence_repairs", "028_reenvelope_idempotency_sequence_repairs.sql"),
         Read(29, "local_security_audit", "029_local_security_audit.sql"),
+        Read(30, "security_audit_methods_and_sync", "030_security_audit_methods_and_sync.sql"),
     ];
 
     private static SqliteMigration Read(long version, string name, string fileName)

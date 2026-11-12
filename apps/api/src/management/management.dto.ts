@@ -8,12 +8,14 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   Max,
   Min,
 } from "class-validator";
 
-import type { StatisticsBucket } from "./management.contracts";
+import type { ShipmentSort, StatisticsBucket } from "./management.contracts";
+import { SHIPMENT_CODE_PATTERN } from "./shipment-code";
 
 export class ManagementFreshnessQueryDto {
   @ApiPropertyOptional({
@@ -71,6 +73,38 @@ export class ManagementQueryDto extends ManagementPageQueryDto {
   @IsOptional()
   @IsUUID()
   shipmentId?: string;
+}
+
+export class ManagementShipmentQueryDto extends ManagementQueryDto {
+  @ApiPropertyOptional({
+    default: "recent",
+    enum: ["recent", "oldest", "cajuelas_desc", "cajuelas_asc"],
+  })
+  @IsOptional()
+  @IsIn(["recent", "oldest", "cajuelas_desc", "cajuelas_asc"])
+  sort?: ShipmentSort;
+
+  @ApiPropertyOptional({ enum: ["recorded", "pending"] })
+  @IsOptional()
+  @IsIn(["recorded", "pending"])
+  goldResult?: "recorded" | "pending";
+
+  @ApiPropertyOptional({
+    description:
+      "Identificador del cargamento: código corto de 8 caracteres (inicio del UUID) o UUID completo. No distingue mayúsculas y quita espacios al inicio y al final.",
+    maxLength: 36,
+    example: "5510B16A",
+  })
+  @Transform(({ value }: TransformFnParams): unknown =>
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(36)
+  @Matches(SHIPMENT_CODE_PATTERN, {
+    message: "shipmentCode must be an 8-character code or a full UUID",
+  })
+  shipmentCode?: string;
 }
 
 export class ManagementStatisticsQueryDto {

@@ -67,8 +67,10 @@ public partial class OperationView : UserControl
 
     private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Mientras se escribe (motivo de corrección, búsqueda, hora...) la tecla es del campo.
         if (ViewModel is null ||
             keyboardAdapter is null ||
+            KeyboardShortcutFocusPolicy.ShouldIgnore(e) ||
             !keyboardAdapter.TryTranslate(e.Key, e.IsRepeat, out OperationInputCommand? command) ||
             command is null)
         {

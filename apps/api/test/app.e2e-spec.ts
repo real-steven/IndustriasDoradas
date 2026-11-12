@@ -189,6 +189,7 @@ describe("API smoke (e2e)", () => {
       listReviews: jest.fn().mockResolvedValue([]),
       createReview: jest.fn(),
       createMercuryMovements: jest.fn().mockResolvedValue(undefined),
+      listSweepMercury: jest.fn().mockResolvedValue([]),
     };
     inventory = {
       hasPlantScope: jest.fn().mockResolvedValue(true),
@@ -428,6 +429,9 @@ describe("API smoke (e2e)", () => {
       "/api/v1/organizations/{organizationId}/management/shipments/{shipmentId}/gold-results",
     );
     expect(body.paths).toHaveProperty(
+      "/api/v1/organizations/{organizationId}/management/gold-overview",
+    );
+    expect(body.paths).toHaveProperty(
       "/api/v1/organizations/{organizationId}/inventory/plants/{plantId}/movements",
     );
     expect(body.paths).toHaveProperty(
@@ -605,6 +609,61 @@ describe("API smoke (e2e)", () => {
       .expect(201);
 
     expect(catalogs.create.mock.calls).toHaveLength(1);
+  });
+
+  it("requires a reason to suspend a supplier and protects the default one", async () => {
+    const supplierId = "35000000-0000-4000-8000-000000000098";
+    const supplier = {
+      id: supplierId,
+      organizationId: ACTIVE_PROFILE.organizationId,
+      name: "Proveedor ficticio",
+      isActive: true,
+      deactivatedAt: null,
+      email: null,
+      phone: null,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    };
+    const path = `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/suppliers/${supplierId}/state`;
+
+    catalogs.findById.mockResolvedValueOnce(supplier);
+    const missingReason = await request(httpServer)
+      .patch(path)
+      .set("Authorization", "Bearer valid-token")
+      .send({ active: false })
+      .expect(400);
+    expect(missingReason.body).toMatchObject({
+      code: "SUPPLIER_REASON_REQUIRED",
+    });
+
+    catalogs.findById.mockResolvedValueOnce({
+      ...supplier,
+      name: "Material propio",
+    });
+    const protectedDefault = await request(httpServer)
+      .patch(path)
+      .set("Authorization", "Bearer valid-token")
+      .send({ active: false, reason: "Prueba ficticia" })
+      .expect(409);
+    expect(protectedDefault.body).toMatchObject({
+      code: "SUPPLIER_DEFAULT_PROTECTED",
+    });
+    expect(catalogs.setActive.mock.calls).toHaveLength(0);
+
+    catalogs.findById.mockResolvedValueOnce(supplier);
+    catalogs.setActive.mockResolvedValueOnce({
+      ...supplier,
+      isActive: false,
+      deactivatedAt: "2026-11-11T12:00:00.000Z",
+    });
+    await request(httpServer)
+      .patch(path)
+      .set("Authorization", "Bearer valid-token")
+      .send({ active: false, reason: "Dejó de entregar material" })
+      .expect(200);
+    expect(catalogs.setActive.mock.calls).toEqual([
+      ["suppliers", ACTIVE_PROFILE.organizationId, supplierId, false],
+    ]);
   });
 
   it("validates catalog payloads before reaching storage", async () => {
@@ -859,6 +918,48 @@ describe("API smoke (e2e)", () => {
     expect(JSON.stringify(response.body)).not.toContain("authUserId");
   });
 
+  it("passes area-dependent audit filters to the server query", async () => {
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/audit-events`,
+      )
+      .query({
+        category: "security",
+        kinds: "ELEVATION_PIN,ELEVATION_BIOMETRIC",
+        workerId: "b1000000-0000-4000-8000-000000000001",
+        productionLineId: "32000000-0000-4000-8000-000000000001",
+        routine: "exclude",
+      })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+
+    expect(auditQuery.list.mock.calls).toContainEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({
+        category: "security",
+        kinds: "ELEVATION_PIN,ELEVATION_BIOMETRIC",
+        workerId: "b1000000-0000-4000-8000-000000000001",
+        productionLineId: "32000000-0000-4000-8000-000000000001",
+        routine: "exclude",
+      }),
+    ]);
+  });
+
+  it.each([
+    { kinds: "elevation_pin" },
+    { kinds: "A,B,C,D,E,F,G,H,I,J,K" },
+    { category: "inventory" },
+    { workerId: "not-a-uuid" },
+  ])("rejects invalid audit filters %o", async (query) => {
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/audit-events`,
+      )
+      .query(query)
+      .set("Authorization", "Bearer valid-token")
+      .expect(400);
+  });
+
   it("combines management filters for the company manager", async () => {
     management.listShipments.mockResolvedValueOnce({
       items: [],
@@ -899,6 +1000,92 @@ describe("API smoke (e2e)", () => {
         shipmentId: "42000000-0000-4000-8000-000000000001",
       }),
     ]);
+  });
+
+  it("sorts completed shipments by cajuelas and filters their gold state", async () => {
+    management.listShipments.mockResolvedValueOnce({
+      items: [],
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      totalPages: 0,
+    });
+
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments`,
+      )
+      .query({ sort: "cajuelas_desc", goldResult: "pending" })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+
+    expect(management.listShipments.mock.calls).toContainEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({ sort: "cajuelas_desc", goldResult: "pending" }),
+    ]);
+
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments`,
+      )
+      .query({ sort: "mas_cajuelas" })
+      .set("Authorization", "Bearer valid-token")
+      .expect(400);
+  });
+
+  it("searches completed shipments by short code or full UUID within the session organization", async () => {
+    management.listShipments.mockResolvedValue({
+      items: [],
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 0,
+    });
+    const path = `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments`;
+
+    await request(httpServer)
+      .get(path)
+      .query({ shipmentCode: "  5510B16a  " })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+    await request(httpServer)
+      .get(path)
+      .query({ shipmentCode: " 5510B16A-0000-4000-8000-00000000000A " })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+
+    expect(management.listShipments.mock.calls).toContainEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({ shipmentCode: "5510b16a" }),
+    ]);
+    expect(management.listShipments.mock.calls).toContainEqual([
+      ACTIVE_PROFILE.organizationId,
+      expect.objectContaining({
+        shipmentCode: "5510b16a-0000-4000-8000-00000000000a",
+      }),
+    ]);
+    const callsBefore = management.listShipments.mock.calls.length;
+
+    for (const invalid of ["5510B16", "5510B16AX", "ZZZZZZZZ", "5510%2A"])
+      await request(httpServer)
+        .get(path)
+        .query({ shipmentCode: invalid })
+        .set("Authorization", "Bearer valid-token")
+        .expect(400);
+    await request(httpServer)
+      .get(path)
+      .query({ shipmentCode: "5510B16A" })
+      .expect(401);
+    await request(httpServer)
+      .get(
+        "/api/v1/organizations/30000000-0000-4000-8000-000000000099/management/shipments",
+      )
+      .query({ shipmentCode: "5510B16A" })
+      .set("Authorization", "Bearer valid-token")
+      .expect(403);
+
+    expect(management.listShipments.mock.calls).toHaveLength(callsBefore);
+    management.listShipments.mockReset();
   });
 
   it("reserves management queries exclusively for JEFE_EMPRESA", async () => {
@@ -1107,6 +1294,49 @@ describe("API smoke (e2e)", () => {
     });
   });
 
+  it("returns a mercury synthesis for listed shipments and validates identifiers", async () => {
+    const shipmentId = "42000000-0000-4000-8000-000000000001";
+
+    const response = await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/gold-overview`,
+      )
+      .query({ shipmentIds: shipmentId })
+      .set("Authorization", "Bearer valid-token")
+      .expect(200);
+
+    expect(response.body).toEqual([
+      {
+        shipmentId,
+        mercury: {
+          sweepCount: 0,
+          completeSweepCount: 0,
+          latestCompleteSweep: null,
+        },
+      },
+    ]);
+    await request(httpServer)
+      .get(
+        `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/gold-overview`,
+      )
+      .query({ shipmentIds: "no-es-uuid" })
+      .set("Authorization", "Bearer valid-token")
+      .expect(400);
+  });
+
+  it("rejects a karat outside the contract at the HTTP boundary", async () => {
+    for (const karat of [25, 18.1234, "18"]) {
+      await request(httpServer)
+        .post(
+          `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments/42000000-0000-4000-8000-000000000001/gold-results`,
+        )
+        .set("Authorization", "Bearer valid-token")
+        .send({ amountGrams: 1, karat })
+        .expect(400);
+    }
+    expect(gold.createResult.mock.calls).toHaveLength(0);
+  });
+
   it("records an initial shipment gold total and audits the mutation", async () => {
     management.findShipment.mockResolvedValueOnce(managementShipment());
     gold.createResult.mockImplementationOnce((input) =>
@@ -1115,6 +1345,7 @@ describe("API smoke (e2e)", () => {
         organizationId: input.organizationId,
         shipmentId: input.shipmentId,
         amountGrams: input.amountGrams,
+        karat: input.karat,
         unitCode: "g",
         recordedAtUtc: input.recordedAtUtc,
         recordedByProfileId: input.recordedByProfileId,
@@ -1129,8 +1360,9 @@ describe("API smoke (e2e)", () => {
         `/api/v1/organizations/${ACTIVE_PROFILE.organizationId}/management/shipments/42000000-0000-4000-8000-000000000001/gold-results`,
       )
       .set("Authorization", "Bearer valid-token")
-      .send({ amountGrams: 0 })
+      .send({ amountGrams: 0, karat: 18.5 })
       .expect(201);
+    expect(gold.createResult.mock.calls.at(-1)?.[0].karat).toBe(18.5);
 
     expect(response.body).toMatchObject({ amountGrams: 0, unitCode: "g" });
     expect(gold.createResult.mock.calls[0]?.[0]).toMatchObject({
@@ -1397,6 +1629,7 @@ function managementShipment() {
     goldRecordedAtUtc: null,
     goldRecordedByProfileId: null,
     goldRevisionCount: null,
+    goldKarat: null,
     hasGoldResult: false,
   };
 }

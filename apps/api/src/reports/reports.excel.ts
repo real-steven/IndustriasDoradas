@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import ExcelJS from "exceljs";
 
+import { shipmentCode } from "../management/shipment-code";
+
 import type {
   ProductionReport,
   ProductionReportField,
@@ -93,11 +95,11 @@ export class ReportsExcelExporter {
       fields.forEach((field, fieldIndex) => {
         const cell = row.getCell(fieldIndex + 1);
         cell.value = this.selectedFieldValue(report, shipment, field);
-        if (
-          typeof cell.value === "number" &&
-          ["gold", "karat", "palos"].includes(field)
-        )
+        if (typeof cell.value === "number" && ["gold", "palos"].includes(field))
           cell.numFmt = "#,##0.00";
+        // El quilataje admite hasta tres decimales.
+        if (typeof cell.value === "number" && field === "karat")
+          cell.numFmt = "0.0##";
         if (
           typeof cell.value === "number" &&
           ["cajuelas", "sweeps"].includes(field)
@@ -191,7 +193,11 @@ export class ReportsExcelExporter {
           this.text(report, "Sin registrar", "Not recorded")
         );
       case "karat":
-        return this.shipmentKarats(report, shipment.shipmentId);
+        // Quilataje vigente del registro de oro; vacío significa no registrado.
+        return (
+          shipment.goldKarat ??
+          this.text(report, "Sin registrar", "Not recorded")
+        );
       case "cajuelas":
         return shipment.cajuelaTotal;
       case "palos":
@@ -206,17 +212,6 @@ export class ReportsExcelExporter {
       case "sweeps":
         return shipment.sweepCount;
     }
-  }
-
-  private shipmentKarats(report: ProductionReport, shipmentId: string): string {
-    const values = report.financialSettlements
-      .flatMap((settlement) => settlement.lines)
-      .filter((line) => line.shipmentId === shipmentId)
-      .sort((left, right) => left.displayOrder - right.displayOrder)
-      .map((line) => this.numberText(line.karat, report.language, 2));
-    return values.length === 0
-      ? this.text(report, "Sin registrar", "Not recorded")
-      : values.join(" / ");
   }
 
   private summarySheet(
@@ -661,7 +656,7 @@ export class ReportsExcelExporter {
           settlement.weekStart,
           this.safeText(settlement.supplierName),
           settlement.status,
-          line.shipmentId.slice(0, 8).toUpperCase(),
+          shipmentCode(line.shipmentId),
           this.safeText(line.assayLabel ?? ""),
           line.karat,
           line.gramsLiquidated,

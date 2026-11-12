@@ -558,6 +558,14 @@
         "required": ["plantId", "name"],
         "type": "object"
       },
+      "EmailChangeDto": {
+        "properties": {
+          "email": { "format": "email", "maxLength": 254, "type": "string" },
+          "redirectTo": { "format": "uri", "maxLength": 512, "type": "string" }
+        },
+        "required": ["email"],
+        "type": "object"
+      },
       "ErrorResponse": {
         "properties": {
           "code": { "example": "AUTHORIZATION_DENIED", "type": "string" },
@@ -585,6 +593,32 @@
         ],
         "type": "object"
       },
+      "GoldMercurySynthesis": {
+        "additionalProperties": false,
+        "properties": {
+          "completeSweepCount": { "minimum": 0, "type": "integer" },
+          "latestCompleteSweep": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "inputGrams": { "minimum": 0, "type": "number" },
+              "remainderGrams": { "minimum": 0, "type": "number" },
+              "sweepId": { "format": "uuid", "type": "string" },
+              "sweptAtUtc": { "format": "date-time", "type": "string" }
+            },
+            "required": [
+              "sweepId",
+              "sweptAtUtc",
+              "inputGrams",
+              "remainderGrams"
+            ],
+            "type": "object"
+          },
+          "sweepCount": { "minimum": 0, "type": "integer" }
+        },
+        "required": ["sweepCount", "completeSweepCount", "latestCompleteSweep"],
+        "type": "object"
+      },
       "GoldResultEntry": {
         "additionalProperties": false,
         "properties": {
@@ -596,6 +630,13 @@
           },
           "correctionReason": { "nullable": true, "type": "string" },
           "id": { "format": "uuid", "type": "string" },
+          "karat": {
+            "maximum": 24,
+            "minimum": 0,
+            "multipleOf": 0.001,
+            "nullable": true,
+            "type": "number"
+          },
           "organizationId": { "format": "uuid", "type": "string" },
           "recordedAtUtc": { "format": "date-time", "type": "string" },
           "recordedByDisplayName": { "type": "string" },
@@ -613,6 +654,7 @@
           "organizationId",
           "shipmentId",
           "amountGrams",
+          "karat",
           "unitCode",
           "recordedAtUtc",
           "recordedByProfileId",
@@ -620,6 +662,15 @@
           "supersedesResultId",
           "correctionReason"
         ],
+        "type": "object"
+      },
+      "GoldShipmentOverview": {
+        "additionalProperties": false,
+        "properties": {
+          "mercury": { "$ref": "#/components/schemas/GoldMercurySynthesis" },
+          "shipmentId": { "format": "uuid", "type": "string" }
+        },
+        "required": ["shipmentId", "mercury"],
         "type": "object"
       },
       "GoldSummary": {
@@ -932,6 +983,12 @@
                 "nullable": true,
                 "type": "number"
               },
+              "goldKarat": {
+                "maximum": 24,
+                "minimum": 0,
+                "nullable": true,
+                "type": "number"
+              },
               "goldRecordedAtUtc": {
                 "format": "date-time",
                 "nullable": true,
@@ -969,6 +1026,7 @@
               "goldRecordedAtUtc",
               "goldRecordedByProfileId",
               "goldRevisionCount",
+              "goldKarat",
               "hasGoldResult"
             ],
             "type": "object"
@@ -1369,6 +1427,12 @@
             "nullable": true,
             "type": "number"
           },
+          "goldKarat": {
+            "maximum": 24,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
           "goldStatus": { "enum": ["REGISTERED", "PENDING"], "type": "string" },
           "gramsPerCajuela": {
             "minimum": 0,
@@ -1411,6 +1475,7 @@
           "sweepCount",
           "goldStatus",
           "goldAmountGrams",
+          "goldKarat",
           "gramsPerCajuela",
           "palosPerCajuela"
         ],
@@ -1888,6 +1953,48 @@
         ],
         "type": "object"
       },
+      "SelfProfile": {
+        "description": "Perfil propio. La foto es una URL firmada de corta duración (60 s) de un bucket privado; nunca permanente.",
+        "properties": {
+          "displayName": { "maxLength": 80, "type": "string" },
+          "email": { "format": "email", "nullable": true, "type": "string" },
+          "id": { "format": "uuid", "type": "string" },
+          "organizationId": { "format": "uuid", "type": "string" },
+          "pendingEmail": {
+            "description": "Correo solicitado aún no confirmado en Supabase Auth; no es definitivo.",
+            "format": "email",
+            "nullable": true,
+            "type": "string"
+          },
+          "phone": {
+            "example": "+50688887777",
+            "nullable": true,
+            "pattern": "^\\+[1-9][0-9]{7,14}$",
+            "type": "string"
+          },
+          "photo": {
+            "nullable": true,
+            "properties": {
+              "expiresAt": { "format": "date-time", "type": "string" },
+              "url": { "format": "uri", "type": "string" }
+            },
+            "required": ["url", "expiresAt"],
+            "type": "object"
+          },
+          "role": { "enum": ["JEFE_EMPRESA", "JEFE_PLANTA"], "type": "string" }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "role",
+          "displayName",
+          "email",
+          "pendingEmail",
+          "phone",
+          "photo"
+        ],
+        "type": "object"
+      },
       "Session": {
         "properties": {
           "displayName": {
@@ -1920,7 +2027,15 @@
         "type": "object"
       },
       "SetCatalogStateDto": {
-        "properties": { "active": { "type": "boolean" } },
+        "properties": {
+          "active": { "type": "boolean" },
+          "reason": {
+            "description": "Motivo breve del cambio; obligatorio al suspender un proveedor.",
+            "maxLength": 300,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
         "required": ["active"],
         "type": "object"
       },
@@ -1935,6 +2050,30 @@
           "reason": { "maxLength": 300, "minLength": 3, "type": "string" }
         },
         "required": ["active"],
+        "type": "object"
+      },
+      "StationPhoneDto": {
+        "properties": {
+          "phone": { "maxLength": 24, "nullable": true, "type": "string" },
+          "pin": {
+            "maxLength": 12,
+            "minLength": 6,
+            "pattern": "^\\d+$",
+            "type": "string"
+          }
+        },
+        "required": ["phone", "pin"],
+        "type": "object"
+      },
+      "StationProfilePhone": {
+        "properties": {
+          "phone": {
+            "example": "+50688887777",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["phone"],
         "type": "object"
       },
       "SyncAuthorizationDto": {
@@ -2065,6 +2204,18 @@
       "UpdateLocaleDto": {
         "properties": { "locale": { "enum": ["es", "en"], "type": "string" } },
         "required": ["locale"],
+        "type": "object"
+      },
+      "UpdateOwnProfileDto": {
+        "properties": {
+          "displayName": { "maxLength": 80, "minLength": 1, "type": "string" },
+          "phone": {
+            "description": "Vacío o `null` elimina el teléfono.",
+            "maxLength": 24,
+            "nullable": true,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "UpdatePayrollWorkerProfileDto": {
@@ -2457,6 +2608,389 @@
           }
         },
         "tags": ["Health"]
+      }
+    },
+    "/api/v1/me/profile": {
+      "get": {
+        "operationId": "ProfileController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SelfProfile" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Profile"]
+      },
+      "patch": {
+        "operationId": "ProfileController_update",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateOwnProfileDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SelfProfile" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Profile"]
+      }
+    },
+    "/api/v1/me/profile/email": {
+      "put": {
+        "operationId": "ProfileController_requestEmailChange",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EmailChangeDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SelfProfile" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Profile"]
+      }
+    },
+    "/api/v1/me/profile/photo": {
+      "delete": {
+        "operationId": "ProfileController_removePhoto",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SelfProfile" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Profile"]
+      },
+      "put": {
+        "operationId": "ProfileController_replacePhoto",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SelfProfile" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "summary": "Cuerpo binario `image/jpeg` ya redimensionado por el navegador.",
+        "tags": ["Profile"]
       }
     },
     "/api/v1/organizations/{organizationId}/accounts": {
@@ -3343,9 +3877,32 @@
             "name": "category",
             "required": false,
             "schema": {
-              "enum": ["operation", "people", "administration"],
+              "enum": ["operation", "people", "security", "administration"],
               "type": "string"
             }
+          },
+          {
+            "description": "Tipos de acción gerencial separados por coma, por ejemplo `LINE_STARTED,SWEEP_RECORDED`.",
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "pattern": "^[A-Z][A-Z_]*(,[A-Z][A-Z_]*){0,9}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workerId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "productionLineId",
+            "required": false,
+            "schema": { "format": "uuid", "type": "string" }
           },
           {
             "in": "query",
@@ -7526,6 +8083,103 @@
         "tags": ["Management"]
       }
     },
+    "/api/v1/organizations/{organizationId}/management/gold-overview": {
+      "get": {
+        "operationId": "GoldController_overview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "shipmentIds",
+            "required": true,
+            "schema": {
+              "items": { "format": "uuid", "type": "string" },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoldShipmentOverview"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["Gold"]
+      }
+    },
     "/api/v1/organizations/{organizationId}/management/gold-summary": {
       "get": {
         "operationId": "GoldController_summary",
@@ -7810,6 +8464,33 @@
               "maximum": 100,
               "minimum": 1,
               "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "recent",
+              "enum": ["recent", "oldest", "cajuelas_desc", "cajuelas_asc"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "goldResult",
+            "required": false,
+            "schema": { "enum": ["recorded", "pending"], "type": "string" }
+          },
+          {
+            "description": "Identificador del cargamento: código corto de 8 caracteres (inicio del UUID) o UUID completo. No distingue mayúsculas y quita espacios al inicio y al final.",
+            "in": "query",
+            "name": "shipmentCode",
+            "required": false,
+            "schema": {
+              "example": "5510B16A",
+              "maxLength": 36,
+              "type": "string"
             }
           },
           {
@@ -11350,6 +12031,101 @@
         },
         "security": [{ "supabase": [] }],
         "tags": ["Station"]
+      }
+    },
+    "/api/v1/organizations/{organizationId}/stations/{stationId}/profile/phone": {
+      "put": {
+        "operationId": "StationProfileController_updatePhone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organizationId",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "stationId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/StationPhoneDto" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StationProfilePhone" }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            },
+            "description": "Error estable"
+          }
+        },
+        "security": [{ "supabase": [] }],
+        "tags": ["StationProfile"]
       }
     },
     "/api/v1/organizations/{organizationId}/stations/{stationId}/session-snapshot": {

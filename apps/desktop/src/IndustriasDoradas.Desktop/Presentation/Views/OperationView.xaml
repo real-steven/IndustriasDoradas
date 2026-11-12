@@ -144,7 +144,7 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock x:Name="LineNameText" Foreground="{StaticResource Ink900Brush}" FontSize="20"
-                                                       FontWeight="Bold" Text="{Binding LineName}" />
+                                                       FontWeight="Bold" Text="{Binding CardTitle}" />
                                             <StackPanel Grid.Column="1" Orientation="Horizontal">
                                                 <Button x:Name="OpenLineButton" Width="30" Height="30" MinHeight="0" Margin="0,0,6,0" Padding="0"
                                                         Click="OnOpenLineWindow" ToolTip="Abrir esta línea en otra pantalla"

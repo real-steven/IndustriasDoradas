@@ -101,6 +101,43 @@ describe("normalizeSyncItem", () => {
     expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
   });
 
+  it("accepts closed station security codes and rejects identity or scope drift", () => {
+    const item = securityEvent();
+    expect(normalizeSyncItem(item, scope).precheckCode).toBeNull();
+
+    // Sin actor propio (inicio rechazado) la sesión que reenvía puede ser posterior.
+    const forwarded = securityEvent();
+    Object.assign(forwarded.payload, {
+      actorProfileId: null,
+      occurredAtUtc: "2026-10-01T00:00:00.000Z",
+    });
+    expect(normalizeSyncItem(forwarded, scope).precheckCode).toBeNull();
+
+    const otherActor = securityEvent();
+    otherActor.payload.actorProfileId = "a1000000-0000-4000-8000-000000000099";
+    expect(normalizeSyncItem(otherActor, scope).precheckCode).toBe(
+      "INVALID_EVENT",
+    );
+
+    const otherStation = securityEvent();
+    otherStation.payload.stationId = "34000000-0000-4000-8000-000000000099";
+    expect(normalizeSyncItem(otherStation, scope).precheckCode).toBe(
+      "INVALID_EVENT",
+    );
+
+    const unknownMethod = securityEvent();
+    unknownMethod.payload.method = "FACE_ID";
+    expect(normalizeSyncItem(unknownMethod, scope).precheckCode).toBe(
+      "INVALID_EVENT",
+    );
+
+    const withDetails = securityEvent();
+    withDetails.payload.details = "Rostro con similitud 0.41";
+    expect(normalizeSyncItem(withDetails, scope).precheckCode).toBe(
+      "INVALID_EVENT",
+    );
+  });
+
   it("validates attendance correction authorship and station sequence", () => {
     const item = attendanceEvent();
     Object.assign(item.payload, {
@@ -285,6 +322,37 @@ function mercuryMovement(): SyncEnvelopeItem {
       recordedByProfileId: operationStarted().authorization.actorProfileId,
       supersedesMovementId: null,
       notes: null,
+    },
+  };
+}
+
+function securityEvent(): SyncEnvelopeItem {
+  const eventId = "4a000000-0000-4000-8000-000000000001";
+  return {
+    outboxMessageId: "4a100000-0000-4000-8000-000000000001",
+    stationSequence: 41,
+    operationType: "SECURITY_EVENT_RECORDED",
+    aggregateType: "station_security_event",
+    aggregateId: eventId,
+    payloadSchemaVersion: 1,
+    createdAtUtc: "2026-10-18T12:00:00.000Z",
+    authorization: {
+      actorProfileId: "a1000000-0000-4000-8000-000000000002",
+      permissionVersion: 1,
+      validatedAtUtc: "2026-10-18T11:00:00.000Z",
+      offlineValidUntilUtc: "2026-10-19T11:00:00.000Z",
+      stateAtCapture: "VALID",
+    },
+    payload: {
+      schemaVersion: 1,
+      eventId,
+      stationId: scope.stationId,
+      clientSequence: 41,
+      actorProfileId: "a1000000-0000-4000-8000-000000000002",
+      eventType: "BIOMETRIC_FACE_NOT_DETECTED",
+      method: "BIOMETRIC",
+      result: "TIEMPO_AGOTADO",
+      occurredAtUtc: "2026-10-18T12:00:00.000Z",
     },
   };
 }

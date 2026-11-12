@@ -14,6 +14,7 @@ import { validateEnvironment } from "./config/environment";
 import { GoldModule } from "./gold/gold.module";
 import { HealthModule } from "./health/health.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { ProfileModule } from "./profile/profile.module";
 import { ManagementModule } from "./management/management.module";
 import { ReportsModule } from "./reports/reports.module";
 import { StationModule } from "./station/station.module";
@@ -47,6 +48,7 @@ const environmentFiles = nodeEnvironment
     HealthModule,
     InventoryModule,
     ManagementModule,
+    ProfileModule,
     ReportsModule,
     StationModule,
     SyncModule,

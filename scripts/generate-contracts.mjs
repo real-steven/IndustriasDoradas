@@ -95,7 +95,13 @@ export type RoleCode = "JEFE_EMPRESA" | "ADMINISTRADOR" | "JEFE_PLANTA";
 export type AccountStatus = "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED";
 export type AccountProvisioningMethod = "DIRECT" | "EMAIL_INVITATION";
 export interface Session { userId: string; sessionId: string; profileId: string; organizationId: string; role: RoleCode; issuedAt: string; expiresAt: string }
-export interface CatalogItem { id: string; organizationId: string; code?: string; name: string; isActive: boolean; deactivatedAt: string | null; plantId?: string; createdAt: string; updatedAt: string }
+export interface SelfProfile { id: string; organizationId: string; role: "JEFE_EMPRESA" | "JEFE_PLANTA"; displayName: string; email: string | null; pendingEmail: string | null; phone: string | null; photo: { url: string; expiresAt: string } | null }
+export interface UpdateOwnProfileInput { displayName?: string; phone?: string | null }
+export interface EmailChangeInput { email: string; redirectTo?: string }
+export interface CatalogItem { id: string; organizationId: string; code?: string; name: string; isActive: boolean; deactivatedAt: string | null; plantId?: string; email?: string | null; phone?: string | null; createdAt: string; updatedAt: string }
+export interface CreateSupplierInput { name: string; email?: string; phone?: string }
+export interface UpdateSupplierInput { name?: string; email?: string | null; phone?: string | null }
+export interface SetCatalogStateInput { active: boolean; reason?: string }
 export interface PageCatalog { items: CatalogItem[]; page: number; pageSize: number; total: number; totalPages: number }
 export interface Account { id: string; organizationId: string; displayName: string; preferredLocale: "es" | "en"; accountStatus: AccountStatus; roleCode: RoleCode; provisioningMethod: AccountProvisioningMethod; statusReason: string | null; isActive: boolean; createdAt: string; updatedAt: string }
 export interface PageAccount { items: Account[]; page: number; pageSize: number; total: number; totalPages: number }
@@ -112,13 +118,15 @@ export interface AttendanceHoursAdjustment { eventId: string; eventType: "ADJUST
 export interface AttendanceWorkerHours { workerId: string; workerName: string; confirmedMinutes: number; completedShiftCount: number; openShiftCount: number; incidentCount: number }
 export interface AttendanceHours { version: "attendance-hours-v1"; timezone: "America/Costa_Rica"; period: { fromDate: string; toDate: string; fromUtc: string; toUtc: string }; summary: { workerCount: number; confirmedShiftCount: number; openShiftCount: number; incidentCount: number; adjustmentCount: number; totalConfirmedMinutes: number }; workers: AttendanceWorkerHours[]; shifts: AttendanceHoursShift[]; incidents: AttendanceHoursIncident[]; adjustments: AttendanceHoursAdjustment[]; coverage: { status: "COMPLETE"; eventsRead: number; confirmedEventsUsed: number; excludedEvents: number; eventsInPeriod: number; firstEventAtUtc: string | null; lastEventAtUtc: string | null }; freshness: { generatedAtUtc: string; lastConfirmedAtUtc: string | null; lagSeconds: number | null } }
 export interface ManagementOperationLine { organizationId: string; plantId: string; stationId: string; stationName: string; shipmentId: string; feedCycleId: string; productionLineId: string; productionLineName: string; productionLineOrder: number; supplierId: string; supplierName: string; responsibleWorkerId: string | null; responsibleWorkerName: string | null; startedAtUtc: string; cajuelaTotal: number; sweepCount: number; sweptCajuelas: number; cajuelasSinceLastSweep: number; nextSweepAt: number; sweepPending: boolean; lastActivityAtUtc: string }
-export interface ManagementShipment extends ManagementOperationLine { status: "COMPLETED"; completedAtUtc: string; goldResultId: string | null; goldAmountGrams: number | null; goldUnitCode: "g" | null; goldRecordedAtUtc: string | null; goldRecordedByProfileId: string | null; goldRevisionCount: number | null; hasGoldResult: boolean }
+export interface ManagementShipment extends ManagementOperationLine { status: "COMPLETED"; completedAtUtc: string; goldResultId: string | null; goldAmountGrams: number | null; goldUnitCode: "g" | null; goldRecordedAtUtc: string | null; goldRecordedByProfileId: string | null; goldRevisionCount: number | null; goldKarat: number | null; hasGoldResult: boolean }
 export interface ManagementSweepMercury { organizationId: string; shipmentId: string; sweepId: string; sweptAtUtc: string; cajuelaCount: number; lineComponentId: string; lineComponentName: string; lineComponentOrder: number; inputGrams: number | null; remainderGrams: number | null; hasInputRecord: boolean; hasRemainderRecord: boolean; inputMovementId: string | null; remainderMovementId: string | null }
-export interface GoldResultEntry { id: string; organizationId: string; shipmentId: string; amountGrams: number; unitCode: "g"; recordedAtUtc: string; recordedByProfileId: string; recordedByDisplayName: string; supersedesResultId: string | null; correctionReason: string | null }
+export interface GoldResultEntry { id: string; organizationId: string; shipmentId: string; amountGrams: number; karat: number | null; unitCode: "g"; recordedAtUtc: string; recordedByProfileId: string; recordedByDisplayName: string; supersedesResultId: string | null; correctionReason: string | null }
 export interface GoldReviewEntry { id: string; organizationId: string; shipmentId: string; disposition: "PENDING" | "ACKNOWLEDGED" | "OMITTED"; recordedAtUtc: string; recordedByProfileId: string; recordedByDisplayName: string; supersedesEntryId: string | null; reason: string | null }
 export interface GoldSupplierCoverage { supplierId: string; supplierName: string; totalShipments: number; registeredShipments: number; excludedShipments: number; coveragePercentage: number; totalGoldGrams: number; includedCajuelas: number; gramsPerCajuela: number | null }
 export interface GoldSummary { totalShipments: number; registeredShipments: number; excludedShipments: number; pendingShipments: number; acknowledgedShipments: number; acknowledgedShipmentIds: string[]; omittedShipments: number; omittedShipmentIds: string[]; coveragePercentage: number; totalGoldGrams: number; includedCajuelas: number; gramsPerCajuela: number | null; suppliers: GoldSupplierCoverage[] }
-export interface RecordShipmentGoldInput { amountGrams: number; correctionReason?: string }
+export interface GoldMercurySynthesis { sweepCount: number; completeSweepCount: number; latestCompleteSweep: { sweepId: string; sweptAtUtc: string; inputGrams: number; remainderGrams: number } | null }
+export interface GoldShipmentOverview { shipmentId: string; mercury: GoldMercurySynthesis }
+export interface RecordShipmentGoldInput { amountGrams: number; karat?: number | null; correctionReason?: string }
 export interface ReviewShipmentGoldInput { disposition: "PENDING" | "ACKNOWLEDGED" | "OMITTED"; reason?: string }
 export interface MercuryMeasurementInput { lineComponentId: string; inputGrams?: number; remainderGrams?: number }
 export interface RecordSweepMercuryInput { measurements: MercuryMeasurementInput[]; correctionReason?: string }
@@ -177,6 +185,9 @@ export class ApiClient {
   }
   getManagementGoldSummary(organizationId: string, filters: Omit<ManagementFilters, "page" | "pageSize" | "shipmentId"> = {}, signal?: AbortSignal): Promise<GoldSummary> {
     return this.request<GoldSummary>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/gold-summary?\${this.goldQuery(filters)}\`, signal);
+  }
+  getManagementGoldOverview(organizationId: string, shipmentIds: readonly string[], signal?: AbortSignal): Promise<GoldShipmentOverview[]> {
+    return this.request<GoldShipmentOverview[]>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/gold-overview?\${new URLSearchParams({ shipmentIds: shipmentIds.join(",") })}\`, signal);
   }
   listManagementShipmentGoldResults(organizationId: string, shipmentId: string, signal?: AbortSignal): Promise<GoldResultEntry[]> {
     return this.request<GoldResultEntry[]>(\`/api/v1/organizations/\${encodeURIComponent(organizationId)}/management/shipments/\${encodeURIComponent(shipmentId)}/gold-results\`, signal);

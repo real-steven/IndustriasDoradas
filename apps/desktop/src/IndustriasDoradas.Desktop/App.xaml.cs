@@ -5,6 +5,7 @@ using IndustriasDoradas.Desktop.Application;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Infrastructure.Health;
+using IndustriasDoradas.Desktop.Infrastructure.Audio;
 using IndustriasDoradas.Desktop.Infrastructure.Auth;
 using IndustriasDoradas.Desktop.Infrastructure.Input;
 using IndustriasDoradas.Desktop.Infrastructure.LocalStorage;
@@ -19,6 +20,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
+using IndustriasDoradas.Desktop.Application.Profile;
+using IndustriasDoradas.Desktop.Infrastructure.Profile;
 
 namespace IndustriasDoradas.Desktop;
 
@@ -184,6 +187,12 @@ public partial class App : System.Windows.Application
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         });
+        builder.Services.AddHttpClient<IProfileApi, ProfileApi>(static (services, client) =>
+        {
+            ApiOptions options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        });
         builder.Services.AddHttpClient<ISupabaseAuthService, SupabaseAuthService>(static (services, client) =>
         {
             SupabaseOptions options = services.GetRequiredService<IOptions<SupabaseOptions>>().Value;
@@ -212,9 +221,28 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<PlantManagerModeState>();
         builder.Services.AddSingleton<IPlantManagerModeAccessor>(services =>
             services.GetRequiredService<PlantManagerModeState>());
-        builder.Services.AddSingleton<IInputCommandSource, ConfigurableInputCommandSource>();
+        // Atajos de teclado: JSON local por estación y usuario de Windows; nunca se sincroniza.
+        builder.Services.AddSingleton<IKeyboardShortcutSettings>(static services => new KeyboardShortcutPreferenceStore(
+            KeyboardShortcutPreferenceStore.DefaultDirectory(
+                services.GetRequiredService<IOptions<StationOptions>>().Value.Id),
+            KeyboardShortcutRules.FromInputOptions(
+                services.GetRequiredService<IOptions<OperationInputOptions>>().Value)));
+        builder.Services.AddSingleton<IInputCommandSource>(static services => new ConfigurableInputCommandSource(
+            services.GetRequiredService<IOptions<OperationInputOptions>>(),
+            services.GetRequiredService<TimeProvider>(),
+            services.GetRequiredService<IKeyboardShortcutSettings>()));
         builder.Services.AddSingleton<OperationInputGuard>();
-        builder.Services.AddSingleton<IOperationFeedbackPlayer, WpfOperationFeedbackPlayer>();
+        // Sonidos: preferencia local por estación y usuario de Windows; nunca se sincroniza.
+        builder.Services.AddSingleton(static services => new SoundPreferenceStore(
+            SoundPreferenceStore.DefaultDirectory(
+                services.GetRequiredService<IOptions<StationOptions>>().Value.Id)));
+        builder.Services.AddSingleton(static services => new WpfOperationFeedbackPlayer(
+            services.GetRequiredService<IOptions<OperationSafetyOptions>>(),
+            services.GetRequiredService<SoundPreferenceStore>()));
+        builder.Services.AddSingleton<IOperationFeedbackPlayer>(static services =>
+            services.GetRequiredService<WpfOperationFeedbackPlayer>());
+        builder.Services.AddSingleton<ISoundFeedbackSettings>(static services =>
+            services.GetRequiredService<WpfOperationFeedbackPlayer>());
         builder.Services.AddSingleton<ILocalDatabasePathProvider, StationDatabasePathProvider>();
         builder.Services.AddSingleton<ILocalSqliteConnectionFactory, SqliteConnectionFactory>();
         builder.Services.AddSingleton<SqliteDatabaseMigrator>();
@@ -276,6 +304,21 @@ public partial class App : System.Windows.Application
         builder.Services.AddSingleton<StationViewModel>();
         builder.Services.AddSingleton<OperationViewModel>();
         builder.Services.AddSingleton<MainWindowViewModel>();
+        // Perfil propio: teléfono central por la API; foto solo local (fuera de SQLite/Outbox/respaldos).
+        builder.Services.AddSingleton<IProfilePhotoStore>(
+            _ => new LocalProfilePhotoStore(LocalProfilePhotoStore.DefaultDirectory()));
+        builder.Services.AddSingleton<IProfileContactCache>(
+            _ => new ProfileContactCacheStore(ProfileContactCacheStore.DefaultDirectory()));
+        builder.Services.AddSingleton<IProfileContactService, ProfileContactService>();
+        builder.Services.AddSingleton(services =>
+        {
+            MainWindowViewModel main = services.GetRequiredService<MainWindowViewModel>();
+            return new ProfilePopoverViewModel(
+                services.GetRequiredService<IProfileContactService>(),
+                services.GetRequiredService<IProfilePhotoStore>(),
+                () => main.IsPlantManager,
+                ProfilePhotoPicker.Pick);
+        });
         builder.Services.AddSingleton<MainWindow>();
 
         return builder.Build();

@@ -71,12 +71,15 @@ describe("ReportsService", () => {
     expect(report.shipments).toHaveLength(2);
     expect(report.shipments[0]).toMatchObject({
       goldAmountGrams: 0,
+      goldKarat: 18.5,
       goldStatus: "REGISTERED",
       gramsPerCajuela: 0,
       palosPerCajuela: 0,
     });
+    // Sin resultado de oro vigente no se muestra un quilataje.
     expect(report.shipments[1]).toMatchObject({
       goldAmountGrams: null,
+      goldKarat: null,
       goldStatus: "PENDING",
       gramsPerCajuela: null,
       palosPerCajuela: null,
@@ -103,6 +106,25 @@ describe("ReportsService", () => {
 
     expect(report.sections).toEqual(["financial"]);
     expect(settlements.list.mock.calls).toHaveLength(1);
+  });
+
+  it("takes karat from the gold record without reading settlements", async () => {
+    management.statistics.mockResolvedValue(statistics());
+    repository.listShipments.mockResolvedValue({
+      items: [shipment()],
+      page: 1,
+      pageSize: 100,
+      total: 1,
+      totalPages: 1,
+    });
+
+    const report = await service.production("organization-id", {
+      ...query(),
+      fields: ["date", "shipment", "gold", "karat"],
+    });
+
+    expect(report.shipments[0]?.goldKarat).toBe(18.5);
+    expect(settlements.list.mock.calls).toHaveLength(0);
   });
 
   it("rejects an invalid range before querying management data", async () => {
@@ -205,6 +227,7 @@ function shipment(
     goldRecordedAtUtc: "2026-11-03T19:00:00.000Z",
     goldRecordedByProfileId: "profile-id",
     goldRevisionCount: 0,
+    goldKarat: 18.5,
     hasGoldResult: true,
     ...overrides,
   };

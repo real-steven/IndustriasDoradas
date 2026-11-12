@@ -65,8 +65,12 @@ describe("historial gerencial de cargamentos", () => {
   });
 
   it("conserva filtros y pagina en la URL y los envia a la API", async () => {
-    const transport = vi.fn<typeof fetch>(() =>
-      Promise.resolve(shipmentPage({ page: 2, totalPages: 3 })),
+    const transport = vi.fn<typeof fetch>((input) =>
+      Promise.resolve(
+        requestUrl(input).includes("/gold-overview")
+          ? json([])
+          : shipmentPage({ page: 2, totalPages: 3 }),
+      ),
     );
     vi.stubGlobal("fetch", transport);
 
@@ -74,7 +78,9 @@ describe("historial gerencial de cargamentos", () => {
       `/gerencia/cargamentos?period=date&date=2026-10-08&shipment=42000000&line=${LINE_ID}&supplier=${SUPPLIER_ID}&responsible=${WORKER_ID}&page=2`,
     );
 
-    expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
+    expect(
+      await screen.findByText("42000000", { selector: "code" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("searchbox", { name: "Buscar actividad" }),
     ).toHaveValue("42000000");
@@ -86,7 +92,7 @@ describe("historial gerencial de cargamentos", () => {
       expect(
         transport.mock.calls.some(([input]) => {
           const candidate = new URL(requestUrl(input), "http://localhost");
-          return candidate.searchParams.get("shipmentId") === SHIPMENT_ID;
+          return candidate.searchParams.get("shipmentCode") === "42000000";
         }),
       ).toBe(true);
     });
@@ -94,7 +100,7 @@ describe("historial gerencial de cargamentos", () => {
       const candidate = new URL(requestUrl(input), "http://localhost");
       return (
         candidate.searchParams.get("page") === "2" &&
-        candidate.searchParams.get("shipmentId") === SHIPMENT_ID
+        candidate.searchParams.get("shipmentCode") === "42000000"
       );
     });
     const request = new URL(requestUrl(pagedRequest?.[0]), "http://localhost");
@@ -107,7 +113,8 @@ describe("historial gerencial de cargamentos", () => {
     expect(request.searchParams.get("productionLineId")).toBe(LINE_ID);
     expect(request.searchParams.get("supplierId")).toBe(SUPPLIER_ID);
     expect(request.searchParams.get("responsibleWorkerId")).toBe(WORKER_ID);
-    expect(request.searchParams.get("shipmentId")).toBe(SHIPMENT_ID);
+    expect(request.searchParams.get("shipmentCode")).toBe("42000000");
+    expect(request.searchParams.get("shipmentId")).toBeNull();
     expect(screen.getByText("Página 2 de 3")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /ABRIR DETALLE/u }),
@@ -247,6 +254,251 @@ describe("historial gerencial de cargamentos", () => {
   });
 });
 
+describe("identificador y busqueda del cargamento", () => {
+  const CODE_ID = "5510b16a-0000-4000-8000-00000000000a";
+  const ORGANIZATION = "30000000-0000-4000-8000-000000000001";
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  function searchTransport(items: ManagementShipment[]) {
+    return vi.fn<typeof fetch>((input) => {
+      const url = new URL(requestUrl(input), "http://localhost");
+      if (url.pathname.endsWith("/gold-overview"))
+        return Promise.resolve(
+          json(
+            items.map((item) => ({
+              shipmentId: item.shipmentId,
+              mercury: {
+                sweepCount: 2,
+                completeSweepCount: 1,
+                latestCompleteSweep: {
+                  sweepId: "44000000-0000-4000-8000-000000000001",
+                  sweptAtUtc: "2026-10-08T17:30:00.000Z",
+                  inputGrams: 30,
+                  remainderGrams: 4.5,
+                },
+              },
+            })),
+          ),
+        );
+      if (url.pathname.endsWith(`/management/shipments/${CODE_ID}/sweeps`))
+        return Promise.resolve(sweepPage());
+      if (url.pathname.endsWith(`/management/shipments/${CODE_ID}`))
+        return Promise.resolve(json(items[0]));
+      if (url.pathname.endsWith("/audit-events"))
+        return Promise.resolve(
+          json({ items: [], page: 1, pageSize: 12, total: 0, totalPages: 0 }),
+        );
+      if (url.pathname.endsWith("/management/shipments"))
+        return Promise.resolve(
+          json({
+            items,
+            page: 1,
+            pageSize: 10,
+            total: items.length,
+            totalPages: items.length === 0 ? 0 : 1,
+          }),
+        );
+      throw new Error(`Unexpected request ${url.pathname}`);
+    });
+  }
+
+  function shipmentRequests(transport: ReturnType<typeof searchTransport>) {
+    return transport.mock.calls
+      .map(([input]) => new URL(requestUrl(input), "http://localhost"))
+      .filter((url) => url.pathname.endsWith("/management/shipments"));
+  }
+
+  const coded = () =>
+    shipment({
+      shipmentId: CODE_ID,
+      supplierName: "Material propio",
+      goldResultId: "46000000-0000-4000-8000-000000000001",
+      goldAmountGrams: 12.5,
+      goldUnitCode: "g",
+      goldKarat: 21.5,
+      hasGoldResult: true,
+    });
+
+  it.each([
+    ["  5510B16a  ", "5510b16a"],
+    ["5510B16A-0000-4000-8000-00000000000A", CODE_ID],
+  ])(
+    "pega %s y lo busca en el servidor sin distinguir mayusculas",
+    async (typed, expected) => {
+      const user = userEvent.setup();
+      const transport = searchTransport([coded()]);
+      vi.stubGlobal("fetch", transport);
+
+      renderPortal("/gerencia/auditoria?view=shipments&period=all");
+      const box = await screen.findByRole("searchbox", {
+        name: "Buscar actividad",
+      });
+      await user.clear(box);
+      await user.type(box, typed);
+      await user.click(screen.getByRole("button", { name: "BUSCAR" }));
+
+      expect(
+        await screen.findByText("5510B16A", { selector: "code" }),
+      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(
+          shipmentRequests(transport).some(
+            (url) => url.searchParams.get("shipmentCode") === expected,
+          ),
+        ).toBe(true);
+      });
+      const request = shipmentRequests(transport).find(
+        (url) => url.searchParams.get("shipmentCode") === expected,
+      );
+      // La consulta va a la organización de la sesión, paginada en el servidor.
+      expect(request?.pathname).toContain(`/organizations/${ORGANIZATION}/`);
+      expect(request?.searchParams.get("pageSize")).toBe("10");
+      expect(request?.searchParams.get("shipmentId")).toBeNull();
+
+      const row = screen
+        .getByText("5510B16A", { selector: "code" })
+        .closest("article");
+      if (row === null) throw new Error("Expected a shipment row");
+      expect(within(row).getByText("Línea 1")).toBeInTheDocument();
+      expect(
+        within(row).getAllByText(/Material propio/u).length,
+      ).toBeGreaterThan(0);
+      expect(within(row).getByText("Responsable Uno")).toBeInTheDocument();
+      expect(within(row).getByText("280")).toBeInTheDocument();
+      expect(within(row).getByText("12,5 g")).toBeInTheDocument();
+      expect(within(row).getByText("21,5 k")).toBeInTheDocument();
+      expect(
+        await within(row).findByText(/Entrada 30 g · Final 4,5 g/u),
+      ).toBeInTheDocument();
+      expect(within(row).getByText("FINALIZADO")).toBeInTheDocument();
+      expect(
+        within(row).getByRole("link", { name: /ABRIR DETALLE/u }),
+      ).toHaveAttribute(
+        "href",
+        expect.stringContaining(`/gerencia/cargamentos/${CODE_ID}`),
+      );
+    },
+  );
+
+  it("guarda el codigo en la URL y abre el detalle del resultado", async () => {
+    const user = userEvent.setup();
+    const transport = searchTransport([coded()]);
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal(
+      "/gerencia/auditoria?view=shipments&period=all&search=5510b16a&page=1",
+    );
+
+    expect(
+      await screen.findByRole("searchbox", { name: "Buscar actividad" }),
+    ).toHaveValue("5510b16a");
+    await user.click(
+      await screen.findByRole("link", { name: /ABRIR DETALLE/u }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "5510B16A" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /VOLVER AL HISTORIAL/u }),
+    ).toHaveAttribute("href", expect.stringContaining("search=5510b16a"));
+  });
+
+  it("avisa cuando no existe un cargamento con ese codigo", async () => {
+    const transport = searchTransport([]);
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal(
+      "/gerencia/auditoria?view=shipments&period=all&search=ABCDEF12",
+    );
+
+    expect(
+      await screen.findByText("No se encontró un cargamento con ese código."),
+    ).toBeInTheDocument();
+    expect(
+      shipmentRequests(transport)[0]?.searchParams.get("shipmentCode"),
+    ).toBe("abcdef12");
+  });
+
+  it("no consulta cargamentos con un texto que no es un codigo", async () => {
+    const transport = searchTransport([coded()]);
+    vi.stubGlobal("fetch", transport);
+
+    renderPortal("/gerencia/auditoria?view=shipments&period=all&search=Lucia");
+
+    expect(
+      await screen.findByText("No se encontró un cargamento con ese código."),
+    ).toBeInTheDocument();
+    expect(shipmentRequests(transport)).toHaveLength(0);
+  });
+
+  it("copia solo el codigo sin abrir el cargamento", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    vi.stubGlobal("fetch", searchTransport([coded()]));
+
+    renderPortal("/gerencia/auditoria?view=shipments&period=all");
+    const button = await screen.findByRole("button", {
+      name: "Copiar identificador del cargamento 5510B16A",
+    });
+    expect(button).toHaveAttribute("title", "Copiar identificador");
+    await user.click(button);
+
+    expect(writeText).toHaveBeenCalledWith("5510B16A");
+    expect(await screen.findByText("Código copiado")).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: "Buscar actividad" }),
+    ).toBeInTheDocument();
+
+    button.focus();
+    await user.keyboard("{Enter}");
+    expect(writeText).toHaveBeenCalledTimes(2);
+  });
+
+  it("deja seleccionar el codigo a mano si el portapapeles falla", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(() => Promise.reject(new Error("denied"))) },
+    });
+    vi.stubGlobal("fetch", searchTransport([coded()]));
+
+    renderPortal("/gerencia/auditoria?view=shipments&period=all");
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Copiar identificador del cargamento 5510B16A",
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "No se pudo copiar. Seleccione el código y cópielo a mano.",
+      ),
+    ).toBeInTheDocument();
+    expect(window.getSelection()?.toString()).toBe("5510B16A");
+  });
+
+  it("ofrece buscar el cargamento desde toda la actividad", async () => {
+    vi.stubGlobal("fetch", searchTransport([coded()]));
+
+    renderPortal("/gerencia/auditoria?search=%205510B16A%20");
+
+    expect(
+      await screen.findByRole("link", {
+        name: /BUSCAR EL CARGAMENTO 5510B16A/u,
+      }),
+    ).toHaveAttribute("href", expect.stringContaining("view=shipments"));
+  });
+});
+
 function renderPortal(path: string): void {
   const auth: AuthState = {
     session: { access_token: "fictitious-token" } as Session,
@@ -312,6 +564,7 @@ function shipment(
     goldRecordedAtUtc: null,
     goldRecordedByProfileId: null,
     goldRevisionCount: null,
+    goldKarat: null,
     hasGoldResult: false,
     ...overrides,
   };

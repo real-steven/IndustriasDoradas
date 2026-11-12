@@ -121,39 +121,6 @@ export function ReportsPage() {
   );
 }
 
-export function UpcomingPage({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  const { tr } = useLanguage();
-
-  return (
-    <PortalPage
-      title={title}
-      eyebrow={tr("PRÓXIMAMENTE", "COMING SOON")}
-      description={description}
-    >
-      <Panel
-        title={tr("Módulo reservado", "Reserved module")}
-        subtitle={tr(
-          "No forma parte del primer entregable web",
-          "Not included in the first web release",
-        )}
-      >
-        <UpcomingState>
-          {tr(
-            "La navegación ya contempla este espacio, pero todavía no crea, modifica ni inventa datos.",
-            "Navigation already includes this space, but it does not create, modify, or fabricate data yet.",
-          )}
-        </UpcomingState>
-      </Panel>
-    </PortalPage>
-  );
-}
-
 function PortalPage({
   title,
   eyebrow,
@@ -185,37 +152,6 @@ function PortalPage({
         </header>
       )}
       {children}
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  subtitle,
-  action,
-  children,
-}: PropsWithChildren<{ title: string; subtitle: string; action?: ReactNode }>) {
-  return (
-    <section className="portal-panel">
-      <header>
-        <div>
-          <h2>{title}</h2>
-          <p>{subtitle}</p>
-        </div>
-        {action}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function UpcomingState({ children }: PropsWithChildren) {
-  const { tr } = useLanguage();
-
-  return (
-    <div className="upcoming-state">
-      <span>{tr("PRÓXIMAMENTE", "COMING SOON")}</span>
-      <p>{children}</p>
     </div>
   );
 }

@@ -174,7 +174,10 @@ export class ReportsPdfExporter {
           ? this.text(report, "Sin registrar", "Not recorded")
           : this.number(shipment.goldAmountGrams, report, 2);
       case "karat":
-        return this.shipmentKarats(report, shipment.shipmentId);
+        // Quilataje vigente del registro de oro; vacío significa no registrado.
+        return shipment.goldKarat === null
+          ? this.text(report, "Sin registrar", "Not recorded")
+          : this.number(shipment.goldKarat, report, 3);
       case "cajuelas":
         return this.number(shipment.cajuelaTotal, report, 0);
       case "palos":
@@ -189,17 +192,6 @@ export class ReportsPdfExporter {
       case "sweeps":
         return this.number(shipment.sweepCount, report, 0);
     }
-  }
-
-  private shipmentKarats(report: ProductionReport, shipmentId: string): string {
-    const values = report.financialSettlements
-      .flatMap((settlement) => settlement.lines)
-      .filter((line) => line.shipmentId === shipmentId)
-      .sort((left, right) => left.displayOrder - right.displayOrder)
-      .map((line) => this.number(line.karat, report, 2));
-    return values.length === 0
-      ? this.text(report, "Sin registrar", "Not recorded")
-      : values.join(" / ");
   }
 
   private summaryPage(document: PDFKit.PDFDocument, report: ProductionReport) {

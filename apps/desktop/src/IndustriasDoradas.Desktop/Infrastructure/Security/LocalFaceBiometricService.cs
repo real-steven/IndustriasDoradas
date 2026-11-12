@@ -222,13 +222,17 @@ public sealed class LocalFaceBiometricService : IBiometricVerificationService, I
                 }
             }
 
-            return new BiometricOperationResult(
-                false,
-                "NO_MATCH",
-                bestSimilarity < 0
-                    ? "No se detectó un rostro con claridad. Puede ingresar su PIN."
-                    : "El rostro no coincide con el registro de este equipo. Puede ingresar su PIN.",
-                bestSimilarity < 0 ? null : bestSimilarity);
+            // Ausencia de rostro y rechazo de identidad son resultados distintos para auditoría.
+            return bestSimilarity < 0
+                ? new BiometricOperationResult(
+                    false,
+                    "FACE_NOT_DETECTED",
+                    "No se detectó un rostro con claridad. Puede ingresar su PIN.")
+                : new BiometricOperationResult(
+                    false,
+                    "NO_MATCH",
+                    "El rostro no coincide con el registro de este equipo. Puede ingresar su PIN.",
+                    bestSimilarity);
         }, status, cancellationToken).ConfigureAwait(false);
     }
 

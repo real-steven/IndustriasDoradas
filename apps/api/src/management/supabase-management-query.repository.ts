@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 
 import type {
   ManagementFilters,
+  ManagementShipmentFilters,
   ManagementLatestChange,
   ManagementOperationLine,
   ManagementPageQuery,
@@ -13,6 +14,7 @@ import type {
   ManagementSweepMercury,
 } from "./management.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
+import { shipmentCodeRange } from "./shipment-code";
 import type { PageResponse } from "../common/dto/page-query.dto";
 import type { EnvironmentVariables } from "../config/environment";
 
@@ -52,6 +54,7 @@ const SHIPMENT_SELECT = [
   "gold_recorded_at_utc",
   "gold_recorded_by_profile_id",
   "gold_revision_count",
+  "gold_karat",
   "has_gold_result",
 ].join(",");
 
@@ -137,16 +140,37 @@ export class SupabaseManagementQueryRepository implements ManagementQueryReposit
 
   async listShipments(
     organizationId: string,
-    query: ManagementFilters,
+    query: ManagementShipmentFilters,
   ): Promise<PageResponse<ManagementShipment>> {
+    const orders: Record<
+      NonNullable<ManagementShipmentFilters["sort"]>,
+      string
+    > = {
+      recent: "completed_at_utc.desc,shipment_id.asc",
+      oldest: "completed_at_utc.asc,shipment_id.asc",
+      cajuelas_desc: "cajuela_total.desc,completed_at_utc.desc,shipment_id.asc",
+      cajuelas_asc: "cajuela_total.asc,completed_at_utc.desc,shipment_id.asc",
+    };
     const parameters = this.baseParameters(
       organizationId,
       query,
       SHIPMENT_SELECT,
-      "completed_at_utc.desc,shipment_id.asc",
+      orders[query.sort ?? "recent"],
     );
     parameters.set("status", "eq.COMPLETED");
+    if (query.goldResult !== undefined)
+      parameters.set(
+        "has_gold_result",
+        query.goldResult === "recorded" ? "is.true" : "is.false",
+      );
     this.appendFilters(parameters, query, "completed_at_utc");
+    if (query.shipmentCode !== undefined) {
+      // El código corto es el inicio del UUID: se busca como rango ordenado
+      // del UUID, sin columnas nuevas y siempre dentro de la organización.
+      const [first, last] = shipmentCodeRange(query.shipmentCode);
+      parameters.append("shipment_id", `gte.${first}`);
+      parameters.append("shipment_id", `lte.${last}`);
+    }
     return this.page("management_shipment_facts", parameters, query, (row) =>
       this.shipment(row),
     );
@@ -367,6 +391,7 @@ export class SupabaseManagementQueryRepository implements ManagementQueryReposit
         "gold_recorded_by_profile_id",
       ),
       goldRevisionCount: this.nullableNumber(row, "gold_revision_count"),
+      goldKarat: this.nullableNumber(row, "gold_karat"),
       hasGoldResult: this.boolean(row, "has_gold_result"),
     };
   }

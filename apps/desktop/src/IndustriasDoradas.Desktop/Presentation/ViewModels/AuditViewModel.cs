@@ -50,6 +50,8 @@ public sealed record AuditShipmentItemViewModel(
     public int SweepCount => Source.SweepCount;
     public int SweptCajuelas => Source.SweptCajuelas;
     public int CorrectionCount => Source.CorrectionCount;
+    public string ShipmentCode => Application.ShipmentCode.From(Source.ShipmentId);
+    public string Identifier => $"{Source.SupplierName} · Cargamento {ShipmentCode}";
     public string MercuryStatusDescription => Source.SweepCount == 0
         ? "Sin barridas"
         : Source.MercuryRecordedSweepCount >= Source.SweepCount
@@ -146,6 +148,11 @@ public sealed class AuditViewModel : ObservableObject
     private IReadOnlyList<AuditAttendanceItemViewModel> allAttendanceItems = [];
     private IReadOnlyList<AuditAttendanceItemViewModel> attendanceItems = [];
     private IReadOnlyList<AuditWorkerFilterOption> attendanceWorkers = [];
+    private IReadOnlyList<AuditAttendanceIncidentViewModel> allAttendanceIncidents = [];
+    private IReadOnlyList<AuditAttendanceIncidentViewModel> attendanceIncidents = [];
+    private bool isIncidentFilterActive;
+    private string shipmentCodeCopyStatus = string.Empty;
+    private int shipmentCodeCopyVersion;
     private IReadOnlyList<AuditSecurityItemViewModel> allSecurityEvents = [];
     private IReadOnlyList<AuditSecurityItemViewModel> securityEvents = [];
     private readonly IReadOnlyList<AuditFilterOption> correctionTypeOptions;
@@ -225,6 +232,14 @@ public sealed class AuditViewModel : ObservableObject
         NextPeriodCommand = new RelayCommand(() => MovePeriod(1), () => CanNavigatePeriod);
         ResetPeriodCommand = new RelayCommand(ResetPeriod);
         ShowComingSoonCommand = new RelayCommand<string>(ShowComingSoon);
+        ToggleIncidentFilterCommand = new RelayCommand(
+            () => IsIncidentFilterActive = !IsIncidentFilterActive);
+        ClearIncidentFilterCommand = new RelayCommand(
+            () => IsIncidentFilterActive = false,
+            () => IsIncidentFilterActive);
+        CopyShipmentCodeCommand = new AsyncRelayCommand<AuditShipmentItemViewModel>(
+            CopyShipmentCodeAsync,
+            AsyncRelayCommandOptions.AllowConcurrentExecutions);
         diagnostics.PropertyChanged += OnDiagnosticsPropertyChanged;
         if (station is not null)
         {
@@ -357,7 +372,63 @@ public sealed class AuditViewModel : ObservableObject
         }
     }
     public int PersonnelInPlantCount => allAttendanceItems.Count(item => item.IsOpen);
-    public int AttendanceIncidentCount => allAttendanceItems.Count(item => item.HasIncident);
+    /// <summary>Incidencias del periodo y de la persona elegida: lo mismo que muestra el filtro.</summary>
+    public int AttendanceIncidentCount => AttendanceIncidents.Count;
+    public int OpenAttendanceIncidentCount => AttendanceIncidents.Count(item => item.IsOpen);
+    public string AttendanceIncidentSummary => OpenAttendanceIncidentCount == 1
+        ? "1 abierta"
+        : $"{OpenAttendanceIncidentCount} abiertas";
+    public IReadOnlyList<AuditAttendanceIncidentViewModel> AttendanceIncidents
+    {
+        get => attendanceIncidents;
+        private set
+        {
+            if (!SetProperty(ref attendanceIncidents, value)) return;
+            OnPropertyChanged(nameof(AttendanceIncidentCount));
+            OnPropertyChanged(nameof(OpenAttendanceIncidentCount));
+            OnPropertyChanged(nameof(AttendanceIncidentSummary));
+            OnPropertyChanged(nameof(HasAttendanceIncidents));
+            OnPropertyChanged(nameof(IncidentFilterDescription));
+            OnPropertyChanged(nameof(VisibleRecordCountDescription));
+        }
+    }
+    public bool HasAttendanceIncidents => AttendanceIncidents.Count > 0;
+    public bool IsIncidentFilterActive
+    {
+        get => isIncidentFilterActive;
+        set
+        {
+            if (!SetProperty(ref isIncidentFilterActive, value)) return;
+            OnPropertyChanged(nameof(IsShowingAllAttendance));
+            OnPropertyChanged(nameof(IncidentFilterDescription));
+            OnPropertyChanged(nameof(VisibleRecordCountDescription));
+            ClearIncidentFilterCommand.NotifyCanExecuteChanged();
+            if (SelectedCategory == AuditCategory.Attendance)
+            {
+                Status = value
+                    ? $"Filtro de incidencias activo. {IncidentFilterDescription}."
+                    : $"Filtro de incidencias quitado. {VisibleRecordCountDescription}.";
+            }
+        }
+    }
+    public bool IsShowingAllAttendance => !IsIncidentFilterActive;
+    public string IncidentFilterDescription => AttendanceIncidentCount == 1
+        ? "Mostrando 1 incidencia"
+        : $"Mostrando {AttendanceIncidentCount} incidencias";
+    public string ShipmentCodeCopyStatus
+    {
+        get => shipmentCodeCopyStatus;
+        private set
+        {
+            if (!SetProperty(ref shipmentCodeCopyStatus, value)) return;
+            OnPropertyChanged(nameof(HasShipmentCodeCopyStatus));
+        }
+    }
+    public bool HasShipmentCodeCopyStatus => ShipmentCodeCopyStatus.Length > 0;
+    /// <summary>Reemplazable en pruebas; en la aplicación usa el portapapeles de Windows.</summary>
+    public IClipboardWriter ClipboardWriter { get; set; } = new WpfClipboardWriter();
+    /// <summary>Tiempo durante el que se muestra la confirmación de copia.</summary>
+    public TimeSpan CopyFeedbackDuration { get; set; } = TimeSpan.FromSeconds(3);
     public string TodayHoursDescription
     {
         get
@@ -474,6 +545,7 @@ public sealed class AuditViewModel : ObservableObject
         AuditCategory.Corrections => CajuelaCorrections.Count == 1
             ? "1 corrección encontrada"
             : $"{CajuelaCorrections.Count} correcciones encontradas",
+        AuditCategory.Attendance when IsIncidentFilterActive => IncidentFilterDescription,
         AuditCategory.Attendance => AttendanceItems.Count == 1
             ? "1 jornada encontrada"
             : $"{AttendanceItems.Count} jornadas encontradas",
@@ -495,6 +567,9 @@ public sealed class AuditViewModel : ObservableObject
     public IRelayCommand NextPeriodCommand { get; }
     public IRelayCommand ResetPeriodCommand { get; }
     public IRelayCommand<string> ShowComingSoonCommand { get; }
+    public IRelayCommand ToggleIncidentFilterCommand { get; }
+    public IRelayCommand ClearIncidentFilterCommand { get; }
+    public IAsyncRelayCommand<AuditShipmentItemViewModel> CopyShipmentCodeCommand { get; }
 
     public Task InitializeAsync() => RefreshAsync();
 
@@ -744,7 +819,9 @@ public sealed class AuditViewModel : ObservableObject
         AuditCategory.Corrections =>
             $"{CajuelaCorrections.Count} corrección(es) locales con trazabilidad.",
         AuditCategory.Attendance =>
-            $"{AttendanceItems.Count} jornada(s) y {AttendanceIncidentCount} incidencia(s) en el periodo.",
+            IsIncidentFilterActive
+                ? $"Filtro de incidencias activo. {IncidentFilterDescription}."
+                : $"{AttendanceItems.Count} jornada(s) y {AttendanceIncidentCount} incidencia(s) en el periodo.",
         AuditCategory.Access =>
             $"{SecurityEvents.Count} evento(s) de seguridad en el periodo.",
         _ => "Cambios administrativos estarán disponibles próximamente.",
@@ -956,10 +1033,12 @@ public sealed class AuditViewModel : ObservableObject
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
         var items = new List<AuditAttendanceItemViewModel>();
+        var incidents = new List<AuditAttendanceIncidentViewModel>();
         foreach (LocalAttendanceWorkerAudit worker in workers)
         {
             if (worker.Events.Count == 0) continue;
             AttendanceProjection projection = AttendanceProjectionService.Project(worker.Events, now);
+            incidents.AddRange(AuditAttendanceIncidents.Build(worker, now));
             string workerRole = worker.WorkerCategory == "JEFE_PLANTA"
                 ? "Jefe de planta"
                 : "Operario";
@@ -1035,8 +1114,12 @@ public sealed class AuditViewModel : ObservableObject
             .OrderByDescending(item => item.IsOpen)
             .ThenBy(item => item.WorkerName, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
+        allAttendanceIncidents = incidents
+            .OrderByDescending(item => item.IsOpen)
+            .ThenByDescending(item => item.OccurredAt)
+            .ThenBy(item => item.WorkerName, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
         OnPropertyChanged(nameof(PersonnelInPlantCount));
-        OnPropertyChanged(nameof(AttendanceIncidentCount));
         OnPropertyChanged(nameof(TodayHoursDescription));
         ApplyAttendanceFilter();
     }
@@ -1046,6 +1129,13 @@ public sealed class AuditViewModel : ObservableObject
         AttendanceItems = SelectedAttendanceWorker?.WorkerId is Guid workerId
             ? allAttendanceItems.Where(item => item.WorkerId == workerId).ToArray()
             : allAttendanceItems;
+        AttendanceIncidents = SelectedAttendanceWorker?.WorkerId is Guid incidentWorkerId
+            ? allAttendanceIncidents.Where(item => item.WorkerId == incidentWorkerId).ToArray()
+            : allAttendanceIncidents;
+        if (SelectedCategory == AuditCategory.Attendance && IsIncidentFilterActive)
+        {
+            Status = StatusForSelectedCategory();
+        }
     }
 
     private void ApplySecurityFilter()
@@ -1056,10 +1146,10 @@ public sealed class AuditViewModel : ObservableObject
                 .Where(item => item.Source.EventType.StartsWith("SESSION_", StringComparison.Ordinal))
                 .ToArray(),
             "ELEVATION" => allSecurityEvents
-                .Where(item => item.Source.EventType.StartsWith("ELEVATION_", StringComparison.Ordinal))
+                .Where(item => SecurityAudit.IsElevation(item.Source.EventType))
                 .ToArray(),
             "REJECTED" => allSecurityEvents
-                .Where(item => item.Source.EventType.EndsWith("_REJECTED", StringComparison.Ordinal))
+                .Where(item => SecurityAudit.IsRejection(item.Source.EventType))
                 .ToArray(),
             _ => allSecurityEvents,
         };
@@ -1067,20 +1157,9 @@ public sealed class AuditViewModel : ObservableObject
 
     private static AuditSecurityItemViewModel ToViewModel(LocalSecurityAuditEvent item)
     {
-        string type = item.EventType switch
-        {
-            "SESSION_OPENED" => "Inicio de sesión",
-            "SESSION_RESTORED" => "Sesión restaurada",
-            "SESSION_CLOSED" => "Cierre de sesión",
-            "SESSION_EXPIRED" => "Sesión vencida o cerrada",
-            "SESSION_REJECTED" => "Inicio de sesión rechazado",
-            "ELEVATION_ACCEPTED" => "Modo Jefe activado",
-            "ELEVATION_REJECTED" => "Elevación rechazada",
-            "ELEVATION_ENDED" => "Modo Jefe finalizado",
-            _ => item.EventType,
-        };
-        string tone = item.EventType.EndsWith("_REJECTED", StringComparison.Ordinal) ||
-            item.EventType == "SESSION_EXPIRED"
+        string type = SecurityAudit.Describe(item.EventType, item.Method);
+        string tone = SecurityAudit.IsRejection(item.EventType) ||
+            item.EventType == SecurityAudit.SessionExpired
             ? "#FFF8E9"
             : "#F7F9FA";
         return new AuditSecurityItemViewModel(item, type, FormatLocal(item.OccurredAt), tone);
@@ -1093,6 +1172,22 @@ public sealed class AuditViewModel : ObservableObject
         value.ToOffset(TimeSpan.FromHours(-6)).ToString(
             "dd/MM/yyyy HH:mm",
             System.Globalization.CultureInfo.InvariantCulture);
+
+    private async Task CopyShipmentCodeAsync(AuditShipmentItemViewModel? shipment)
+    {
+        if (shipment is null) return;
+        int version = ++shipmentCodeCopyVersion;
+        bool copied = ClipboardWriter.TrySetText(shipment.ShipmentCode);
+        ShipmentCodeCopyStatus = copied
+            ? "Código copiado"
+            : $"No se pudo copiar. Seleccione el código {shipment.ShipmentCode} y cópielo a mano.";
+        Status = copied
+            ? $"Código copiado: {shipment.ShipmentCode}."
+            : ShipmentCodeCopyStatus;
+        if (!copied) return;
+        await Task.Delay(CopyFeedbackDuration).ConfigureAwait(true);
+        if (version == shipmentCodeCopyVersion) ShipmentCodeCopyStatus = string.Empty;
+    }
 
     private void ShowComingSoon(string? action)
     {

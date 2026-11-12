@@ -11,6 +11,24 @@ export interface Session {
   issuedAt: string;
   expiresAt: string;
 }
+export interface SelfProfile {
+  id: string;
+  organizationId: string;
+  role: "JEFE_EMPRESA" | "JEFE_PLANTA";
+  displayName: string;
+  email: string | null;
+  pendingEmail: string | null;
+  phone: string | null;
+  photo: { url: string; expiresAt: string } | null;
+}
+export interface UpdateOwnProfileInput {
+  displayName?: string;
+  phone?: string | null;
+}
+export interface EmailChangeInput {
+  email: string;
+  redirectTo?: string;
+}
 export interface CatalogItem {
   id: string;
   organizationId: string;
@@ -19,8 +37,24 @@ export interface CatalogItem {
   isActive: boolean;
   deactivatedAt: string | null;
   plantId?: string;
+  email?: string | null;
+  phone?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+export interface CreateSupplierInput {
+  name: string;
+  email?: string;
+  phone?: string;
+}
+export interface UpdateSupplierInput {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+}
+export interface SetCatalogStateInput {
+  active: boolean;
+  reason?: string;
 }
 export interface PageCatalog {
   items: CatalogItem[];
@@ -217,6 +251,7 @@ export interface ManagementShipment extends ManagementOperationLine {
   goldRecordedAtUtc: string | null;
   goldRecordedByProfileId: string | null;
   goldRevisionCount: number | null;
+  goldKarat: number | null;
   hasGoldResult: boolean;
 }
 export interface ManagementSweepMercury {
@@ -240,6 +275,7 @@ export interface GoldResultEntry {
   organizationId: string;
   shipmentId: string;
   amountGrams: number;
+  karat: number | null;
   unitCode: "g";
   recordedAtUtc: string;
   recordedByProfileId: string;
@@ -284,8 +320,23 @@ export interface GoldSummary {
   gramsPerCajuela: number | null;
   suppliers: GoldSupplierCoverage[];
 }
+export interface GoldMercurySynthesis {
+  sweepCount: number;
+  completeSweepCount: number;
+  latestCompleteSweep: {
+    sweepId: string;
+    sweptAtUtc: string;
+    inputGrams: number;
+    remainderGrams: number;
+  } | null;
+}
+export interface GoldShipmentOverview {
+  shipmentId: string;
+  mercury: GoldMercurySynthesis;
+}
 export interface RecordShipmentGoldInput {
   amountGrams: number;
+  karat?: number | null;
   correctionReason?: string;
 }
 export interface ReviewShipmentGoldInput {
@@ -508,6 +559,16 @@ export class ApiClient {
   ): Promise<GoldSummary> {
     return this.request<GoldSummary>(
       `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/gold-summary?${this.goldQuery(filters)}`,
+      signal,
+    );
+  }
+  getManagementGoldOverview(
+    organizationId: string,
+    shipmentIds: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<GoldShipmentOverview[]> {
+    return this.request<GoldShipmentOverview[]>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId)}/management/gold-overview?${new URLSearchParams({ shipmentIds: shipmentIds.join(",") })}`,
       signal,
     );
   }

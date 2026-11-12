@@ -66,6 +66,7 @@ with assignments (role_code, permission_code) as (
     ('JEFE_EMPRESA', 'audit.read_redacted'),
     ('JEFE_EMPRESA', 'administrators.govern'),
     ('JEFE_EMPRESA', 'organization_catalogs.read'),
+    ('JEFE_EMPRESA', 'suppliers.manage'),
     ('JEFE_EMPRESA', 'workers.read'),
     ('JEFE_EMPRESA', 'attendance.read'),
     ('JEFE_EMPRESA', 'attendance.correct'),

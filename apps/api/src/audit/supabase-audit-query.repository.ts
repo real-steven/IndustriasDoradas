@@ -9,6 +9,10 @@ import type {
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
 import type { PageResponse } from "../common/dto/page-query.dto";
 import type { EnvironmentVariables } from "../config/environment";
+import {
+  SHIPMENT_CODE_PATTERN,
+  shipmentCodeRange,
+} from "../management/shipment-code";
 
 type Row = Record<string, unknown>;
 
@@ -39,6 +43,9 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       pageSize: number;
       search?: string;
       category?: AuditCategory;
+      kinds?: string;
+      workerId?: string;
+      productionLineId?: string;
       action?: string;
       entityType?: string;
       result?: AuditListItem["result"];
@@ -48,19 +55,26 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       routine?: "include" | "exclude";
     },
   ): Promise<PageResponse<AuditListItem>> {
+    // La vista clasifica cada hecho por área y tipo; el filtrado y la paginación
+    // ocurren en la base, nunca descargando el historial completo.
     const parameters = new URLSearchParams({
       organization_id: `eq.${organizationId}`,
       limit: String(query.pageSize),
       offset: String((query.page - 1) * query.pageSize),
       order: "occurred_at.desc,id.asc",
       select:
-        "id,correlation_id,organization_id,station_id,actor_display_name,actor_role_code,origin,action,entity_type,entity_id,result,reason_code,evidence_state,changed_fields,changes,occurred_at,recorded_at",
+        "id,correlation_id,organization_id,station_id,actor_display_name,actor_role_code,origin,action,entity_type,entity_id,result,reason_code,evidence_state,changed_fields,changes,occurred_at,recorded_at,audit_area,audit_kind,subject_worker_id,subject_name,subject_occurred_at_utc,production_line_id",
     });
-    if (query.action !== undefined) {
+    if (query.action !== undefined)
       parameters.set("action", `eq.${query.action}`);
-    } else if (query.category !== undefined) {
-      this.applyCategory(parameters, query.category);
-    }
+    if (query.category !== undefined)
+      parameters.set("audit_area", `eq.${query.category}`);
+    if (query.kinds !== undefined)
+      parameters.set("audit_kind", `in.(${query.kinds})`);
+    if (query.workerId !== undefined)
+      parameters.set("subject_worker_id", `eq.${query.workerId}`);
+    if (query.productionLineId !== undefined)
+      parameters.set("production_line_id", `eq.${query.productionLineId}`);
     if (query.entityType !== undefined)
       parameters.set("entity_type", `eq.${query.entityType}`);
     if (
@@ -78,39 +92,39 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       parameters.set("occurred_at", `gte.${query.fromUtc}`);
     if (query.toUtc !== undefined)
       parameters.append("occurred_at", `lt.${query.toUtc}`);
-    if (
-      query.routine === "exclude" &&
-      query.action === undefined &&
-      query.category === undefined
-    )
-      parameters.set("action", "neq.access.api");
+    // Rutina: accesos técnicos y cajuelas individuales. Se conservan, pero no
+    // saturan la auditoría gerencial normal.
+    if (query.routine === "exclude") parameters.set("is_routine", "is.false");
     if (query.search?.trim()) {
       const search = this.escape(query.search);
       const clauses = [
         `action.ilike.*${search}*`,
         `entity_type.ilike.*${search}*`,
         `actor_display_name.ilike.*${search}*`,
+        `subject_name.ilike.*${search}*`,
         `reason_code.ilike.*${search}*`,
-        ...(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
-          query.search.trim(),
-        )
-          ? [`entity_id.eq.${search}`]
-          : []),
+        ...this.shipmentCodeClauses(query.search),
         ...this.managerSearchAliases(query.search),
       ];
       parameters.set("or", `(${clauses.join(",")})`);
     }
-    const response = await fetch(`${this.restUrl}/audit_events?${parameters}`, {
-      headers: {
-        Accept: "application/json",
-        "Accept-Profile": "app",
-        apikey: this.secret,
-        Authorization: `Bearer ${this.secret}`,
-        Prefer: "count=exact",
+    const response = await fetch(
+      `${this.restUrl}/management_audit_entries?${parameters}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "Accept-Profile": "app",
+          apikey: this.secret,
+          Authorization: `Bearer ${this.secret}`,
+          Prefer: "count=exact",
+        },
       },
-    });
+    );
     if (!response.ok)
-      throw new SupabaseDataError(`HTTP_${response.status}`, "audit_events");
+      throw new SupabaseDataError(
+        `HTTP_${response.status}`,
+        "management_audit_entries",
+      );
     const rows = (await response.json()) as Row[];
     const items = rows.map((row) => this.item(row));
     const shipmentStatuses = await this.shipmentStatuses(organizationId, items);
@@ -183,33 +197,6 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
     return statuses;
   }
 
-  private applyCategory(
-    parameters: URLSearchParams,
-    category: AuditCategory,
-  ): void {
-    if (category === "operation") {
-      parameters.set("action", "eq.sync.ingest");
-      parameters.set(
-        "entity_type",
-        "in.(shipment,production_event,production_sweep,mercury_movement)",
-      );
-      return;
-    }
-
-    const actions =
-      category === "people"
-        ? ["attendance.record", "attendance.correct"]
-        : [
-            "account.provision",
-            "account.governance",
-            "permission.governance",
-            "privilege.elevation",
-            "authorization.policy",
-            "business.mutation",
-          ];
-    parameters.set("action", `in.(${actions.join(",")})`);
-  }
-
   private item(row: Row): AuditListItem {
     return {
       id: this.string(row, "id"),
@@ -237,9 +224,23 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
         typeof row.changes === "object" && row.changes !== null
           ? (row.changes as AuditListItem["changes"])
           : {},
+      auditArea: this.area(row.audit_area),
+      auditKind: this.nullable(row, "audit_kind") ?? "OTHER",
+      subjectWorkerId: this.nullable(row, "subject_worker_id"),
+      subjectName: this.nullable(row, "subject_name"),
+      subjectOccurredAtUtc: this.nullable(row, "subject_occurred_at_utc"),
+      productionLineId: this.nullable(row, "production_line_id"),
       occurredAt: this.string(row, "occurred_at"),
       recordedAt: this.string(row, "recorded_at"),
     };
+  }
+  private area(value: unknown): AuditCategory | null {
+    return value === "operation" ||
+      value === "people" ||
+      value === "security" ||
+      value === "administration"
+      ? value
+      : null;
   }
   private string(row: Row, key: string): string {
     const value = row[key];
@@ -254,6 +255,17 @@ export class SupabaseAuditQueryRepository implements AuditQueryRepository {
       throw new SupabaseDataError("INVALID_ROW", key);
     return value;
   }
+  // UUID completo o código corto del cargamento (primeros 8 caracteres del
+  // UUID, igual que en desktop, web y reportes), sin importar mayúsculas.
+  private shipmentCodeClauses(value: string): string[] {
+    const normalized = value.trim().toLowerCase();
+    if (!SHIPMENT_CODE_PATTERN.test(normalized)) return [];
+    const [first, last] = shipmentCodeRange(normalized);
+    return first === last
+      ? [`entity_id.eq.${first}`]
+      : [`and(entity_id.gte.${first},entity_id.lte.${last})`];
+  }
+
   private escape(value: string): string {
     return value.trim().replace(/[\\%_(),]/gu, (match) => `\\${match}`);
   }

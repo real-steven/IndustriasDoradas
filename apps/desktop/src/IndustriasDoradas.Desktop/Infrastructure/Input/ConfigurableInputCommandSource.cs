@@ -7,14 +7,29 @@ namespace IndustriasDoradas.Desktop.Infrastructure.Input;
 
 public sealed class ConfigurableInputCommandSource : IInputCommandSource
 {
+    private const string KeyboardAdapterKind = "KEYBOARD";
     private readonly IReadOnlyDictionary<string, InputControllerOptions> controllers;
     private readonly TimeProvider timeProvider;
+    private readonly IKeyboardShortcutSettings? shortcuts;
 
     public ConfigurableInputCommandSource(
         IOptions<OperationInputOptions> options,
         TimeProvider timeProvider)
+        : this(options, timeProvider, null)
+    {
+    }
+
+    /// <param name="shortcuts">
+    /// Atajos locales del teclado. Si existen, mandan sobre las teclas de <c>appsettings</c> para
+    /// las acciones configurables; la navegación (línea y flechas) sigue saliendo de <c>appsettings</c>.
+    /// </param>
+    public ConfigurableInputCommandSource(
+        IOptions<OperationInputOptions> options,
+        TimeProvider timeProvider,
+        IKeyboardShortcutSettings? shortcuts)
     {
         this.timeProvider = timeProvider;
+        this.shortcuts = shortcuts;
         controllers = options.Value.Controllers.ToDictionary(
             controller => controller.Id,
             StringComparer.OrdinalIgnoreCase);
@@ -54,14 +69,27 @@ public sealed class ConfigurableInputCommandSource : IInputCommandSource
         out OperationInputCommand? command)
     {
         command = null;
-        if (controller is null ||
-            string.IsNullOrWhiteSpace(signalCode) ||
-            !controller.Bindings.TryGetValue(signalCode, out string? specification) ||
-            !OperationInputActionParser.TryParse(
-                specification,
-                controller.LineSlot,
-                out OperationInputAction action,
-                out int lineSlot))
+        if (controller is null || string.IsNullOrWhiteSpace(signalCode))
+        {
+            return false;
+        }
+
+        OperationInputAction action;
+        int lineSlot = controller.LineSlot;
+        bool usesShortcuts = shortcuts is not null &&
+            string.Equals(controller.AdapterKind, KeyboardAdapterKind, StringComparison.OrdinalIgnoreCase);
+        if (usesShortcuts && shortcuts!.Current.TryFindAction(signalCode, out KeyboardShortcutAction shortcut))
+        {
+            action = KeyboardShortcutMap.ToInputAction(shortcut);
+        }
+        else if (!controller.Bindings.TryGetValue(signalCode, out string? specification) ||
+                 !OperationInputActionParser.TryParse(
+                     specification,
+                     controller.LineSlot,
+                     out action,
+                     out lineSlot) ||
+                 // Una tecla reasignada deja de ejecutar su acción anterior de appsettings.
+                 usesShortcuts && KeyboardShortcutMap.IsConfigurable(action))
         {
             return false;
         }

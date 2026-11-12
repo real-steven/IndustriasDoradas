@@ -25,6 +25,7 @@ public sealed class OperationLinePanelViewModel : ObservableObject
     private Guid lineId;
     private int lineSlot = 1;
     private string lineName = "Línea piloto";
+    private string shipmentCode = string.Empty;
     private string stateLabel = "SIN PREPARAR";
     private string feedDescription = "El jefe de planta debe preparar un cargamento.";
     private string responsibleDescription = "Sin responsable asignado";
@@ -57,7 +58,27 @@ public sealed class OperationLinePanelViewModel : ObservableObject
 
     public Guid LineId { get => lineId; set => SetProperty(ref lineId, value); }
     public int LineSlot { get => lineSlot; set => SetProperty(ref lineSlot, value); }
-    public string LineName { get => lineName; set => SetProperty(ref lineName, value); }
+    public string LineName
+    {
+        get => lineName;
+        set
+        {
+            if (SetProperty(ref lineName, value)) OnPropertyChanged(nameof(CardTitle));
+        }
+    }
+
+    /// <summary>Código corto del cargamento activo; vacío si la línea no está preparada.</summary>
+    public string ShipmentCode
+    {
+        get => shipmentCode;
+        set
+        {
+            if (SetProperty(ref shipmentCode, value)) OnPropertyChanged(nameof(CardTitle));
+        }
+    }
+
+    /// <summary>Título de la card: «Línea morada - 1480AEC3», o solo la línea sin cargamento activo.</summary>
+    public string CardTitle => string.IsNullOrEmpty(shipmentCode) ? lineName : $"{lineName} - {shipmentCode}";
     public string StateLabel { get => stateLabel; set => SetProperty(ref stateLabel, value); }
     public string FeedDescription { get => feedDescription; set => SetProperty(ref feedDescription, value); }
     public string ResponsibleDescription

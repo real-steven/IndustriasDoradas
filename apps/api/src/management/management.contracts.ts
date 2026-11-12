@@ -19,6 +19,16 @@ export interface ManagementFilters extends ManagementPageQuery {
   shipmentId?: string;
 }
 
+export type ShipmentSort =
+  "recent" | "oldest" | "cajuelas_desc" | "cajuelas_asc";
+
+export interface ManagementShipmentFilters extends ManagementFilters {
+  sort?: ShipmentSort;
+  goldResult?: "recorded" | "pending";
+  /** Código corto (8 caracteres) o UUID completo del cargamento. */
+  shipmentCode?: string;
+}
+
 export interface ManagementOperationLine {
   organizationId: string;
   plantId: string;
@@ -52,6 +62,8 @@ export interface ManagementShipment extends ManagementOperationLine {
   goldRecordedAtUtc: string | null;
   goldRecordedByProfileId: string | null;
   goldRevisionCount: number | null;
+  /** Quilataje anotado con el oro vigente; null significa no registrado. */
+  goldKarat: number | null;
   hasGoldResult: boolean;
 }
 
@@ -161,7 +173,7 @@ export interface ManagementQueryRepository {
   ): Promise<PageResponse<ManagementOperationLine>>;
   listShipments(
     organizationId: string,
-    query: ManagementFilters,
+    query: ManagementShipmentFilters,
   ): Promise<PageResponse<ManagementShipment>>;
   findShipment(
     organizationId: string,

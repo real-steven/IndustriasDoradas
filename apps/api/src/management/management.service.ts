@@ -4,6 +4,7 @@ import {
   MANAGEMENT_QUERY_REPOSITORY,
   type ManagementFreshness,
   type ManagementFilters,
+  type ManagementShipmentFilters,
   type ManagementPageQuery,
   type ManagementQueryRepository,
   type ManagementStatisticsBreakdown,
@@ -44,7 +45,7 @@ export class ManagementService {
     return this.repository.listOperationLines(organizationId, query);
   }
 
-  listShipments(organizationId: string, query: ManagementFilters) {
+  listShipments(organizationId: string, query: ManagementShipmentFilters) {
     this.validateDateRange(query);
     return this.repository.listShipments(organizationId, query);
   }

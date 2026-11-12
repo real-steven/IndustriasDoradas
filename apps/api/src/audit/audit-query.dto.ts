@@ -3,6 +3,7 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
 } from "class-validator";
@@ -12,8 +13,23 @@ import { PageQueryDto } from "../common/dto/page-query.dto";
 
 export class AuditQueryDto extends PageQueryDto {
   @IsOptional()
-  @IsIn(["operation", "people", "administration"])
+  @IsIn(["operation", "people", "security", "administration"])
   category?: AuditCategory;
+
+  /** Tipos de acción gerencial separados por coma, por ejemplo `LINE_STARTED,SWEEP_RECORDED`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  @Matches(/^[A-Z][A-Z_]*(,[A-Z][A-Z_]*){0,9}$/u)
+  kinds?: string;
+
+  @IsOptional()
+  @IsUUID()
+  workerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  productionLineId?: string;
 
   @IsOptional()
   @IsString()

@@ -48,6 +48,56 @@ Los filtros de cargamentos se conservan en la URL y cubren semana actual,
 semana anterior, fecha específica, planta, línea y proveedor. La paginación y
 el orden definitivo pertenecen a la API del paso 5.3.
 
+### Períodos rápidos del expediente del trabajador
+
+El expediente de cada trabajador (Trabajadores → Abrir) conserva los
+selectores exactos «Desde» y «Hasta» (ambos inclusive) y ofrece accesos
+rápidos. Todos se calculan con la fecha de hoy en `America/Costa_Rica`,
+nunca con la zona horaria del navegador:
+
+| Acceso          | Desde                                      | Hasta                                                   |
+| --------------- | ------------------------------------------ | ------------------------------------------------------- |
+| Esta semana     | lunes de la semana actual                  | domingo de la semana actual                             |
+| Semana anterior | lunes de la semana anterior                | domingo de la semana anterior                           |
+| Quincena actual | día 1 si hoy es del 1 al 15; si no, día 16 | día 15 si hoy es del 1 al 15; si no, último día del mes |
+| Mes actual      | día 1 del mes actual                       | último día del mes actual (28, 29, 30 o 31)             |
+
+**Quincena.** No existía una definición previa en el negocio ni en el código,
+así que se usa la quincena calendario: primera quincena del día 1 al 15 y
+segunda quincena del día 16 al último día del mes (en febrero, del 16 al 28 o
+29). No significa «últimos 15 días».
+
+Las semanas van de lunes a domingo, igual que la pre-nómina semanal existente,
+y pueden cruzar de un mes a otro. Al abrir el expediente se usa «Esta semana».
+Si se cambia a mano «Desde» o «Hasta», el acceso queda en «Personalizado». El
+período se mantiene mientras el expediente está abierto y vuelve a «Esta
+semana» al cerrarlo. Horas, jornadas, incidencias, tarifa y bruto los calcula
+la API para el período elegido; las jornadas abiertas no se cuentan como cero
+horas ni como pago, solo se avisan.
+
+## Proveedores dentro de Trabajadores
+
+No hay módulo de Configuración: la ruta `/gerencia/configuracion` redirige a
+Trabajadores. Las líneas, las reglas operativas y la estación no se editan
+desde la web.
+
+Trabajadores muestra tres bloques, en este orden: **Proveedores**, **Jefes de
+planta** y **Operarios**. El buscador filtra los tres. Solo el bloque de
+operarios se pagina.
+
+- Un proveedor no es un usuario: no inicia sesión ni tiene asistencia, tarifa
+  ni planilla. Se le paga aparte, con un monto que la aplicación no calcula.
+- Guarda únicamente el nombre de la empresa, el correo y el teléfono.
+- Se crea desde «+ Agregar nuevo», con la opción «Proveedor».
+- Se edita desde su ficha, y se suspende o reactiva desde ahí; suspender exige
+  un motivo. Nunca se elimina, así que su historial de cargamentos se conserva.
+- «Material propio» aparece primero, con la etiqueta «Predeterminado», y no se
+  puede suspender ni renombrar, porque desktop lo reconoce por su nombre.
+- Un proveedor suspendido deja de ofrecerse al preparar cargamentos en
+  desktop después de la siguiente sincronización.
+- Cada cambio queda en la auditoría con quién lo hizo, el valor anterior, el
+  valor nuevo, la fecha y el motivo cuando corresponde.
+
 ## Criterio de aceptación de 5.1
 
 5.1 queda aprobado cuando:

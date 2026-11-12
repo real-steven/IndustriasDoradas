@@ -348,6 +348,7 @@ export class CatalogsController {
       id,
       body.active,
       this.context(request),
+      body.reason,
     );
   }
 

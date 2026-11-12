@@ -1,0 +1,110 @@
+<Window x:Class="IndustriasDoradas.Desktop.Presentation.Views.KeyboardShortcutSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Controles de teclado · Industrias Doradas"
+        Width="780" Height="660" MinWidth="660" MinHeight="540"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        ShowInTaskbar="False" Background="#F3F7F8"
+        AutomationProperties.Name="Configuración de controles de teclado">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibleWhenTrue" />
+        <Style x:Key="RowActionStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="MinWidth" Value="130" />
+            <Setter Property="Padding" Value="11,5" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Foreground="#2F7EA4" FontSize="11" FontWeight="Bold" Text="PREFERENCIA LOCAL DE ESTA ESTACIÓN" />
+            <TextBlock Margin="0,6,0,0" FontSize="26" FontWeight="Bold" Text="Controles de teclado" />
+            <TextBlock Margin="0,5,0,14" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                       Text="Elija la tecla de cada acción de Operación. Los atajos no funcionan mientras se escribe en un campo. Se guardan solo en este equipo y funcionan sin Internet." />
+        </StackPanel>
+
+        <Border Grid.Row="1" Style="{StaticResource SurfaceCardStyle}" CornerRadius="12">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                <ItemsControl x:Name="ShortcutsList" ItemsSource="{Binding Items}"
+                              AutomationProperties.Name="Teclas por acción">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="14,10" BorderBrush="{StaticResource SoftBorderBrush}" BorderThickness="0,0,0,1">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsListening}" Value="True">
+                                                <Setter Property="Background" Value="#FFF6E0" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="210" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding Label}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,2,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                                                   Text="{Binding Description}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                                        <TextBlock FontWeight="Bold" Foreground="{StaticResource NavyBrush}" FontSize="14"
+                                                   Text="{Binding KeysText}" TextWrapping="Wrap"
+                                                   AutomationProperties.LiveSetting="Polite" />
+                                        <TextBlock Margin="0,2,0,0" Foreground="{StaticResource WarningBrush}" FontSize="11"
+                                                   Text="Sin guardar"
+                                                   Visibility="{Binding IsUnsaved, Converter={StaticResource VisibleWhenTrue}}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Style="{StaticResource RowActionStyle}" VerticalAlignment="Center"
+                                            Content="{Binding ChangeLabel}"
+                                            Command="{Binding ChangeCommand}"
+                                            ToolTip="Pulse y luego la tecla nueva"
+                                            AutomationProperties.Name="{Binding ChangeAutomationName}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <TextBlock Grid.Row="2" Margin="2,10,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                   TextWrapping="Wrap" Text="{Binding FixedKeysText}"
+                   Visibility="{Binding HasFixedKeys, Converter={StaticResource VisibleWhenTrue}}" />
+
+        <Grid Grid.Row="3" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{StaticResource NavyBrush}" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite" Text="{Binding Status}" />
+            <Button x:Name="RestoreDefaultsButton" Grid.Column="1" Margin="12,0,0,0"
+                    Content="Restaurar valores predeterminados"
+                    Command="{Binding RestoreDefaultsCommand}"
+                    AutomationProperties.Name="Restaurar teclas predeterminadas" />
+            <Button x:Name="CancelButton" Grid.Column="2" Margin="8,0,0,0" MinWidth="100" IsCancel="True"
+                    Content="Cancelar" Click="OnClose"
+                    AutomationProperties.Name="Cerrar sin guardar" />
+            <Button x:Name="SaveButton" Grid.Column="3" Margin="8,0,0,0" MinWidth="110"
+                    Background="{StaticResource NavyBrush}" BorderBrush="{StaticResource NavyBrush}" Foreground="White"
+                    Content="Guardar" Command="{Binding SaveCommand}"
+                    AutomationProperties.Name="Guardar controles de teclado" />
+        </Grid>
+    </Grid>
+</Window>

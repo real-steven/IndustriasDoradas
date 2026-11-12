@@ -9,6 +9,7 @@ import {
 import type {
   GoldReviewEntry,
   GoldResultEntry,
+  GoldShipmentOverview,
   GoldSummary,
   PageManagementSweepMercury,
   RecordShipmentGoldInput,
@@ -37,6 +38,31 @@ export function useGoldSummary(filters: ShipmentFilters) {
     queryFn: ({ signal }) =>
       apiRequest<GoldSummary>(
         `/organizations/${encodeURIComponent(organizationId)}/management/gold-summary?${query}`,
+        token,
+        { signal },
+      ),
+    placeholderData: keepPreviousData,
+    ...cachePolicy.live,
+  });
+}
+
+/**
+ * Quilataje oficial (liquidaciones aprobadas o cerradas) y síntesis de mercurio
+ * de los cargamentos visibles. React solo presenta lo que calcula la API.
+ */
+export function useGoldOverview(shipmentIds: readonly string[]) {
+  const auth = useAuth();
+  const token = auth.session?.access_token ?? "";
+  const organizationId = auth.profile?.organizationId ?? "";
+  const profileId = auth.profile?.profileId ?? "";
+  const ids = [...shipmentIds].sort().join(",");
+
+  return useQuery({
+    queryKey: scopedQueryKey("gold-overview", profileId, organizationId, ids),
+    enabled: auth.session !== null && auth.profile !== null && ids.length > 0,
+    queryFn: ({ signal }) =>
+      apiRequest<GoldShipmentOverview[]>(
+        `/organizations/${encodeURIComponent(organizationId)}/management/gold-overview?${new URLSearchParams({ shipmentIds: ids })}`,
         token,
         { signal },
       ),
@@ -214,6 +240,12 @@ export function useRecordSweepMercury(
         invalidateScoped(
           queryClient,
           "management-shipment-sweeps",
+          profileId,
+          organizationId,
+        ),
+        invalidateScoped(
+          queryClient,
+          "gold-overview",
           profileId,
           organizationId,
         ),

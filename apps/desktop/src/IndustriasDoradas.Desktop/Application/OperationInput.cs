@@ -11,6 +11,8 @@ public enum OperationInputAction
     Confirm,
     RevertLastCajuela,
     Cancel,
+    RegisterFiveCajuelas,
+    PrepareSweep,
 }
 
 public sealed record OperationInputOrigin(

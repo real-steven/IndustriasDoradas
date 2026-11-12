@@ -281,13 +281,60 @@ public sealed class SqliteAuditRepository(
                 reader.IsDBNull(16) ? null : Guid.Parse(reader.GetString(16))));
         }
 
+        await reader.DisposeAsync().ConfigureAwait(false);
+        IReadOnlyDictionary<Guid, string> correctorNames = await ReadCorrectorNamesAsync(
+                connection,
+                workers.Values
+                    .SelectMany(worker => worker.Events)
+                    .Select(item => item.CorrectedByProfileId)
+                    .OfType<Guid>()
+                    .Distinct()
+                    .ToArray(),
+                cancellationToken)
+            .ConfigureAwait(false);
         return workers.Values
             .Select(worker => new LocalAttendanceWorkerAudit(
                 worker.WorkerId,
                 worker.WorkerName,
                 worker.WorkerCategory,
-                worker.Events.AsReadOnly()))
+                worker.Events.AsReadOnly(),
+                correctorNames))
             .ToArray();
+    }
+
+    /// <summary>
+    /// El evento de asistencia solo guarda el perfil que corrigió. Su nombre visible se toma
+    /// de la última sesión o elevación registrada localmente por ese perfil.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<Guid, string>> ReadCorrectorNamesAsync(
+        SqliteConnection connection,
+        Guid[] profileIds,
+        CancellationToken cancellationToken)
+    {
+        var names = new Dictionary<Guid, string>();
+        if (profileIds.Length == 0) return names;
+        await using SqliteCommand command = connection.CreateCommand();
+        string[] parameters = profileIds.Select((_, index) => $"$profile{index}").ToArray();
+        command.CommandText = $"""
+            SELECT profile_id, actor_display_name
+            FROM local_security_audit_events
+            WHERE profile_id IN ({string.Join(", ", parameters)})
+            ORDER BY occurred_at_utc DESC, id DESC;
+            """;
+        for (int index = 0; index < profileIds.Length; index++)
+        {
+            command.Parameters.AddWithValue(parameters[index], profileIds[index].ToString("D"));
+        }
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!Guid.TryParse(reader.GetString(0), out Guid profileId)) continue;
+            names.TryAdd(profileId, reader.GetString(1));
+        }
+
+        return names;
     }
 
     public async Task<IReadOnlyList<LocalSecurityAuditEvent>> ListSecurityEventsAsync(
@@ -301,7 +348,7 @@ public sealed class SqliteAuditRepository(
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, station_id, profile_id, actor_display_name,
-                   event_type, result, details, occurred_at_utc
+                   event_type, result, details, occurred_at_utc, method
             FROM local_security_audit_events
             WHERE ($startUtc IS NULL OR occurred_at_utc >= $startUtc)
               AND ($endUtc IS NULL OR occurred_at_utc < $endUtc)
@@ -322,40 +369,132 @@ public sealed class SqliteAuditRepository(
                 reader.GetString(4),
                 reader.GetString(5),
                 reader.GetString(6),
-                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(7))));
+                SqliteLocalStorageConverters.ReadTimestamp(reader.GetString(7)),
+                reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
         return results;
     }
 
+    /// <summary>
+    /// Guarda el evento y su mensaje de Outbox en una sola transacción. Reintentar con el mismo
+    /// <see cref="RecordLocalSecurityAuditEvent.EventId"/> no duplica ninguno de los dos.
+    /// </summary>
     public async Task RecordSecurityEventAsync(
         RecordLocalSecurityAuditEvent auditEvent,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(auditEvent);
+        if (auditEvent.StationId == Guid.Empty)
+            throw new ArgumentException("El evento de seguridad requiere estación.", nameof(auditEvent));
+        Guid eventId = auditEvent.EventId == Guid.Empty ? Guid.NewGuid() : auditEvent.EventId;
+        string eventType = auditEvent.EventType.Trim();
+        string result = auditEvent.Result.Trim();
+
         await using SqliteConnection connection = await connectionFactory
             .OpenAsync(cancellationToken)
             .ConfigureAwait(false);
-        await using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = """
-            INSERT INTO local_security_audit_events(
-                id, station_id, profile_id, actor_display_name,
-                event_type, result, details, occurred_at_utc)
-            VALUES($id, $stationId, $profileId, $actorName,
-                   $eventType, $result, $details, $occurredAt);
-            """;
-        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
-        command.Parameters.AddWithValue("$stationId", auditEvent.StationId.ToString("D"));
-        command.Parameters.AddWithValue(
-            "$profileId",
-            auditEvent.ProfileId is null ? DBNull.Value : auditEvent.ProfileId.Value.ToString("D"));
-        command.Parameters.AddWithValue("$actorName", auditEvent.ActorName.Trim());
-        command.Parameters.AddWithValue("$eventType", auditEvent.EventType.Trim());
-        command.Parameters.AddWithValue("$result", auditEvent.Result.Trim());
-        command.Parameters.AddWithValue("$details", auditEvent.Details.Trim());
-        command.Parameters.AddWithValue(
-            "$occurredAt",
-            SqliteLocalStorageConverters.Timestamp(auditEvent.OccurredAt));
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
+
+        await using (SqliteCommand existing = connection.CreateCommand())
+        {
+            existing.Transaction = transaction;
+            existing.CommandText = "SELECT 1 FROM local_security_audit_events WHERE id = $id;";
+            existing.Parameters.AddWithValue("$id", eventId.ToString("D"));
+            if (await existing.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+            {
+                transaction.Commit();
+                return;
+            }
+        }
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO local_security_audit_events(
+                    id, station_id, profile_id, actor_display_name,
+                    event_type, method, result, details, occurred_at_utc)
+                VALUES($id, $stationId, $profileId, $actorName,
+                       $eventType, $method, $result, $details, $occurredAt);
+                """;
+            command.Parameters.AddWithValue("$id", eventId.ToString("D"));
+            command.Parameters.AddWithValue("$stationId", auditEvent.StationId.ToString("D"));
+            command.Parameters.AddWithValue(
+                "$profileId",
+                auditEvent.ProfileId is null ? DBNull.Value : auditEvent.ProfileId.Value.ToString("D"));
+            command.Parameters.AddWithValue("$actorName", auditEvent.ActorName.Trim());
+            command.Parameters.AddWithValue("$eventType", eventType);
+            command.Parameters.AddWithValue("$method", (object?)auditEvent.Method ?? DBNull.Value);
+            command.Parameters.AddWithValue("$result", result);
+            command.Parameters.AddWithValue("$details", auditEvent.Details.Trim());
+            command.Parameters.AddWithValue(
+                "$occurredAt",
+                SqliteLocalStorageConverters.Timestamp(auditEvent.OccurredAt));
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        long sequence = await SqliteLocalSequenceAllocator.NextAsync(
+                connection, transaction, auditEvent.StationId, cancellationToken)
+            .ConfigureAwait(false);
+        var payload = new SecurityEventOutboxPayload(
+            1,
+            eventId,
+            auditEvent.StationId,
+            sequence,
+            auditEvent.ProfileId,
+            eventType,
+            auditEvent.Method,
+            result,
+            auditEvent.OccurredAt);
+        string json = System.Text.Json.JsonSerializer.Serialize(
+            payload,
+            LocalStorageJsonSerializerContext.Default.SecurityEventOutboxPayload);
+        string now = SqliteLocalStorageConverters.Timestamp(auditEvent.OccurredAt);
+        await using (SqliteCommand outbox = connection.CreateCommand())
+        {
+            outbox.Transaction = transaction;
+            outbox.CommandText = """
+                INSERT INTO outbox_messages(
+                    id, station_id, station_sequence, operation_type, aggregate_type,
+                    aggregate_id, payload_json, actor_profile_id, permission_version,
+                    authorization_validated_at_utc, authorization_offline_until_utc,
+                    authorization_state, state, attempt_count, created_at_utc, updated_at_utc)
+                VALUES (
+                    $outboxId, $stationId, $sequence, 'SECURITY_EVENT_RECORDED',
+                    'station_security_event', $eventId, $payload, $actorProfileId,
+                    $permissionVersion, $authorizationValidatedAt,
+                    $authorizationOfflineUntil, $authorizationState,
+                    'PENDING', 0, $now, $now);
+                """;
+            outbox.Parameters.AddWithValue("$outboxId", Guid.NewGuid().ToString("D"));
+            outbox.Parameters.AddWithValue("$stationId", auditEvent.StationId.ToString("D"));
+            outbox.Parameters.AddWithValue("$sequence", sequence);
+            outbox.Parameters.AddWithValue("$eventId", eventId.ToString("D"));
+            outbox.Parameters.AddWithValue("$payload", json);
+            outbox.Parameters.AddWithValue("$now", now);
+            // Sin sesión (p. ej. un inicio rechazado) la evidencia se completa al reclamar el
+            // mensaje con la sesión que lo sincroniza; el actor del evento sigue en el payload.
+            SqliteLocalStorageConverters.AddAuthorizationParameters(outbox, auditEvent.Authorization);
+            await outbox.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (SqliteCommand advance = connection.CreateCommand())
+        {
+            advance.Transaction = transaction;
+            advance.CommandText = """
+                INSERT INTO station_sequence_state(station_id, next_sequence, updated_at_utc)
+                VALUES ($stationId, $nextSequence, $now)
+                ON CONFLICT(station_id) DO UPDATE SET
+                    next_sequence = MAX(station_sequence_state.next_sequence, excluded.next_sequence),
+                    updated_at_utc = excluded.updated_at_utc;
+                """;
+            advance.Parameters.AddWithValue("$stationId", auditEvent.StationId.ToString("D"));
+            advance.Parameters.AddWithValue("$nextSequence", sequence + 1);
+            advance.Parameters.AddWithValue("$now", now);
+            await advance.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        transaction.Commit();
     }
 
     private static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<LocalResponsibilityAudit>>> ReadResponsibilitiesAsync(

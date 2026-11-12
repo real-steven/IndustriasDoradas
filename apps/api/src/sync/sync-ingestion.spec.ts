@@ -91,7 +91,9 @@ describe("sync ingestion with PostgreSQL", () => {
         const rpc =
           input.item.operationType === "ATTENDANCE_EVENT_RECORDED"
             ? "ingest_attendance_sync_item_v2"
-            : "ingest_sync_item_v2";
+            : input.item.operationType === "SECURITY_EVENT_RECORDED"
+              ? "ingest_station_security_sync_item_v2"
+              : "ingest_sync_item_v2";
         const result = await db.query<{ result: SyncItemResult }>(
           `select app.${rpc}($1::jsonb) as result`,
           [
@@ -486,7 +488,260 @@ describe("sync ingestion with PostgreSQL", () => {
       ).rows[0]?.count,
     ).toBe(2);
   });
+
+  it("does not let a security event take the central sequence of a later operation", async () => {
+    // Reproduce el choque del 2026-11-11: el evento de seguridad trae un número
+    // local que coincide con el que el servidor dará después a una operación.
+    const next = (
+      await db.query<{ next: string }>(
+        `select (case when is_called then last_value + 1 else last_value end)::text as next
+         from app.sync_receipt_storage_sequence_v2`,
+      )
+    ).rows[0]!.next;
+    const collidingSequence = Number(next) + 2;
+    const security = securityItem(
+      collidingSequence,
+      "ELEVATION_ACCEPTED",
+      "PIN",
+      "ACEPTADO",
+    );
+    const { start, added, reversed, completed } = scenario();
+
+    expect((await push([security])).results[0]?.status).toBe("APPLIED");
+    const operations = await push([start, added, reversed, completed]);
+
+    expect(operations.results.map((result) => result.code)).toEqual(
+      Array(4).fill("APPLIED"),
+    );
+    const receipts = (
+      await db.query<{
+        station_sequence: string;
+        client_sequence: string;
+        operation_type: string;
+      }>(
+        `select station_sequence::text, client_sequence::text, operation_type
+         from app.sync_receipts where station_id = $1
+         order by station_sequence`,
+        [scope.stationId],
+      )
+    ).rows;
+    const securityReceipt = receipts.find(
+      (receipt) => receipt.operation_type === "SECURITY_EVENT_RECORDED",
+    );
+    expect(securityReceipt?.client_sequence).toBe(String(collidingSequence));
+    expect(securityReceipt?.station_sequence).toBe(next);
+    expect(
+      new Set(receipts.map((receipt) => receipt.station_sequence)).size,
+    ).toBe(receipts.length);
+  });
+
+  it("records each station security result once with its original time, method and outcome", async () => {
+    const requested = securityItem(
+      8001,
+      "ELEVATION_REQUESTED",
+      null,
+      "SOLICITADA",
+    );
+    const noFace = securityItem(
+      8002,
+      "BIOMETRIC_FACE_NOT_DETECTED",
+      "BIOMETRIC",
+      "TIEMPO_AGOTADO",
+    );
+    const camera = securityItem(
+      8003,
+      "BIOMETRIC_CAMERA_UNAVAILABLE",
+      "BIOMETRIC",
+      "NO_DISPONIBLE",
+    );
+    const fallback = securityItem(
+      8004,
+      "ELEVATION_ACCEPTED",
+      "PIN_FALLBACK",
+      "ACEPTADO",
+    );
+    const biometric = securityItem(
+      8005,
+      "ELEVATION_ACCEPTED",
+      "BIOMETRIC",
+      "ACEPTADO",
+    );
+    // Un inicio rechazado no tiene sesión propia: lo reenvía la sesión abierta después.
+    const rejectedSignIn = securityItem(
+      8006,
+      "SESSION_REJECTED",
+      "PASSWORD",
+      "RECHAZADO",
+      {
+        actorProfileId: null,
+        occurredAtUtc: "2026-10-18T10:00:00.000Z",
+      },
+    );
+    const items = [
+      requested,
+      noFace,
+      camera,
+      fallback,
+      biometric,
+      rejectedSignIn,
+    ];
+
+    const first = await push(items);
+    expect(first.results.map((result) => result.status)).toEqual(
+      items.map(() => "APPLIED"),
+    );
+    const rows = (
+      await db.query<{
+        entity_id: string;
+        occurred_at: string;
+        result: string;
+        reason_code: string | null;
+        actor_kind: string;
+        actor_profile_id: string | null;
+        origin: string;
+        changes: Record<string, { before: unknown; after: unknown }>;
+      }>(
+        `select entity_id, occurred_at::text, result::text, reason_code,
+                actor_kind::text, actor_profile_id, origin, changes
+         from app.audit_events where action = 'station.security'
+         order by occurred_at`,
+      )
+    ).rows;
+    expect(rows).toHaveLength(items.length);
+    const byId = new Map(rows.map((row) => [row.entity_id, row]));
+    expect(byId.get(noFace.aggregateId)).toMatchObject({
+      result: "REJECTED",
+      reason_code: "TIEMPO_AGOTADO",
+      origin: "DESKTOP",
+      actor_profile_id: actorProfileId,
+    });
+    expect(byId.get(camera.aggregateId)).toMatchObject({
+      result: "FAILED",
+      reason_code: "NO_DISPONIBLE",
+    });
+    expect(byId.get(fallback.aggregateId)?.changes.access_method?.after).toBe(
+      "PIN_FALLBACK",
+    );
+    expect(byId.get(biometric.aggregateId)).toMatchObject({
+      result: "SUCCEEDED",
+      reason_code: null,
+    });
+    expect(byId.get(rejectedSignIn.aggregateId)).toMatchObject({
+      actor_kind: "UNKNOWN",
+      actor_profile_id: null,
+      result: "REJECTED",
+    });
+    expect(
+      new Date(byId.get(noFace.aggregateId)!.occurred_at).toISOString(),
+    ).toBe(String(noFace.payload.occurredAtUtc));
+    // Solo tres códigos cerrados por evento: ningún dato sensible ni texto libre.
+    for (const row of rows)
+      expect(Object.keys(row.changes).sort()).toEqual([
+        "access_method",
+        "security_event",
+        "security_outcome",
+      ]);
+
+    // Reintento idéntico y reenvío del mismo hecho con otro sobre: sin duplicados.
+    expect((await push(items)).results.map((result) => result.status)).toEqual(
+      items.map(() => "ALREADY_APPLIED"),
+    );
+    const reenveloped = {
+      ...biometric,
+      outboxMessageId: randomUUID(),
+      stationSequence: 8100,
+      payload: { ...biometric.payload, clientSequence: 8100 },
+    };
+    expect((await push([reenveloped])).results[0]?.status).toBe("APPLIED");
+    expect(
+      (
+        await db.query<{ count: number }>(
+          "select count(*)::int as count from app.audit_events where action = 'station.security'",
+        )
+      ).rows[0]?.count,
+    ).toBe(items.length);
+  });
+
+  it("rejects a security event that carries anything beyond closed codes", async () => {
+    const leaked = securityItem(
+      8201,
+      "BIOMETRIC_REJECTED",
+      "BIOMETRIC",
+      "NO_COINCIDE",
+    );
+    leaked.payload = { ...leaked.payload, pin: "123456" };
+    const freeText = securityItem(
+      8202,
+      "ELEVATION_REJECTED",
+      "PIN",
+      "pin incorrecto 1234",
+    );
+    const unknownType = securityItem(
+      8203,
+      "FACE_TEMPLATE_STORED",
+      "BIOMETRIC",
+      "ACEPTADO",
+    );
+
+    const results = (await push([leaked, freeText, unknownType])).results;
+
+    expect(results.map((result) => [result.status, result.code])).toEqual([
+      ["FAILED_REVIEW", "INVALID_EVENT"],
+      ["FAILED_REVIEW", "INVALID_EVENT"],
+      ["FAILED_REVIEW", "INVALID_EVENT"],
+    ]);
+    expect(
+      (
+        await db.query<{ count: number }>(
+          "select count(*)::int as count from app.audit_events where action = 'station.security'",
+        )
+      ).rows[0]?.count,
+    ).toBe(0);
+  });
 });
+
+function securityItem(
+  sequence: number,
+  eventType: string,
+  method: string | null,
+  result: string,
+  overrides: { actorProfileId?: string | null; occurredAtUtc?: string } = {},
+): SyncEnvelopeItem {
+  const eventId = randomUUID();
+  const occurredAtUtc =
+    overrides.occurredAtUtc ??
+    new Date(
+      Date.parse("2026-10-18T12:00:00.000Z") + sequence * 1000,
+    ).toISOString();
+  return {
+    outboxMessageId: randomUUID(),
+    stationSequence: sequence,
+    operationType: "SECURITY_EVENT_RECORDED",
+    aggregateType: "station_security_event",
+    aggregateId: eventId,
+    payloadSchemaVersion: 1,
+    createdAtUtc: occurredAtUtc,
+    authorization: {
+      ...authorization,
+      validatedAtUtc: "2026-10-18T11:00:00.000Z",
+      offlineValidUntilUtc: "2026-10-20T11:00:00.000Z",
+    },
+    payload: {
+      schemaVersion: 1,
+      eventId,
+      stationId: scope.stationId,
+      clientSequence: sequence,
+      actorProfileId:
+        overrides.actorProfileId === undefined
+          ? actorProfileId
+          : overrides.actorProfileId,
+      eventType,
+      method,
+      result,
+      occurredAtUtc,
+    },
+  };
+}
 
 function attendanceItem(input: {
   id: string;

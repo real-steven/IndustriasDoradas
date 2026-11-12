@@ -30,25 +30,24 @@
                                    Text="Controles de teclado" />
                         <TextBlock Margin="0,7,0,18" Foreground="{StaticResource MutedBrush}"
                                    LineHeight="20" TextWrapping="Wrap"
-                                   Text="Permitirá asignar teclas a las acciones disponibles durante el futuro Modo teclado." />
+                                   Text="Elija qué tecla ejecuta cada acción en Operación. Se guarda solo en este equipo y funciona sin Internet." />
 
                         <Border Padding="16" Background="#F7F9FA" CornerRadius="11">
                             <StackPanel>
-                                <TextBlock FontWeight="Bold" Text="Acciones que podrán configurarse" />
-                                <TextBlock Margin="0,10,0,0" Text="• Seleccionar Línea 1, 2, 3 o 4" />
-                                <TextBlock Margin="0,6,0,0" Text="• Agregar cajuela a la línea seleccionada" />
-                                <TextBlock Margin="0,6,0,0" Text="• Solicitar corrección de la última cajuela" />
-                                <TextBlock Margin="0,6,0,0" Text="• Registrar barrida cuando esté disponible" />
-                                <TextBlock Margin="0,6,0,0" Text="• Confirmar o cancelar una advertencia" />
+                                <TextBlock FontWeight="Bold" Text="Acciones configurables" />
+                                <TextBlock Margin="0,10,0,0" Text="• Agregar una cajuela o cinco cajuelas" />
+                                <TextBlock Margin="0,6,0,0" Text="• Restar una cajuela (pide confirmación)" />
+                                <TextBlock Margin="0,6,0,0" Text="• Abrir barrida" />
+                                <TextBlock Margin="0,6,0,0" Text="• Confirmar acción y cancelar o cerrar" />
                                 <TextBlock Margin="0,6,0,0" FontWeight="Bold"
-                                           Text="• Esc — salir del modo teclado; no configurable" />
+                                           Text="• Los atajos se ignoran mientras se escribe en un campo" />
                             </StackPanel>
                         </Border>
 
-                        <Button Margin="0,18,0,0" HorizontalAlignment="Left"
-                                Command="{Binding ShowComingSoonCommand}"
-                                CommandParameter="personalizar las teclas del Modo teclado"
-                                Content="CONFIGURAR TECLAS · PRÓXIMAMENTE" />
+                        <Button x:Name="ConfigureShortcutsButton" Margin="0,18,0,0" HorizontalAlignment="Left"
+                                Click="OnConfigureShortcuts" IsEnabled="{Binding CanConfigureShortcuts}"
+                                Content="Configurar controles"
+                                AutomationProperties.Name="Configurar controles de teclado" />
                     </StackPanel>
                 </Border>
 
@@ -58,10 +57,11 @@
                             <TextBlock FontFamily="Segoe UI Emoji" FontSize="28" Text="🔊" />
                             <TextBlock Margin="0,10,0,0" FontSize="17" FontWeight="Bold" Text="Sonidos y respuesta" />
                             <TextBlock Margin="0,5,0,12" Foreground="{StaticResource MutedBrush}"
-                                       Text="Ajustará sonidos de éxito, error y volumen de la estación." TextWrapping="Wrap" />
-                            <Button HorizontalAlignment="Left" Command="{Binding ShowComingSoonCommand}"
-                                    CommandParameter="personalizar sonidos y respuesta visual"
-                                    Content="PRÓXIMAMENTE" />
+                                       Text="Active o desactive sonidos y elija uno por acción. Solo afecta a este equipo." TextWrapping="Wrap" />
+                            <Button x:Name="ConfigureSoundsButton" HorizontalAlignment="Left"
+                                    Click="OnConfigureSounds" IsEnabled="{Binding CanConfigureSounds}"
+                                    Content="CONFIGURAR"
+                                    AutomationProperties.Name="Configurar sonidos y respuesta" />
                         </StackPanel>
                     </Border>
                     <Border Margin="0,12,0,0" Padding="21" Style="{StaticResource SurfaceCardStyle}"

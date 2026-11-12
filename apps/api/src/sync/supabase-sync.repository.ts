@@ -141,7 +141,9 @@ export class SupabaseSyncRepository implements SyncRepository {
           ? "rpc/ingest_inventory_sync_item_v3"
           : input.item.operationType === "ATTENDANCE_EVENT_RECORDED"
             ? "rpc/ingest_attendance_sync_item_v2"
-            : "rpc/ingest_sync_item_v2";
+            : input.item.operationType === "SECURITY_EVENT_RECORDED"
+              ? "rpc/ingest_station_security_sync_item_v2"
+              : "rpc/ingest_sync_item_v2";
     const response = await this.request(rpc, {
       method: "POST",
       body: JSON.stringify({

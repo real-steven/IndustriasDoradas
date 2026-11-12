@@ -17,6 +17,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isRefreshingAfterSync;
     private bool isRefreshRequestedAfterSync;
     private bool correctionNotificationsReady;
+    private bool wasElevated;
     private string? dismissedCorrectionNotificationKey;
     private string? dismissedResponsibilityWarningKey;
 
@@ -95,10 +96,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Attendance = attendance;
         this.syncStatusNotifier = syncStatusNotifier;
         this.uiDispatcher = uiDispatcher;
-        currentPage = operation ?? (object?)station ?? home;
+        wasElevated = HasElevatedAccess;
+        currentPage = operation ?? (HasElevatedAccess ? (object?)station : null) ?? home;
         ShowHomeCommand = new RelayCommand(() => CurrentPage = Home);
         ShowDiagnosticsCommand = new RelayCommand(
-            () => CurrentPage = Diagnostics,
+            () => TryNavigate(Diagnostics),
             CanShowDiagnostics);
         ShowAuditCommand = new AsyncRelayCommand(
             ShowAuditAsync,
@@ -117,16 +119,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             () => Attendance?.HasResponsibilityWarning == true);
         ShowStationResponsibilityCommand = new AsyncRelayCommand(
             ShowStationResponsibilityAsync,
-            () => Station is not null && Attendance?.HasResponsibilityWarning == true);
+            () => CanShowStation() && Attendance?.HasResponsibilityWarning == true);
         ShowSettingsCommand = new RelayCommand(
-            () => CurrentPage = Settings!,
+            () => TryNavigate(Settings),
             CanShowSettings);
         ShowAttendanceCommand = new AsyncRelayCommand(
             ShowAttendanceAsync,
             () => Attendance is not null);
         ShowStationCommand = new AsyncRelayCommand(
             ShowStationAsync,
-            () => Station is not null);
+            CanShowStation);
         ShowOperationCommand = new AsyncRelayCommand(
             ShowOperationAsync,
             () => Operation is not null);
@@ -168,6 +170,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsStationOpen => Station?.IsStationOpen ?? true;
     public bool IsApplicationUnlocked => Station?.IsApplicationUnlocked ?? true;
     public bool IsPlantManager => Station?.IsPlantManager ?? false;
+
+    /// <summary>
+    /// Elevación temporal activa. Es independiente del rol de la cuenta que abrió la estación:
+    /// un jefe con la estación abierta sigue en Modo Operación hasta elevar con PIN o biometría.
+    /// Sin estación (pruebas o diseño) no existe frontera de elevación.
+    /// </summary>
+    public bool HasElevatedAccess => Station is null || Station.IsPlantManager;
+
+    /// <summary>Se dispara cuando termina la elevación (salida manual, inactividad o cierre).</summary>
+    public event EventHandler? PrivilegedAccessEnded;
+
+    /// <summary>Estación, Auditoría, Estado y Configuración exigen elevación activa.</summary>
+    public bool IsPageAllowed(object? page) =>
+        page is not null && (!IsProtectedPage(page) || HasElevatedAccess);
+
     public bool IsHomePage => ReferenceEquals(CurrentPage, Home);
     public bool IsOperationPage => ReferenceEquals(CurrentPage, Operation);
     public bool IsStationPage => ReferenceEquals(CurrentPage, Station);
@@ -241,6 +258,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception) when (
             exception is IOException or SqliteException or InvalidOperationException)
         {
+            // Recuperación de arranque: ocurre antes de desbloquear la estación (el shell aún está
+            // oculto) y al abrir la sesión la navegación vuelve a Inicio.
             CurrentPage = Diagnostics;
         }
 
@@ -250,14 +269,24 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public void RecordActivity() => Station?.RecordActivity();
 
-    private static bool CanShowDiagnostics() => true;
-    private bool CanShowAudit() => Audit is not null;
-    private bool CanShowAttendanceIncidents() => Audit is not null &&
-        (Station is null || Station.IsPlantManager);
-    private bool CanShowAuditCorrections() => Audit is not null &&
-        (Station is null || Station.IsPlantManager);
-    private bool CanShowSettings() => Settings is not null &&
-        (Station is null || Station.IsPlantManager);
+    private bool CanShowDiagnostics() => HasElevatedAccess;
+    private bool CanShowAudit() => Audit is not null && HasElevatedAccess;
+    private bool CanShowAttendanceIncidents() => CanShowAudit();
+    private bool CanShowAuditCorrections() => CanShowAudit();
+    private bool CanShowSettings() => Settings is not null && HasElevatedAccess;
+    private bool CanShowStation() => Station is not null && HasElevatedAccess;
+
+    private static bool IsProtectedPage(object page) =>
+        page is StationViewModel or AuditViewModel or DiagnosticsViewModel or SettingsViewModel;
+
+    // Los comandos de CommunityToolkit no revalidan CanExecute al llamar Execute directamente:
+    // toda navegación pasa por esta compuerta además de deshabilitar el botón.
+    private bool TryNavigate(object? page)
+    {
+        if (!IsPageAllowed(page)) return false;
+        CurrentPage = page!;
+        return true;
+    }
 
     private async Task ShowOperationAsync()
     {
@@ -268,9 +297,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task ShowStationAsync()
     {
-        if (Station is null) return;
-        await Station.RefreshPreparationAsync();
-        CurrentPage = Station;
+        if (!CanShowStation()) return;
+        await Station!.RefreshPreparationAsync();
+        TryNavigate(Station);
     }
 
     private async Task ShowAttendanceAsync()
@@ -282,16 +311,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task ShowAuditAsync()
     {
-        if (Audit is null) return;
-        CurrentPage = Audit;
-        await Audit.RefreshAsync();
+        if (!TryNavigate(Audit)) return;
+        await Audit!.RefreshAsync();
     }
 
     private async Task ShowAuditCorrectionsAsync()
     {
-        if (Audit is null) return;
-        CurrentPage = Audit;
-        await Audit.SelectCategoryCommand.ExecuteAsync(AuditCategory.Corrections);
+        if (!TryNavigate(Audit)) return;
+        await Audit!.SelectCategoryCommand.ExecuteAsync(AuditCategory.Corrections);
         DismissCorrectionNotification();
     }
 
@@ -303,9 +330,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task ShowAttendanceAuditAsync()
     {
-        if (Audit is null) return;
-        CurrentPage = Audit;
-        await Audit.SelectCategoryCommand.ExecuteAsync(AuditCategory.Attendance);
+        if (!TryNavigate(Audit)) return;
+        await Audit!.SelectCategoryCommand.ExecuteAsync(AuditCategory.Attendance);
     }
 
     private void DismissCorrectionNotification()
@@ -337,10 +363,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task ShowStationResponsibilityAsync()
     {
-        if (Station is null) return;
+        if (!CanShowStation()) return;
         DismissResponsibilityWarning();
-        await Station.RefreshPreparationAsync();
-        CurrentPage = Station;
+        await Station!.RefreshPreparationAsync();
+        TryNavigate(Station);
     }
 
     private void DismissResponsibilityWarning()
@@ -379,17 +405,37 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         if (e.PropertyName == nameof(StationViewModel.Mode))
         {
-            OnPropertyChanged(nameof(IsPlantManager));
-            ShowDiagnosticsCommand.NotifyCanExecuteChanged();
-            ShowAuditCommand.NotifyCanExecuteChanged();
-            ShowAuditCorrectionsCommand.NotifyCanExecuteChanged();
-            ShowAttendanceIncidentsCommand.NotifyCanExecuteChanged();
-            ShowSettingsCommand.NotifyCanExecuteChanged();
-            OnPropertyChanged(nameof(HasCorrectionNotification));
-            if (!CanShowSettings() && ReferenceEquals(CurrentPage, Settings))
-            {
-                CurrentPage = Operation ?? (object)Home;
-            }
+            OnElevationChanged();
+        }
+    }
+
+    private void OnElevationChanged()
+    {
+        bool isElevated = HasElevatedAccess;
+        OnPropertyChanged(nameof(IsPlantManager));
+        OnPropertyChanged(nameof(HasElevatedAccess));
+        ShowDiagnosticsCommand.NotifyCanExecuteChanged();
+        ShowAuditCommand.NotifyCanExecuteChanged();
+        ShowAuditCorrectionsCommand.NotifyCanExecuteChanged();
+        ShowAttendanceIncidentsCommand.NotifyCanExecuteChanged();
+        ShowSettingsCommand.NotifyCanExecuteChanged();
+        ShowStationCommand.NotifyCanExecuteChanged();
+        ShowStationResponsibilityCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(HasCorrectionNotification));
+        Attendance?.RefreshManagerMode();
+
+        if (!isElevated && !IsPageAllowed(CurrentPage))
+        {
+            // Las operaciones pendientes viven en SQLite/Outbox y los borradores de Estación se
+            // conservan en su ViewModel: salir de la vista no descarta ningún registro.
+            CurrentPage = Operation ?? (object)Home;
+        }
+
+        bool ended = wasElevated && !isElevated;
+        wasElevated = isElevated;
+        if (ended)
+        {
+            PrivilegedAccessEnded?.Invoke(this, EventArgs.Empty);
         }
     }
 

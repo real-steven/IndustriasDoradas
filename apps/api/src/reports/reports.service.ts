@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
+import { officialSettlements } from "./official-settlements";
 import { ReportSettlementsService } from "./report-settlements.service";
 import type {
   ProductionReport,
@@ -15,6 +16,7 @@ import {
   type ManagementStatisticsMetrics,
 } from "../management/management.contracts";
 import { ManagementService } from "../management/management.service";
+import { shipmentCode } from "../management/shipment-code";
 
 const MAX_REPORT_SHIPMENTS = 5_000;
 
@@ -45,7 +47,9 @@ export class ReportsService {
         comparePrevious: false,
       }),
       this.listShipments(organizationId, query),
-      sections.includes("financial") || fields.includes("karat")
+      // El quilataje ya viene en cada cargamento; las liquidaciones solo se leen
+      // cuando se pide la sección financiera.
+      sections.includes("financial")
         ? this.settlements.list(organizationId, {
             fromDate: this.localDate(query.fromUtc),
             toDate: this.localDate(new Date(Date.parse(query.toUtc) - 1)),
@@ -180,7 +184,7 @@ export class ReportsService {
         : this.round(goldAmount / shipment.cajuelaTotal, 4);
     return {
       shipmentId: shipment.shipmentId,
-      shipmentCode: shipment.shipmentId.slice(0, 8).toUpperCase(),
+      shipmentCode: shipmentCode(shipment.shipmentId),
       plantId: shipment.plantId,
       stationName: shipment.stationName,
       productionLineId: shipment.productionLineId,
@@ -201,6 +205,7 @@ export class ReportsService {
       sweepCount: shipment.sweepCount,
       goldStatus: goldAmount === null ? "PENDING" : "REGISTERED",
       goldAmountGrams: goldAmount,
+      goldKarat: goldAmount === null ? null : shipment.goldKarat,
       gramsPerCajuela,
       palosPerCajuela:
         gramsPerCajuela === null ? null : this.round(gramsPerCajuela * 10, 4),
@@ -262,18 +267,7 @@ export class ReportsService {
   private officialSettlements(
     settlements: Awaited<ReturnType<ReportSettlementsService["list"]>>,
   ) {
-    const approved = settlements.filter(
-      (settlement) =>
-        settlement.status === "APPROVED" || settlement.status === "CLOSED",
-    );
-    const superseded = new Set(
-      approved.flatMap((settlement) =>
-        settlement.supersedesSettlementId === null
-          ? []
-          : [settlement.supersedesSettlementId],
-      ),
-    );
-    return approved.filter((settlement) => !superseded.has(settlement.id));
+    return officialSettlements(settlements);
   }
 
   private weeklyFinancialSummary(

@@ -24,6 +24,7 @@ describe("GoldService", () => {
       listReviews: jest.fn().mockResolvedValue([]),
       createReview: jest.fn(),
       createMercuryMovements: jest.fn().mockResolvedValue(undefined),
+      listSweepMercury: jest.fn().mockResolvedValue([]),
     };
     management = {
       findLatestChange: jest.fn(),
@@ -39,6 +40,41 @@ describe("GoldService", () => {
       management,
       new AuditTrailService(auditEvents),
     );
+  });
+
+  it("summarizes mercury with the latest complete sweep instead of adding sweeps", async () => {
+    const shipmentId = "42000000-0000-4000-8000-0000000000aa";
+    repository.listSweepMercury.mockResolvedValue([
+      ...sweep(shipmentId, "s1", "2026-10-12T10:00:00.000Z", [
+        [100, 20],
+        [100, 25],
+        [100, 30],
+      ]),
+      ...sweep(shipmentId, "s2", "2026-10-12T14:00:00.000Z", [
+        [80.1, 10.2],
+        [80.2, 10.3],
+        [80.3, 10.4],
+      ]),
+      // La barrida más reciente tiene una rastra sin remanente: incompleta.
+      ...sweep(shipmentId, "s3", "2026-10-12T18:00:00.000Z", [
+        [90, 15],
+        [90, null],
+        [90, 15],
+      ]),
+    ]);
+
+    const [overview] = await service.overview(ORGANIZATION_ID, [shipmentId]);
+
+    expect(overview?.mercury).toEqual({
+      sweepCount: 3,
+      completeSweepCount: 2,
+      latestCompleteSweep: {
+        sweepId: "s2",
+        sweptAtUtc: "2026-10-12T14:00:00.000Z",
+        inputGrams: 240.6,
+        remainderGrams: 30.9,
+      },
+    });
   });
 
   it("compares suppliers with explicit registered and excluded coverage", async () => {
@@ -272,6 +308,124 @@ describe("GoldService", () => {
     expect(repository.createResult.mock.calls).toHaveLength(0);
   });
 
+  it("records karat with the gold total and audits it", async () => {
+    management.findShipment.mockResolvedValue(shipment());
+    repository.createResult.mockImplementation((input) =>
+      Promise.resolve(result(input.id, input.amountGrams, input.karat)),
+    );
+
+    const created = await service.record(
+      ORGANIZATION_ID,
+      SHIPMENT_ID,
+      { amountGrams: 2.5, karat: 18.125 },
+      { auth: AUTH, correlationId: CORRELATION_ID },
+    );
+
+    expect(created.karat).toBe(18.125);
+    expect(repository.createResult.mock.calls[0]?.[0]).toMatchObject({
+      amountGrams: 2.5,
+      karat: 18.125,
+    });
+    expect(auditEvents.insert.mock.calls[0]?.[0]).toMatchObject({
+      changes: {
+        gold_amount_grams: { before: null, after: 2.5 },
+        gold_karat: { before: null, after: 18.125 },
+      },
+    });
+  });
+
+  it("corrects only the karat as a new append-only entry with a reason", async () => {
+    management.findShipment.mockResolvedValue(
+      shipment({
+        goldResultId: RESULT_ID,
+        goldAmountGrams: 2.5,
+        goldUnitCode: "g",
+        goldRevisionCount: 1,
+        goldKarat: 18,
+        hasGoldResult: true,
+      }),
+    );
+    repository.createResult.mockImplementation((input) =>
+      Promise.resolve(result(input.id, input.amountGrams, input.karat)),
+    );
+
+    await service.record(
+      ORGANIZATION_ID,
+      SHIPMENT_ID,
+      {
+        amountGrams: 2.5,
+        karat: 21,
+        correctionReason: "Ensayo de laboratorio",
+      },
+      { auth: AUTH, correlationId: CORRELATION_ID },
+    );
+
+    expect(repository.createResult.mock.calls[0]?.[0]).toMatchObject({
+      amountGrams: 2.5,
+      karat: 21,
+      supersedesResultId: RESULT_ID,
+      correctionReason: "Ensayo de laboratorio",
+    });
+    expect(auditEvents.insert.mock.calls[0]?.[0]).toMatchObject({
+      changes: { gold_karat: { before: 18, after: 21 } },
+    });
+  });
+
+  it("keeps the current karat when a correction omits it and rejects an unchanged result", async () => {
+    const current = shipment({
+      goldResultId: RESULT_ID,
+      goldAmountGrams: 2.5,
+      goldUnitCode: "g",
+      goldRevisionCount: 1,
+      goldKarat: 18,
+      hasGoldResult: true,
+    });
+    management.findShipment.mockResolvedValue(current);
+    repository.createResult.mockImplementation((input) =>
+      Promise.resolve(result(input.id, input.amountGrams, input.karat)),
+    );
+
+    await service.record(
+      ORGANIZATION_ID,
+      SHIPMENT_ID,
+      { amountGrams: 3, correctionReason: "Nueva pesada" },
+      { auth: AUTH, correlationId: CORRELATION_ID },
+    );
+    expect(repository.createResult.mock.calls[0]?.[0]).toMatchObject({
+      amountGrams: 3,
+      karat: 18,
+    });
+
+    await expect(
+      service.record(
+        ORGANIZATION_ID,
+        SHIPMENT_ID,
+        { amountGrams: 2.5, karat: 18, correctionReason: "Sin cambios" },
+        { auth: AUTH, correlationId: CORRELATION_ID },
+      ),
+    ).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: { code: "GOLD_AMOUNT_UNCHANGED" },
+    });
+  });
+
+  it("rejects a karat outside the existing contract before reading the shipment", async () => {
+    for (const karat of [-1, 24.001, 18.1234]) {
+      await expect(
+        service.record(
+          ORGANIZATION_ID,
+          SHIPMENT_ID,
+          { amountGrams: 2.5, karat },
+          { auth: AUTH, correlationId: CORRELATION_ID },
+        ),
+      ).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST,
+        response: { code: "GOLD_KARAT_INVALID" },
+      });
+    }
+    expect(management.findShipment.mock.calls).toHaveLength(0);
+  });
+
   it("keeps an empty value unregistered by rejecting non-numeric input", async () => {
     await expect(
       service.record(
@@ -289,6 +443,22 @@ describe("GoldService", () => {
 });
 
 const ORGANIZATION_ID = "30000000-0000-4000-8000-000000000001";
+
+function sweep(
+  shipmentId: string,
+  sweepId: string,
+  sweptAtUtc: string,
+  rastras: readonly (readonly [number | null, number | null])[],
+) {
+  return rastras.map(([inputGrams, remainderGrams], index) => ({
+    shipmentId,
+    sweepId,
+    sweptAtUtc,
+    lineComponentId: `${sweepId}-rastra-${index + 1}`,
+    inputGrams,
+    remainderGrams,
+  }));
+}
 const SHIPMENT_ID = "42000000-0000-4000-8000-000000000001";
 const RESULT_ID = "46000000-0000-4000-8000-000000000001";
 const SWEEP_ID = "43000000-0000-4000-8000-000000000001";
@@ -393,17 +563,23 @@ function shipment(
     goldRecordedAtUtc: null,
     goldRecordedByProfileId: null,
     goldRevisionCount: null,
+    goldKarat: null,
     hasGoldResult: false,
     ...changes,
   };
 }
 
-function result(id: string, amountGrams: number): GoldResultEntry {
+function result(
+  id: string,
+  amountGrams: number,
+  karat: number | null = null,
+): GoldResultEntry {
   return {
     id,
     organizationId: ORGANIZATION_ID,
     shipmentId: SHIPMENT_ID,
     amountGrams,
+    karat,
     unitCode: "g",
     recordedAtUtc: "2026-10-12T12:00:00.000Z",
     recordedByProfileId: AUTH.profile.id,

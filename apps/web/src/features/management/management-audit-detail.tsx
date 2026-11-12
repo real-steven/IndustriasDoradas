@@ -13,6 +13,7 @@ import {
   managerAuditOrigin,
   managerAuditReason,
   managerAuditResult,
+  managerSecurityMethod,
   managerVisibleAuditChanges,
 } from "./management-audit-labels";
 
@@ -28,6 +29,7 @@ export function ManagementAuditDetail({
   const titleId = `audit-detail-title-${event.id}`;
   const descriptionId = `audit-detail-description-${event.id}`;
   const changes = managerVisibleAuditChanges(event);
+  const securityMethod = managerSecurityMethod(event, language);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -121,6 +123,12 @@ export function ManagementAuditDetail({
               label={tr("Registrado desde", "Recorded from")}
               value={managerAuditOrigin(event.origin, language)}
             />
+            {securityMethod !== null && (
+              <AuditDetailItem
+                label={tr("Método de acceso", "Access method")}
+                value={securityMethod}
+              />
+            )}
             {event.entityId !== null && (
               <AuditDetailItem
                 label={tr("Referencia", "Reference")}
@@ -175,6 +183,22 @@ function auditResultDescription(
   event: AuditEvent,
   tr: (spanish: string, english: string) => string,
 ): string {
+  if (event.action === "station.security") {
+    if (event.result === "REJECTED")
+      return tr(
+        "El acceso no se concedió. La estación siguió operando en modo normal.",
+        "Access was not granted. The station kept operating in normal mode.",
+      );
+    if (event.result === "FAILED")
+      return tr(
+        "El dispositivo no pudo completar la verificación; el PIN siguió disponible.",
+        "The device could not complete the verification; the PIN remained available.",
+      );
+    return tr(
+      "El evento de seguridad quedó registrado desde la estación.",
+      "The security event was recorded from the station.",
+    );
+  }
   if (event.result === "REJECTED")
     return tr(
       "El cambio no se aplicó porque no cumplió una regla o permiso.",

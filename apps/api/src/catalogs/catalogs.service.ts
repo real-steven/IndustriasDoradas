@@ -21,6 +21,16 @@ import type { AuthenticatedContext } from "../auth/auth.contracts";
 import type { PageResponse } from "../common/dto/page-query.dto";
 import { ApplicationError } from "../common/errors/application-error";
 
+/** Proveedor operativo predeterminado; desktop lo reconoce por este nombre. */
+export const DEFAULT_SUPPLIER_NAME = "Material propio";
+
+function isDefaultSupplier(name: string): boolean {
+  return (
+    name.trim().toLocaleLowerCase("es") ===
+    DEFAULT_SUPPLIER_NAME.toLocaleLowerCase("es")
+  );
+}
+
 export interface MutationContext {
   auth: AuthenticatedContext;
   correlationId: string;
@@ -98,6 +108,14 @@ export class CatalogsService {
     context: MutationContext,
   ): Promise<CatalogItem> {
     const before = await this.requireItem(resource, organizationId, id);
+    if (
+      resource === "suppliers" &&
+      isDefaultSupplier(before.name) &&
+      changes.name !== undefined &&
+      !isDefaultSupplier(changes.name)
+    ) {
+      this.defaultSupplierProtected();
+    }
     const normalized = {
       ...changes,
       ...(changes.code === undefined
@@ -143,6 +161,7 @@ export class CatalogsService {
     id: string,
     active: boolean,
     context: MutationContext,
+    reason?: string,
   ): Promise<CatalogItem> {
     const before = await this.requireItem(resource, organizationId, id);
     if (before.isActive === active) {
@@ -154,6 +173,28 @@ export class CatalogsService {
           : "Catalog item is already inactive",
       );
     }
+    const trimmedReason = reason?.trim() || undefined;
+    if (resource === "suppliers" && !active) {
+      if (isDefaultSupplier(before.name)) this.defaultSupplierProtected();
+      if (trimmedReason === undefined) {
+        throw new ApplicationError(
+          HttpStatus.BAD_REQUEST,
+          "SUPPLIER_REASON_REQUIRED",
+          "A reason is required to suspend a supplier",
+        );
+      }
+    }
+    const stateChanges: Record<string, AuditFieldChange> = {
+      is_active: { before: before.isActive, after: active },
+      // La auditoría gerencial no resuelve el nombre del proveedor por sí
+      // sola; se guarda como referencia para saber a quién se suspendió.
+      ...(resource === "suppliers"
+        ? { supplier_name: { before: null, after: before.name } }
+        : {}),
+      ...(trimmedReason === undefined
+        ? {}
+        : { reason: { before: null, after: trimmedReason } }),
+    };
 
     return this.auditTrail.execute(
       {
@@ -166,8 +207,8 @@ export class CatalogsService {
         entityId: id,
         failureResult: "REJECTED",
         failureReasonCode: "CATALOG_STATE_REJECTED",
-        allowedChangeFields: ["is_active"],
-        changes: { is_active: { before: before.isActive, after: active } },
+        allowedChangeFields: Object.keys(stateChanges),
+        changes: stateChanges,
       },
       async () => {
         try {
@@ -291,6 +332,14 @@ export class CatalogsService {
       stations: "station",
       suppliers: "supplier",
     }[resource];
+  }
+
+  private defaultSupplierProtected(): never {
+    throw new ApplicationError(
+      HttpStatus.CONFLICT,
+      "SUPPLIER_DEFAULT_PROTECTED",
+      "The default supplier cannot be renamed or suspended",
+    );
   }
 
   private notFound(resource: CatalogResource): never {

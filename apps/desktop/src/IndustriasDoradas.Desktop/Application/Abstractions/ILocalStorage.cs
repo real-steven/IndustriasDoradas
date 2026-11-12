@@ -268,11 +268,16 @@ public sealed record LocalCajuelaCorrectionAudit(
     DateTimeOffset ConfirmedAt,
     bool RequiredPlantManager);
 
+/// <param name="CorrectorNames">
+/// Nombre visible de los perfiles que corrigieron marcas, tomado del registro local de
+/// seguridad; si falta, la vista muestra el rol genérico.
+/// </param>
 public sealed record LocalAttendanceWorkerAudit(
     Guid WorkerId,
     string WorkerName,
     string WorkerCategory,
-    IReadOnlyList<AttendanceEvent> Events);
+    IReadOnlyList<AttendanceEvent> Events,
+    IReadOnlyDictionary<Guid, string>? CorrectorNames = null);
 
 public sealed record LocalSecurityAuditEvent(
     Guid Id,
@@ -282,8 +287,15 @@ public sealed record LocalSecurityAuditEvent(
     string EventType,
     string Result,
     string Details,
-    DateTimeOffset OccurredAt);
+    DateTimeOffset OccurredAt,
+    string? Method = null);
 
+/// <summary>
+/// Evento de seguridad de la estación. <see cref="Details"/> es texto local para la vista de
+/// desktop y nunca se sincroniza. Ningún campo admite PIN, contraseña, token, plantilla,
+/// imagen ni características faciales. <see cref="EventId"/> hace idempotente el registro:
+/// repetirlo con el mismo identificador no crea otro evento ni otro mensaje de Outbox.
+/// </summary>
 public sealed record RecordLocalSecurityAuditEvent(
     Guid StationId,
     Guid? ProfileId,
@@ -291,7 +303,10 @@ public sealed record RecordLocalSecurityAuditEvent(
     string EventType,
     string Result,
     string Details,
-    DateTimeOffset OccurredAt);
+    DateTimeOffset OccurredAt,
+    string? Method = null,
+    Guid EventId = default,
+    OutboxAuthorizationEvidence? Authorization = null);
 
 public sealed record LocalAuditQuery(
     DateTimeOffset? StartUtc,
@@ -640,6 +655,7 @@ public sealed record SyncFailureDiagnostic(
         "PRODUCTION_EVENT_CREATED" => "Registro o corrección de cajuela",
         "MERCURY_MOVEMENT_RECORDED" => "Registro de mercurio",
         "ATTENDANCE_EVENT_RECORDED" => "Registro de asistencia",
+        "SECURITY_EVENT_RECORDED" => "Evento de seguridad de la estación",
         _ => "Evento operativo",
     };
 

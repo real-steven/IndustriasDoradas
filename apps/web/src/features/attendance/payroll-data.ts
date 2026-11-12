@@ -9,6 +9,7 @@ import { apiDownload, apiRequest } from "../../api/http";
 import { cachePolicy } from "../../app/cache-policy";
 import { scopedQueryKey } from "../../app/query-keys";
 import { useAuth } from "../../auth/auth-context";
+import { costaRicaToday, payrollPeriodRange } from "./payroll-periods";
 
 export type PayrollAdjustmentType =
   | "PAID_LEAVE_HOURS"
@@ -306,23 +307,7 @@ export function currentPayrollWeek(now = new Date()): {
   fromDate: string;
   toDate: string;
 } {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Costa_Rica",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const parts = formatter.formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((item) => item.type === type)?.value);
-  const year = part("year");
-  const month = part("month");
-  const day = part("day");
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
-  const fromDate = date.toISOString().slice(0, 10);
-  date.setUTCDate(date.getUTCDate() + 6);
-  return { fromDate, toDate: date.toISOString().slice(0, 10) };
+  return payrollPeriodRange("currentWeek", costaRicaToday(now));
 }
 
 export async function downloadPayrollReport(

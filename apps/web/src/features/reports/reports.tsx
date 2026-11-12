@@ -495,7 +495,6 @@ function ProductionReportPreview({
                     <tr key={shipment.shipmentId}>
                       {fields.map((field, index) => {
                         const value = reportFieldValue(
-                          report,
                           shipment,
                           field,
                           locale,
@@ -603,8 +602,8 @@ function reportFieldOptions(
       field: "karat",
       label: tr("Quilataje", "Karat"),
       description: tr(
-        "Resultados de quilataje registrados en la liquidación.",
-        "Karat results recorded in the settlement.",
+        "Quilataje anotado junto con el oro del cargamento.",
+        "Karat recorded together with the shipment gold.",
       ),
     },
     {
@@ -665,7 +664,6 @@ function sortShipments(shipments: ReportShipment[]): ReportShipment[] {
 }
 
 function reportFieldValue(
-  report: ProductionReport,
   shipment: ReportShipment,
   field: ProductionReportField,
   locale: string,
@@ -685,7 +683,9 @@ function reportFieldValue(
         ? tr("Sin registrar", "Not recorded")
         : `${formatNumber(shipment.goldAmountGrams, locale, 2)} g`;
     case "karat":
-      return shipmentKarats(report, shipment.shipmentId, locale, tr);
+      return shipment.goldKarat === null
+        ? tr("Sin registrar", "Not recorded")
+        : `${formatKarat(shipment.goldKarat, locale)} k`;
     case "cajuelas":
       return shipment.cajuelaTotal.toLocaleString(locale);
     case "palos":
@@ -699,27 +699,19 @@ function reportFieldValue(
   }
 }
 
-function shipmentKarats(
-  report: ProductionReport,
-  shipmentId: string,
-  locale: string,
-  tr: (spanish: string, english: string) => string,
-): string {
-  const values = report.financialSettlements
-    .flatMap((settlement) => settlement.lines)
-    .filter((line) => line.shipmentId === shipmentId)
-    .sort((left, right) => left.displayOrder - right.displayOrder)
-    .map((line) => formatNumber(line.karat, locale, 2));
-  return values.length === 0
-    ? tr("Sin registrar", "Not recorded")
-    : values.join(" / ");
-}
-
 function formatDate(value: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeZone: "America/Costa_Rica",
   }).format(new Date(value));
+}
+
+// Quilataje con hasta tres decimales, sin ceros de relleno (18,5 k, no 18,500 k).
+function formatKarat(value: number, locale: string): string {
+  return value.toLocaleString(locale, {
+    maximumFractionDigits: 3,
+    minimumFractionDigits: 0,
+  });
 }
 
 function formatNumber(value: number, locale: string, digits: number): string {

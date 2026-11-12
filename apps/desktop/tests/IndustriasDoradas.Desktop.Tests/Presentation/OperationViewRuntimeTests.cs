@@ -89,7 +89,7 @@ public sealed class OperationViewRuntimeTests
             },
         };
         AssertCanRender(login);
-        TextBox loginEmail = FindVisualChildren<TextBox>(login).Single();
+        var loginEmail = (TextBox)login.FindName("EmailBox");
         PasswordBox loginPassword = FindVisualChildren<PasswordBox>(login).Single();
         loginEmail.Text = "jefe@planta.test";
         loginPassword.Password = "12345678";
@@ -144,9 +144,12 @@ public sealed class OperationViewRuntimeTests
 
     private static void EnsureApplicationResources()
     {
-        if (System.Windows.Application.Current is not null) return;
-        var application = new App();
-        application.InitializeComponent();
+        if (System.Windows.Application.Current is null)
+        {
+            var application = new App();
+            application.InitializeComponent();
+        }
+        LoginViewTestHost.KeepSharedApplicationAlive();
     }
 
     private static void AssertCanRender(FrameworkElement view)

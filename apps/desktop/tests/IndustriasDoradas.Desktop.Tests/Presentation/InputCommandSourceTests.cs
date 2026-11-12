@@ -1,5 +1,6 @@
 using System.Windows.Input;
 using IndustriasDoradas.Desktop.Application;
+using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Configuration;
 using IndustriasDoradas.Desktop.Infrastructure.Input;
 using IndustriasDoradas.Desktop.Presentation.Input;
@@ -101,6 +102,66 @@ public sealed class InputCommandSourceTests
     }
 
     [TestMethod]
+    public void SavedShortcutsReplaceAppSettingsKeysAndKeepKeyboardOrigin()
+    {
+        var shortcuts = new MemoryShortcuts(KeyboardShortcutMap.Default
+            .With(KeyboardShortcutAction.OpenSweep, "F2")
+            .With(KeyboardShortcutAction.SubtractCajuela, "Delete"));
+        var source = new ConfigurableInputCommandSource(
+            Options.Create(ValidOptions()),
+            new FixedTimeProvider(Now),
+            shortcuts);
+        var adapter = new WpfKeyboardInputAdapter(source);
+        adapter.Connect();
+        (Key Key, OperationInputAction Action)[] expected =
+        [
+            (Key.Add, OperationInputAction.RegisterCajuela),
+            (Key.D5, OperationInputAction.RegisterFiveCajuelas),
+            (Key.Delete, OperationInputAction.RevertLastCajuela),
+            (Key.F2, OperationInputAction.PrepareSweep),
+            (Key.Enter, OperationInputAction.Confirm),
+            (Key.Escape, OperationInputAction.Cancel),
+            // La navegación no es configurable y sigue saliendo de appsettings.
+            (Key.D1, OperationInputAction.SelectLine),
+            (Key.Up, OperationInputAction.MoveUp),
+        ];
+
+        foreach ((Key key, OperationInputAction action) in expected)
+        {
+            Assert.IsTrue(adapter.TryTranslate(key, false, out OperationInputCommand? command), key.ToString());
+            Assert.AreEqual(action, command!.Action, key.ToString());
+            Assert.AreEqual("KEYBOARD", command.Origin.SourceKind);
+            Assert.AreEqual("shared-keyboard", command.Origin.ControllerId);
+            Assert.AreEqual(key.ToString(), command.Origin.SignalCode);
+            Assert.AreEqual(1, command.Origin.LineSlot);
+        }
+
+        Assert.IsFalse(adapter.TryTranslate(Key.R, false, out _),
+            "La tecla anterior de restar deja de funcionar al reasignarla.");
+        Assert.IsFalse(adapter.TryTranslate(Key.B, false, out _),
+            "La tecla anterior de barrida deja de funcionar al reasignarla.");
+        Assert.IsTrue(adapter.TryTranslate(Key.D5, true, out OperationInputCommand? held));
+        Assert.IsTrue(held!.Origin.IsRepeat, "El auto-repeat llega marcado para que el guardia lo ignore.");
+    }
+
+    [TestMethod]
+    public void ShortcutChangesApplyWithoutRestartingTheStation()
+    {
+        var shortcuts = new MemoryShortcuts(KeyboardShortcutMap.Default);
+        var source = new ConfigurableInputCommandSource(
+            Options.Create(ValidOptions()),
+            new FixedTimeProvider(Now),
+            shortcuts);
+
+        Assert.IsTrue(source.TryCreateForAdapter("KEYBOARD", "B", false, out _));
+        shortcuts.Current = KeyboardShortcutMap.Default.With(KeyboardShortcutAction.OpenSweep, "F2");
+
+        Assert.IsFalse(source.TryCreateForAdapter("KEYBOARD", "B", false, out _));
+        Assert.IsTrue(source.TryCreateForAdapter("KEYBOARD", "F2", false, out OperationInputCommand? command));
+        Assert.AreEqual(OperationInputAction.PrepareSweep, command!.Action);
+    }
+
+    [TestMethod]
     public void ConfigurationRejectsKeyboardWithoutARequiredAction()
     {
         OperationInputOptions options = ValidOptions();
@@ -139,5 +200,16 @@ public sealed class InputCommandSourceTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class MemoryShortcuts(KeyboardShortcutMap map) : IKeyboardShortcutSettings
+    {
+        public KeyboardShortcutMap Current { get; set; } = map;
+        public KeyboardShortcutRules Rules { get; } = new();
+        public bool Save(KeyboardShortcutMap value)
+        {
+            Current = value;
+            return true;
+        }
     }
 }

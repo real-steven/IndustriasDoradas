@@ -8,6 +8,7 @@ import {
   useLanguage,
 } from "../../i18n/language-context";
 import { LanguageSwitcher } from "../../i18n/language-switcher";
+import { ProfileMenu } from "../profile/profile-popover";
 import {
   useManagementFreshness,
   type ManagementFreshnessQuery,
@@ -53,15 +54,6 @@ const primaryNavigation = [
   },
 ] as const;
 
-const futureNavigation = [
-  {
-    to: "/gerencia/configuracion",
-    label: "Configuración",
-    labelEn: "Settings",
-    icon: "⚙",
-  },
-] as const;
-
 const pageTitles: Record<string, readonly [string, string]> = {
   "/gerencia": ["Resumen", "Overview"],
   "/gerencia/oro": ["Oro y mercurio", "Gold and mercury"],
@@ -69,7 +61,6 @@ const pageTitles: Record<string, readonly [string, string]> = {
   "/gerencia/estadisticas": ["Estadísticas", "Statistics"],
   "/gerencia/trabajadores": ["Trabajadores", "Workers"],
   "/gerencia/reportes": ["Reportes", "Reports"],
-  "/gerencia/configuracion": ["Configuración", "Settings"],
 };
 
 export function ProtectedPortal({ roles }: { roles: RoleCode[] }) {
@@ -140,38 +131,12 @@ export function PortalLayout() {
           ))}
         </nav>
 
-        <p className="sidebar-label">{tr("PRÓXIMAMENTE", "COMING SOON")}</p>
-        <nav
-          className="manager-nav"
-          aria-label={tr("Módulos futuros", "Future modules")}
-        >
-          {futureNavigation.map((item) => (
-            <PortalNavLink
-              key={item.to}
-              {...item}
-              label={tr(item.label, item.labelEn)}
-              future
-            />
-          ))}
-        </nav>
-
         <div className="manager-identity">
-          <span className="manager-avatar" aria-hidden="true">
-            LG
-          </span>
+          <ProfileMenu />
           <span>
             <strong>{tr("Cuenta gerencial", "Management account")}</strong>
             <small>{tr("Sesión de Lucía", "Lucía's session")}</small>
           </span>
-          <button
-            type="button"
-            className="icon-button sidebar-signout"
-            aria-label={tr("Cerrar sesión", "Sign out")}
-            title={tr("Cerrar sesión", "Sign out")}
-            onClick={() => void auth.signOut()}
-          >
-            ↪
-          </button>
         </div>
       </aside>
 
@@ -224,16 +189,12 @@ function PortalNavLink({
   label,
   icon,
   end,
-  future = false,
 }: {
   to: string;
   label: string;
   icon: string;
   end?: boolean;
-  future?: boolean;
 }) {
-  const { tr } = useLanguage();
-
   return (
     <NavLink
       to={to}
@@ -246,7 +207,6 @@ function PortalNavLink({
         {icon}
       </span>
       <span>{label}</span>
-      {future && <small>{tr("PRÓX.", "SOON")}</small>}
     </NavLink>
   );
 }

@@ -58,6 +58,7 @@ describe("SupabaseGoldRepository", () => {
           organization_id: ORGANIZATION_ID,
           shipment_id: SHIPMENT_ID,
           amount_grams: "2.50",
+          karat: "18.500",
           unit_code: "g",
           recorded_at_utc: "2026-10-12T12:00:00.000Z",
           recorded_by_profile_id: PROFILE_ID,
@@ -84,6 +85,7 @@ describe("SupabaseGoldRepository", () => {
     expect(history).toEqual([
       expect.objectContaining({
         amountGrams: 2.5,
+        karat: 18.5,
         recordedByDisplayName: "Lucía ficticia",
       }),
     ]);
@@ -104,6 +106,7 @@ describe("SupabaseGoldRepository", () => {
             organization_id: ORGANIZATION_ID,
             shipment_id: SHIPMENT_ID,
             amount_grams: "3.25",
+            karat: null,
             unit_code: "g",
             recorded_at_utc: "2026-10-12T12:00:00.000Z",
             recorded_by_profile_id: PROFILE_ID,
@@ -119,6 +122,7 @@ describe("SupabaseGoldRepository", () => {
       organizationId: ORGANIZATION_ID,
       shipmentId: SHIPMENT_ID,
       amountGrams: 3.25,
+      karat: 21.5,
       recordedAtUtc: "2026-10-12T12:00:00.000Z",
       recordedByProfileId: PROFILE_ID,
       recordedByDisplayName: "Lucía ficticia",
@@ -131,6 +135,7 @@ describe("SupabaseGoldRepository", () => {
     expect(requestBody(init)).toContain(
       `"supersedes_result_id":"${PREVIOUS_RESULT_ID}"`,
     );
+    expect(requestBody(init)).toContain('"karat":21.5');
   });
 });
 

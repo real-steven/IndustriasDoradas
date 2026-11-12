@@ -73,7 +73,9 @@ describe("recorrido gerencial de aceptación", () => {
       screen.getByRole("combobox", { name: "Área" }),
       "shipments",
     );
-    expect(await screen.findByText("CARGAMENTO 42000000")).toBeInTheDocument();
+    expect(
+      await screen.findByText("42000000", { selector: "code" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("searchbox", { name: "Buscar actividad" }),
     ).toBeInTheDocument();
@@ -102,7 +104,7 @@ describe("recorrido gerencial de aceptación", () => {
     expect(
       await screen.findByText("Resultado registrado correctamente."),
     ).toBeInTheDocument();
-    expect(api.postBodies[0]).toEqual({ amountGrams: 0 });
+    expect(api.postBodies[0]).toEqual({ amountGrams: 0, karat: null });
 
     await user.clear(amount);
     await user.type(amount, "1,25");
@@ -118,6 +120,7 @@ describe("recorrido gerencial de aceptación", () => {
     ).toBeInTheDocument();
     expect(api.postBodies[1]).toEqual({
       amountGrams: 1.25,
+      karat: null,
       correctionReason: "Ajuste de pesada final",
     });
 
@@ -150,7 +153,10 @@ describe("recorrido gerencial de aceptación", () => {
     ).toBeInTheDocument();
     expect(within(main).queryByText("PRÓXIMAMENTE")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    await user.click(screen.getByRole("button", { name: /^Perfil de / }));
+    await user.click(
+      await screen.findByRole("button", { name: "Cerrar sesión" }),
+    );
     expect(
       await screen.findByRole("heading", { name: "Bienvenido" }),
     ).toBeInTheDocument();
@@ -270,6 +276,7 @@ function createManagementApi(): {
           organizationId: ORGANIZATION_ID,
           shipmentId: SHIPMENT_ID,
           amountGrams: numberField(body, "amountGrams"),
+          karat: null,
           unitCode: "g",
           recordedAtUtc: `2026-10-13T18:0${goldEntries.length}:00.000Z`,
           recordedByProfileId: PROFILE_ID,
@@ -296,6 +303,20 @@ function createManagementApi(): {
 
     if (url.pathname.endsWith(`/management/shipments/${SHIPMENT_ID}`))
       return Promise.resolve(json(shipment(goldEntries)));
+
+    if (url.pathname.endsWith("/management/gold-overview"))
+      return Promise.resolve(
+        json([
+          {
+            shipmentId: SHIPMENT_ID,
+            mercury: {
+              sweepCount: 0,
+              completeSweepCount: 0,
+              latestCompleteSweep: null,
+            },
+          },
+        ]),
+      );
 
     if (url.pathname.endsWith("/management/gold-summary"))
       return Promise.resolve(json(goldSummary(goldEntries)));
@@ -355,6 +376,7 @@ function shipment(entries: GoldResultEntry[]): ManagementShipment {
     goldRecordedAtUtc: current?.recordedAtUtc ?? null,
     goldRecordedByProfileId: current?.recordedByProfileId ?? null,
     goldRevisionCount: entries.length === 0 ? null : entries.length,
+    goldKarat: current?.karat ?? null,
     hasGoldResult: current !== undefined,
   };
 }

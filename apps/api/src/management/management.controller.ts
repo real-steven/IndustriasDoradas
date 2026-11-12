@@ -5,6 +5,7 @@ import {
   ManagementFreshnessQueryDto,
   ManagementPageQueryDto,
   ManagementQueryDto,
+  ManagementShipmentQueryDto,
   ManagementStatisticsQueryDto,
 } from "./management.dto";
 import type { ManagementStatisticsResponse } from "./management.contracts";
@@ -40,7 +41,7 @@ export class ManagementController {
   @Get("shipments")
   listShipments(
     @Param("organizationId", ParseUUIDPipe) organizationId: string,
-    @Query() query: ManagementQueryDto,
+    @Query() query: ManagementShipmentQueryDto,
   ) {
     return this.management.listShipments(organizationId, query);
   }

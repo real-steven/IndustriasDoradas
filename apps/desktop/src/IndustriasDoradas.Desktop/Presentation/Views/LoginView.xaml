@@ -106,13 +106,46 @@
                                  AutomationProperties.Name="Correo de jefe de planta" />
 
                         <TextBlock FontSize="10" FontWeight="Bold" Text="CONTRASEÑA" />
-                        <PasswordBox x:Name="PasswordBox" Height="48" Margin="0,7,0,12" Padding="13,10"
+                        <Grid x:Name="PasswordField" Height="48" Margin="0,7,0,12">
+                            <PasswordBox x:Name="PasswordBox" Padding="13,10,50,10"
+                                         Background="White" BorderBrush="#C9D7DD" BorderThickness="1"
+                                         Foreground="#172026" CaretBrush="#173B50" SelectionBrush="#B9DCEB"
+                                         FontFamily="Segoe UI" FontSize="13" FontWeight="Normal"
+                                         PasswordChar="●" IsEnabled="{Binding NeedsCredentials}"
+                                         KeyDown="OnPasswordKeyDown"
+                                         AutomationProperties.Name="Contraseña" />
+                            <!-- Solo existe con contenido mientras se muestra; nunca se persiste ni se registra. -->
+                            <TextBox x:Name="RevealedPasswordBox" Padding="13,10,50,10" Visibility="Collapsed"
                                      Background="White" BorderBrush="#C9D7DD" BorderThickness="1"
                                      Foreground="#172026" CaretBrush="#173B50" SelectionBrush="#B9DCEB"
                                      FontFamily="Segoe UI" FontSize="13" FontWeight="Normal"
-                                     PasswordChar="●" IsEnabled="{Binding NeedsCredentials}"
+                                     IsUndoEnabled="False"
+                                     AcceptsReturn="False" ContextMenu="{x:Null}"
+                                     IsEnabled="{Binding NeedsCredentials}"
                                      KeyDown="OnPasswordKeyDown"
                                      AutomationProperties.Name="Contraseña" />
+                            <Button x:Name="PasswordVisibilityButton" Width="36" Height="36" MinHeight="0"
+                                    Margin="0,0,6,0" Padding="0" HorizontalAlignment="Right"
+                                    VerticalAlignment="Center" Background="Transparent"
+                                    BorderBrush="Transparent" Foreground="#47667A"
+                                    Click="OnTogglePasswordVisibility"
+                                    IsEnabled="{Binding NeedsCredentials}"
+                                    ToolTip="Mostrar contraseña"
+                                    AutomationProperties.Name="Mostrar contraseña">
+                                <Grid Width="20" Height="20" IsHitTestVisible="False">
+                                    <Path x:Name="ShowPasswordIcon" Stretch="None"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.6" StrokeLineJoin="Round"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          Data="M 1.5 10 C 4 5.2 7 3.8 10 3.8 C 13 3.8 16 5.2 18.5 10 C 16 14.8 13 16.2 10 16.2 C 7 16.2 4 14.8 1.5 10 Z M 10 7 A 3 3 0 1 1 10 13 A 3 3 0 1 1 10 7 Z" />
+                                    <Path x:Name="HidePasswordIcon" Stretch="None" Visibility="Collapsed"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.6" StrokeLineJoin="Round"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          Data="M 1.5 10 C 4 5.2 7 3.8 10 3.8 C 13 3.8 16 5.2 18.5 10 C 16 14.8 13 16.2 10 16.2 C 7 16.2 4 14.8 1.5 10 Z M 10 7 A 3 3 0 1 1 10 13 A 3 3 0 1 1 10 7 Z M 3 2.5 L 17 17.5" />
+                                </Grid>
+                            </Button>
+                        </Grid>
 
                         <Grid Margin="1,0,1,18">
                             <CheckBox x:Name="RememberEmailBox" VerticalAlignment="Center"

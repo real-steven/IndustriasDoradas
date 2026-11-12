@@ -10,6 +10,7 @@ import type {
   GoldResultEntry,
   GoldReviewEntry,
   GoldShipmentFact,
+  SweepMercuryRow,
 } from "./gold.contracts";
 import { SupabaseDataError } from "../catalogs/supabase-catalog.repository";
 import type { EnvironmentVariables } from "../config/environment";
@@ -55,6 +56,32 @@ export class SupabaseGoldRepository implements GoldRepository {
     );
   }
 
+  async listSweepMercury(
+    organizationId: string,
+    shipmentIds: readonly string[],
+  ): Promise<readonly SweepMercuryRow[]> {
+    if (shipmentIds.length === 0) return [];
+    const rows = await this.allRows(
+      "management_sweep_mercury",
+      new URLSearchParams({
+        organization_id: `eq.${organizationId}`,
+        shipment_id: `in.(${shipmentIds.join(",")})`,
+        order:
+          "shipment_id.asc,swept_at_utc.asc,sweep_id.asc,line_component_order.asc",
+        select:
+          "shipment_id,sweep_id,swept_at_utc,line_component_id,input_grams,remainder_grams",
+      }),
+    );
+    return rows.map((row) => ({
+      shipmentId: this.string(row, "shipment_id"),
+      sweepId: this.string(row, "sweep_id"),
+      sweptAtUtc: this.string(row, "swept_at_utc"),
+      lineComponentId: this.string(row, "line_component_id"),
+      inputGrams: this.nullableNumber(row, "input_grams"),
+      remainderGrams: this.nullableNumber(row, "remainder_grams"),
+    }));
+  }
+
   async listResults(
     organizationId: string,
     shipmentId: string,
@@ -64,7 +91,7 @@ export class SupabaseGoldRepository implements GoldRepository {
       shipment_id: `eq.${shipmentId}`,
       order: "recorded_at_utc.desc,id.desc",
       select:
-        "id,organization_id,shipment_id,amount_grams,unit_code,recorded_at_utc,recorded_by_profile_id,supersedes_result_id,correction_reason",
+        "id,organization_id,shipment_id,amount_grams,karat,unit_code,recorded_at_utc,recorded_by_profile_id,supersedes_result_id,correction_reason",
     });
     const rows = await this.allRows("shipment_gold_result_entries", parameters);
     const names = await this.profileNames(
@@ -87,6 +114,7 @@ export class SupabaseGoldRepository implements GoldRepository {
         organization_id: input.organizationId,
         shipment_id: input.shipmentId,
         amount_grams: input.amountGrams,
+        karat: input.karat,
         unit_code: "g",
         recorded_at_utc: input.recordedAtUtc,
         recorded_by_profile_id: input.recordedByProfileId,
@@ -308,6 +336,7 @@ export class SupabaseGoldRepository implements GoldRepository {
       organizationId: this.string(row, "organization_id"),
       shipmentId: this.string(row, "shipment_id"),
       amountGrams: this.number(row, "amount_grams"),
+      karat: this.nullableNumber(row, "karat"),
       unitCode,
       recordedAtUtc: this.string(row, "recorded_at_utc"),
       recordedByProfileId: this.string(row, "recorded_by_profile_id"),

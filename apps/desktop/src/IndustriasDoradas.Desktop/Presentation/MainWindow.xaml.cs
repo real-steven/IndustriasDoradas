@@ -6,13 +6,16 @@ using System.ComponentModel;
 using System.Globalization;
 using IndustriasDoradas.Desktop.Application.Abstractions;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
+using IndustriasDoradas.Desktop.Presentation.Views;
 
 namespace IndustriasDoradas.Desktop.Presentation;
 
-public partial class MainWindow : Window, IDisposable
+public partial class MainWindow : Window, IDisposable, IPrivilegedDialogHost
 {
     private readonly MainWindowViewModel viewModel;
+    private readonly List<Window> privilegedDialogs = [];
     private readonly IBiometricVerificationService biometricService;
+    private readonly ProfilePopoverViewModel? profile;
     private readonly DispatcherTimer clockTimer;
     private readonly DispatcherTimer headerTimer;
     private readonly DispatcherTimer noticeTimer;
@@ -28,12 +31,25 @@ public partial class MainWindow : Window, IDisposable
 
     public MainWindow(
         MainWindowViewModel viewModel,
-        IBiometricVerificationService biometricService)
+        IBiometricVerificationService biometricService,
+        ProfilePopoverViewModel? profile = null)
     {
         InitializeComponent();
         this.viewModel = viewModel;
         this.biometricService = biometricService;
+        this.profile = profile;
         DataContext = viewModel;
+        if (profile is null)
+        {
+            ProfileAvatarHost.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            ProfileAvatarHost.DataContext = profile;
+            profile.PinResetRequested += OnProfilePinResetRequested;
+            PreviewMouseDown += OnProfileOutsideMouseDown;
+            _ = profile.RefreshAsync();
+        }
         clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         clockTimer.Tick += OnClockTick;
         headerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
@@ -43,6 +59,7 @@ public partial class MainWindow : Window, IDisposable
         Loaded += OnLoaded;
         Closed += OnClosed;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        viewModel.PrivilegedAccessEnded += OnPrivilegedAccessEnded;
         PreviewKeyDown += OnActivity;
         PreviewKeyDown += OnWindowPreviewKeyDown;
         PreviewMouseDown += OnActivity;
@@ -69,6 +86,47 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
+    /// <summary>
+    /// Registra un diálogo que solo puede existir con elevación activa. La interacción dentro del
+    /// diálogo cuenta como actividad del jefe y, si la elevación termina, el diálogo se cierra sin
+    /// guardar cambios pendientes. Devuelve false si la elevación ya no está activa.
+    /// </summary>
+    public bool TryTrackPrivilegedDialog(Window dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        if (!viewModel.HasElevatedAccess) return false;
+
+        privilegedDialogs.Add(dialog);
+        dialog.PreviewKeyDown += OnPrivilegedDialogActivity;
+        dialog.PreviewMouseDown += OnPrivilegedDialogActivity;
+        dialog.PreviewTouchDown += OnPrivilegedDialogActivity;
+        dialog.Closed += OnPrivilegedDialogClosed;
+        return true;
+    }
+
+    private void OnPrivilegedDialogActivity(object? sender, InputEventArgs e) =>
+        viewModel.RecordActivity();
+
+    private void OnPrivilegedDialogClosed(object? sender, EventArgs e)
+    {
+        if (sender is not Window dialog) return;
+        dialog.PreviewKeyDown -= OnPrivilegedDialogActivity;
+        dialog.PreviewMouseDown -= OnPrivilegedDialogActivity;
+        dialog.PreviewTouchDown -= OnPrivilegedDialogActivity;
+        dialog.Closed -= OnPrivilegedDialogClosed;
+        privilegedDialogs.Remove(dialog);
+    }
+
+    private void OnPrivilegedAccessEnded(object? sender, EventArgs e)
+    {
+        // Close() de cada diálogo dispara su limpieza normal (p. ej. cancelar la cámara del
+        // registro facial). Los datos operativos ya confirmados viven en SQLite y no se tocan.
+        foreach (Window dialog in privilegedDialogs.ToArray())
+        {
+            dialog.Close();
+        }
+    }
+
     private void OnClockTick(object? sender, EventArgs e) => UpdateClock();
 
     private void UpdateClock()
@@ -81,6 +139,15 @@ public partial class MainWindow : Window, IDisposable
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainWindowViewModel.IsPlantManager))
+        {
+            // Si la elevación vence con el perfil abierto, pasa a solo lectura al instante.
+            profile?.OnElevationChanged();
+        }
+        if (e.PropertyName == nameof(MainWindowViewModel.IsApplicationUnlocked) && !viewModel.IsApplicationUnlocked)
+        {
+            CloseProfilePopup(returnFocus: false);
+        }
         if (e.PropertyName == nameof(MainWindowViewModel.IsApplicationUnlocked))
         {
             if (!viewModel.IsApplicationUnlocked && isFullScreen)
@@ -249,6 +316,13 @@ public partial class MainWindow : Window, IDisposable
 
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && ProfilePopup.IsOpen)
+        {
+            HandleProfileEscape();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.F11)
         {
             ToggleFullScreen();
@@ -295,13 +369,16 @@ public partial class MainWindow : Window, IDisposable
         if (viewModel.Station?.IsPlantManager == true)
         {
             viewModel.Station.ExitManagerModeCommand.Execute(null);
-            viewModel.Attendance?.RefreshManagerMode();
             return;
         }
 
         ElevationOverlay.Visibility = Visibility.Visible;
         HeaderPinBox.Focus();
         Keyboard.Focus(HeaderPinBox);
+        if (viewModel.Station is not null)
+        {
+            await viewModel.Station.RecordElevationRequestedAsync();
+        }
         try
         {
             await StartSilentBiometricVerificationAsync();
@@ -313,6 +390,10 @@ public partial class MainWindow : Window, IDisposable
         catch (Exception exception)
         {
             BiometricStatusText.Text = $"La cámara no pudo completar la validación. Puede ingresar su PIN. Detalle: {exception.Message}";
+            if (viewModel.Station is not null)
+            {
+                await viewModel.Station.RecordBiometricTechnicalFailureAsync();
+            }
         }
     }
 
@@ -340,7 +421,6 @@ public partial class MainWindow : Window, IDisposable
         if (station.IsPlantManager)
         {
             ElevationOverlay.Visibility = Visibility.Collapsed;
-            viewModel.Attendance?.RefreshManagerMode();
         }
     }
 
@@ -377,6 +457,7 @@ public partial class MainWindow : Window, IDisposable
         }
 
         var status = new Progress<string>(message => BiometricStatusText.Text = message);
+        station.BeginBiometricAttempt();
         BiometricOperationResult result = await biometricService.VerifyAsync(
             profileId.Value,
             status,
@@ -385,6 +466,8 @@ public partial class MainWindow : Window, IDisposable
         BiometricStatusText.Text = result.Message;
         if (!result.Succeeded)
         {
+            // Un único evento con el resultado final del intento, nunca uno por fotograma.
+            await station.RecordBiometricFailureAsync(result);
             EnrollBiometricButton.Content = "VOLVER A REGISTRAR ROSTRO";
             EnrollBiometricButton.Visibility = Visibility.Visible;
             return;
@@ -394,7 +477,6 @@ public partial class MainWindow : Window, IDisposable
         if (!elevated || ElevationOverlay.Visibility != Visibility.Visible) return;
         HeaderPinBox.Clear();
         ElevationOverlay.Visibility = Visibility.Collapsed;
-        viewModel.Attendance?.RefreshManagerMode();
     }
 
     private async void OnEnrollBiometric(object sender, RoutedEventArgs e)
@@ -426,6 +508,7 @@ public partial class MainWindow : Window, IDisposable
         {
             Owner = this,
         };
+        if (!TryTrackPrivilegedDialog(enrollmentWindow)) return;
         enrollmentWindow.ShowDialog();
         BiometricOperationResult? result = enrollmentWindow.Result;
         BiometricStatusText.Text = result?.Message ?? "Registro facial cancelado.";
@@ -433,7 +516,6 @@ public partial class MainWindow : Window, IDisposable
 
         EnrollBiometricButton.Visibility = Visibility.Collapsed;
         ElevationOverlay.Visibility = Visibility.Collapsed;
-        viewModel.Attendance?.RefreshManagerMode();
     }
 
     private void CancelBiometricVerification()
@@ -469,19 +551,17 @@ public partial class MainWindow : Window, IDisposable
         ComingSoonNotice.Visibility = Visibility.Collapsed;
     }
 
-    private async void OnCloseStation(object sender, RoutedEventArgs e)
+    private void OnCloseStation(object sender, RoutedEventArgs e)
     {
-        if (viewModel.Station is null) return;
-        MessageBoxResult result = MessageBox.Show(
-            this,
-            "¿Cerrar la estación y volver al inicio de sesión?",
-            "Cerrar estación",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-        if (result == MessageBoxResult.Yes)
-        {
-            await viewModel.Station.CloseStationCommand.ExecuteAsync(null);
-        }
+        StationViewModel? station = viewModel.Station;
+        if (station is null) return;
+        // El cierre (Outbox, sesión y vuelta al login) sigue siendo CloseStationCommand;
+        // el diálogo solo lo ejecuta tras confirmar y espera a que termine.
+        var confirmation = new CloseStationConfirmationViewModel(() => station.IsStationOpen
+            ? station.CloseStationCommand.ExecuteAsync(null)
+            : Task.CompletedTask);
+        var dialog = new CloseStationConfirmationWindow { Owner = this, DataContext = confirmation };
+        dialog.ShowDialog();
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -498,11 +578,94 @@ public partial class MainWindow : Window, IDisposable
         headerTimer.Stop();
         noticeTimer.Stop();
         viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        viewModel.PrivilegedAccessEnded -= OnPrivilegedAccessEnded;
         PreviewKeyDown -= OnWindowPreviewKeyDown;
+        PreviewMouseDown -= OnProfileOutsideMouseDown;
+        if (profile is not null) profile.PinResetRequested -= OnProfilePinResetRequested;
         clockTimer.Tick -= OnClockTick;
         headerTimer.Tick -= OnHeaderTimerTick;
         noticeTimer.Tick -= OnNoticeTimerTick;
         Closed -= OnClosed;
         GC.SuppressFinalize(this);
+    }
+
+    private async void OnProfileAvatarClick(object sender, RoutedEventArgs e)
+    {
+        if (profile is null) return;
+        if (ProfilePopup.IsOpen)
+        {
+            CloseProfilePopup(returnFocus: true);
+            return;
+        }
+
+        ProfilePopup.IsOpen = true;
+        Task opening = profile.OpenAsync();
+        _ = Dispatcher.BeginInvoke(
+            () => ProfilePopupPanel.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)),
+            DispatcherPriority.Input);
+        await opening;
+    }
+
+    private void OnProfilePopupKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+        HandleProfileEscape();
+        e.Handled = true;
+    }
+
+    private void HandleProfileEscape()
+    {
+        if (profile is null || profile.IsPickingPhoto) return;
+        if (profile.IsEditingPhone)
+        {
+            profile.CancelEditCommand.Execute(null);
+            ProfilePopupPanel.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            return;
+        }
+        CloseProfilePopup(returnFocus: true);
+    }
+
+    private void OnProfileOutsideMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        // Los clics dentro de la ventana emergente no llegan aquí (es otra ventana nativa).
+        if (!ProfilePopup.IsOpen || profile?.IsPickingPhoto == true) return;
+        if (e.OriginalSource is DependencyObject source && IsWithin(source, ProfileAvatarButton)) return;
+        CloseProfilePopup(returnFocus: false);
+    }
+
+    private void CloseProfilePopup(bool returnFocus)
+    {
+        if (!ProfilePopup.IsOpen) return;
+        ProfilePinBox.Clear();
+        profile?.Close();
+        ProfilePopup.IsOpen = false;
+        if (returnFocus) ProfileAvatarButton.Focus();
+    }
+
+    private async void OnProfileSavePhone(object sender, RoutedEventArgs e)
+    {
+        if (profile is null) return;
+        await profile.SavePhoneAsync(ProfilePinBox.Password);
+    }
+
+    private async void OnProfilePinKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || profile is null) return;
+        e.Handled = true;
+        await profile.SavePhoneAsync(ProfilePinBox.Password);
+    }
+
+    private void OnProfilePinResetRequested(object? sender, EventArgs e) => ProfilePinBox.Clear();
+
+    private static bool IsWithin(DependencyObject source, DependencyObject ancestor)
+    {
+        for (DependencyObject? current = source; current is not null;
+             current = current is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                 ? System.Windows.Media.VisualTreeHelper.GetParent(current)
+                 : LogicalTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, ancestor)) return true;
+        }
+        return false;
     }
 }

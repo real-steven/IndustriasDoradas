@@ -63,7 +63,7 @@ describe("reportes gerenciales", () => {
       name: "Vista previa del reporte",
     });
     expect(within(dialog).getByText("42000001")).toBeInTheDocument();
-    expect(within(dialog).getByText("13,42")).toBeInTheDocument();
+    expect(within(dialog).getByText("13,42 k")).toBeInTheDocument();
     expect(within(dialog).getAllByText("Proveedor Norte")).toHaveLength(2);
     expect(within(dialog).queryByText("Cobertura")).not.toBeInTheDocument();
     expect(within(dialog).queryByText("Cajuelas")).not.toBeInTheDocument();
@@ -102,7 +102,7 @@ describe("reportes gerenciales", () => {
             url.pathname.endsWith("/reports/production.pdf") &&
             url.searchParams.get("productionLineId") === "line-id" &&
             url.searchParams.get("supplierId") === "supplier-id" &&
-            url.searchParams.get("sections") === "shipments,financial" &&
+            url.searchParams.get("sections") === "shipments" &&
             url.searchParams.get("fields") ===
               "date,shipment,supplier,gold,karat" &&
             new Headers(init?.headers).get("Authorization") ===
@@ -282,28 +282,21 @@ function report() {
       },
     ],
     shipments: [
-      reportShipment({ goldAmountGrams: 0, palosPerCajuela: 0 }),
+      // El quilataje llega en cada cargamento desde el registro de oro.
+      reportShipment({
+        goldAmountGrams: 0,
+        goldKarat: 13.42,
+        palosPerCajuela: 0,
+      }),
       reportShipment({
         shipmentId: "42000000-0000-4000-8000-000000000002",
         shipmentCode: "42000002",
         goldStatus: "PENDING",
         goldAmountGrams: null,
+        goldKarat: null,
         gramsPerCajuela: null,
         palosPerCajuela: null,
       }),
-    ],
-    financialSettlements: [
-      {
-        id: "settlement-id",
-        supplierId: "supplier-id",
-        lines: [
-          {
-            shipmentId: "42000000-0000-4000-8000-000000000001",
-            karat: 13.42,
-            displayOrder: 1,
-          },
-        ],
-      },
     ],
   };
 }

@@ -41,6 +41,8 @@ export interface ReportShipment {
   sweepCount: number;
   goldStatus: "REGISTERED" | "PENDING";
   goldAmountGrams: number | null;
+  /** Quilataje vigente del registro de oro; null significa no registrado. */
+  goldKarat: number | null;
   gramsPerCajuela: number | null;
   palosPerCajuela: number | null;
 }
@@ -56,7 +58,6 @@ export interface ProductionReport {
   summary: ReportMetrics;
   suppliers: ReportSupplier[];
   shipments: ReportShipment[];
-  financialSettlements: ReportSettlement[];
 }
 
 export type ProductionReportSection = "summary" | "shipments" | "financial";
@@ -71,16 +72,6 @@ export type ProductionReportField =
   | "palos"
   | "responsible"
   | "sweeps";
-
-export interface ReportSettlement {
-  id: string;
-  supplierId: string;
-  lines: Array<{
-    shipmentId: string;
-    karat: number;
-    displayOrder: number;
-  }>;
-}
 
 export function useProductionReport(
   filters: StatisticsFilters,
@@ -144,7 +135,8 @@ function reportQuery(
     fromUtc: range.fromUtc,
     toUtc: range.toUtc,
     language,
-    sections: fields.includes("karat") ? "shipments,financial" : "shipments",
+    // El quilataje llega en cada cargamento desde el registro de oro.
+    sections: "shipments",
     fields: fields.join(","),
   });
   if (filters.productionLineId !== undefined)

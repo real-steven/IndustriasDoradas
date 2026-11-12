@@ -1,13 +1,30 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 
+import type { CatalogItem } from "../../api/generated/api-client";
 import { requestErrorMessage } from "../../api/http";
 import { useLanguage } from "../../i18n/language-context";
-import { workerDisplayName } from "../workers/worker-display";
+import {
+  compareWorkersForDirectory,
+  workerDisplayName,
+} from "../workers/worker-display";
 import { PlantManagerPage } from "../accounts/plant-manager-page";
 import { formatMinutes } from "./attendance-data";
 import {
-  currentPayrollWeek,
+  costaRicaToday,
+  PAYROLL_PERIOD_PRESETS,
+  payrollPeriodRange,
+  type PayrollDateRange,
+  type PayrollPeriodPreset,
+  type PayrollPeriodSelection,
+} from "./payroll-periods";
+import {
   useAuthorizePayrollGross,
   useCreatePayrollAdjustment,
   useCreatePayrollRate,
@@ -20,6 +37,14 @@ import {
   type PayrollWorkerResult,
   type PayrollWorkerProfile,
 } from "./payroll-data";
+import {
+  compareSuppliersForDirectory,
+  isDefaultSupplier,
+  useCanManageSuppliers,
+  useSetSupplierState,
+  useSuppliers,
+  useUpdateSupplier,
+} from "./supplier-data";
 
 const COMMENT_OPTIONS: Array<{
   value: PayrollAdjustmentType;
@@ -52,18 +77,34 @@ export function AttendanceFeature() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const workers = usePayrollWorkers(search);
+  const suppliers = useSuppliers();
   const orderedWorkers = useMemo(
     () =>
       [...(Array.isArray(workers.data) ? workers.data : [])].sort(
-        (left, right) =>
-          roleOrder(left.category) - roleOrder(right.category) ||
-          left.name.localeCompare(right.name, "es"),
+        compareWorkersForDirectory,
       ),
     [workers.data],
   );
+  const managers = orderedWorkers.filter(
+    (worker) => worker.category === "JEFE_PLANTA",
+  );
+  const operators = orderedWorkers.filter(
+    (worker) => worker.category !== "JEFE_PLANTA",
+  );
+  const allSuppliers = suppliers.data?.items;
+  const orderedSuppliers = useMemo(
+    () =>
+      [...(allSuppliers ?? [])]
+        .filter((supplier) => supplierMatches(supplier, search))
+        .sort(compareSuppliersForDirectory),
+    [allSuppliers, search],
+  );
   const totalWorkers = orderedWorkers.length;
-  const totalPages = Math.max(1, Math.ceil(totalWorkers / WORKERS_PER_PAGE));
-  const visibleWorkers = orderedWorkers.slice(
+  const totalOperatorPages = Math.max(
+    1,
+    Math.ceil(operators.length / WORKERS_PER_PAGE),
+  );
+  const visibleOperators = operators.slice(
     (page - 1) * WORKERS_PER_PAGE,
     page * WORKERS_PER_PAGE,
   );
@@ -71,12 +112,36 @@ export function AttendanceFeature() {
   const selectedWorker = orderedWorkers.find(
     (worker) => worker.id === selectedWorkerId,
   );
+  const selectedSupplierId = parameters.get("supplier") ?? undefined;
+  const selectedSupplier = allSuppliers?.find(
+    (supplier) => supplier.id === selectedSupplierId,
+  );
   const createWorkerOpen = parameters.get("action") === "create";
+  const openWorker = (workerId: string) => {
+    const next = new URLSearchParams(parameters);
+    next.set("worker", workerId);
+    setParameters(next, { replace: true });
+  };
+  const openSupplier = (supplierId: string) => {
+    const next = new URLSearchParams(parameters);
+    next.set("supplier", supplierId);
+    setParameters(next, { replace: true });
+  };
   const closeWorker = () => {
     const next = new URLSearchParams(parameters);
     next.delete("worker");
     setParameters(next, { replace: true });
   };
+  const closeSupplier = () => {
+    const next = new URLSearchParams(parameters);
+    next.delete("supplier");
+    setParameters(next, { replace: true });
+  };
+  const nothingFound =
+    Array.isArray(workers.data) &&
+    totalWorkers === 0 &&
+    suppliers.data !== undefined &&
+    orderedSuppliers.length === 0;
   const openCreateWorker = () => {
     const next = new URLSearchParams(parameters);
     next.set("action", "create");
@@ -97,6 +162,15 @@ export function AttendanceFeature() {
             <p>
               {totalWorkers.toLocaleString(locale)}{" "}
               {tr("empleados", "employees")}
+              {suppliers.data !== undefined && (
+                <>
+                  {" · "}
+                  {orderedSuppliers.length.toLocaleString(locale)}{" "}
+                  {orderedSuppliers.length === 1
+                    ? tr("proveedor", "supplier")
+                    : tr("proveedores", "suppliers")}
+                </>
+              )}
             </p>
           </div>
           <div className="payroll-directory-actions">
@@ -106,8 +180,8 @@ export function AttendanceFeature() {
                 type="search"
                 value={search}
                 placeholder={tr(
-                  "Buscar por nombre o cédula",
-                  "Search by name or identity",
+                  "Buscar por nombre, cédula o proveedor",
+                  "Search by name, identity, or supplier",
                 )}
                 onChange={(event) => {
                   setSearch(event.target.value);
@@ -131,30 +205,64 @@ export function AttendanceFeature() {
             {requestErrorMessage(workers.error, undefined, language)}
           </p>
         )}
+        {suppliers.isError && suppliers.data === undefined && (
+          <p className="query-message error" role="alert">
+            {requestErrorMessage(suppliers.error, undefined, language)}
+          </p>
+        )}
+        {orderedSuppliers.length > 0 && (
+          <DirectorySection
+            title={tr("PROVEEDORES", "SUPPLIERS")}
+            count={orderedSuppliers.length}
+          >
+            {orderedSuppliers.map((supplier) => (
+              <SupplierDirectoryRow
+                key={supplier.id}
+                supplier={supplier}
+                onOpen={() => openSupplier(supplier.id)}
+              />
+            ))}
+          </DirectorySection>
+        )}
         {Array.isArray(workers.data) && (
           <>
-            <div className="payroll-worker-list">
-              {visibleWorkers.map((worker) => (
-                <WorkerDirectoryRow
-                  key={worker.id}
-                  worker={worker}
-                  onOpen={() => {
-                    const next = new URLSearchParams(parameters);
-                    next.set("worker", worker.id);
-                    setParameters(next, { replace: true });
-                  }}
-                />
-              ))}
-              {totalWorkers === 0 && (
-                <p className="attendance-empty">
-                  {tr(
-                    "No se encontraron trabajadores con ese nombre o cédula.",
-                    "No workers matched that name or identity number.",
-                  )}
-                </p>
-              )}
-            </div>
-            {totalPages > 1 && (
+            {managers.length > 0 && (
+              <DirectorySection
+                title={tr("JEFES DE PLANTA", "PLANT MANAGERS")}
+                count={managers.length}
+              >
+                {managers.map((worker) => (
+                  <WorkerDirectoryRow
+                    key={worker.id}
+                    worker={worker}
+                    onOpen={() => openWorker(worker.id)}
+                  />
+                ))}
+              </DirectorySection>
+            )}
+            {operators.length > 0 && (
+              <DirectorySection
+                title={tr("OPERARIOS", "OPERATORS")}
+                count={operators.length}
+              >
+                {visibleOperators.map((worker) => (
+                  <WorkerDirectoryRow
+                    key={worker.id}
+                    worker={worker}
+                    onOpen={() => openWorker(worker.id)}
+                  />
+                ))}
+              </DirectorySection>
+            )}
+            {nothingFound && (
+              <p className="attendance-empty">
+                {tr(
+                  "No se encontraron trabajadores ni proveedores con esa búsqueda.",
+                  "No workers or suppliers matched that search.",
+                )}
+              </p>
+            )}
+            {totalOperatorPages > 1 && (
               <nav
                 className="payroll-pagination"
                 aria-label={tr("Paginación", "Pagination")}
@@ -169,15 +277,15 @@ export function AttendanceFeature() {
                   ‹
                 </button>
                 <span>
-                  {page} / {totalPages}
+                  {page} / {totalOperatorPages}
                 </span>
                 <button
                   type="button"
                   className="secondary"
                   aria-label={tr("Página siguiente", "Next page")}
-                  disabled={page === totalPages}
+                  disabled={page === totalOperatorPages}
                   onClick={() =>
-                    setPage((value) => Math.min(totalPages, value + 1))
+                    setPage((value) => Math.min(totalOperatorPages, value + 1))
                   }
                 >
                   ›
@@ -195,10 +303,369 @@ export function AttendanceFeature() {
           onClose={closeWorker}
         />
       )}
+      {selectedSupplierId !== undefined && selectedSupplier !== undefined && (
+        <SupplierDialog supplier={selectedSupplier} onClose={closeSupplier} />
+      )}
       {createWorkerOpen && (
         <PlantUserCreateDialog onClose={closeCreateWorker} />
       )}
     </div>
+  );
+}
+
+function supplierMatches(supplier: CatalogItem, search: string): boolean {
+  const term = search.trim().toLocaleLowerCase("es");
+  if (term.length === 0) return true;
+  return [supplier.name, supplier.email, supplier.phone].some(
+    (value) => value?.toLocaleLowerCase("es").includes(term) ?? false,
+  );
+}
+
+function DirectorySection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="personnel-directory-section" aria-label={title}>
+      <h2>
+        {title} <span>({count})</span>
+      </h2>
+      <div className="payroll-worker-list">{children}</div>
+    </section>
+  );
+}
+
+function SupplierDirectoryRow({
+  supplier,
+  onOpen,
+}: {
+  supplier: CatalogItem;
+  onOpen: () => void;
+}) {
+  const { tr } = useLanguage();
+  const contact = [supplier.email, supplier.phone]
+    .filter((value): value is string => (value ?? "").trim().length > 0)
+    .join(" · ");
+  return (
+    <button
+      type="button"
+      className={`payroll-worker-row supplier-row${supplier.isActive ? "" : " inactive"}`}
+      onClick={onOpen}
+    >
+      <span className="payroll-worker-identity">
+        <strong>
+          {supplier.name}
+          <SupplierBadges supplier={supplier} />
+        </strong>
+        <small>
+          {contact.length > 0 ? contact : tr("Sin contacto", "No contact")}
+        </small>
+      </span>
+      <span className="payroll-worker-rate">
+        <small>{tr("Pago", "Payment")}</small>
+        <strong>{tr("Aparte", "Separate")}</strong>
+      </span>
+      <span className="payroll-open-label">{tr("ABRIR", "OPEN")} →</span>
+    </button>
+  );
+}
+
+function SupplierBadges({ supplier }: { supplier: CatalogItem }) {
+  const { tr } = useLanguage();
+  if (isDefaultSupplier(supplier))
+    return (
+      <span className="supplier-badge default">
+        {tr("Predeterminado", "Default")}
+      </span>
+    );
+  if (!supplier.isActive)
+    return (
+      <span className="supplier-badge suspended">
+        {tr("Suspendido", "Suspended")}
+      </span>
+    );
+  return null;
+}
+
+function SupplierDialog({
+  supplier,
+  onClose,
+}: {
+  supplier: CatalogItem;
+  onClose: () => void;
+}) {
+  const { tr } = useLanguage();
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="payroll-modal-backdrop" onMouseDown={onClose}>
+      <section
+        className="payroll-modal supplier-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={tr("Ficha del proveedor", "Supplier record")}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="payroll-modal-header">
+          <div className="payroll-modal-person">
+            <span>{tr("PROVEEDOR", "SUPPLIER")}</span>
+            <h2>{supplier.name}</h2>
+            <div className="payroll-worker-heading-meta">
+              <span>
+                {supplier.isActive
+                  ? tr("Activo", "Active")
+                  : tr("Suspendido", "Suspended")}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>{tr("Pago aparte", "Paid separately")}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="secondary payroll-modal-close"
+            onClick={onClose}
+            aria-label={tr("Cerrar", "Close")}
+          >
+            ×
+          </button>
+        </header>
+        <SupplierProfilePanel key={supplier.updatedAt} supplier={supplier} />
+      </section>
+    </div>
+  );
+}
+
+function SupplierProfilePanel({ supplier }: { supplier: CatalogItem }) {
+  const { language, tr } = useLanguage();
+  const canManage = useCanManageSuppliers();
+  const updateMutation = useUpdateSupplier();
+  const stateMutation = useSetSupplierState();
+  const isDefault = isDefaultSupplier(supplier);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(supplier.name);
+  const [email, setEmail] = useState(supplier.email ?? "");
+  const [phone, setPhone] = useState(supplier.phone ?? "");
+  const [suspending, setSuspending] = useState(false);
+  const [suspensionReason, setSuspensionReason] = useState("");
+
+  if (!editing) {
+    return (
+      <section className="worker-profile-panel">
+        <header>
+          <div>
+            <span>{tr("DATOS DEL PROVEEDOR", "SUPPLIER DETAILS")}</span>
+            <h3>{tr("Contacto y estado", "Contact and status")}</h3>
+          </div>
+          {canManage && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setEditing(true)}
+            >
+              ✎ {tr("EDITAR DATOS", "EDIT DETAILS")}
+            </button>
+          )}
+        </header>
+        <dl className="worker-profile-grid">
+          <div>
+            <dt>{tr("Nombre de la empresa", "Company name")}</dt>
+            <dd>{supplier.name}</dd>
+          </div>
+          <div>
+            <dt>{tr("Correo electrónico", "Email")}</dt>
+            <dd>{supplier.email ?? tr("Sin registrar", "Not recorded")}</dd>
+          </div>
+          <div>
+            <dt>{tr("Teléfono", "Phone")}</dt>
+            <dd>{supplier.phone ?? tr("Sin registrar", "Not recorded")}</dd>
+          </div>
+          <div>
+            <dt>{tr("Estado", "Status")}</dt>
+            <dd>
+              {supplier.isActive
+                ? tr("Activo", "Active")
+                : tr("Suspendido", "Suspended")}
+            </dd>
+          </div>
+        </dl>
+        {isDefault ? (
+          <p className="field-help">
+            {tr(
+              "Proveedor predeterminado al preparar una línea en planta. No se puede suspender ni cambiar de nombre.",
+              "Default supplier when preparing a plant line. It cannot be suspended or renamed.",
+            )}
+          </p>
+        ) : (
+          <p className="field-help">
+            {tr(
+              "Un proveedor suspendido no aparece al preparar cargamentos nuevos; su historial se conserva.",
+              "A suspended supplier is not offered for new shipments; its history is kept.",
+            )}
+          </p>
+        )}
+        {canManage && !isDefault && (
+          <div className="worker-profile-state-actions">
+            {supplier.isActive ? (
+              suspending ? (
+                <div className="worker-suspension-box">
+                  <label>
+                    {tr("Motivo de suspensión", "Suspension reason")}
+                    <textarea
+                      required
+                      minLength={3}
+                      maxLength={300}
+                      rows={2}
+                      value={suspensionReason}
+                      onChange={(event) =>
+                        setSuspensionReason(event.target.value)
+                      }
+                    />
+                  </label>
+                  <MutationError mutation={stateMutation} language={language} />
+                  <div>
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={
+                        stateMutation.isPending ||
+                        suspensionReason.trim().length < 3
+                      }
+                      onClick={() =>
+                        stateMutation.mutate(
+                          {
+                            supplierId: supplier.id,
+                            active: false,
+                            reason: suspensionReason.trim(),
+                          },
+                          {
+                            onSuccess: () => {
+                              setSuspending(false);
+                              setSuspensionReason("");
+                            },
+                          },
+                        )
+                      }
+                    >
+                      {tr("CONFIRMAR SUSPENSIÓN", "CONFIRM SUSPENSION")}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setSuspending(false)}
+                    >
+                      {tr("CANCELAR", "CANCEL")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="danger secondary"
+                  onClick={() => setSuspending(true)}
+                >
+                  {tr("SUSPENDER PROVEEDOR", "SUSPEND SUPPLIER")}
+                </button>
+              )
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={stateMutation.isPending}
+                  onClick={() =>
+                    stateMutation.mutate({
+                      supplierId: supplier.id,
+                      active: true,
+                    })
+                  }
+                >
+                  {tr("REACTIVAR PROVEEDOR", "REACTIVATE SUPPLIER")}
+                </button>
+                <MutationError mutation={stateMutation} language={language} />
+              </>
+            )}
+          </div>
+        )}
+      </section>
+    );
+  }
+  return (
+    <form
+      className="worker-profile-panel worker-profile-editor"
+      onSubmit={(event) => {
+        event.preventDefault();
+        updateMutation.mutate(
+          {
+            supplierId: supplier.id,
+            ...(isDefault ? {} : { name: name.trim() }),
+            email: email.trim() || null,
+            phone: phone.trim() || null,
+          },
+          { onSuccess: () => setEditing(false) },
+        );
+      }}
+    >
+      <header>
+        <div>
+          <span>{tr("EDITAR PROVEEDOR", "EDIT SUPPLIER")}</span>
+          <h3>{tr("Datos del proveedor", "Supplier details")}</h3>
+        </div>
+      </header>
+      <div className="worker-profile-form-grid">
+        <label>
+          {tr("Nombre de la empresa", "Company name")}
+          <input
+            autoFocus={!isDefault}
+            required
+            maxLength={160}
+            value={name}
+            disabled={isDefault}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label>
+          {tr("Correo electrónico", "Email")}
+          <input
+            type="email"
+            maxLength={254}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <label>
+          {tr("Teléfono", "Phone")}
+          <input
+            type="tel"
+            maxLength={40}
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        </label>
+      </div>
+      <MutationError mutation={updateMutation} language={language} />
+      <div className="payroll-editor-actions">
+        <button type="submit" disabled={updateMutation.isPending}>
+          {tr("GUARDAR CAMBIOS", "SAVE CHANGES")}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setEditing(false)}
+        >
+          {tr("CANCELAR", "CANCEL")}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -235,8 +702,22 @@ function PlantUserCreateDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function roleOrder(category: string): number {
-  return category === "JEFE_PLANTA" ? 0 : 1;
+const LOCAL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
+
+function periodLabel(
+  preset: PayrollPeriodPreset,
+  tr: (spanish: string, english: string) => string,
+): string {
+  switch (preset) {
+    case "currentWeek":
+      return tr("Esta semana", "This week");
+    case "previousWeek":
+      return tr("Semana anterior", "Previous week");
+    case "currentFortnight":
+      return tr("Quincena actual", "Current fortnight");
+    case "currentMonth":
+      return tr("Mes actual", "Current month");
+  }
 }
 
 function roleLabel(
@@ -259,12 +740,7 @@ function WorkerDirectoryRow({
   return (
     <button type="button" className="payroll-worker-row" onClick={onOpen}>
       <span className="payroll-worker-identity">
-        <strong>
-          <span className="worker-role-prefix">
-            {worker.category === "JEFE_PLANTA" ? "JF" : "OP"}
-          </span>{" "}
-          {workerDisplayName(worker.name)}
-        </strong>
+        <strong>{workerDisplayName(worker.name)}</strong>
         <small>
           {roleLabel(worker.category, tr)} ·{" "}
           {worker.identityNumber === null
@@ -295,11 +771,35 @@ function WorkerPayrollDialog({
   onClose: () => void;
 }) {
   const { language, tr } = useLanguage();
-  const initialRange = useMemo(() => currentPayrollWeek(), []);
-  const [fromDate, setFromDate] = useState(initialRange.fromDate);
-  const [toDate, setToDate] = useState(initialRange.toDate);
+  // «Hoy» se fija al abrir el expediente para que los accesos no cambien solos.
+  const today = useMemo(() => costaRicaToday(), []);
+  const [period, setPeriod] = useState<PayrollPeriodSelection>("currentWeek");
+  const [range, setRange] = useState<PayrollDateRange>(() =>
+    payrollPeriodRange("currentWeek", today),
+  );
+  const { fromDate, toDate } = range;
+  const rangeIsValid =
+    LOCAL_DATE_PATTERN.test(fromDate) &&
+    LOCAL_DATE_PATTERN.test(toDate) &&
+    fromDate <= toDate;
+  // Con un rango inválido se conserva el último válido en pantalla.
+  const [queryRange, setQueryRange] = useState(range);
+  if (
+    rangeIsValid &&
+    (queryRange.fromDate !== fromDate || queryRange.toDate !== toDate)
+  ) {
+    setQueryRange(range);
+  }
+  const selectPreset = (preset: PayrollPeriodPreset) => {
+    setPeriod(preset);
+    setRange(payrollPeriodRange(preset, today));
+  };
+  const changeDate = (field: keyof PayrollDateRange, value: string) => {
+    setPeriod("custom");
+    setRange((current) => ({ ...current, [field]: value }));
+  };
   const [tab, setTab] = useState<PayrollTab>("summary");
-  const report = usePayrollReport({ fromDate, toDate, workerId });
+  const report = usePayrollReport({ ...queryRange, workerId });
   const result = report.data?.workers[0];
   const worker = result?.worker ?? initialWorker;
 
@@ -330,9 +830,6 @@ function WorkerPayrollDialog({
             </h2>
             {worker !== undefined && (
               <div className="payroll-worker-heading-meta">
-                <span className="worker-role-prefix">
-                  {worker.category === "JEFE_PLANTA" ? "JF" : "OP"}
-                </span>
                 <span>{roleLabel(worker.category, tr)}</span>
                 <span aria-hidden="true">·</span>
                 <span>
@@ -349,7 +846,9 @@ function WorkerPayrollDialog({
               <input
                 type="date"
                 value={fromDate}
-                onChange={(event) => setFromDate(event.target.value)}
+                max={toDate || undefined}
+                aria-invalid={!rangeIsValid}
+                onChange={(event) => changeDate("fromDate", event.target.value)}
               />
             </label>
             <label>
@@ -357,7 +856,9 @@ function WorkerPayrollDialog({
               <input
                 type="date"
                 value={toDate}
-                onChange={(event) => setToDate(event.target.value)}
+                min={fromDate || undefined}
+                aria-invalid={!rangeIsValid}
+                onChange={(event) => changeDate("toDate", event.target.value)}
               />
             </label>
             <button
@@ -370,6 +871,40 @@ function WorkerPayrollDialog({
             </button>
           </div>
         </header>
+
+        <div className="payroll-period-bar">
+          <div
+            className="payroll-period-presets"
+            role="group"
+            aria-label={tr("Período rápido", "Quick period")}
+          >
+            {PAYROLL_PERIOD_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={period === preset ? "active" : ""}
+                aria-pressed={period === preset}
+                onClick={() => selectPreset(preset)}
+              >
+                {periodLabel(preset, tr)}
+              </button>
+            ))}
+            <span
+              className={`payroll-period-custom${period === "custom" ? " active" : ""}`}
+              aria-hidden={period !== "custom"}
+            >
+              {tr("Personalizado", "Custom")}
+            </span>
+          </div>
+          {!rangeIsValid && (
+            <p className="payroll-period-error" role="alert">
+              {tr(
+                "Revise las fechas: «Desde» debe ser igual o anterior a «Hasta».",
+                "Check the dates: “From” must be on or before “To”.",
+              )}
+            </p>
+          )}
+        </div>
 
         <nav
           className="payroll-modal-tabs"
@@ -405,10 +940,14 @@ function WorkerPayrollDialog({
             </p>
           )}
           {result !== undefined && tab === "summary" && (
-            <SummaryTab result={result} fromDate={fromDate} toDate={toDate} />
+            <SummaryTab
+              result={result}
+              fromDate={queryRange.fromDate}
+              toDate={queryRange.toDate}
+            />
           )}
           {result !== undefined && tab === "comments" && (
-            <CommentsTab result={result} defaultDate={toDate} />
+            <CommentsTab result={result} defaultDate={queryRange.toDate} />
           )}
         </div>
         <footer className="payroll-modal-footer">

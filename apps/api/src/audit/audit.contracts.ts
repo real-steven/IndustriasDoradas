@@ -1,7 +1,8 @@
 export const AUDIT_EVENT_REPOSITORY = Symbol("AUDIT_EVENT_REPOSITORY");
 export const AUDIT_QUERY_REPOSITORY = Symbol("AUDIT_QUERY_REPOSITORY");
 
-export type AuditCategory = "operation" | "people" | "administration";
+export type AuditCategory =
+  "operation" | "people" | "security" | "administration";
 
 export const AUDIT_ACTIONS = {
   API_ACCESS: "access.api",
@@ -92,6 +93,16 @@ export interface AuditListItem {
   entityType: string;
   entityId: string | null;
   shipmentStatus?: "ACTIVE" | "COMPLETED" | null;
+  /** Área gerencial derivada; `null` para accesos técnicos y otros. */
+  auditArea: AuditCategory | null;
+  /** Tipo de acción gerencial derivado, por ejemplo `ATTENDANCE_CHECK_IN`. */
+  auditKind: string;
+  /** Persona a la que se refiere el hecho (asistencia o cuenta), no quien lo hizo. */
+  subjectWorkerId: string | null;
+  subjectName: string | null;
+  /** Hora real de la marcación de asistencia, en UTC. */
+  subjectOccurredAtUtc: string | null;
+  productionLineId: string | null;
   result: AuditResult;
   reasonCode: string | null;
   evidenceState: AuditEvidenceState;
@@ -109,6 +120,9 @@ export interface AuditQueryRepository {
       pageSize: number;
       search?: string;
       category?: AuditCategory;
+      kinds?: string;
+      workerId?: string;
+      productionLineId?: string;
       action?: string;
       entityType?: string;
       result?: AuditResult;

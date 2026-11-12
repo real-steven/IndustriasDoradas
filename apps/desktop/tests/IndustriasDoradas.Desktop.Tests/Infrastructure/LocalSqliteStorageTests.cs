@@ -31,6 +31,11 @@ public sealed class LocalSqliteStorageTests
     private static readonly Guid SecondWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000002");
     private static readonly Guid ThirdWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000003");
     private static readonly Guid ActorProfileId = Guid.Parse("20000000-0000-4000-8000-000000000001");
+    private static readonly string[] ExpectedSecurityPayloadKeys =
+    [
+        "schemaVersion", "eventId", "stationId", "clientSequence", "actorProfileId",
+        "eventType", "method", "result", "occurredAtUtc",
+    ];
     private static readonly Guid InventoryItemTypeId = Guid.Parse("77000000-0000-4000-8000-000000000001");
     private static readonly Guid InventoryUnitId = Guid.Parse("77100000-0000-4000-8000-000000000001");
     private static readonly Guid InventoryItemId = Guid.Parse("77200000-0000-4000-8000-000000000001");
@@ -65,8 +70,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(29L, result.CurrentVersion);
-        Assert.AreEqual(29, result.AppliedCount);
+        Assert.AreEqual(30L, result.CurrentVersion);
+        Assert.AreEqual(30, result.AppliedCount);
         Assert.AreEqual("wal", result.JournalMode, ignoreCase: true);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "PRAGMA foreign_keys;"));
@@ -75,7 +80,7 @@ public sealed class LocalSqliteStorageTests
         Assert.AreEqual("ok", await ScalarTextAsync(connection, "PRAGMA integrity_check;"), ignoreCase: true);
         Assert.AreEqual(0L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
         Assert.IsTrue(Version.Parse(await ScalarTextAsync(connection, "SELECT sqlite_version();")) >= new Version(3, 50, 2));
-        Assert.AreEqual(29L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(30L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM local_schema_migrations;"));
         Assert.AreEqual(1L, await ScalarLongAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'production_events';"));
@@ -90,8 +95,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(29L, result.CurrentVersion);
-        Assert.AreEqual(10, result.AppliedCount);
+        Assert.AreEqual(30L, result.CurrentVersion);
+        Assert.AreEqual(11, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(3L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_workers;"));
         Assert.AreEqual(9L, await ScalarLongAsync(connection, """
@@ -491,8 +496,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(29L, result.CurrentVersion);
-        Assert.AreEqual(2, result.AppliedCount);
+        Assert.AreEqual(30L, result.CurrentVersion);
+        Assert.AreEqual(3, result.AppliedCount);
         await using SqliteConnection verification = await database.Factory.OpenAsync();
         Assert.AreEqual(0L, await ScalarLongAsync(
             verification,
@@ -552,7 +557,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(28, result.AppliedCount);
+        Assert.AreEqual(29, result.AppliedCount);
         Assert.AreEqual(1, (await database.Catalogs().ListActiveSuppliersAsync(OrganizationId)).Count);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -572,8 +577,8 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(29L, result.CurrentVersion);
-        Assert.AreEqual(18, result.AppliedCount);
+        Assert.AreEqual(30L, result.CurrentVersion);
+        Assert.AreEqual(19, result.AppliedCount);
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM cached_shipments;"));
         Assert.AreEqual(1L, await ScalarLongAsync(connection, "SELECT COUNT(*) FROM production_events;"));
@@ -841,7 +846,7 @@ public sealed class LocalSqliteStorageTests
 
         Assert.IsTrue(File.Exists(copyPath));
         Assert.AreEqual(1L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM cached_suppliers;"));
-        Assert.AreEqual(29L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
+        Assert.AreEqual(30L, await ScalarLongAsync(copy, "SELECT COUNT(*) FROM local_schema_migrations;"));
     }
 
     [TestMethod]
@@ -991,7 +996,7 @@ public sealed class LocalSqliteStorageTests
 
         LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
 
-        Assert.AreEqual(27, result.AppliedCount);
+        Assert.AreEqual(28, result.AppliedCount);
         Assert.AreEqual(1, await database.Cajuelas().GetTotalAsync(LineId, ShipmentId));
         await using SqliteConnection connection = await database.Factory.OpenAsync();
         Assert.AreEqual(1L, await ScalarLongAsync(
@@ -1673,8 +1678,8 @@ public sealed class LocalSqliteStorageTests
         IReadOnlyList<CachedLineComponent> rastras = await database.Mercury()
             .ListRastrasAsync(OrganizationId, LineId);
 
-        Assert.AreEqual(29L, result.CurrentVersion);
-        Assert.AreEqual(16, result.AppliedCount);
+        Assert.AreEqual(30L, result.CurrentVersion);
+        Assert.AreEqual(17, result.AppliedCount);
         Assert.HasCount(1, rastras);
         Assert.AreEqual(rastraId, rastras[0].Id);
     }
@@ -2728,6 +2733,174 @@ public sealed class LocalSqliteStorageTests
         await Assert.ThrowsExactlyAsync<SqliteException>(() => ExecuteWithoutParametersAsync(
             connection,
             "DELETE FROM local_security_audit_events;"));
+    }
+
+    [TestMethod]
+    public async Task AttendanceAuditResolvesCorrectorNameFromLocalSecurityHistory()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        await SeedSelectableCatalogsAsync(database);
+        var attendance = new SqliteAttendanceRepository(database.Factory);
+        Guid checkInId = Guid.NewGuid();
+        await attendance.RecordAsync(new RecordLocalAttendanceMutation(
+            checkInId, OrganizationId, PlantId, StationId, WorkerId,
+            AttendanceEventType.CheckIn, StartedAt, StartedAt.AddSeconds(1)));
+        await attendance.RecordAsync(new RecordLocalAttendanceMutation(
+            Guid.NewGuid(), OrganizationId, PlantId, StationId, WorkerId,
+            AttendanceEventType.AdjustedCheckOut, StartedAt.AddHours(8), StartedAt.AddHours(9),
+            ActorProfileId, "Olvidó marcar la salida", checkInId));
+        SqliteAuditRepository audit = database.Audit();
+        await audit.RecordSecurityEventAsync(new RecordLocalSecurityAuditEvent(
+            StationId, ActorProfileId, "Jefe Ficticio", "ELEVATION_ACCEPTED", "EXITOSO",
+            "Elevación para pruebas.", StartedAt));
+
+        IReadOnlyList<LocalAttendanceWorkerAudit> workers = await audit.ListAttendanceAsync(
+            new LocalAuditQuery(null, null));
+
+        LocalAttendanceWorkerAudit worker = workers.Single(item => item.WorkerId == WorkerId);
+        Assert.HasCount(2, worker.Events);
+        Assert.IsNotNull(worker.CorrectorNames);
+        Assert.AreEqual("Jefe Ficticio", worker.CorrectorNames[ActorProfileId]);
+    }
+
+    [TestMethod]
+    public async Task BiometricSecurityEventsPersistOnceAndEnterOutboxWithoutSensitiveData()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync();
+        SqliteAuditRepository audit = database.Audit();
+        Guid eventId = Guid.NewGuid();
+        var biometric = new RecordLocalSecurityAuditEvent(
+            StationId,
+            ActorProfileId,
+            "Jefe de planta",
+            SecurityAudit.ElevationAccepted,
+            "ACEPTADO",
+            "Identidad facial validada localmente.",
+            StartedAt,
+            SecurityAudit.MethodBiometric,
+            eventId);
+
+        await audit.RecordSecurityEventAsync(biometric);
+        await audit.RecordSecurityEventAsync(biometric);
+        foreach ((string type, string result) in new[]
+        {
+            (SecurityAudit.BiometricRejected, "NO_COINCIDE"),
+            (SecurityAudit.BiometricFaceNotDetected, "TIEMPO_AGOTADO"),
+            (SecurityAudit.BiometricCameraUnavailable, "NO_DISPONIBLE"),
+            (SecurityAudit.BiometricFailed, "ERROR_TECNICO"),
+        })
+        {
+            await audit.RecordSecurityEventAsync(biometric with
+            {
+                EventId = Guid.NewGuid(),
+                EventType = type,
+                Result = result,
+                Details = "Resultado final del intento.",
+            });
+        }
+
+        IReadOnlyList<LocalSecurityAuditEvent> security = await audit.ListSecurityEventsAsync(
+            new LocalAuditQuery(StartedAt.AddMinutes(-1), StartedAt.AddMinutes(1)));
+        Assert.HasCount(5, security, "El reintento con el mismo identificador no duplica el evento.");
+        LocalSecurityAuditEvent accepted = security.Single(item => item.Id == eventId);
+        Assert.AreEqual(SecurityAudit.MethodBiometric, accepted.Method);
+
+        await using SqliteConnection connection = await database.Factory.OpenAsync();
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT aggregate_id, aggregate_type, payload_json, station_sequence, actor_profile_id
+            FROM outbox_messages
+            WHERE operation_type = 'SECURITY_EVENT_RECORDED'
+            ORDER BY station_sequence;
+            """;
+        var payloads = new List<(string AggregateId, string Payload, long Sequence)>();
+        await using (SqliteDataReader reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                Assert.AreEqual("station_security_event", reader.GetString(1));
+                // Sin evidencia capturada, el reclamo la completa con la sesión que sincroniza.
+                Assert.IsTrue(reader.IsDBNull(4));
+                payloads.Add((reader.GetString(0), reader.GetString(2), reader.GetInt64(3)));
+            }
+        }
+
+        Assert.HasCount(5, payloads, "Un mensaje de Outbox por evento, sin duplicar el reintento.");
+        CollectionAssert.AllItemsAreUnique(payloads.Select(item => item.Sequence).ToArray());
+        using JsonDocument first = JsonDocument.Parse(
+            payloads.Single(item => item.AggregateId == eventId.ToString("D")).Payload);
+        string[] keys = first.RootElement.EnumerateObject().Select(property => property.Name).ToArray();
+        CollectionAssert.AreEquivalent(ExpectedSecurityPayloadKeys, keys);
+        Assert.AreEqual("BIOMETRIC", first.RootElement.GetProperty("method").GetString());
+        foreach ((_, string payload, _) in payloads)
+        {
+            Assert.IsFalse(
+                payload.Contains("Identidad facial", StringComparison.Ordinal) ||
+                payload.Contains("Jefe de planta", StringComparison.Ordinal),
+                "Ni el detalle libre ni el nombre del actor viajan en el payload.");
+        }
+
+        var forwardingSession = new OutboxAuthorizationEvidence(
+            ActorProfileId, 3, StartedAt.AddMinutes(-5), StartedAt.AddHours(24), "VALID");
+        IReadOnlyList<ClaimedOutboxMessage> claimed = await database.Outbox().ClaimAsync(
+            StationId,
+            Guid.NewGuid(),
+            10,
+            StartedAt.AddMinutes(5),
+            StartedAt.AddMinutes(10),
+            forwardingSession);
+        Assert.HasCount(5, claimed);
+    }
+
+    [TestMethod]
+    public async Task SecurityAuditMigrationKeepsHistoryAndAcceptsBiometricEvents()
+    {
+        await using var database = new TestDatabase();
+        await database.Migrator.MigrateAsync(SqliteMigrationCatalog.All.Take(29).ToArray());
+        await using (SqliteConnection connection = await database.Factory.OpenAsync())
+        {
+            await ExecuteWithoutParametersAsync(connection, $"""
+                INSERT INTO local_security_audit_events(
+                    id, station_id, profile_id, actor_display_name, event_type,
+                    result, details, occurred_at_utc)
+                VALUES ('{Guid.NewGuid():D}', '{StationId:D}', '{ActorProfileId:D}',
+                        'Jefe de planta', 'ELEVATION_ACCEPTED', 'ACEPTADO',
+                        'PIN validado.', '2026-08-27T12:00:00.0000000+00:00');
+                """);
+            // La causa original: la versión 29 rechazaba los eventos biométricos.
+            await Assert.ThrowsExactlyAsync<SqliteException>(() => ExecuteWithoutParametersAsync(
+                connection, $"""
+                    INSERT INTO local_security_audit_events(
+                        id, station_id, actor_display_name, event_type, result, details,
+                        occurred_at_utc)
+                    VALUES ('{Guid.NewGuid():D}', '{StationId:D}', 'Jefe de planta',
+                            'BIOMETRIC_ELEVATION_ACCEPTED', 'ACEPTADO', 'Rostro.',
+                            '2026-08-27T12:01:00.0000000+00:00');
+                    """));
+        }
+
+        LocalDatabaseMigrationResult result = await database.Migrator.MigrateAsync();
+
+        Assert.AreEqual(30L, result.CurrentVersion);
+        SqliteAuditRepository audit = database.Audit();
+        await audit.RecordSecurityEventAsync(new RecordLocalSecurityAuditEvent(
+            StationId,
+            ActorProfileId,
+            "Jefe de planta",
+            SecurityAudit.BiometricFaceNotDetected,
+            "TIEMPO_AGOTADO",
+            "No se detectó un rostro a tiempo.",
+            StartedAt.AddMinutes(2),
+            SecurityAudit.MethodBiometric));
+        IReadOnlyList<LocalSecurityAuditEvent> events = await audit.ListSecurityEventsAsync(
+            new LocalAuditQuery(null, null));
+        Assert.HasCount(2, events);
+        Assert.AreEqual(SecurityAudit.MethodPin, events.Single(item =>
+            item.EventType == SecurityAudit.ElevationAccepted).Method);
+        Assert.AreEqual(SecurityAudit.MethodBiometric, events.Single(item =>
+            item.EventType == SecurityAudit.BiometricFaceNotDetected).Method);
     }
 
     [TestMethod]

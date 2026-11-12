@@ -66,6 +66,57 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         correlationId: UUID,
       },
     },
+    SelfProfile: {
+      type: "object",
+      description:
+        "Perfil propio. La foto es una URL firmada de corta duración (60 s) de un bucket privado; nunca permanente.",
+      required: [
+        "id",
+        "organizationId",
+        "role",
+        "displayName",
+        "email",
+        "pendingEmail",
+        "phone",
+        "photo",
+      ],
+      properties: {
+        id: UUID,
+        organizationId: UUID,
+        role: { type: "string", enum: ["JEFE_EMPRESA", "JEFE_PLANTA"] },
+        displayName: { type: "string", maxLength: 80 },
+        email: { type: "string", format: "email", nullable: true },
+        pendingEmail: {
+          type: "string",
+          format: "email",
+          nullable: true,
+          description:
+            "Correo solicitado aún no confirmado en Supabase Auth; no es definitivo.",
+        },
+        phone: {
+          type: "string",
+          nullable: true,
+          pattern: "^\\+[1-9][0-9]{7,14}$",
+          example: "+50688887777",
+        },
+        photo: {
+          type: "object",
+          nullable: true,
+          required: ["url", "expiresAt"],
+          properties: {
+            url: { type: "string", format: "uri" },
+            expiresAt: DATE_TIME,
+          },
+        },
+      },
+    },
+    StationProfilePhone: {
+      type: "object",
+      required: ["phone"],
+      properties: {
+        phone: { type: "string", nullable: true, example: "+50688887777" },
+      },
+    },
     Session: {
       type: "object",
       required: [
@@ -648,6 +699,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
             "goldRecordedAtUtc",
             "goldRecordedByProfileId",
             "goldRevisionCount",
+            "goldKarat",
             "hasGoldResult",
           ],
           properties: {
@@ -666,6 +718,12 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
             goldRevisionCount: {
               type: "integer",
               minimum: 1,
+              nullable: true,
+            },
+            goldKarat: {
+              type: "number",
+              minimum: 0,
+              maximum: 24,
               nullable: true,
             },
             hasGoldResult: { type: "boolean" },
@@ -712,6 +770,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         "organizationId",
         "shipmentId",
         "amountGrams",
+        "karat",
         "unitCode",
         "recordedAtUtc",
         "recordedByProfileId",
@@ -729,6 +788,13 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
           format: "double",
           minimum: 0,
           multipleOf: 0.01,
+        },
+        karat: {
+          type: "number",
+          minimum: 0,
+          maximum: 24,
+          multipleOf: 0.001,
+          nullable: true,
         },
         unitCode: { type: "string", enum: ["g"] },
         recordedAtUtc: DATE_TIME,
@@ -789,6 +855,36 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
           type: "array",
           items: { $ref: "#/components/schemas/GoldSupplierCoverage" },
         },
+      },
+    },
+    GoldMercurySynthesis: {
+      type: "object",
+      required: ["sweepCount", "completeSweepCount", "latestCompleteSweep"],
+      additionalProperties: false,
+      properties: {
+        sweepCount: { type: "integer", minimum: 0 },
+        completeSweepCount: { type: "integer", minimum: 0 },
+        latestCompleteSweep: {
+          type: "object",
+          nullable: true,
+          required: ["sweepId", "sweptAtUtc", "inputGrams", "remainderGrams"],
+          additionalProperties: false,
+          properties: {
+            sweepId: UUID,
+            sweptAtUtc: { type: "string", format: "date-time" },
+            inputGrams: { type: "number", minimum: 0 },
+            remainderGrams: { type: "number", minimum: 0 },
+          },
+        },
+      },
+    },
+    GoldShipmentOverview: {
+      type: "object",
+      required: ["shipmentId", "mercury"],
+      additionalProperties: false,
+      properties: {
+        shipmentId: UUID,
+        mercury: { $ref: "#/components/schemas/GoldMercurySynthesis" },
       },
     },
     ProductionReportMetrics: {
@@ -852,6 +948,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         "sweepCount",
         "goldStatus",
         "goldAmountGrams",
+        "goldKarat",
         "gramsPerCajuela",
         "palosPerCajuela",
       ],
@@ -874,6 +971,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
         sweepCount: { type: "integer", minimum: 0 },
         goldStatus: { type: "string", enum: ["REGISTERED", "PENDING"] },
         goldAmountGrams: { type: "number", minimum: 0, nullable: true },
+        goldKarat: { type: "number", minimum: 0, maximum: 24, nullable: true },
         gramsPerCajuela: { type: "number", minimum: 0, nullable: true },
         palosPerCajuela: { type: "number", minimum: 0, nullable: true },
       },
@@ -1258,6 +1356,10 @@ function responseSchema(
 ): Record<string, unknown> {
   if (path.endsWith("/auth/session"))
     return { $ref: "#/components/schemas/Session" };
+  if (path.endsWith("/stations/{stationId}/profile/phone"))
+    return { $ref: "#/components/schemas/StationProfilePhone" };
+  if (path.includes("/me/profile"))
+    return { $ref: "#/components/schemas/SelfProfile" };
   if (path.includes("/inventory/")) {
     if (path.endsWith("/movements")) {
       return operationId.includes("list")
@@ -1285,6 +1387,11 @@ function responseSchema(
     return { $ref: "#/components/schemas/AttendanceHours" };
   if (path.endsWith("/management/gold-summary"))
     return { $ref: "#/components/schemas/GoldSummary" };
+  if (path.endsWith("/management/gold-overview"))
+    return {
+      type: "array",
+      items: { $ref: "#/components/schemas/GoldShipmentOverview" },
+    };
   if (path.endsWith("/reports/production"))
     return { $ref: "#/components/schemas/ProductionReport" };
   if (path.endsWith("/reports/settlements/weekly-summary"))

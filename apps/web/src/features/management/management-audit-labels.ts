@@ -35,6 +35,15 @@ export function managerAuditAction(
       : message[es ? 0 : 1];
   }
 
+  if (event.action === "station.security")
+    return stationSecurityAction(event, es);
+
+  if (event.entityType === "user_profile_self")
+    return selfProfileAction(event, es);
+
+  const attendance = attendanceAction(event, language);
+  if (attendance !== null) return attendance;
+
   if (event.action === "attendance.record")
     return es
       ? "Se registró una marcación de asistencia"
@@ -112,7 +121,11 @@ export function managerAuditArea(
   if (entityType.includes("inventory")) return es ? "Inventario" : "Inventory";
   if (entityType.includes("rastra") || entityType.includes("novelty"))
     return es ? "Mantenimiento" : "Maintenance";
-  if (entityType.includes("station_session") || entityType === "api_endpoint")
+  if (
+    entityType.includes("station_session") ||
+    entityType === "station_security_event" ||
+    entityType === "api_endpoint"
+  )
     return es ? "Seguridad" : "Security";
   if (
     entityType === "plant" ||
@@ -191,6 +204,7 @@ export function managerAuditField(
     station_count: ["Cantidad de estaciones", "Station count"],
     status: ["Estado", "Status"],
     status_reason: ["Motivo del estado", "Status reason"],
+    supplier_name: ["Proveedor", "Supplier"],
     timezone: ["Zona horaria", "Time zone"],
     worker_status: ["Estado del trabajador", "Worker status"],
   };
@@ -211,6 +225,10 @@ export function managerVisibleAuditChanges(
     "device_identifier_changed",
     "occurred_at_utc",
     "provisioning_method",
+    // Códigos técnicos de seguridad: se traducen en la acción, el método y el motivo.
+    "security_event",
+    "access_method",
+    "security_outcome",
   ]);
   return Object.entries(event.changes ?? {}).filter(
     ([field]) => !field.endsWith("_id") && !hidden.has(field),
@@ -225,6 +243,8 @@ export function managerAuditReason(
     return language === "es"
       ? "La sesión no pudo ser validada."
       : "The session could not be validated.";
+  const security = securityReasons[reasonCode];
+  if (security !== undefined) return security[language === "es" ? 0 : 1];
   if (reasonCode.includes("REJECTED"))
     return language === "es"
       ? "La operación fue rechazada por una regla o validación."
@@ -232,6 +252,155 @@ export function managerAuditReason(
   return language === "es"
     ? "No fue posible completar la operación."
     : "The operation could not be completed.";
+}
+
+const securityReasons: Record<string, readonly [string, string]> = {
+  NO_COINCIDE: [
+    "El rostro no coincidió con el registro del jefe de planta.",
+    "The face did not match the plant manager's enrollment.",
+  ],
+  PERFIL_DISTINTO: [
+    "El rostro reconocido pertenece a una cuenta distinta de la sesión abierta.",
+    "The recognized face belongs to a different account than the open session.",
+  ],
+  TIEMPO_AGOTADO: [
+    "No se detectó un rostro dentro del tiempo límite.",
+    "No face was detected within the time limit.",
+  ],
+  NO_DISPONIBLE: [
+    "La cámara no estaba conectada o no respondió.",
+    "The camera was not connected or did not respond.",
+  ],
+  EN_USO: [
+    "La cámara estaba siendo usada por otra aplicación.",
+    "The camera was being used by another application.",
+  ],
+  ERROR_TECNICO: [
+    "Ocurrió un error técnico durante el reconocimiento facial.",
+    "A technical error occurred during facial recognition.",
+  ],
+  RECHAZADO: ["El acceso no fue concedido.", "Access was not granted."],
+  REJECTED: [
+    "El PIN ingresado no fue aceptado.",
+    "The PIN entered was not accepted.",
+  ],
+  BLOCKED: [
+    "La elevación quedó bloqueada por intentos fallidos.",
+    "Elevation was locked after failed attempts.",
+  ],
+  RESET_REQUIRED: [
+    "El PIN debe restablecerse antes de volver a usarlo.",
+    "The PIN must be reset before it can be used again.",
+  ],
+};
+
+function securityChange(event: AuditEvent, field: string): string | null {
+  const value = event.changes?.[field]?.after;
+  return typeof value === "string" ? value : null;
+}
+
+/** Método de acceso de un evento de seguridad de estación, en lenguaje operativo. */
+export function managerSecurityMethod(
+  event: AuditEvent,
+  language: "es" | "en",
+): string | null {
+  if (event.action !== "station.security") return null;
+  const methods: Record<string, readonly [string, string]> = {
+    PASSWORD: ["Correo y contraseña", "Email and password"],
+    SESSION: ["Sesión guardada en la estación", "Saved station session"],
+    PIN: ["PIN", "PIN"],
+    PIN_FALLBACK: [
+      "PIN como alternativa al reconocimiento facial",
+      "PIN as an alternative to facial recognition",
+    ],
+    BIOMETRIC: ["Reconocimiento facial", "Facial recognition"],
+  };
+  const method = securityChange(event, "access_method");
+  const label = method === null ? undefined : methods[method];
+  return label === undefined ? null : label[language === "es" ? 0 : 1];
+}
+
+function stationSecurityAction(event: AuditEvent, es: boolean): string {
+  const method = securityChange(event, "access_method");
+  const accepted: readonly [string, string] =
+    method === "BIOMETRIC"
+      ? [
+          "Se autorizó el acceso de jefe de planta con reconocimiento facial",
+          "Plant manager access was authorized with facial recognition",
+        ]
+      : method === "PIN_FALLBACK"
+        ? [
+            "Se autorizó el acceso de jefe de planta con PIN como alternativa",
+            "Plant manager access was authorized with PIN as an alternative",
+          ]
+        : [
+            "Se autorizó el acceso de jefe de planta con PIN",
+            "Plant manager access was authorized with PIN",
+          ];
+  const messages: Record<string, readonly [string, string]> = {
+    SESSION_FOUND: [
+      "Se encontró una sesión guardada en la estación",
+      "A saved station session was found",
+    ],
+    SESSION_OPENED: [
+      "Inicio de sesión exitoso en la estación",
+      "Successful station sign-in",
+    ],
+    SESSION_RESTORED: [
+      "Se abrió la estación con la sesión guardada",
+      "The station was opened with the saved session",
+    ],
+    SESSION_CLOSED: ["Se cerró la estación", "The station was closed"],
+    SESSION_EXPIRED: [
+      "La sesión de la estación venció",
+      "The station session expired",
+    ],
+    SESSION_REJECTED: [
+      "Se rechazó un inicio de sesión en la estación",
+      "A station sign-in was rejected",
+    ],
+    ELEVATION_REQUESTED: [
+      "Se solicitó acceso de jefe de planta",
+      "Plant manager access was requested",
+    ],
+    ELEVATION_ACCEPTED: accepted,
+    ELEVATION_REJECTED:
+      method === "PIN_FALLBACK"
+        ? [
+            "Se rechazó el PIN usado como alternativa",
+            "The alternative PIN was rejected",
+          ]
+        : [
+            "Se rechazó un PIN de jefe de planta",
+            "A plant manager PIN was rejected",
+          ],
+    ELEVATION_ENDED: [
+      "Terminó el acceso de jefe de planta",
+      "Plant manager access ended",
+    ],
+    BIOMETRIC_REJECTED: [
+      "El reconocimiento facial no confirmó la identidad",
+      "Facial recognition did not confirm the identity",
+    ],
+    BIOMETRIC_FACE_NOT_DETECTED: [
+      "No se detectó un rostro a tiempo",
+      "No face was detected in time",
+    ],
+    BIOMETRIC_CAMERA_UNAVAILABLE: [
+      "La cámara de la estación no estaba disponible",
+      "The station camera was unavailable",
+    ],
+    BIOMETRIC_FAILED: [
+      "El reconocimiento facial falló por un error técnico",
+      "Facial recognition failed due to a technical error",
+    ],
+  };
+  const eventType = securityChange(event, "security_event");
+  const message = eventType === null ? undefined : messages[eventType];
+  return (message ?? [
+    "Se registró un evento de seguridad de la estación",
+    "A station security event was recorded",
+  ])[es ? 0 : 1];
 }
 
 function businessMutationAction(event: AuditEvent, es: boolean): string {
@@ -446,4 +615,100 @@ function isCreation(event: AuditEvent): boolean {
 
 function capitalize(value: string): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+/**
+ * Asistencia en lenguaje claro: «Ana Pérez registró entrada a las 6:05 a. m.
+ * del 3 nov 2026». La hora es la de la marcación, en America/Costa_Rica.
+ */
+function attendanceAction(
+  event: AuditEvent,
+  language: "es" | "en",
+): string | null {
+  const name = event.subjectName?.trim();
+  const occurredAt = event.subjectOccurredAtUtc;
+  if (
+    name === undefined ||
+    name.length === 0 ||
+    occurredAt === null ||
+    occurredAt === undefined
+  )
+    return null;
+  const locale = language === "es" ? "es-CR" : "en-US";
+  const instant = new Date(occurredAt);
+  if (Number.isNaN(instant.getTime())) return null;
+  const time = new Intl.DateTimeFormat(locale, {
+    timeStyle: "short",
+    timeZone: "America/Costa_Rica",
+  }).format(instant);
+  const date = new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeZone: "America/Costa_Rica",
+  }).format(instant);
+  const es = language === "es";
+  switch (event.auditKind) {
+    case "ATTENDANCE_CHECK_IN":
+      return es
+        ? `${name} registró entrada a las ${time} del ${date}`
+        : `${name} checked in at ${time} on ${date}`;
+    case "ATTENDANCE_CHECK_OUT":
+      return es
+        ? `${name} registró salida a las ${time} del ${date}`
+        : `${name} checked out at ${time} on ${date}`;
+    case "ATTENDANCE_CHECK_IN_CORRECTED":
+      return es
+        ? `Se corrigió la entrada de ${name}: a las ${time} del ${date}`
+        : `${name}'s check-in was corrected to ${time} on ${date}`;
+    case "ATTENDANCE_CHECK_OUT_CORRECTED":
+      return es
+        ? `Se corrigió la salida de ${name}: a las ${time} del ${date}`
+        : `${name}'s check-out was corrected to ${time} on ${date}`;
+    default:
+      return null;
+  }
+}
+
+/** Cambios que una persona hace sobre su propio perfil (web o estación). */
+function selfProfileAction(event: AuditEvent, es: boolean): string {
+  const failed = event.result !== "SUCCEEDED";
+  const messages: Record<string, readonly [string, string]> = {
+    EMAIL_CHANGE_REQUESTED: [
+      "Se solicitó un cambio de correo de acceso (pendiente de confirmar)",
+      "A sign-in email change was requested (pending confirmation)",
+    ],
+    EMAIL_CHANGE_CONFIRMED: [
+      "Se confirmó el cambio de correo de acceso",
+      "The sign-in email change was confirmed",
+    ],
+    PHOTO_ADDED: [
+      "Se agregó la fotografía de perfil",
+      "A profile photo was added",
+    ],
+    PHOTO_REPLACED: [
+      "Se reemplazó la fotografía de perfil",
+      "The profile photo was replaced",
+    ],
+    PHOTO_REMOVED: [
+      "Se quitó la fotografía de perfil",
+      "The profile photo was removed",
+    ],
+  };
+  const message = event.reasonCode ? messages[event.reasonCode] : undefined;
+  if (message !== undefined && !failed) return message[es ? 0 : 1];
+  if (failed)
+    return es
+      ? "No se completó un cambio en un perfil propio"
+      : "A self-profile change was not completed";
+  const fields = event.changedFields ?? [];
+  if (fields.includes("phone") && fields.includes("display_name"))
+    return es
+      ? "Se actualizaron el nombre y el teléfono del perfil"
+      : "Profile name and phone were updated";
+  if (fields.includes("phone"))
+    return es
+      ? "Se actualizó el teléfono del perfil"
+      : "The profile phone was updated";
+  return es
+    ? "Se actualizó el nombre del perfil"
+    : "The profile name was updated";
 }

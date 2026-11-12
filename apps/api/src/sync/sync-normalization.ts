@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { isUUID } from "class-validator";
 
 import {
+  STATION_SECURITY_EVENT_TYPES,
+  STATION_SECURITY_METHODS,
   SYNC_OPERATION_TYPES,
   type NormalizedSyncItem,
   type SyncEnvelopeItem,
@@ -59,6 +61,10 @@ const OPERATION_SCHEMAS: Readonly<
   },
   OPERATIONAL_NOVELTY_CLOSED: {
     aggregateType: "operational_novelty_change",
+    version: 1,
+  },
+  SECURITY_EVENT_RECORDED: {
+    aggregateType: "station_security_event",
     version: 1,
   },
 };
@@ -149,6 +155,9 @@ function normalizePayload(
     }
     if (operationType === "ATTENDANCE_EVENT_RECORDED") {
       return normalizeAttendanceEvent(payload, item, scope);
+    }
+    if (operationType === "SECURITY_EVENT_RECORDED") {
+      return normalizeStationSecurityEvent(payload, item, scope);
     }
     if (operationType === "INVENTORY_MOVEMENT_RECORDED") {
       return normalizeInventoryMovement(payload, item, scope);
@@ -601,6 +610,63 @@ function normalizeInventoryReview(
   )
     throw new Error("invalid inventory review");
   validateAuthorizationWindow(item, reviewedAtUtc);
+  return { payload: canonicalObject(normalized), code: null };
+}
+
+/**
+ * Evento de seguridad de estación. Solo admite códigos cerrados: cualquier campo extra
+ * (PIN, contraseña, token, plantilla, imagen, características o detalle libre) se rechaza.
+ */
+function normalizeStationSecurityEvent(
+  payload: Record<string, unknown>,
+  item: SyncEnvelopeItem,
+  scope: NormalizationScope,
+): PayloadResult {
+  requireExactKeys(payload, [
+    "schemaVersion",
+    "eventId",
+    "stationId",
+    "clientSequence",
+    "actorProfileId",
+    "eventType",
+    "method",
+    "result",
+    "occurredAtUtc",
+  ]);
+  const eventType = requireText(payload, "eventType", 40);
+  const method = requireNullableText(payload, "method", 20);
+  const result = requireText(payload, "result", 40);
+  const actorProfileId = requireNullableUuid(payload, "actorProfileId");
+  const normalized = {
+    schemaVersion: requirePositiveInteger(payload, "schemaVersion"),
+    eventId: requireUuid(payload, "eventId"),
+    stationId: requireUuid(payload, "stationId"),
+    clientSequence: requirePositiveInteger(payload, "clientSequence"),
+    actorProfileId,
+    eventType,
+    method,
+    result,
+    occurredAtUtc: requireDate(payload, "occurredAtUtc"),
+  };
+  if (
+    normalized.schemaVersion !== 1 ||
+    normalized.stationId !== scope.stationId ||
+    normalized.eventId !== item.aggregateId ||
+    normalized.clientSequence !== item.stationSequence ||
+    !(STATION_SECURITY_EVENT_TYPES as readonly string[]).includes(eventType) ||
+    (method !== null &&
+      !(STATION_SECURITY_METHODS as readonly string[]).includes(method)) ||
+    !/^[A-Z][A-Z0-9_]{0,39}$/u.test(result)
+  ) {
+    throw new Error("invalid station security event");
+  }
+  // Un evento con actor se capturó con su propia sesión. Sin actor (p. ej. un inicio de
+  // sesión rechazado) la evidencia corresponde a la sesión que lo reenvía después.
+  if (actorProfileId !== null) {
+    if (actorProfileId !== item.authorization.actorProfileId)
+      throw new Error("security actor mismatch");
+    validateAuthorizationWindow(item, normalized.occurredAtUtc);
+  }
   return { payload: canonicalObject(normalized), code: null };
 }
 

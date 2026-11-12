@@ -16,7 +16,6 @@ import {
   ShipmentDetailPage,
   StatisticsPage,
   WorkersPage,
-  UpcomingPage,
 } from "../features/portal/portal-pages";
 import { PortalLayout, ProtectedPortal } from "../features/portal/portal-shell";
 import { StatusPage } from "../features/system-status/status-page";
@@ -24,8 +23,6 @@ import { useLanguage } from "../i18n/language-context";
 import { LanguageSwitcher } from "../i18n/language-switcher";
 
 export function App() {
-  const { tr } = useLanguage();
-
   return (
     <Routes>
       <Route path="login" element={<LoginPage />} />
@@ -56,17 +53,10 @@ export function App() {
             path="inventario"
             element={<Navigate to="/gerencia" replace />}
           />
+          {/* Los proveedores se administran en Trabajadores. */}
           <Route
             path="configuracion"
-            element={
-              <UpcomingPage
-                title={tr("Configuración", "Settings")}
-                description={tr(
-                  "Administración futura de líneas y catálogos sin eliminar historial.",
-                  "Future management of lines and catalogs without deleting history.",
-                )}
-              />
-            }
+            element={<Navigate to="/gerencia/trabajadores" replace />}
           />
         </Route>
       </Route>

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace IndustriasDoradas.Desktop.Tests.Presentation;
 
 [TestClass]
-public sealed class OperationViewModelTests
+public sealed partial class OperationViewModelTests
 {
     private static readonly Guid OrganizationId = Guid.Parse("30000000-0000-4000-8000-000000000001");
     private static readonly Guid PlantId = Guid.Parse("31000000-0000-4000-8000-000000000001");
@@ -33,6 +33,7 @@ public sealed class OperationViewModelTests
         Assert.IsTrue(viewModel.Line.IsReady);
         Assert.AreEqual("LÍNEA LISTA", viewModel.Line.StateLabel);
         Assert.AreEqual("Línea 1", viewModel.Line.LineName);
+        Assert.AreEqual("Línea 1 - 41000000", viewModel.Line.CardTitle);
         StringAssert.Contains(viewModel.Line.FeedDescription, "La Esperanza");
         StringAssert.Contains(viewModel.Line.ResponsibleDescription, "Marta");
         Assert.AreEqual(7, viewModel.Line.Total);
@@ -57,6 +58,7 @@ public sealed class OperationViewModelTests
         StringAssert.Contains(viewModel.LastResult, "guardada localmente");
         Assert.AreEqual("2 pendientes · 0 por revisar · 0 sincronizados", viewModel.PendingStatus);
         Assert.AreEqual(OperationFeedbackKind.Success, feedback.LastKind);
+        Assert.AreEqual(FeedbackSoundEvent.CajuelaAdded, feedback.LastSound);
     }
 
     [TestMethod]
@@ -119,6 +121,7 @@ public sealed class OperationViewModelTests
         Assert.IsTrue(viewModel.Line.IsReviewAlertActive);
         Assert.AreEqual(1, feedback.ReviewAlertCalls);
         Assert.AreEqual(1, feedback.PlayCalls);
+        Assert.AreEqual(FeedbackSoundEvent.FiveCajuelasAdded, feedback.LastSound);
         Assert.AreEqual(5, metrics.Items.Count(item => item.Outcome == OperationInputMetricOutcome.Accepted));
         StringAssert.Contains(viewModel.LastResult, "5 cajuelas guardadas");
     }
@@ -171,6 +174,33 @@ public sealed class OperationViewModelTests
         Assert.AreEqual(1, viewModel.Lines[0].LineSlot);
         Assert.AreEqual(2, viewModel.Lines[1].LineSlot);
         Assert.AreEqual(12, viewModel.Lines[1].Total);
+    }
+
+    [TestMethod]
+    public async Task SharedKeyboardSelectsAnyLineAndRegistersOnTheSelectedLine()
+    {
+        var dashboard = new ListDashboardRepository(
+        [
+            ReadySnapshot(total: 7),
+            ReadySnapshotForLine(SecondLineId, "Línea 2", total: 12),
+        ]);
+        var cajuelas = new StubCajuelaRepository(total: 7);
+        OperationViewModel viewModel = Create(dashboard, cajuelas);
+        await viewModel.InitializeAsync();
+
+        await viewModel.HandleInputCommandAsync(new OperationInputCommand(
+            Guid.NewGuid(),
+            OperationInputAction.SelectLine,
+            new OperationInputOrigin("KEYBOARD", "shared-keyboard", "D2", 2, false),
+            Now));
+        Assert.AreEqual(SecondLineId, viewModel.Line.LineId);
+
+        // El teclado compartido viene configurado con LineSlot 1: no debe regresar a la Línea 1.
+        await viewModel.HandleInputCommandAsync(Input(OperationInputAction.RegisterCajuela, "Add"));
+
+        Assert.AreEqual(SecondLineId, viewModel.Line.LineId);
+        Assert.AreEqual(SecondLineId, cajuelas.LastRegisterMutation!.LineId);
+        Assert.AreEqual(2, cajuelas.LastRegisterMutation.InputOrigin.LineSlot);
     }
 
     [TestMethod]
@@ -503,6 +533,7 @@ public sealed class OperationViewModelTests
 
         Assert.IsFalse(viewModel.Line.IsReady);
         Assert.AreEqual("LÍNEA SIN PREPARAR", viewModel.Line.StateLabel);
+        Assert.AreEqual("Línea 1", viewModel.Line.CardTitle);
         Assert.IsFalse(viewModel.RegisterCajuelaCommand.CanExecute(null));
         Assert.IsFalse(viewModel.PrepareCorrectionCommand.CanExecute(null));
         Assert.IsFalse(viewModel.DispatchInputCommand.CanExecute(OperationInputAction.RegisterCajuela));
@@ -1004,10 +1035,17 @@ public sealed class OperationViewModelTests
         public OperationFeedbackKind LastKind { get; private set; }
         public int ReviewAlertCalls { get; private set; }
         public int PlayCalls { get; private set; }
+        public FeedbackSoundEvent? LastSound { get; private set; }
         public void Play(OperationFeedbackKind kind)
         {
             LastKind = kind;
+            LastSound = null;
             PlayCalls++;
+        }
+        public void Play(OperationFeedbackKind kind, FeedbackSoundEvent sound)
+        {
+            Play(kind);
+            LastSound = sound;
         }
         public void PlayReviewAlert() => ReviewAlertCalls++;
     }

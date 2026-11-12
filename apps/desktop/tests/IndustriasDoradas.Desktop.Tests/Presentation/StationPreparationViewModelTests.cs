@@ -5,6 +5,7 @@ using IndustriasDoradas.Desktop.Domain;
 using IndustriasDoradas.Desktop.Domain.Attendance;
 using IndustriasDoradas.Desktop.Domain.Production;
 using IndustriasDoradas.Desktop.Infrastructure.Station;
+using IndustriasDoradas.Desktop.Presentation;
 using IndustriasDoradas.Desktop.Presentation.ViewModels;
 using Microsoft.Extensions.Options;
 
@@ -25,6 +26,39 @@ public sealed class StationPreparationViewModelTests
     private static readonly Guid WorkerId = Guid.Parse("45000000-0000-4000-8000-000000000001");
     private static readonly Guid SecondWorkerId = Guid.Parse("45000000-0000-4000-8000-000000000002");
     private static readonly DateTimeOffset Now = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
+    private static readonly string[] ExpiredElevationAudit =
+        ["SESSION_FOUND", "SESSION_RESTORED", "ELEVATION_ACCEPTED:PIN", "ELEVATION_ENDED:INACTIVIDAD"];
+    private static readonly string[] ManualElevationAudit =
+    [
+        "SESSION_FOUND",
+        "SESSION_RESTORED",
+        "ELEVATION_ACCEPTED:PIN",
+        "ELEVATION_ENDED:MANUAL",
+        "ELEVATION_ACCEPTED:PIN",
+        "ELEVATION_ENDED:CIERRE_ESTACION",
+        "SESSION_CLOSED",
+    ];
+    private static readonly string[] BiometricAttemptResults =
+        ["TIEMPO_AGOTADO", "NO_COINCIDE", "NO_DISPONIBLE", "EN_USO", "ERROR_TECNICO", "ERROR_TECNICO"];
+    private static readonly string[] BiometricAttemptAudit =
+    [
+        "SESSION_FOUND",
+        "SESSION_RESTORED",
+        "ELEVATION_REQUESTED",
+        "BIOMETRIC_FACE_NOT_DETECTED",
+        "ELEVATION_ACCEPTED:PIN_FALLBACK",
+        "ELEVATION_ENDED:MANUAL",
+        "ELEVATION_REQUESTED",
+        "BIOMETRIC_REJECTED",
+        "BIOMETRIC_CAMERA_UNAVAILABLE",
+        "BIOMETRIC_CAMERA_UNAVAILABLE",
+        "BIOMETRIC_FAILED",
+        "BIOMETRIC_FAILED",
+        "ELEVATION_ACCEPTED:BIOMETRIC",
+        "ELEVATION_ENDED:MANUAL",
+        "ELEVATION_REQUESTED",
+        "ELEVATION_ACCEPTED:PIN",
+    ];
 
     [TestMethod]
     public async Task CloseStationCommandReturnsToSignedOutLoginState()
@@ -101,8 +135,8 @@ public sealed class StationPreparationViewModelTests
             new HomeViewModel(), diagnostics, viewModel, null, audit, settings);
 
         await viewModel.InitializeAsync();
-        Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
-        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowAuditCommand.CanExecute(null));
         Assert.IsFalse(shell.ShowSettingsCommand.CanExecute(null));
         audit.SelectCategoryCommand.Execute(AuditCategory.Corrections);
         Assert.IsTrue(audit.IsOperationCategory);
@@ -518,6 +552,390 @@ public sealed class StationPreparationViewModelTests
         Assert.HasCount(1, viewModel.Workers);
         Assert.AreEqual(WorkerId, viewModel.Workers[0].Id);
         Assert.AreEqual("Marta", viewModel.Workers[0].DisplayName);
+    }
+
+    [TestMethod]
+    public async Task ProtectedModulesRequireActiveElevationEvenWhenPlantManagerOpenedTheStation()
+    {
+        await using ElevationHarness harness = await ElevationHarness.OpenAsync();
+        MainWindowViewModel shell = harness.Shell;
+
+        // La sesión abierta es de una cuenta JEFE_PLANTA (ver State()), pero sin elevación la
+        // estación permanece en Modo Operación: el rol no sustituye la elevación temporal.
+        Assert.IsTrue(harness.Station.IsStationOpen);
+        Assert.AreEqual(StationMode.Operation, harness.Station.Mode);
+        Assert.IsFalse(shell.HasElevatedAccess);
+        Assert.IsTrue(shell.ShowHomeCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAttendanceCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowStationCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowAuditCorrectionsCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowAttendanceIncidentsCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsFalse(shell.ShowSettingsCommand.CanExecute(null));
+        Assert.IsFalse(harness.Station.ExitManagerModeCommand.CanExecute(null));
+
+        // Ejecutar el comando directamente (sin pasar por el botón) tampoco navega.
+        await shell.ShowStationCommand.ExecuteAsync(null);
+        await shell.ShowAuditCommand.ExecuteAsync(null);
+        await shell.ShowAuditCorrectionsCommand.ExecuteAsync(null);
+        await shell.ShowAttendanceIncidentsCommand.ExecuteAsync(null);
+        await shell.ShowStationResponsibilityCommand.ExecuteAsync(null);
+        shell.ShowDiagnosticsCommand.Execute(null);
+        shell.ShowSettingsCommand.Execute(null);
+        Assert.IsTrue(shell.IsHomePage);
+        foreach (object page in new object[] { harness.Station, harness.AuditPage, harness.Diagnostics, harness.Settings })
+        {
+            Assert.IsFalse(shell.IsPageAllowed(page));
+        }
+
+        await shell.ShowAttendanceCommand.ExecuteAsync(null);
+        Assert.IsTrue(shell.IsAttendancePage);
+
+        await harness.Station.ElevateAsync("123456");
+
+        Assert.IsTrue(shell.HasElevatedAccess);
+        Assert.IsTrue(shell.ShowStationCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowAuditCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowDiagnosticsCommand.CanExecute(null));
+        Assert.IsTrue(shell.ShowSettingsCommand.CanExecute(null));
+        await shell.ShowStationCommand.ExecuteAsync(null);
+        Assert.IsTrue(shell.IsStationPage);
+        await shell.ShowAuditCommand.ExecuteAsync(null);
+        Assert.IsTrue(shell.IsAuditPage);
+        shell.ShowDiagnosticsCommand.Execute(null);
+        Assert.IsTrue(shell.IsDiagnosticsPage);
+        shell.ShowSettingsCommand.Execute(null);
+        Assert.IsTrue(shell.IsSettingsPage);
+    }
+
+    [TestMethod]
+    public async Task ElevationExpiryRedirectsClosesPrivilegedAccessAndKeepsPendingWork()
+    {
+        await using ElevationHarness harness = await ElevationHarness.OpenAsync();
+        StationViewModel station = harness.Station;
+        MainWindowViewModel shell = harness.Shell;
+        int endedNotifications = 0;
+        shell.PrivilegedAccessEnded += (_, _) => endedNotifications++;
+
+        await station.ElevateAsync("123456");
+        station.SelectedLine = station.Lines.Single(line => line.Id == LineId);
+        station.SelectedSupplier = station.Suppliers.Single();
+        station.SelectedWorker = station.Workers.Single(worker => worker.Id == WorkerId);
+        await station.PrepareLineCommand.ExecuteAsync(null);
+        await station.ConfirmLineCommand.ExecuteAsync(null);
+        await shell.ShowStationCommand.ExecuteAsync(null);
+        Assert.IsTrue(shell.IsStationPage);
+
+        harness.Time.Advance(TimeSpan.FromSeconds(299));
+        await station.EvaluateInactivityAsync();
+        Assert.AreEqual(StationMode.PlantManager, station.Mode, "La elevación sigue activa antes de cinco minutos.");
+
+        harness.Time.Advance(TimeSpan.FromSeconds(2));
+        await station.EvaluateInactivityAsync();
+
+        Assert.AreEqual(StationMode.Operation, station.Mode);
+        Assert.IsTrue(station.IsStationOpen, "Vencer la elevación no cierra la estación.");
+        Assert.IsTrue(shell.IsHomePage, "La vista protegida se abandona hacia una vista permitida.");
+        Assert.AreEqual(1, endedNotifications, "La ventana cierra los diálogos privilegiados.");
+        Assert.IsFalse(shell.ShowStationCommand.CanExecute(null));
+        await shell.ShowStationCommand.ExecuteAsync(null);
+        Assert.IsTrue(shell.IsHomePage);
+
+        // El cargamento confirmado antes del vencimiento se conserva activo.
+        Assert.AreEqual(1, harness.Operations.StartCalls);
+        Assert.AreEqual(LineFeedCycleStatus.Active, harness.Sessions.Current?.Status);
+        Assert.IsTrue(station.LineStatuses.Single(line => line.Id == LineId).IsPrepared);
+        CollectionAssert.AreEqual(ExpiredElevationAudit, harness.Audit.SecurityEventKeys());
+
+        // Reingreso con PIN restablece el mismo acceso.
+        await station.ElevateAsync("123456");
+        Assert.IsTrue(shell.ShowStationCommand.CanExecute(null));
+        await shell.ShowStationCommand.ExecuteAsync(null);
+        Assert.IsTrue(shell.IsStationPage);
+        Assert.AreEqual(1, endedNotifications);
+    }
+
+    [TestMethod]
+    public async Task BiometricAndPinElevationGrantExactlyTheSameScope()
+    {
+        await using ElevationHarness pinHarness = await ElevationHarness.OpenAsync();
+        await using ElevationHarness biometricHarness = await ElevationHarness.OpenAsync();
+
+        await pinHarness.Station.ElevateAsync("123456");
+        bool biometricElevated = await biometricHarness.Station.ElevateWithBiometricAsync(
+            biometricHarness.Station.CurrentProfileId!.Value);
+
+        Assert.IsTrue(biometricElevated);
+        Assert.AreEqual(pinHarness.Station.Mode, biometricHarness.Station.Mode);
+        CollectionAssert.AreEqual(pinHarness.AccessSnapshot(), biometricHarness.AccessSnapshot());
+        Assert.IsTrue(biometricHarness.AccessSnapshot().All(allowed => allowed));
+        Assert.AreEqual(
+            "ELEVATION_ACCEPTED:BIOMETRIC",
+            biometricHarness.Audit.SecurityEventKeys().Last());
+
+        // La biometría vence igual que el PIN y el PIN sigue disponible para volver a entrar.
+        biometricHarness.Time.Advance(TimeSpan.FromSeconds(301));
+        await biometricHarness.Station.EvaluateInactivityAsync();
+        Assert.IsTrue(biometricHarness.AccessSnapshot().All(allowed => !allowed));
+        Assert.AreEqual("ELEVATION_ENDED:INACTIVIDAD", biometricHarness.Audit.SecurityEventKeys().Last());
+
+        await biometricHarness.Station.ElevateAsync("123456");
+        CollectionAssert.AreEqual(pinHarness.AccessSnapshot(), biometricHarness.AccessSnapshot());
+    }
+
+    [TestMethod]
+    public async Task BiometricElevationForAnotherProfileGrantsNothing()
+    {
+        await using ElevationHarness harness = await ElevationHarness.OpenAsync();
+
+        bool elevated = await harness.Station.ElevateWithBiometricAsync(Guid.NewGuid());
+
+        Assert.IsFalse(elevated);
+        Assert.AreEqual(StationMode.Operation, harness.Station.Mode);
+        Assert.IsTrue(harness.AccessSnapshot().All(allowed => !allowed));
+        Assert.AreEqual("BIOMETRIC_REJECTED", harness.Audit.SecurityEventKeys().Last());
+        Assert.AreEqual("PERFIL_DISTINTO", harness.Audit.Events[^1].Result);
+    }
+
+    [TestMethod]
+    public async Task ManualExitAndStationCloseAreAuditedOnlyWhileElevated()
+    {
+        await using ElevationHarness harness = await ElevationHarness.OpenAsync();
+        StationViewModel station = harness.Station;
+
+        station.ExitManagerModeCommand.Execute(null);
+        Assert.AreEqual(2, harness.Audit.SecurityEventKeys().Length, "Sin elevación no se audita una salida.");
+
+        await station.ElevateAsync("123456");
+        await harness.Shell.ShowAuditCommand.ExecuteAsync(null);
+        station.ExitManagerModeCommand.Execute(null);
+
+        Assert.AreEqual(StationMode.Operation, station.Mode);
+        Assert.IsTrue(harness.Shell.IsHomePage);
+        Assert.AreEqual("ELEVATION_ENDED:MANUAL", harness.Audit.SecurityEventKeys().Last());
+
+        await station.ElevateAsync("123456");
+        await station.CloseStationCommand.ExecuteAsync(null);
+
+        CollectionAssert.AreEqual(ManualElevationAudit, harness.Audit.SecurityEventKeys());
+    }
+
+    [TestMethod]
+    public async Task EachBiometricAttemptRecordsOneDistinctFinalResultAndPinFallback()
+    {
+        await using ElevationHarness harness = await ElevationHarness.OpenAsync();
+        StationViewModel station = harness.Station;
+
+        await station.RecordElevationRequestedAsync();
+        station.BeginBiometricAttempt();
+        await station.RecordBiometricFailureAsync(new BiometricOperationResult(false, "FACE_NOT_DETECTED", "x"));
+        await station.ElevateAsync("123456");
+        station.ExitManagerModeCommand.Execute(null);
+
+        await station.RecordElevationRequestedAsync();
+        station.BeginBiometricAttempt();
+        await station.RecordBiometricFailureAsync(new BiometricOperationResult(false, "NO_MATCH", "x", 0.2));
+        await station.RecordBiometricFailureAsync(new BiometricOperationResult(false, "CAMERA_UNAVAILABLE", "x"));
+        await station.RecordBiometricFailureAsync(new BiometricOperationResult(false, "CAMERA_BUSY", "x"));
+        await station.RecordBiometricFailureAsync(new BiometricOperationResult(false, "BIOMETRIC_ERROR", "x"));
+        await station.RecordBiometricTechnicalFailureAsync();
+        await station.RecordBiometricFailureAsync(new BiometricOperationResult(false, "CANCELLED", "x"));
+        await station.RecordBiometricFailureAsync(new BiometricOperationResult(false, "NOT_ENROLLED", "x"));
+        Assert.IsTrue(await station.ElevateWithBiometricAsync(station.CurrentProfileId!.Value));
+        station.ExitManagerModeCommand.Execute(null);
+
+        await station.RecordElevationRequestedAsync();
+        await station.ElevateAsync("123456");
+
+        CollectionAssert.AreEqual(BiometricAttemptAudit, harness.Audit.SecurityEventKeys());
+        RecordLocalSecurityAuditEvent[] biometric = harness.Audit.Events
+            .Where(item => item.EventType.StartsWith("BIOMETRIC_", StringComparison.Ordinal))
+            .ToArray();
+        CollectionAssert.AreEqual(BiometricAttemptResults, biometric.Select(item => item.Result).ToArray());
+        foreach (RecordLocalSecurityAuditEvent item in harness.Audit.Events)
+        {
+            Assert.AreNotEqual(Guid.Empty, item.EventId);
+            Assert.AreEqual(StationId, item.StationId);
+            Assert.IsNotNull(item.Authorization, "Cada evento conserva la evidencia de su sesión.");
+            Assert.AreEqual(TimeSpan.Zero, item.OccurredAt.Offset);
+        }
+        Assert.IsTrue(biometric.All(item => item.Method == SecurityAudit.MethodBiometric));
+        Assert.HasCount(harness.Audit.Events.Count, harness.Audit.Events.Select(item => item.EventId).Distinct().ToArray());
+    }
+
+    [TestMethod]
+    public async Task SecurityAuditFailureNeverBlocksPinOrStation()
+    {
+        await using ElevationHarness harness = await ElevationHarness.OpenAsync();
+        harness.Audit.FailWith = new IOException("Disco lleno.");
+
+        await harness.Station.RecordElevationRequestedAsync();
+        harness.Station.BeginBiometricAttempt();
+        await harness.Station.RecordBiometricFailureAsync(
+            new BiometricOperationResult(false, "CAMERA_UNAVAILABLE", "x"));
+        await harness.Station.ElevateAsync("123456");
+
+        Assert.AreEqual(StationMode.PlantManager, harness.Station.Mode);
+        Assert.IsTrue(harness.Station.IsStationOpen);
+        harness.Audit.FailWith = new ArgumentException("Dato inválido.");
+        harness.Station.ExitManagerModeCommand.Execute(null);
+        Assert.AreEqual(StationMode.Operation, harness.Station.Mode);
+    }
+
+    [TestMethod]
+    public void BiometricResultsAreClassifiedWithoutLeakingFreeText()
+    {
+        var unknown = SecurityAudit.ClassifyBiometricFailure(
+            new BiometricOperationResult(false, "OPENCV_CRASH", "Detalle: C:\\ruta\\modelo.onnx"));
+
+        Assert.AreEqual(SecurityAudit.BiometricFailed, unknown!.Value.EventType);
+        Assert.IsFalse(unknown.Value.Details.Contains("ruta", StringComparison.Ordinal));
+        Assert.IsNull(SecurityAudit.ClassifyBiometricFailure(new BiometricOperationResult(true, "MATCHED", "x")));
+        Assert.AreEqual("RECHAZADO", SecurityAudit.ResultCode("pin 1234"));
+        Assert.AreEqual("BLOCKED", SecurityAudit.ResultCode("BLOCKED"));
+    }
+
+    private sealed class ElevationHarness : IAsyncDisposable
+    {
+        private ElevationHarness(
+            MutableTimeProvider time,
+            StationViewModel station,
+            MainWindowViewModel shell,
+            DiagnosticsViewModel diagnostics,
+            AuditViewModel audit,
+            SettingsViewModel settings,
+            RecordingSecurityAudit securityAudit,
+            RecordingOperationRepository operations,
+            MemorySessions sessions)
+        {
+            Time = time;
+            Station = station;
+            Shell = shell;
+            Diagnostics = diagnostics;
+            AuditPage = audit;
+            Settings = settings;
+            Audit = securityAudit;
+            Operations = operations;
+            Sessions = sessions;
+        }
+
+        public MutableTimeProvider Time { get; }
+        public StationViewModel Station { get; }
+        public MainWindowViewModel Shell { get; }
+        public DiagnosticsViewModel Diagnostics { get; }
+        public AuditViewModel AuditPage { get; }
+        public SettingsViewModel Settings { get; }
+        public RecordingSecurityAudit Audit { get; }
+        public RecordingOperationRepository Operations { get; }
+        public MemorySessions Sessions { get; }
+
+        public static async Task<ElevationHarness> OpenAsync()
+        {
+            var time = new MutableTimeProvider(Now);
+            ProtectedStationState state = State();
+            var catalogs = new MemoryCatalogs();
+            var options = Options.Create(new StationOptions { Id = StationId });
+            var coordinator = new StationCoordinator(
+                new StubAuth(),
+                new StubStationApi(state, Snapshot()),
+                catalogs,
+                new MemoryStationSequences(),
+                new MemoryStationStore(state),
+                new NoopEvidenceCapture(),
+                options,
+                time);
+            var sessions = new MemorySessions();
+            var operations = new RecordingOperationRepository(sessions);
+            var securityAudit = new RecordingSecurityAudit();
+            var station = new StationViewModel(
+                coordinator,
+                catalogs,
+                new LocalOperationService(catalogs, sessions, operations, time),
+                options,
+                time,
+                dashboard: null,
+                sweepHandler: null,
+                sharedManagerMode: null,
+                mercuryHandler: null,
+                localAudit: securityAudit);
+            DiagnosticsViewModel diagnostics = new(new StubHealthService(), new StubLocalDiagnostics());
+            AuditViewModel audit = new(diagnostics, station);
+            SettingsViewModel settings = new();
+            var shell = new MainWindowViewModel(
+                new HomeViewModel(),
+                diagnostics,
+                station,
+                null,
+                audit,
+                settings,
+                null,
+                new WpfUiDispatcher(),
+                new AttendancePreviewViewModel());
+
+            await station.InitializeAsync();
+            station.EnterRestoredSession();
+            await Task.Yield();
+            return new ElevationHarness(
+                time, station, shell, diagnostics, audit, settings, securityAudit, operations, sessions);
+        }
+
+        /// <summary>Estación, Auditoría, Correcciones, Estado y Configuración.</summary>
+        public bool[] AccessSnapshot() =>
+        [
+            Shell.ShowStationCommand.CanExecute(null),
+            Shell.ShowAuditCommand.CanExecute(null),
+            Shell.ShowAuditCorrectionsCommand.CanExecute(null),
+            Shell.ShowDiagnosticsCommand.CanExecute(null),
+            Shell.ShowSettingsCommand.CanExecute(null),
+            Shell.IsPageAllowed(Station),
+            Shell.IsPageAllowed(AuditPage),
+            Shell.IsPageAllowed(Diagnostics),
+            Shell.IsPageAllowed(Settings),
+            Station.CanUseContextActions,
+        ];
+
+        public ValueTask DisposeAsync()
+        {
+            Shell.Dispose();
+            Station.Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingSecurityAudit : ILocalAuditRepository
+    {
+        private readonly List<RecordLocalSecurityAuditEvent> events = [];
+
+        public List<RecordLocalSecurityAuditEvent> Events => events;
+
+        public Exception? FailWith { get; set; }
+
+        public string[] SecurityEventKeys() => events
+            .Select(item => item.EventType switch
+            {
+                "ELEVATION_ENDED" => $"{item.EventType}:{item.Result}",
+                "ELEVATION_ACCEPTED" => $"{item.EventType}:{item.Method}",
+                _ => item.EventType,
+            })
+            .ToArray();
+
+        public Task<IReadOnlyList<LocalCompletedShipmentAudit>> ListCompletedShipmentsAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<LocalCompletedShipmentAudit>>([]);
+
+        public Task<IReadOnlyList<LocalCajuelaCorrectionAudit>> ListCajuelaCorrectionsAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<LocalCajuelaCorrectionAudit>>([]);
+
+        public Task RecordSecurityEventAsync(
+            RecordLocalSecurityAuditEvent auditEvent,
+            CancellationToken cancellationToken = default)
+        {
+            if (FailWith is not null) throw FailWith;
+            events.Add(auditEvent);
+            return Task.CompletedTask;
+        }
     }
 
     private static ProtectedStationState State() => new(

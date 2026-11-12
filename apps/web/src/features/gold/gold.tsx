@@ -6,7 +6,9 @@ import {
   type KeyboardEvent,
 } from "react";
 import type {
+  GoldMercurySynthesis,
   GoldReviewEntry,
+  GoldShipmentOverview,
   ManagementShipment,
   ManagementSweepMercury,
 } from "../../api/generated/api-client";
@@ -15,6 +17,7 @@ import { useLanguage } from "../../i18n/language-context";
 
 import {
   useGoldHistory,
+  useGoldOverview,
   useGoldSummary,
   useRecordShipmentGold,
   useRecordSweepMercury,
@@ -44,6 +47,18 @@ export function GoldFeature() {
   const shipments = useManagementShipments(filters);
   const options = useManagementShipmentFilterOptions(filters);
   const summary = useGoldSummary(filters);
+  const overview = useGoldOverview(
+    shipments.data?.items.map((shipment) => shipment.shipmentId) ?? [],
+  );
+  const overviewFor = (shipmentId: string): OverviewState =>
+    overview.isError
+      ? { status: "error" }
+      : overview.data === undefined
+        ? { status: "loading" }
+        : {
+            status: "ready",
+            value: overview.data.find((item) => item.shipmentId === shipmentId),
+          };
   const [selected, setSelected] = useState<ManagementShipment | null>(null);
   const editorTrigger = useRef<HTMLButtonElement | null>(null);
   const items = options.data?.items ?? shipments.data?.items ?? [];
@@ -144,6 +159,7 @@ export function GoldFeature() {
                     summary.data?.acknowledgedShipmentIds ?? [],
                     summary.data?.omittedShipmentIds ?? [],
                   )}
+                  overview={overviewFor(shipment.shipmentId)}
                   open={(trigger) => openEditor(shipment, trigger)}
                 />
               ))}
@@ -360,13 +376,30 @@ function FilterSelect({
   );
 }
 
+type OverviewState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; value: GoldShipmentOverview | undefined };
+
+type GoldRowStatus = "REGISTERED" | "OMITTED" | "PENDING";
+
+function goldRowStatus(
+  shipment: ManagementShipment,
+  disposition: GoldReviewEntry["disposition"],
+): GoldRowStatus {
+  if (shipment.hasGoldResult) return "REGISTERED";
+  return disposition === "OMITTED" ? "OMITTED" : "PENDING";
+}
+
 function GoldShipmentRow({
   shipment,
   disposition,
+  overview,
   open,
 }: {
   shipment: ManagementShipment;
   disposition: GoldReviewEntry["disposition"];
+  overview: OverviewState;
   open(this: void, trigger: HTMLButtonElement): void;
 }) {
   const { language, locale, tr } = useLanguage();
@@ -408,6 +441,7 @@ function GoldShipmentRow({
   const reviewError = reviewMutation.isError
     ? mutationMessage(reviewMutation.error, language)
     : null;
+  const status = goldRowStatus(shipment, disposition);
 
   return (
     <article className="gold-shipment-row">
@@ -420,34 +454,41 @@ function GoldShipmentRow({
           {shipment.supplierName} · {tr("Cerrado", "Closed")}{" "}
           {formatCostaRicaDateTime(shipment.completedAtUtc, language)}
         </p>
+        <GoldStatusBadge status={status} disposition={disposition} />
       </div>
-      <div className="gold-current-value">
-        {shipment.hasGoldResult && shipment.goldAmountGrams !== null ? (
-          <>
-            <strong>{formatGrams(shipment.goldAmountGrams, locale)} g</strong>
-            <small>
-              {formatPalos(shipment.goldAmountGrams, locale)}{" "}
-              {tr("palos", "palos")}
-            </small>
-          </>
-        ) : disposition === "OMITTED" ? (
-          <>
-            <strong>{tr("Revisado", "Reviewed")}</strong>
-            <small>{tr("Sin dato de oro", "Without gold data")}</small>
-          </>
-        ) : disposition === "ACKNOWLEDGED" ? (
-          <>
-            <strong>{tr("Leído", "Read")}</strong>
-            <small>{tr("Sin registrar", "Not recorded")}</small>
-          </>
-        ) : (
-          <>
-            <strong>{tr("Pendiente", "Pending")}</strong>
-            <small>{tr("No registrado", "Not recorded")}</small>
-          </>
-        )}
-      </div>
-      <dl>
+      <dl className="gold-row-facts">
+        <div>
+          <dt>{tr("Oro registrado", "Recorded gold")}</dt>
+          <dd>
+            {shipment.hasGoldResult && shipment.goldAmountGrams !== null ? (
+              <>
+                {formatGrams(shipment.goldAmountGrams, locale)} g
+                <small>
+                  {formatPalos(shipment.goldAmountGrams, locale)}{" "}
+                  {tr("palos", "palos")}
+                </small>
+              </>
+            ) : (
+              tr("Sin registrar", "Not recorded")
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>{tr("Quilataje", "Karat")}</dt>
+          <dd>
+            {karatText(
+              shipment.hasGoldResult ? shipment.goldKarat : null,
+              locale,
+              tr,
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>{tr("Mercurio", "Mercury")}</dt>
+          <dd>
+            <MercurySummary overview={overview} />
+          </dd>
+        </div>
         <div>
           <dt>{tr("Cajuelas", "Cajuelas")}</dt>
           <dd>{shipment.cajuelaTotal}</dd>
@@ -550,6 +591,72 @@ function GoldShipmentRow({
   );
 }
 
+function GoldStatusBadge({
+  status,
+  disposition,
+}: {
+  status: GoldRowStatus;
+  disposition: GoldReviewEntry["disposition"];
+}) {
+  const { tr } = useLanguage();
+  const label =
+    status === "REGISTERED"
+      ? tr("Registrado", "Recorded")
+      : status === "OMITTED"
+        ? tr("Revisado sin datos", "Reviewed without data")
+        : disposition === "ACKNOWLEDGED"
+          ? tr("Pendiente · leído", "Pending · read")
+          : tr("Pendiente", "Pending");
+  return (
+    <span className={`gold-review-status ${status.toLowerCase()}`}>
+      {label}
+    </span>
+  );
+}
+
+function karatText(
+  karat: number | null,
+  locale: string,
+  tr: (spanish: string, english: string) => string,
+): string {
+  return karat === null
+    ? tr("Sin registrar", "Not recorded")
+    : `${formatKarat(karat, locale)} k`;
+}
+
+function MercurySummary({ overview }: { overview: OverviewState }) {
+  const { locale, tr } = useLanguage();
+  if (overview.status === "loading") return <>…</>;
+  if (overview.status === "error")
+    return <>{tr("No disponible", "Unavailable")}</>;
+  const mercury: GoldMercurySynthesis = overview.value?.mercury ?? {
+    sweepCount: 0,
+    completeSweepCount: 0,
+    latestCompleteSweep: null,
+  };
+  if (mercury.sweepCount === 0) return <>{tr("Sin barridas", "No sweeps")}</>;
+  const completeness = `${mercury.completeSweepCount} ${tr("de", "of")} ${mercury.sweepCount} ${tr("barridas completas", "complete sweeps")}`;
+  if (mercury.latestCompleteSweep === null)
+    return (
+      <>
+        {tr("Sin registrar", "Not recorded")}
+        <small>{completeness}</small>
+      </>
+    );
+  return (
+    <>
+      {tr("Entrada", "Input")}{" "}
+      {formatGrams(mercury.latestCompleteSweep.inputGrams, locale)} g ·{" "}
+      {tr("Final", "Final")}{" "}
+      {formatGrams(mercury.latestCompleteSweep.remainderGrams, locale)} g
+      <small>
+        {tr("Última barrida completa", "Latest complete sweep")} ·{" "}
+        {completeness}
+      </small>
+    </>
+  );
+}
+
 function GoldEditor({
   shipment,
   disposition,
@@ -566,6 +673,9 @@ function GoldEditor({
   const [amount, setAmount] = useState(
     shipment.goldAmountGrams === null ? "" : String(shipment.goldAmountGrams),
   );
+  const [karat, setKarat] = useState(
+    shipment.goldKarat === null ? "" : String(shipment.goldKarat),
+  );
   const [reason, setReason] = useState("");
   const [validation, setValidation] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -573,7 +683,17 @@ function GoldEditor({
     shipment.hasGoldResult,
   );
   const parsed = parseAmount(amount);
+  const parsedKarat = parseKarat(karat);
   const correction = hasCurrentResult;
+  // El historial llega ordenado del más reciente al más antiguo: el primero es el
+  // valor vigente. Solo las entradas anteriores aportan información adicional.
+  const currentEntry = history.data?.[0];
+  const currentGold =
+    currentEntry?.amountGrams ??
+    (shipment.hasGoldResult ? shipment.goldAmountGrams : null);
+  const currentKarat =
+    currentEntry === undefined ? shipment.goldKarat : currentEntry.karat;
+  const previousEntries = history.data?.slice(1) ?? [];
   const formError =
     validation ??
     (mutation.isError ? mutationMessage(mutation.error, language) : null);
@@ -631,6 +751,15 @@ function GoldEditor({
       );
       return;
     }
+    if (parsedKarat === undefined) {
+      setValidation(
+        tr(
+          "El quilataje debe estar entre 0 y 24, con máximo tres decimales, o quedar vacío.",
+          "Karat must be between 0 and 24 with up to three decimals, or be left empty.",
+        ),
+      );
+      return;
+    }
     if (correction && reason.trim().length === 0) {
       setValidation(
         tr(
@@ -642,8 +771,10 @@ function GoldEditor({
     }
     setValidation(null);
     try {
+      // Cada entrada guarda el resultado completo: oro y quilataje (null = sin registrar).
       await mutation.mutateAsync({
         amountGrams: parsed,
+        karat: parsedKarat,
         ...(correction ? { correctionReason: reason.trim() } : {}),
       });
       setHasCurrentResult(true);
@@ -694,25 +825,43 @@ function GoldEditor({
 
       <div className="gold-editor-section-heading">
         <div>
-          <h3>{tr("Oro total", "Total gold")}</h3>
+          <h3>{tr("Oro y quilataje", "Gold and karat")}</h3>
           <p>
             {tr(
-              "Dato opcional del cargamento completo.",
-              "Optional value for the complete shipment.",
+              "Datos opcionales del cargamento completo.",
+              "Optional values for the complete shipment.",
             )}
           </p>
         </div>
-        <span
-          className={`gold-review-status${disposition === "OMITTED" ? " omitted" : ""}`}
-        >
-          {hasCurrentResult
-            ? tr("Registrado", "Recorded")
-            : disposition === "OMITTED"
-              ? tr("Revisado sin dato", "Reviewed without data")
-              : disposition === "ACKNOWLEDGED"
-                ? tr("Leído", "Read")
-                : tr("Pendiente", "Pending")}
-        </span>
+        <GoldStatusBadge
+          status={
+            hasCurrentResult
+              ? "REGISTERED"
+              : disposition === "OMITTED"
+                ? "OMITTED"
+                : "PENDING"
+          }
+          disposition={disposition}
+        />
+      </div>
+      <div className="gold-current-values">
+        <div className="gold-current-karat">
+          <span>{tr("Oro vigente", "Current gold")}</span>
+          <strong>
+            {currentGold === null
+              ? tr("Sin registrar", "Not recorded")
+              : `${formatGrams(currentGold, locale)} g`}
+          </strong>
+          {currentGold !== null && (
+            <small>
+              {formatPalos(currentGold, locale)} {tr("palos", "palos")}
+            </small>
+          )}
+        </div>
+        <div className="gold-current-karat">
+          <span>{tr("Quilataje vigente", "Current karat")}</span>
+          <strong>{karatText(currentKarat, locale, tr)}</strong>
+        </div>
       </div>
       <form onSubmit={(event) => void submit(event)}>
         <label>
@@ -740,6 +889,24 @@ function GoldEditor({
               )
             : `${formatPalos(parsed, locale)} ${tr("palos equivalentes", "equivalent palos")} · ${tr("1 palo = 0,10 g", "1 palo = 0.10 g")}`}
         </p>
+        <label>
+          <span>{tr("Quilataje (opcional)", "Karat (optional)")}</span>
+          <input
+            inputMode="decimal"
+            placeholder={tr(
+              "Ej. 18,5 · vacío = sin registrar",
+              "E.g. 18.5 · empty = not recorded",
+            )}
+            value={karat}
+            onChange={(event) => {
+              setKarat(event.target.value);
+              setValidation(null);
+              setSaved(null);
+              if (mutation.isError) mutation.reset();
+            }}
+            aria-invalid={formError !== null}
+          />
+        </label>
         {correction && (
           <label>
             <span>
@@ -786,31 +953,33 @@ function GoldEditor({
         </div>
       </form>
 
-      <div className="gold-history">
-        <h3>{tr("Historial append-only", "Append-only history")}</h3>
-        {history.isPending ? (
-          <p>{tr("Cargando historial…", "Loading history…")}</p>
-        ) : history.isError || history.data === undefined ? (
-          <p className="form-error">
-            {tr(
-              "No se pudo consultar el historial.",
-              "History could not be loaded.",
-            )}
-          </p>
-        ) : history.data.length === 0 ? (
-          <p>
-            {tr(
-              "Aún no existe una entrada para este cargamento.",
-              "There is no entry for this shipment yet.",
-            )}
-          </p>
-        ) : (
+      {/* El historial completo sigue en base de datos y auditoría; aquí solo se
+          muestran las correcciones anteriores, sin repetir el valor vigente. */}
+      {history.isError && (
+        <p className="form-error">
+          {tr(
+            "No se pudo consultar el historial.",
+            "History could not be loaded.",
+          )}
+        </p>
+      )}
+      {previousEntries.length > 0 && (
+        <div className="gold-history">
+          <h3>{tr("Correcciones anteriores", "Previous corrections")}</h3>
+          {history.data?.[0]?.correctionReason != null && (
+            <p>
+              {tr("Motivo del valor vigente", "Reason for current value")}:{" "}
+              {history.data[0].correctionReason}
+            </p>
+          )}
           <ol>
-            {history.data.map((entry, index) => (
+            {previousEntries.map((entry) => (
               <li key={entry.id}>
                 <div>
-                  <strong>{formatGrams(entry.amountGrams, locale)} g</strong>
-                  {index === 0 && <span>{tr("VIGENTE", "CURRENT")}</span>}
+                  <strong>
+                    {formatGrams(entry.amountGrams, locale)} g ·{" "}
+                    {karatText(entry.karat, locale, tr)}
+                  </strong>
                 </div>
                 <p>
                   {entry.recordedByDisplayName} ·{" "}
@@ -824,8 +993,8 @@ function GoldEditor({
               </li>
             ))}
           </ol>
-        )}
-      </div>
+        </div>
+      )}
       <MercuryEditor shipmentId={shipment.shipmentId} sweeps={sweeps} />
     </section>
   );
@@ -1244,11 +1413,30 @@ function reviewDisposition(
   return "PENDING";
 }
 
+const karatPattern = /^\d{1,2}(?:[.,]\d{1,3})?$/u;
+
+// Vacío = sin registrar (null); undefined = valor inválido. Mismo contrato que el
+// quilataje existente: 0 a 24 con hasta tres decimales.
+function parseKarat(value: string): number | null | undefined {
+  const normalized = value.trim();
+  if (normalized.length === 0) return null;
+  if (!karatPattern.test(normalized)) return undefined;
+  const parsed = Number(normalized.replace(",", "."));
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 24
+    ? parsed
+    : undefined;
+}
+
 function parseAmount(value: string): number | null {
   const normalized = value.trim();
   if (!decimalPattern.test(normalized)) return null;
   const parsed = Number(normalized.replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+// El contrato admite hasta tres decimales de quilataje.
+function formatKarat(value: number, locale: string): string {
+  return formatNumber(value, locale, 3);
 }
 
 function formatGrams(value: number, locale: string): string {
@@ -1280,8 +1468,12 @@ function mutationMessage(error: Error, language: "es" | "en"): string {
         : "The result changed in another session. Refresh before trying again.";
     if (error.code === "GOLD_AMOUNT_UNCHANGED")
       return language === "es"
-        ? "El valor corregido debe ser diferente del resultado vigente."
-        : "The corrected value must differ from the current result.";
+        ? "La corrección debe cambiar el oro o el quilataje vigente."
+        : "The correction must change the current gold or karat.";
+    if (error.code === "GOLD_KARAT_INVALID")
+      return language === "es"
+        ? "El quilataje debe estar entre 0 y 24, con máximo tres decimales."
+        : "Karat must be between 0 and 24 with up to three decimals.";
     if (error.code === "GOLD_CORRECTION_REASON_REQUIRED")
       return language === "es"
         ? "La corrección necesita un motivo."
