@@ -63,7 +63,8 @@
                                Text="{Binding PendingStatus}" />
                 </Grid>
 
-                <Border Grid.Row="2" Margin="6,0,6,10" Padding="12,9" Background="#EEF6FA"
+                <!-- Franja compacta (~40 px): al ocultar una línea las cards apenas se desplazan. -->
+                <Border Grid.Row="2" Margin="6,0,6,6" Padding="12,4" Background="#EEF6FA"
                         BorderBrush="#CFE0E8" BorderThickness="1" CornerRadius="12"
                         Visibility="{Binding HasHiddenLines, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid>
@@ -73,14 +74,14 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Ink700Brush}"
-                                   FontSize="11" FontWeight="Bold" Text="LÍNEAS OCULTAS" />
-                        <ItemsControl Grid.Column="1" Margin="12,0" ItemsSource="{Binding HiddenLines}">
+                                   FontSize="10" FontWeight="Bold" Text="LÍNEAS OCULTAS" />
+                        <ItemsControl Grid.Column="1" Margin="12,0" VerticalAlignment="Center" ItemsSource="{Binding HiddenLines}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button Margin="0,0,7,0" Padding="10,5"
+                                    <Button Margin="0,1,6,1" Padding="9,2" MinHeight="26" FontSize="11"
                                             Command="{Binding DataContext.RestoreLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             CommandParameter="{Binding LineId}"
                                             Content="{Binding LineName}"
@@ -88,7 +89,8 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Button Grid.Column="2" Padding="10,5" Command="{Binding RestoreAllLinesCommand}"
+                        <Button Grid.Column="2" Padding="9,2" MinHeight="26" FontSize="11"
+                                VerticalAlignment="Center" Command="{Binding RestoreAllLinesCommand}"
                                 Content="MOSTRAR TODAS" />
                     </Grid>
                 </Border>
